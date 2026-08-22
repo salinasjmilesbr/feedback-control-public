@@ -97,10 +97,12 @@ function ColaboradorCard({ colaborador }: Props) {
             }}
           >
             <strong>Status:</strong>{" "}
-            {colaborador.ativo
-              ? "✅ Ativo"
-              : "❌ Inativo"}
-          </p>
+             {colaborador.status === "ATIVO"
+                ? "✅ Ativo"
+                : colaborador.status === "LICENCA"
+                ? "🟡 Em licença"
+                : "❌ Desligado"}
+            </p>
 
           <Link
             to={`/colaborador/${colaborador.matricula}`}

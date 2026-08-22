@@ -567,7 +567,11 @@ if (feedbackExistente) {
             }}
           >
             <span style={{ fontWeight: "bold" }}>
-              {colaborador.ativo ? "✅ Ativo" : "❌ Inativo"}
+              {colaborador.status === "ATIVO"
+                ? "✅ Ativo"
+                : colaborador.status === "LICENCA"
+                ? "🟡 Em licença"
+                : "❌ Desligado"}
             </span>
           </div>
         </div>

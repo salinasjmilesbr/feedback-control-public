@@ -255,7 +255,11 @@ function ColaboradorDetalhePage() {
                 fontWeight: "bold",
               }}
             >
-              {colaborador.ativo ? "✅ Ativo" : "❌ Inativo"}
+              {colaborador.status === "ATIVO"
+                ? "✅ Ativo"
+                : colaborador.status === "LICENCA"
+                ? "🟡 Em licença"
+                : "❌ Desligado"}
             </span>
 
             <Link to={`/colaborador/${colaborador.matricula}/novo-feedback`}>
