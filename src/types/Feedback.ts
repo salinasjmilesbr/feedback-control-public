@@ -5,11 +5,19 @@ export interface FeedbackCompetencia {
   comentario: string;
 }
 
+export interface VotoColegiado {
+  avaliadorMatricula: number;
+  avaliadorNome: string;
+  nota: number;
+  dataAtualizacao?: string;
+}
+
 export interface FeedbackSubcriterioDetalhado {
   nome: string;
   notaGerente: number;
   notaCoordenador: number;
   notaColegiado: number;
+  votosColegiado?: VotoColegiado[];
   notaFinal: number;
 }
 

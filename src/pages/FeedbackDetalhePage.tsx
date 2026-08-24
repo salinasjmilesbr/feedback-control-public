@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { colaboradores } from "../data/colaboradores";
+import { getColaboradorByMatricula } from "../services/colaboradorStorage";
 import {
   deleteFeedback,
   getFeedbacksByColaborador,
@@ -12,9 +12,10 @@ function FeedbackDetalhePage() {
   const [criterioAberto, setCriterioAberto] = useState<string>("");
   const [feedbackFinalAberto, setFeedbackFinalAberto] = useState(false);
 
-  const colaborador = colaboradores.find(
-    (item) => item.matricula.toString() === id
-  );
+  const matricula = Number(id);
+  const colaborador = Number.isFinite(matricula)
+    ? getColaboradorByMatricula(matricula)
+    : undefined;
 
   if (!colaborador) {
     return (
@@ -525,8 +526,29 @@ function FeedbackDetalhePage() {
                         <div>
                           <strong>Colegiado</strong>
                           <div style={{ marginTop: "8px" }}>
-                            {subcriterio.notaColegiado || "Não informado"}
+                            {subcriterio.notaColegiado > 0
+                              ? subcriterio.notaColegiado.toFixed(2)
+                              : "Não informado"}
                           </div>
+
+                          {(subcriterio.votosColegiado?.length ?? 0) > 0 && (
+                            <div
+                              style={{
+                                marginTop: "10px",
+                                display: "grid",
+                                gap: "6px",
+                                fontSize: "13px",
+                                color: "#555",
+                              }}
+                            >
+                              {subcriterio.votosColegiado?.map((voto) => (
+                                <div key={voto.avaliadorMatricula}>
+                                  {voto.avaliadorNome}:{" "}
+                                  <strong>{voto.nota}</strong>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

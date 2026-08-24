@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { colaboradores } from "../data/colaboradores";
+import { getColaboradorByMatricula, getColaboradores } from "../services/colaboradorStorage";
 import { saveFeedback, getFeedbacksByColaborador,} from "../services/feedbackStorage";
 import type { Feedback } from "../types/Feedback";
 
@@ -118,11 +118,17 @@ function NovoFeedbackPage() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const colaborador = colaboradores.find(
-    (item) => item.matricula.toString() === id
-  );
+  const matricula = Number(id);
+  const colaborador = Number.isFinite(matricula)
+    ? getColaboradorByMatricula(matricula)
+    : undefined;
+
+  const colaboradores = getColaboradores();
 
   const [avaliacoes, setAvaliacoes] = useState<Avaliacoes>(criarEstadoInicial);
+  const [votosColegiado, setVotosColegiado] = useState<
+    Record<string, Record<string, Record<number, number>>>
+  >({});
   const [feedbackFinalGerente, setFeedbackFinalGerente] = useState("");
   const [feedbackFinalCoordenador, setFeedbackFinalCoordenador] = useState("");
   const [status, setStatus] = useState<Feedback["status"]>("RASCUNHO");
@@ -140,6 +146,16 @@ function NovoFeedbackPage() {
       </div>
     );
   }
+
+  const avaliadoresColegiado = (
+    colaborador.avaliadoresColegiadoMatriculas ?? []
+  )
+    .map((matriculaAvaliador) =>
+      colaboradores.find(
+        (item) => item.matricula === matriculaAvaliador
+      )
+    )
+    .filter((item) => item !== undefined);
 
   function atualizarNota(
     criterioId: string,
@@ -160,6 +176,127 @@ function NovoFeedbackPage() {
         },
       },
     }));
+  }
+
+  function atualizarVotoColegiado(
+    criterioId: string,
+    subcriterio: string,
+    avaliadorMatricula: number,
+    nota: number
+  ) {
+    setVotosColegiado((estadoAtual) => {
+      const votosAtualizados = {
+        ...estadoAtual,
+        [criterioId]: {
+          ...(estadoAtual[criterioId] ?? {}),
+          [subcriterio]: {
+            ...(estadoAtual[criterioId]?.[subcriterio] ?? {}),
+            [avaliadorMatricula]: nota,
+          },
+        },
+      };
+
+      const notas = Object.values(
+        votosAtualizados[criterioId][subcriterio]
+      ).filter((valor) => valor > 0);
+
+      const mediaColegiado =
+        notas.length === 0
+          ? 0
+          : notas.reduce((total, valor) => total + valor, 0) /
+            notas.length;
+
+      setAvaliacoes((avaliacoesAtuais) => ({
+        ...avaliacoesAtuais,
+        [criterioId]: {
+          ...avaliacoesAtuais[criterioId],
+          notas: {
+            ...avaliacoesAtuais[criterioId].notas,
+            [subcriterio]: {
+              ...avaliacoesAtuais[criterioId].notas[subcriterio],
+              colegiado: mediaColegiado,
+            },
+          },
+        },
+      }));
+
+      return votosAtualizados;
+    });
+  }
+
+  function renderVotosColegiado(
+    criterioId: string,
+    subcriterio: string
+  ) {
+    if (avaliadoresColegiado.length === 0) {
+      return (
+        <div style={{ color: "#777", fontSize: "14px" }}>
+          Nenhum avaliador do colegiado cadastrado.
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ display: "grid", gap: "12px" }}>
+        {avaliadoresColegiado.map((avaliador) => {
+          const valorAtual =
+            votosColegiado[criterioId]?.[subcriterio]?.[
+              avaliador.matricula
+            ] ?? 0;
+
+          return (
+            <div key={avaliador.matricula}>
+              <div
+                style={{
+                  fontSize: "13px",
+                  fontWeight: "bold",
+                  color: "#555",
+                  marginBottom: "6px",
+                }}
+              >
+                {avaliador.nome}
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: "10px",
+                  justifyContent: "center",
+                  flexWrap: "wrap",
+                }}
+              >
+                {[1, 2, 3, 4, 5].map((nota) => (
+                  <label
+                    key={nota}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name={`${criterioId}-${subcriterio}-colegiado-${avaliador.matricula}`}
+                      checked={valorAtual === nota}
+                      onChange={() =>
+                        atualizarVotoColegiado(
+                          criterioId,
+                          subcriterio,
+                          avaliador.matricula,
+                          nota
+                        )
+                      }
+                    />
+                    {nota}
+                  </label>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
   }
 
   function atualizarObservacao(
@@ -403,6 +540,23 @@ function NovoFeedbackPage() {
             notaGerente: notas.gerente,
             notaCoordenador: notas.coordenador,
             notaColegiado: notas.colegiado,
+            votosColegiado: avaliadoresColegiado
+              .map((avaliador) => {
+                const nota =
+                  votosColegiado[criterio.id]?.[subcriterio]?.[
+                    avaliador.matricula
+                  ] ?? 0;
+
+                return nota > 0
+                  ? {
+                      avaliadorMatricula: avaliador.matricula,
+                      avaliadorNome: avaliador.nome,
+                      nota,
+                      dataAtualizacao: new Date().toISOString(),
+                    }
+                  : undefined;
+              })
+              .filter((voto) => voto !== undefined),
             notaFinal: calcularMediaSubcriterio(criterio.id, subcriterio),
           };
         }),
@@ -933,7 +1087,7 @@ if (feedbackExistente) {
                           >
                             Nota do Colegiado
                           </div>
-                          {renderNotas(criterio.id, subcriterio, "colegiado")}
+                          {renderVotosColegiado(criterio.id, subcriterio)}
                         </div>
                       </div>
                     </div>
