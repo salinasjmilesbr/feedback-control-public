@@ -17,10 +17,27 @@ export type SituacaoAvaliacaoCiclo =
   | "PRONTA_PARA_FEEDBACK"
   | "CONCLUIDA";
 
+export type SituacaoPapelAvaliacao =
+  | "NAO_APLICA"
+  | "NAO_INICIADO"
+  | "EM_ANDAMENTO"
+  | "CONCLUIDO"
+  | "PENDENTE";
+
+export interface ProgressoPapelPainel {
+  situacao: SituacaoPapelAvaliacao;
+  preenchidos: number;
+  total: number;
+}
+
 export interface LinhaPainelCiclo {
   colaborador: Colaborador;
   feedback?: Feedback;
   situacao: SituacaoAvaliacaoCiclo;
+  gerente: ProgressoPapelPainel;
+  coordenador: ProgressoPapelPainel;
+  colegiado: ProgressoPapelPainel;
+  possuiPendencias: boolean;
 }
 
 function criarFeedbackVazio(
@@ -152,6 +169,149 @@ export function getSituacaoAvaliacaoCiclo(
     : "NAO_INICIADA";
 }
 
+function criarProgressoPapel(
+  preenchidos: number,
+  total: number,
+  cicloEncerrado: boolean
+): ProgressoPapelPainel {
+  if (total === 0) {
+    return {
+      situacao: "NAO_APLICA",
+      preenchidos: 0,
+      total: 0,
+    };
+  }
+
+  if (preenchidos >= total) {
+    return {
+      situacao: "CONCLUIDO",
+      preenchidos: total,
+      total,
+    };
+  }
+
+  if (cicloEncerrado) {
+    return {
+      situacao: "PENDENTE",
+      preenchidos,
+      total,
+    };
+  }
+
+  if (preenchidos === 0) {
+    return {
+      situacao: "NAO_INICIADO",
+      preenchidos,
+      total,
+    };
+  }
+
+  return {
+    situacao: "EM_ANDAMENTO",
+    preenchidos,
+    total,
+  };
+}
+
+function calcularProgressoPapeis(
+  colaborador: Colaborador,
+  feedback: Feedback | undefined,
+  colaboradores: Colaborador[],
+  cicloEncerrado: boolean
+): {
+  gerente: ProgressoPapelPainel;
+  coordenador: ProgressoPapelPainel;
+  colegiado: ProgressoPapelPainel;
+} {
+  const subcriterios =
+    feedback?.criteriosDetalhados?.flatMap(
+      (criterio) => criterio.subcriterios
+    ) ?? [];
+
+  const totalSubcriterios =
+    feedback?.criteriosDetalhados?.reduce(
+      (total, criterio) => total + criterio.subcriterios.length,
+      0
+    ) ?? criteriosAvaliacao.reduce(
+      (total, criterio) => total + criterio.subcriterios.length,
+      0
+    );
+
+  const gerenteNotas = subcriterios.filter(
+    (subcriterio) => subcriterio.notaGerente > 0
+  ).length;
+  const gerenteFeedbackFinal =
+    (feedback?.feedbackFinalGerente?.trim().length ?? 0) > 0 ? 1 : 0;
+
+  const gerente = criarProgressoPapel(
+    gerenteNotas + gerenteFeedbackFinal,
+    totalSubcriterios + 1,
+    cicloEncerrado
+  );
+
+  const gestorDireto = colaborador.gestorDiretoMatricula
+    ? colaboradores.find(
+        (item) =>
+          item.matricula === colaborador.gestorDiretoMatricula
+      )
+    : undefined;
+
+  const precisaCoordenador =
+    colaborador.funcao === "ANALISTA" &&
+    gestorDireto?.funcao === "COORDENADOR";
+
+  const coordenadorNotas = precisaCoordenador
+    ? subcriterios.filter(
+        (subcriterio) => subcriterio.notaCoordenador > 0
+      ).length
+    : 0;
+  const coordenadorFeedbackFinal =
+    precisaCoordenador &&
+    (feedback?.feedbackFinalCoordenador?.trim().length ?? 0) > 0
+      ? 1
+      : 0;
+
+  const coordenador = criarProgressoPapel(
+    coordenadorNotas + coordenadorFeedbackFinal,
+    precisaCoordenador ? totalSubcriterios + 1 : 0,
+    cicloEncerrado
+  );
+
+  const avaliadoresColegiado =
+    colaborador.funcao === "ANALISTA"
+      ? colaborador.avaliadoresColegiadoMatriculas?.length ?? 0
+      : 0;
+
+  const totalVotosColegiado =
+    avaliadoresColegiado > 0
+      ? totalSubcriterios * avaliadoresColegiado
+      : 0;
+
+  const votosColegiadoRecebidos =
+    avaliadoresColegiado > 0
+      ? subcriterios.reduce(
+          (total, subcriterio) =>
+            total +
+            (subcriterio.votosColegiado?.filter(
+              (voto) => voto.nota > 0
+            ).length ?? 0),
+          0
+        )
+      : 0;
+
+  const colegiado = criarProgressoPapel(
+    votosColegiadoRecebidos,
+    totalVotosColegiado,
+    cicloEncerrado
+  );
+
+  return {
+    gerente,
+    coordenador,
+    colegiado,
+  };
+}
+
 export function getPainelCiclo(
   ciclo: CicloAvaliacao,
   gerente: Colaborador
@@ -178,10 +338,28 @@ export function getPainelCiclo(
         item.ciclo === ciclo.ciclo
     );
 
+    const progressoPapeis = calcularProgressoPapeis(
+      colaborador,
+      feedback,
+      colaboradores,
+      ciclo.status === "ENCERRADO"
+    );
+
+    const possuiPendencias =
+      [progressoPapeis.gerente, progressoPapeis.coordenador, progressoPapeis.colegiado]
+        .some(
+          (papel) =>
+            papel.situacao !== "NAO_APLICA" &&
+            papel.situacao !== "CONCLUIDO"
+        ) ||
+      feedback?.encerradaComPendencias === true;
+
     return {
       colaborador,
       feedback,
       situacao: getSituacaoAvaliacaoCiclo(feedback),
+      ...progressoPapeis,
+      possuiPendencias,
     };
   });
 }

@@ -93,6 +93,24 @@ function ColaboradoresPage() {
           {usuarioAtual.funcao === "COORDENADOR" && (
             <button
               type="button"
+              onClick={() => navigate("/painel-ciclos")}
+              style={{
+                padding: "10px 16px",
+                borderRadius: "8px",
+                border: "1px solid #660099",
+                backgroundColor: "#fff",
+                color: "#660099",
+                cursor: "pointer",
+                fontWeight: "600",
+              }}
+            >
+              Painel de Ciclos
+            </button>
+          )}
+
+          {usuarioAtual.funcao === "COORDENADOR" && (
+            <button
+              type="button"
               onClick={() => navigate("/minha-avaliacao")}
               style={{
                 padding: "10px 16px",
@@ -105,24 +123,6 @@ function ColaboradoresPage() {
               }}
             >
               Minha Avaliação
-            </button>
-          )}
-
-          {usuarioAtual.funcao === "GERENTE" && (
-            <button
-              type="button"
-              onClick={() => navigate("/ciclos")}
-              style={{
-                padding: "10px 16px",
-                borderRadius: "8px",
-                border: "1px solid #660099",
-                backgroundColor: "#fff",
-                color: "#660099",
-                cursor: "pointer",
-                fontWeight: "600",
-              }}
-            >
-              Ciclos de avaliação
             </button>
           )}
 

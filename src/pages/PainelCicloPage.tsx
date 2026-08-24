@@ -6,6 +6,7 @@ import {
 } from "../services/cicloAvaliacaoStorage";
 import {
   getPainelCiclo,
+  type ProgressoPapelPainel,
   type SituacaoAvaliacaoCiclo,
 } from "../services/cicloEquipeService";
 
@@ -16,16 +17,42 @@ const labelsSituacao: Record<SituacaoAvaliacaoCiclo, string> = {
   CONCLUIDA: "Concluída",
 };
 
+function labelPapel(progresso: ProgressoPapelPainel) {
+  if (progresso.situacao === "NAO_APLICA") return "—";
+  if (progresso.situacao === "CONCLUIDO") return "Concluído";
+  if (progresso.situacao === "PENDENTE") {
+    return `Pendente (${progresso.preenchidos}/${progresso.total})`;
+  }
+  if (progresso.situacao === "EM_ANDAMENTO") {
+    return `Em andamento (${progresso.preenchidos}/${progresso.total})`;
+  }
+  return `Não iniciado (0/${progresso.total})`;
+}
+
+function corPapel(progresso: ProgressoPapelPainel) {
+  if (progresso.situacao === "CONCLUIDO") return "#107C41";
+  if (progresso.situacao === "PENDENTE") return "#A4262C";
+  if (progresso.situacao === "EM_ANDAMENTO") return "#8A6D00";
+  if (progresso.situacao === "NAO_APLICA") return "#999";
+  return "#555";
+}
+
 function PainelCicloPage() {
   const { cicloId } = useParams();
   const navigate = useNavigate();
   const { usuarioAtual } = useUsuarioAtual();
 
-  if (!usuarioAtual || usuarioAtual.funcao !== "GERENTE") {
+  if (
+    !usuarioAtual ||
+    (usuarioAtual.funcao !== "GERENTE" &&
+      usuarioAtual.funcao !== "COORDENADOR")
+  ) {
     return (
       <div style={{ padding: "30px" }}>
         <h1>Acesso restrito</h1>
-        <p>O painel do ciclo está disponível apenas para gerentes.</p>
+        <p>
+          O painel do ciclo está disponível para gerentes e coordenadores.
+        </p>
       </div>
     );
   }
@@ -56,6 +83,11 @@ function PainelCicloPage() {
       CONCLUIDA: 0,
     } as Record<SituacaoAvaliacaoCiclo, number>
   );
+
+  const totalAvaliacoes = linhas.length;
+  const avaliacoesComPendencias = linhas.filter(
+    (linha) => linha.possuiPendencias
+  ).length;
 
   return (
     <div
@@ -103,21 +135,24 @@ function PainelCicloPage() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
           gap: "12px",
           marginTop: "22px",
         }}
       >
-        {(
-          [
-            "NAO_INICIADA",
-            "EM_ANDAMENTO",
-            "PRONTA_PARA_FEEDBACK",
-            "CONCLUIDA",
-          ] as SituacaoAvaliacaoCiclo[]
-        ).map((situacao) => (
+        {[
+          { label: "Total", valor: totalAvaliacoes },
+          { label: "Não iniciadas", valor: totais.NAO_INICIADA },
+          { label: "Em andamento", valor: totais.EM_ANDAMENTO },
+          {
+            label: "Prontas para Feedback",
+            valor: totais.PRONTA_PARA_FEEDBACK,
+          },
+          { label: "Concluídas", valor: totais.CONCLUIDA },
+          { label: "Com pendências", valor: avaliacoesComPendencias },
+        ].map((indicador) => (
           <div
-            key={situacao}
+            key={indicador.label}
             style={{
               border: "1px solid #ddd",
               borderRadius: "12px",
@@ -126,7 +161,7 @@ function PainelCicloPage() {
             }}
           >
             <div style={{ color: "#666", fontSize: "13px" }}>
-              {labelsSituacao[situacao]}
+              {indicador.label}
             </div>
             <div
               style={{
@@ -136,7 +171,7 @@ function PainelCicloPage() {
                 color: "#660099",
               }}
             >
-              {totais[situacao]}
+              {indicador.valor}
             </div>
           </div>
         ))}
@@ -148,7 +183,7 @@ function PainelCicloPage() {
           border: "1px solid #ddd",
           borderRadius: "12px",
           backgroundColor: "#fff",
-          overflow: "hidden",
+          overflowX: "auto",
         }}
       >
         {linhas.length === 0 ? (
@@ -156,79 +191,136 @@ function PainelCicloPage() {
             Nenhum colaborador elegível na sua estrutura.
           </div>
         ) : (
-          linhas.map((linha, index) => (
+          <div style={{ minWidth: "980px" }}>
             <div
-              key={linha.colaborador.matricula}
               style={{
                 display: "grid",
                 gridTemplateColumns:
-                  "minmax(220px, 1fr) minmax(150px, auto) auto",
-                gap: "14px",
-                alignItems: "center",
-                padding: "14px 16px",
-                borderTop: index === 0 ? "none" : "1px solid #eee",
+                  "minmax(220px, 1.4fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(170px, 1fr) 130px",
+                gap: "12px",
+                padding: "12px 16px",
+                backgroundColor: "#F7F7F7",
+                borderBottom: "1px solid #ddd",
+                fontSize: "12px",
+                fontWeight: "bold",
+                color: "#555",
               }}
             >
-              <div>
-                <div style={{ fontWeight: "bold" }}>
-                  {linha.colaborador.nome}
-                </div>
-                <div
-                  style={{
-                    marginTop: "4px",
-                    color: "#666",
-                    fontSize: "13px",
-                  }}
-                >
-                  {linha.colaborador.funcao === "COORDENADOR"
-                    ? "Coordenador"
-                    : linha.colaborador.funcao === "CONSULTOR"
-                    ? "Consultor"
-                    : "Analista"}
-                </div>
-              </div>
+              <div>Colaborador</div>
+              <div>Gerente</div>
+              <div>Coordenador</div>
+              <div>Colegiado</div>
+              <div>Status geral</div>
+              <div></div>
+            </div>
 
+            {linhas.map((linha) => (
               <div
+                key={linha.colaborador.matricula}
                 style={{
-                  fontWeight: "bold",
-                  color:
-                    linha.situacao === "CONCLUIDA"
-                      ? "#107C41"
-                      : linha.situacao === "PRONTA_PARA_FEEDBACK"
-                      ? "#8A6D00"
-                      : "#555",
+                  display: "grid",
+                  gridTemplateColumns:
+                    "minmax(220px, 1.4fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(170px, 1fr) 130px",
+                  gap: "12px",
+                  alignItems: "center",
+                  padding: "14px 16px",
+                  borderBottom: "1px solid #eee",
                 }}
               >
-                {labelsSituacao[linha.situacao]}
-              </div>
+                <div>
+                  <div style={{ fontWeight: "bold" }}>
+                    {linha.colaborador.nome}
+                  </div>
+                  <div
+                    style={{
+                      marginTop: "4px",
+                      color: "#666",
+                      fontSize: "12px",
+                    }}
+                  >
+                    {linha.colaborador.funcao === "COORDENADOR"
+                      ? "Coordenador"
+                      : linha.colaborador.funcao === "CONSULTOR"
+                      ? "Consultor"
+                      : "Analista"}
+                  </div>
+                </div>
 
-              {linha.feedback ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    navigate(
-                      `/colaborador/${linha.colaborador.matricula}/feedback/${linha.feedback!.id}/editar`
-                    )
-                  }
-                  style={{
-                    padding: "8px 12px",
-                    borderRadius: "8px",
-                    border: "1px solid #660099",
-                    backgroundColor: "#fff",
-                    color: "#660099",
-                    cursor: "pointer",
-                    fontWeight: "bold",
-                  }}
-                >
-                  Abrir avaliação
-                </button>
-              ) : (
-                <span style={{ color: "#999", fontSize: "13px" }}>
-                  Não criada
-                </span>
-              )}
-            </div>
-          ))
+                {[linha.gerente, linha.coordenador, linha.colegiado].map(
+                  (progresso, indice) => (
+                    <div
+                      key={indice}
+                      style={{
+                        color: corPapel(progresso),
+                        fontWeight:
+                          progresso.situacao === "PENDENTE" ||
+                          progresso.situacao === "CONCLUIDO"
+                            ? "bold"
+                            : "normal",
+                        fontSize: "13px",
+                      }}
+                    >
+                      {labelPapel(progresso)}
+                    </div>
+                  )
+                )}
+
+                <div>
+                  <div
+                    style={{
+                      fontWeight: "bold",
+                      color:
+                        linha.situacao === "CONCLUIDA"
+                          ? "#107C41"
+                          : linha.situacao === "PRONTA_PARA_FEEDBACK"
+                          ? "#8A6D00"
+                          : "#555",
+                    }}
+                  >
+                    {labelsSituacao[linha.situacao]}
+                  </div>
+                  {linha.feedback?.encerradaComPendencias && (
+                    <div
+                      style={{
+                        marginTop: "4px",
+                        color: "#A4262C",
+                        fontSize: "12px",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      Encerrada com pendências
+                    </div>
+                  )}
+                </div>
+
+                {linha.feedback ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate(
+                        `/colaborador/${linha.colaborador.matricula}/feedback/${linha.feedback!.id}/editar`
+                      )
+                    }
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: "8px",
+                      border: "1px solid #660099",
+                      backgroundColor: "#fff",
+                      color: "#660099",
+                      cursor: "pointer",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    Abrir
+                  </button>
+                ) : (
+                  <span style={{ color: "#999", fontSize: "13px" }}>
+                    Não criada
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>
