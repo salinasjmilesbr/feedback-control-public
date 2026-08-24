@@ -1288,44 +1288,50 @@ function EditarFeedbackPage() {
                           gap: "14px",
                         }}
                       >
-                        <div style={{ textAlign: "center" }}>
-                          <div
-                            style={{
-                              fontWeight: "bold",
-                              color: "#555",
-                              marginBottom: "10px",
-                            }}
-                          >
-                            Nota do Gerente
+                        {progressoAvaliacao.gerente.necessario && (
+                          <div style={{ textAlign: "center" }}>
+                            <div
+                              style={{
+                                fontWeight: "bold",
+                                color: "#555",
+                                marginBottom: "10px",
+                              }}
+                            >
+                              Nota do Gerente
+                            </div>
+                            {renderNotas(criterio.id, subcriterio, "gerente")}
                           </div>
-                          {renderNotas(criterio.id, subcriterio, "gerente")}
-                        </div>
+                        )}
 
-                        <div style={{ textAlign: "center" }}>
-                          <div
-                            style={{
-                              fontWeight: "bold",
-                              color: "#555",
-                              marginBottom: "10px",
-                            }}
-                          >
-                            Nota do Coordenador
+                        {progressoAvaliacao.coordenador.necessario && (
+                          <div style={{ textAlign: "center" }}>
+                            <div
+                              style={{
+                                fontWeight: "bold",
+                                color: "#555",
+                                marginBottom: "10px",
+                              }}
+                            >
+                              Nota do Coordenador
+                            </div>
+                            {renderNotas(criterio.id, subcriterio, "coordenador")}
                           </div>
-                          {renderNotas(criterio.id, subcriterio, "coordenador")}
-                        </div>
+                        )}
 
-                        <div style={{ textAlign: "center" }}>
-                          <div
-                            style={{
-                              fontWeight: "bold",
-                              color: "#555",
-                              marginBottom: "10px",
-                            }}
-                          >
-                            Nota do Colegiado
+                        {progressoAvaliacao.colegiado.necessario && (
+                          <div style={{ textAlign: "center" }}>
+                            <div
+                              style={{
+                                fontWeight: "bold",
+                                color: "#555",
+                                marginBottom: "10px",
+                              }}
+                            >
+                              Nota do Colegiado
+                            </div>
+                            {renderVotosColegiado(criterio.id, subcriterio)}
                           </div>
-                          {renderVotosColegiado(criterio.id, subcriterio)}
-                        </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -1339,57 +1345,61 @@ function EditarFeedbackPage() {
                     marginTop: "20px",
                   }}
                 >
-                  <div>
-                    <label style={{ fontWeight: "bold", color: "#333" }}>
-                      Observação do Gerente
-                    </label>
-                    <textarea
-                      value={avaliacoes[criterio.id].observacaoGerente}
-                      disabled={!permissoes.podeAvaliarComoGerente}
-                      onChange={(event) =>
-                        atualizarObservacao(
-                          criterio.id,
-                          "observacaoGerente",
-                          event.target.value
-                        )
-                      }
-                      style={{
-                        width: "100%",
-                        minHeight: "90px",
-                        marginTop: "8px",
-                        padding: "10px",
-                        borderRadius: "8px",
-                        border: "1px solid #ccc",
-                        boxSizing: "border-box",
-                      }}
-                    />
-                  </div>
+                  {progressoAvaliacao.gerente.necessario && (
+                    <div>
+                      <label style={{ fontWeight: "bold", color: "#333" }}>
+                        Observação do Gerente
+                      </label>
+                      <textarea
+                        value={avaliacoes[criterio.id].observacaoGerente}
+                        disabled={!permissoes.podeAvaliarComoGerente}
+                        onChange={(event) =>
+                          atualizarObservacao(
+                            criterio.id,
+                            "observacaoGerente",
+                            event.target.value
+                          )
+                        }
+                        style={{
+                          width: "100%",
+                          minHeight: "90px",
+                          marginTop: "8px",
+                          padding: "10px",
+                          borderRadius: "8px",
+                          border: "1px solid #ccc",
+                          boxSizing: "border-box",
+                        }}
+                      />
+                    </div>
+                  )}
 
-                  <div>
-                    <label style={{ fontWeight: "bold", color: "#333" }}>
-                      Observação do Coordenador
-                    </label>
-                    <textarea
-                      value={avaliacoes[criterio.id].observacaoCoordenador}
-                      disabled={!permissoes.podeAvaliarComoCoordenador}
-                      onChange={(event) =>
-                        atualizarObservacao(
-                          criterio.id,
-                          "observacaoCoordenador",
-                          event.target.value
-                        )
-                      }
-                      style={{
-                        width: "100%",
-                        minHeight: "90px",
-                        marginTop: "8px",
-                        padding: "10px",
-                        borderRadius: "8px",
-                        border: "1px solid #ccc",
-                        boxSizing: "border-box",
-                      }}
-                    />
-                  </div>
+                  {progressoAvaliacao.coordenador.necessario && (
+                    <div>
+                      <label style={{ fontWeight: "bold", color: "#333" }}>
+                        Observação do Coordenador
+                      </label>
+                      <textarea
+                        value={avaliacoes[criterio.id].observacaoCoordenador}
+                        disabled={!permissoes.podeAvaliarComoCoordenador}
+                        onChange={(event) =>
+                          atualizarObservacao(
+                            criterio.id,
+                            "observacaoCoordenador",
+                            event.target.value
+                          )
+                        }
+                        style={{
+                          width: "100%",
+                          minHeight: "90px",
+                          marginTop: "8px",
+                          padding: "10px",
+                          borderRadius: "8px",
+                          border: "1px solid #ccc",
+                          boxSizing: "border-box",
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div
@@ -1603,47 +1613,51 @@ function EditarFeedbackPage() {
                 gap: "16px",
               }}
             >
-              <div>
-                <label style={{ fontWeight: "bold", color: "#333" }}>
-                  Feedback Final do Gerente
-                </label>
-                <textarea
-                  value={feedbackFinalGerente}
-                  disabled={!permissoes.podeAvaliarComoGerente}
-                  onChange={(event) => setFeedbackFinalGerente(event.target.value)}
-                  style={{
-                    width: "100%",
-                    minHeight: "160px",
-                    marginTop: "8px",
-                    padding: "10px",
-                    borderRadius: "8px",
-                    border: "1px solid #ccc",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
+              {progressoAvaliacao.gerente.necessario && (
+                <div>
+                  <label style={{ fontWeight: "bold", color: "#333" }}>
+                    Feedback Final do Gerente
+                  </label>
+                  <textarea
+                    value={feedbackFinalGerente}
+                    disabled={!permissoes.podeAvaliarComoGerente}
+                    onChange={(event) => setFeedbackFinalGerente(event.target.value)}
+                    style={{
+                      width: "100%",
+                      minHeight: "160px",
+                      marginTop: "8px",
+                      padding: "10px",
+                      borderRadius: "8px",
+                      border: "1px solid #ccc",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                </div>
+              )}
 
-              <div>
-                <label style={{ fontWeight: "bold", color: "#333" }}>
-                  Feedback Final do Coordenador
-                </label>
-                <textarea
-                  value={feedbackFinalCoordenador}
-                  disabled={!permissoes.podeAvaliarComoCoordenador}
-                  onChange={(event) =>
-                    setFeedbackFinalCoordenador(event.target.value)
-                  }
-                  style={{
-                    width: "100%",
-                    minHeight: "160px",
-                    marginTop: "8px",
-                    padding: "10px",
-                    borderRadius: "8px",
-                    border: "1px solid #ccc",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
+              {progressoAvaliacao.coordenador.necessario && (
+                <div>
+                  <label style={{ fontWeight: "bold", color: "#333" }}>
+                    Feedback Final do Coordenador
+                  </label>
+                  <textarea
+                    value={feedbackFinalCoordenador}
+                    disabled={!permissoes.podeAvaliarComoCoordenador}
+                    onChange={(event) =>
+                      setFeedbackFinalCoordenador(event.target.value)
+                    }
+                    style={{
+                      width: "100%",
+                      minHeight: "160px",
+                      marginTop: "8px",
+                      padding: "10px",
+                      borderRadius: "8px",
+                      border: "1px solid #ccc",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                </div>
+              )}
             </div>
           </div>
         )}

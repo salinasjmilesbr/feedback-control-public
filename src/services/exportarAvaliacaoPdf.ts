@@ -24,6 +24,7 @@ function formatarSenioridade(
 function formatarFuncao(funcao: Colaborador["funcao"]) {
   if (funcao === "GERENTE") return "Gerente";
   if (funcao === "COORDENADOR") return "Coordenador";
+  if (funcao === "CONSULTOR") return "Consultor";
   if (funcao === "ANALISTA") return "Analista";
   return "-";
 }
@@ -139,16 +140,16 @@ export function exportarAvaliacaoPdf(
     const valor = (nota: number) =>
       nota > 0 ? nota.toFixed(2) : "-";
 
-    escreverTexto(
-      `Gerente: ${valor(notaGerente)}    Coordenador: ${valor(
-        notaCoordenador
-      )}    Colegiado: ${valor(
-        notaColegiado
-      )}    Nota final: ${valor(notaFinal)}`,
-      9,
-      false,
-      4
-    );
+    const partes = [`Gerente: ${valor(notaGerente)}`];
+
+    if (colaborador.funcao === "ANALISTA") {
+      partes.push(`Coordenador: ${valor(notaCoordenador)}`);
+      partes.push(`Colegiado: ${valor(notaColegiado)}`);
+    }
+
+    partes.push(`Nota final: ${valor(notaFinal)}`);
+
+    escreverTexto(partes.join("    "), 9, false, 4);
   }
 
   pdf.setFont("helvetica", "bold");
@@ -180,14 +181,18 @@ export function exportarAvaliacaoPdf(
     false,
     1
   );
-  escreverTexto(
-    `Senioridade: ${formatarSenioridade(
-      colaborador.senioridade
-    )}`,
-    10,
-    false,
-    5
-  );
+  if (colaborador.funcao === "ANALISTA") {
+    escreverTexto(
+      `Senioridade: ${formatarSenioridade(
+        colaborador.senioridade
+      )}`,
+      10,
+      false,
+      5
+    );
+  } else {
+    y += 3;
+  }
 
   garantirEspaco(18);
   pdf.setDrawColor(102, 0, 153);
@@ -210,26 +215,30 @@ export function exportarAvaliacaoPdf(
     );
   }
 
-  if (avaliadores.coordenador) {
-    escreverTexto(
-      `Coordenador: ${avaliadores.coordenador.nome}`,
-      10,
-      false,
-      1
-    );
-  }
+  if (colaborador.funcao === "ANALISTA") {
+    if (avaliadores.coordenador) {
+      escreverTexto(
+        `Coordenador: ${avaliadores.coordenador.nome}`,
+        10,
+        false,
+        1
+      );
+    }
 
-  if (avaliadores.colegiado.length > 0) {
-    escreverTexto(
-      `Colegiado: ${avaliadores.colegiado
-        .map((avaliador) => avaliador.nome)
-        .join(", ")}`,
-      10,
-      false,
-      5
-    );
+    if (avaliadores.colegiado.length > 0) {
+      escreverTexto(
+        `Colegiado: ${avaliadores.colegiado
+          .map((avaliador) => avaliador.nome)
+          .join(", ")}`,
+        10,
+        false,
+        5
+      );
+    } else {
+      escreverTexto("Colegiado: -", 10, false, 5);
+    }
   } else {
-    escreverTexto("Colegiado: -", 10, false, 5);
+    y += 3;
   }
 
   const criterios = feedback.criteriosDetalhados ?? [];
@@ -261,7 +270,10 @@ export function exportarAvaliacaoPdf(
       escreverTexto(criterio.observacaoGerente, 9, false, 4);
     }
 
-    if (criterio.observacaoCoordenador?.trim()) {
+    if (
+      colaborador.funcao === "ANALISTA" &&
+      criterio.observacaoCoordenador?.trim()
+    ) {
       escreverTexto("Observacao do Coordenador", 10, true, 1);
       escreverTexto(criterio.observacaoCoordenador, 9, false, 4);
     }
@@ -271,7 +283,8 @@ export function exportarAvaliacaoPdf(
 
   if (
     feedback.feedbackFinalGerente?.trim() ||
-    feedback.feedbackFinalCoordenador?.trim()
+    (colaborador.funcao === "ANALISTA" &&
+      feedback.feedbackFinalCoordenador?.trim())
   ) {
     garantirEspaco(16);
     escreverTexto("Feedback Final", 13, true, 3);
@@ -281,7 +294,10 @@ export function exportarAvaliacaoPdf(
       escreverTexto(feedback.feedbackFinalGerente, 9, false, 4);
     }
 
-    if (feedback.feedbackFinalCoordenador?.trim()) {
+    if (
+      colaborador.funcao === "ANALISTA" &&
+      feedback.feedbackFinalCoordenador?.trim()
+    ) {
       escreverTexto("Coordenador", 10, true, 1);
       escreverTexto(
         feedback.feedbackFinalCoordenador,

@@ -9,7 +9,7 @@ function InicioPage() {
     return <div style={{ padding: "30px" }}><h1>Usuário atual não definido</h1></div>;
   }
 
-  if (usuarioAtual.funcao === "ANALISTA") {
+  if (usuarioAtual.funcao === "ANALISTA" || usuarioAtual.funcao === "CONSULTOR") {
     return <MinhaAvaliacaoPage />;
   }
 

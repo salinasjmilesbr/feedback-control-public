@@ -165,22 +165,27 @@ function MinhaAvaliacaoDetalhePage() {
                           : "-"}
                       </strong>
                     </span>
-                    <span>
-                      Coordenador:{" "}
-                      <strong>
-                        {subcriterio.notaCoordenador > 0
-                          ? subcriterio.notaCoordenador.toFixed(2)
-                          : "-"}
-                      </strong>
-                    </span>
-                    <span>
-                      Colegiado:{" "}
-                      <strong>
-                        {subcriterio.notaColegiado > 0
-                          ? subcriterio.notaColegiado.toFixed(2)
-                          : "-"}
-                      </strong>
-                    </span>
+
+                    {usuarioAtual.funcao === "ANALISTA" && (
+                      <>
+                        <span>
+                          Coordenador:{" "}
+                          <strong>
+                            {subcriterio.notaCoordenador > 0
+                              ? subcriterio.notaCoordenador.toFixed(2)
+                              : "-"}
+                          </strong>
+                        </span>
+                        <span>
+                          Colegiado:{" "}
+                          <strong>
+                            {subcriterio.notaColegiado > 0
+                              ? subcriterio.notaColegiado.toFixed(2)
+                              : "-"}
+                          </strong>
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}
@@ -213,22 +218,23 @@ function MinhaAvaliacaoDetalhePage() {
                     </div>
                   )}
 
-                  {criterio.observacaoCoordenador && (
-                    <div>
-                      <strong>Observação do Coordenador</strong>
-                      <div
-                        style={{
-                          marginTop: "6px",
-                          padding: "10px",
-                          borderRadius: "8px",
-                          backgroundColor: "#F8F8F8",
-                          whiteSpace: "pre-wrap",
-                        }}
-                      >
-                        {criterio.observacaoCoordenador}
+                  {usuarioAtual.funcao === "ANALISTA" &&
+                    criterio.observacaoCoordenador && (
+                      <div>
+                        <strong>Observação do Coordenador</strong>
+                        <div
+                          style={{
+                            marginTop: "6px",
+                            padding: "10px",
+                            borderRadius: "8px",
+                            backgroundColor: "#F8F8F8",
+                            whiteSpace: "pre-wrap",
+                          }}
+                        >
+                          {criterio.observacaoCoordenador}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
                 </div>
               )}
             </div>
@@ -269,22 +275,23 @@ function MinhaAvaliacaoDetalhePage() {
               </div>
             )}
 
-            {feedback.feedbackFinalCoordenador && (
-              <div>
-                <strong>Coordenador</strong>
-                <div
-                  style={{
-                    marginTop: "6px",
-                    padding: "12px",
-                    borderRadius: "8px",
-                    backgroundColor: "#F8F8F8",
-                    whiteSpace: "pre-wrap",
-                  }}
-                >
-                  {feedback.feedbackFinalCoordenador}
+            {usuarioAtual.funcao === "ANALISTA" &&
+              feedback.feedbackFinalCoordenador && (
+                <div>
+                  <strong>Coordenador</strong>
+                  <div
+                    style={{
+                      marginTop: "6px",
+                      padding: "12px",
+                      borderRadius: "8px",
+                      backgroundColor: "#F8F8F8",
+                      whiteSpace: "pre-wrap",
+                    }}
+                  >
+                    {feedback.feedbackFinalCoordenador}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
           </div>
         </div>
       )}
@@ -298,9 +305,9 @@ function MinhaAvaliacaoDetalhePage() {
           color: "#555",
         }}
       >
-        O analista vê as notas do gerente, coordenador e a média do
-        colegiado, mas não vê os votos individuais de cada integrante
-        do colegiado.
+        {usuarioAtual.funcao === "ANALISTA"
+          ? "Nesta visão aparecem as notas do gerente, coordenador e a média do colegiado, sem revelar os votos individuais."
+          : "Nesta visão aparecem apenas as notas, observações e feedbacks do gerente responsável pela avaliação."}
       </div>
 
     </div>

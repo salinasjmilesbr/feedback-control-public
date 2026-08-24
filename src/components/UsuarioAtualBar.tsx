@@ -50,6 +50,8 @@ function UsuarioAtualBar() {
                 ? "Gerente"
                 : usuario.funcao === "COORDENADOR"
                 ? "Coordenador"
+                : usuario.funcao === "CONSULTOR"
+                ? "Consultor"
                 : "Analista"}
             </option>
           ))}
@@ -70,6 +72,8 @@ function UsuarioAtualBar() {
               ? "GERENTE"
               : usuarioAtual.funcao === "COORDENADOR"
               ? "COORDENADOR"
+              : usuarioAtual.funcao === "CONSULTOR"
+              ? "CONSULTOR"
               : "ANALISTA"}
           </span>
         )}

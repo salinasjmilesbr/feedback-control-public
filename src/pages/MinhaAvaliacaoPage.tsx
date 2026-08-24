@@ -18,7 +18,35 @@ function MinhaAvaliacaoPage() {
 
   return (
     <div style={{ padding: "30px" }}>
-      <h1>Minha Avaliação</h1>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "16px",
+          marginBottom: "20px",
+        }}
+      >
+        <h1 style={{ margin: 0 }}>Minha Avaliação</h1>
+
+        {usuarioAtual.funcao === "COORDENADOR" && (
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            style={{
+              padding: "10px 16px",
+              borderRadius: "8px",
+              border: "1px solid #660099",
+              backgroundColor: "#fff",
+              color: "#660099",
+              cursor: "pointer",
+              fontWeight: "600",
+            }}
+          >
+            Minha equipe
+          </button>
+        )}
+      </div>
 
       <div style={{
         border: "1px solid #ddd",

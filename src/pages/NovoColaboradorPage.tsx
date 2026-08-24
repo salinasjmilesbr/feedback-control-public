@@ -31,8 +31,10 @@ function NovoColaboradorPage() {
     .filter(
       (colaborador) =>
         colaborador.status === "ATIVO" &&
-        (colaborador.funcao === "GERENTE" ||
-          colaborador.funcao === "COORDENADOR")
+        (funcao === "ANALISTA"
+          ? colaborador.funcao === "GERENTE" ||
+            colaborador.funcao === "COORDENADOR"
+          : colaborador.funcao === "GERENTE")
     )
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
@@ -90,7 +92,8 @@ function NovoColaboradorPage() {
       area: area.trim(),
       funcao,
       senioridade: funcao === "ANALISTA" ? senioridade : undefined,
-      avaliadoresColegiadoMatriculas,
+      avaliadoresColegiadoMatriculas:
+        funcao === "ANALISTA" ? avaliadoresColegiadoMatriculas : [],
       gestorDiretoMatricula: gestorDireto?.matricula,
       respondePara: gestorDireto?.nome ?? "",
       status,
@@ -168,6 +171,7 @@ function NovoColaboradorPage() {
           >
             <option value="ANALISTA">Analista</option>
             <option value="COORDENADOR">Coordenador</option>
+            <option value="CONSULTOR">Consultor</option>
             <option value="GERENTE">Gerente</option>
           </select>
         </label>
@@ -208,7 +212,8 @@ function NovoColaboradorPage() {
           </select>
         </label>
 
-        <fieldset
+        {funcao === "ANALISTA" && (
+          <fieldset
           style={{
             border: "1px solid #ccc",
             borderRadius: "8px",
@@ -234,7 +239,8 @@ function NovoColaboradorPage() {
               </label>
             ))}
           </div>
-        </fieldset>
+          </fieldset>
+        )}
 
         <label>
           Status

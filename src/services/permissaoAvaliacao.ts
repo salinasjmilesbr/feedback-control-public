@@ -61,13 +61,15 @@ export function obterPermissoesAvaliacao(
     gerenteResponsavel?.matricula === usuarioAtual.matricula;
 
   const podeAvaliarComoCoordenador =
+    colaboradorAvaliado.funcao === "ANALISTA" &&
     usuarioAtual.funcao === "COORDENADOR" &&
     colaboradorAvaliado.gestorDiretoMatricula === usuarioAtual.matricula;
 
   const podeAvaliarComoColegiado =
-    colaboradorAvaliado.avaliadoresColegiadoMatriculas?.includes(
+    colaboradorAvaliado.funcao === "ANALISTA" &&
+    (colaboradorAvaliado.avaliadoresColegiadoMatriculas?.includes(
       usuarioAtual.matricula
-    ) ?? false;
+    ) ?? false);
 
   const papeisPermitidos: string[] = [];
 

@@ -88,10 +88,16 @@ export function calcularProgressoAvaliacao(
     colaborador,
     colaboradores
   );
-  const coordenadorNecessario = gestorDireto?.funcao === "COORDENADOR";
+  const coordenadorNecessario =
+    colaborador.funcao === "ANALISTA" &&
+    gestorDireto?.funcao === "COORDENADOR";
   const avaliadoresColegiado =
-    colaborador.avaliadoresColegiadoMatriculas ?? [];
-  const colegiadoNecessario = avaliadoresColegiado.length > 0;
+    colaborador.funcao === "ANALISTA"
+      ? colaborador.avaliadoresColegiadoMatriculas ?? []
+      : [];
+  const colegiadoNecessario =
+    colaborador.funcao === "ANALISTA" &&
+    avaliadoresColegiado.length > 0;
 
   let gerentePreenchidos = 0;
   let coordenadorPreenchidos = 0;

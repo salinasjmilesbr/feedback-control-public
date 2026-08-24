@@ -82,19 +82,46 @@ function ColaboradoresPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => navigate("/colaboradores/novo")}
+        <div
           style={{
-            padding: "10px 16px",
-            borderRadius: "8px",
-            border: "none",
-            cursor: "pointer",
-            fontWeight: "600",
+            display: "flex",
+            gap: "10px",
+            flexWrap: "wrap",
+            justifyContent: "flex-end",
           }}
         >
-          + Novo colaborador
-        </button>
+          {usuarioAtual.funcao === "COORDENADOR" && (
+            <button
+              type="button"
+              onClick={() => navigate("/minha-avaliacao")}
+              style={{
+                padding: "10px 16px",
+                borderRadius: "8px",
+                border: "1px solid #660099",
+                backgroundColor: "#fff",
+                color: "#660099",
+                cursor: "pointer",
+                fontWeight: "600",
+              }}
+            >
+              Minha Avaliação
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => navigate("/colaboradores/novo")}
+            style={{
+              padding: "10px 16px",
+              borderRadius: "8px",
+              border: "none",
+              cursor: "pointer",
+              fontWeight: "600",
+            }}
+          >
+            + Novo colaborador
+          </button>
+        </div>
       </div>
 
       <input

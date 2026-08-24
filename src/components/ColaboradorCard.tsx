@@ -27,6 +27,8 @@ function ColaboradorCard({ colaborador }: Props) {
       ? "Gerente"
       : colaborador.funcao === "COORDENADOR"
       ? "Coordenador"
+      : colaborador.funcao === "CONSULTOR"
+      ? "Consultor"
       : "Analista";
 
   const senioridadeLabel =

@@ -47,6 +47,7 @@ export function UsuarioAtualProvider({ children }: { children: ReactNode }) {
           const ordemFuncao = {
             GERENTE: 0,
             COORDENADOR: 1,
+            CONSULTOR: 1,
             ANALISTA: 2,
           } as const;
 

@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import InicioPage from "../pages/InicioPage";
+import MinhaAvaliacaoPage from "../pages/MinhaAvaliacaoPage";
 import MinhaAvaliacaoDetalhePage from "../pages/MinhaAvaliacaoDetalhePage";
 import ColaboradorDetalhePage from "../pages/ColaboradorDetalhePage";
 import NovoColaboradorPage from "../pages/NovoColaboradorPage";
@@ -16,6 +17,11 @@ function AppRoutes() {
         <Route
           path="/"
           element={<InicioPage />}
+        />
+
+        <Route
+          path="/minha-avaliacao"
+          element={<MinhaAvaliacaoPage />}
         />
 
         <Route

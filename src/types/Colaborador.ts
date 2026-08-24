@@ -6,6 +6,7 @@ export type StatusColaborador =
 export type FuncaoColaborador =
   | "GERENTE"
   | "COORDENADOR"
+  | "CONSULTOR"
   | "ANALISTA";
 
 export type SenioridadeColaborador =
