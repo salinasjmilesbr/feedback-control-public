@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
-import ColaboradoresPage from "../pages/ColaboradoresPage";
+import InicioPage from "../pages/InicioPage";
+import MinhaAvaliacaoDetalhePage from "../pages/MinhaAvaliacaoDetalhePage";
 import ColaboradorDetalhePage from "../pages/ColaboradorDetalhePage";
 import NovoColaboradorPage from "../pages/NovoColaboradorPage";
 import EditarColaboradorPage from "../pages/EditarColaboradorPage";
@@ -14,7 +15,12 @@ function AppRoutes() {
       <Routes>
         <Route
           path="/"
-          element={<ColaboradoresPage />}
+          element={<InicioPage />}
+        />
+
+        <Route
+          path="/minha-avaliacao/:feedbackId"
+          element={<MinhaAvaliacaoDetalhePage />}
         />
 
         <Route

@@ -3,12 +3,28 @@ import { useNavigate } from "react-router-dom";
 import ColaboradorCard from "../components/ColaboradorCard";
 import { getColaboradores } from "../services/colaboradorStorage";
 import type { StatusColaborador } from "../types/Colaborador";
+import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
+import { getColaboradoresVisiveis } from "../services/visibilidadeColaboradores";
 
 type StatusFiltro = "TODOS" | StatusColaborador;
 
 function ColaboradoresPage() {
   const navigate = useNavigate();
+  const { usuarioAtual } = useUsuarioAtual();
   const colaboradores = getColaboradores();
+
+  if (!usuarioAtual) {
+    return (
+      <div style={{ padding: "30px" }}>
+        <h1>Usuário atual não definido</h1>
+      </div>
+    );
+  }
+
+  const colaboradoresVisiveis = getColaboradoresVisiveis(
+    usuarioAtual,
+    colaboradores
+  );
 
   const [busca, setBusca] = useState("");
   const [coordenadorFiltro, setCoordenadorFiltro] = useState("TODOS");
@@ -18,14 +34,14 @@ function ColaboradoresPage() {
     "TODOS",
     ...Array.from(
       new Set(
-        colaboradores
+        colaboradoresVisiveis
           .map((colaborador) => colaborador.respondePara)
           .filter((coordenador) => coordenador.trim() !== "")
       )
     ).sort((a, b) => a.localeCompare(b, "pt-BR")),
   ];
 
-  const colaboradoresFiltrados = colaboradores
+  const colaboradoresFiltrados = colaboradoresVisiveis
     .filter((colaborador) => {
       const correspondeBusca = colaborador.nome
         .toLowerCase()
@@ -57,7 +73,14 @@ function ColaboradoresPage() {
           marginBottom: "20px",
         }}
       >
-        <h1 style={{ margin: 0 }}>Colaboradores</h1>
+        <div>
+          <h1 style={{ margin: 0 }}>Colaboradores</h1>
+          <p style={{ margin: "6px 0 0 0", color: "#666" }}>
+            {usuarioAtual.funcao === "GERENTE"
+              ? "Sua estrutura hierárquica"
+              : "Sua equipe e avaliações em que participa"}
+          </p>
+        </div>
 
         <button
           type="button"

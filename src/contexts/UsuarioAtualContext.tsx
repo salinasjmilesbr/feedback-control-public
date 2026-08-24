@@ -42,13 +42,23 @@ export function UsuarioAtualProvider({ children }: { children: ReactNode }) {
   const usuariosDisponiveis = useMemo(
     () =>
       getColaboradores()
-        .filter(
-          (usuario) =>
-            usuario.status === "ATIVO" &&
-            (usuario.funcao === "GERENTE" ||
-              usuario.funcao === "COORDENADOR")
-        )
-        .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
+        .filter((usuario) => usuario.status === "ATIVO")
+        .sort((a, b) => {
+          const ordemFuncao = {
+            GERENTE: 0,
+            COORDENADOR: 1,
+            ANALISTA: 2,
+          } as const;
+
+          const ordemA =
+            a.funcao ? ordemFuncao[a.funcao] : 3;
+          const ordemB =
+            b.funcao ? ordemFuncao[b.funcao] : 3;
+
+          if (ordemA !== ordemB) return ordemA - ordemB;
+
+          return a.nome.localeCompare(b.nome, "pt-BR");
+        }),
     []
   );
 

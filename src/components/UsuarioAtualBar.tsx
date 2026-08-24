@@ -45,7 +45,12 @@ function UsuarioAtualBar() {
         >
           {usuariosDisponiveis.map((usuario) => (
             <option key={usuario.matricula} value={usuario.matricula}>
-              {usuario.nome} - {usuario.funcao === "GERENTE" ? "Gerente" : "Coordenador"}
+              {usuario.nome} -{" "}
+              {usuario.funcao === "GERENTE"
+                ? "Gerente"
+                : usuario.funcao === "COORDENADOR"
+                ? "Coordenador"
+                : "Analista"}
             </option>
           ))}
         </select>
@@ -61,7 +66,11 @@ function UsuarioAtualBar() {
               fontWeight: "bold",
             }}
           >
-            {usuarioAtual.funcao === "GERENTE" ? "GERENTE" : "COORDENADOR"}
+            {usuarioAtual.funcao === "GERENTE"
+              ? "GERENTE"
+              : usuarioAtual.funcao === "COORDENADOR"
+              ? "COORDENADOR"
+              : "ANALISTA"}
           </span>
         )}
       </div>
