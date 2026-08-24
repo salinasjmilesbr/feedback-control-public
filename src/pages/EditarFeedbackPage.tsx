@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { colaboradores } from "../data/colaboradores";
+import { getColaboradorByMatricula, getColaboradores } from "../services/colaboradorStorage";
+import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
+import { obterPermissoesAvaliacao } from "../services/permissaoAvaliacao";
 import { getFeedbacksByColaborador, updateFeedback, } from "../services/feedbackStorage";
 import type { Feedback } from "../types/Feedback";
 
@@ -143,13 +145,34 @@ function criarEstadoInicialEdicao(feedback?: Feedback): Avaliacoes {
   return estadoInicial;
 }
 
+function criarVotosColegiadoIniciais(feedback?: Feedback) {
+  const votos: Record<string, Record<string, Record<number, number>>> = {};
+
+  feedback?.criteriosDetalhados?.forEach((criterio) => {
+    criterio.subcriterios.forEach((subcriterio) => {
+      subcriterio.votosColegiado?.forEach((voto) => {
+        votos[criterio.criterioId] ??= {};
+        votos[criterio.criterioId][subcriterio.nome] ??= {};
+        votos[criterio.criterioId][subcriterio.nome][voto.avaliadorMatricula] =
+          voto.nota;
+      });
+    });
+  });
+
+  return votos;
+}
+
 function EditarFeedbackPage() {
   const { id, feedbackId } = useParams();
   const navigate = useNavigate();
+  const { usuarioAtual } = useUsuarioAtual();
 
-  const colaborador = colaboradores.find(
-    (item) => item.matricula.toString() === id
-  );
+  const matricula = Number(id);
+  const colaborador = Number.isFinite(matricula)
+    ? getColaboradorByMatricula(matricula)
+    : undefined;
+
+  const colaboradores = getColaboradores();
 
   const feedbacks = colaborador
     ? getFeedbacksByColaborador(colaborador.matricula)
@@ -160,6 +183,9 @@ function EditarFeedbackPage() {
   const [avaliacoes, setAvaliacoes] = useState<Avaliacoes>(() =>
     criarEstadoInicialEdicao(feedback)
   );
+  const [votosColegiado, setVotosColegiado] = useState<
+    Record<string, Record<string, Record<number, number>>>
+  >(() => criarVotosColegiadoIniciais(feedback));
   const [feedbackFinalGerente, setFeedbackFinalGerente] = useState(
     feedback?.feedbackFinalGerente ?? ""
   );
@@ -204,6 +230,26 @@ function EditarFeedbackPage() {
     );
   }
 
+  const avaliadoresColegiado = (
+    colaborador.avaliadoresColegiadoMatriculas ?? []
+  )
+    .map((matriculaAvaliador) =>
+      colaboradores.find((item) => item.matricula === matriculaAvaliador)
+    )
+    .filter((item) => item !== undefined);
+
+  const permissoes = obterPermissoesAvaliacao(
+    usuarioAtual,
+    colaborador,
+    colaboradores
+  );
+
+  function podeEditarPapel(papel: PapelAvaliador) {
+    if (papel === "gerente") return permissoes.podeAvaliarComoGerente;
+    if (papel === "coordenador") return permissoes.podeAvaliarComoCoordenador;
+    return permissoes.podeAvaliarComoColegiado;
+  }
+
   function atualizarNota(
     criterioId: string,
     subcriterio: string,
@@ -223,6 +269,129 @@ function EditarFeedbackPage() {
         },
       },
     }));
+  }
+
+  function atualizarVotoColegiado(
+    criterioId: string,
+    subcriterio: string,
+    avaliadorMatricula: number,
+    nota: number
+  ) {
+    if (usuarioAtual?.matricula !== avaliadorMatricula) return;
+
+    setVotosColegiado((estadoAtual) => {
+      const votosAtualizados = {
+        ...estadoAtual,
+        [criterioId]: {
+          ...(estadoAtual[criterioId] ?? {}),
+          [subcriterio]: {
+            ...(estadoAtual[criterioId]?.[subcriterio] ?? {}),
+            [avaliadorMatricula]: nota,
+          },
+        },
+      };
+
+      const notas = Object.values(
+        votosAtualizados[criterioId][subcriterio]
+      ).filter((valor) => valor > 0);
+
+      const mediaColegiado =
+        notas.length === 0
+          ? 0
+          : notas.reduce((total, valor) => total + valor, 0) / notas.length;
+
+      setAvaliacoes((avaliacoesAtuais) => ({
+        ...avaliacoesAtuais,
+        [criterioId]: {
+          ...avaliacoesAtuais[criterioId],
+          notas: {
+            ...avaliacoesAtuais[criterioId].notas,
+            [subcriterio]: {
+              ...avaliacoesAtuais[criterioId].notas[subcriterio],
+              colegiado: mediaColegiado,
+            },
+          },
+        },
+      }));
+
+      return votosAtualizados;
+    });
+  }
+
+  function renderVotosColegiado(criterioId: string, subcriterio: string) {
+    if (avaliadoresColegiado.length === 0) {
+      return (
+        <div style={{ color: "#777", fontSize: "14px" }}>
+          Nenhum avaliador do colegiado cadastrado.
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ display: "grid", gap: "12px" }}>
+        {avaliadoresColegiado.map((avaliador) => {
+          const valorAtual =
+            votosColegiado[criterioId]?.[subcriterio]?.[avaliador.matricula] ?? 0;
+          const podeEditar =
+            permissoes.podeAvaliarComoColegiado &&
+            usuarioAtual?.matricula === avaliador.matricula;
+
+          return (
+            <div key={avaliador.matricula}>
+              <div
+                style={{
+                  fontSize: "13px",
+                  fontWeight: "bold",
+                  color: podeEditar ? "#555" : "#999",
+                  marginBottom: "6px",
+                }}
+              >
+                {avaliador.nome}
+                {usuarioAtual?.matricula === avaliador.matricula ? " (você)" : ""}
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: "10px",
+                  justifyContent: "center",
+                  flexWrap: "wrap",
+                }}
+              >
+                {[1, 2, 3, 4, 5].map((nota) => (
+                  <label
+                    key={nota}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      cursor: podeEditar ? "pointer" : "not-allowed",
+                      color: podeEditar ? "#444" : "#aaa",
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name={`${criterioId}-${subcriterio}-colegiado-${avaliador.matricula}`}
+                      checked={valorAtual === nota}
+                      disabled={!podeEditar}
+                      onChange={() =>
+                        atualizarVotoColegiado(
+                          criterioId,
+                          subcriterio,
+                          avaliador.matricula,
+                          nota
+                        )
+                      }
+                    />
+                    {nota}
+                  </label>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
   }
 
   function atualizarObservacao(
@@ -412,6 +581,7 @@ function EditarFeedbackPage() {
               type="radio"
               name={`${criterioId}-${subcriterio}-${papel}`}
               checked={valorAtual === nota}
+              disabled={!podeEditarPapel(papel)}
               onChange={() => atualizarNota(criterioId, subcriterio, papel, nota)}
             />
             {nota}
@@ -461,6 +631,23 @@ function EditarFeedbackPage() {
             notaGerente: notas.gerente,
             notaCoordenador: notas.coordenador,
             notaColegiado: notas.colegiado,
+            votosColegiado: avaliadoresColegiado
+              .map((avaliador) => {
+                const nota =
+                  votosColegiado[criterio.id]?.[subcriterio]?.[
+                    avaliador.matricula
+                  ] ?? 0;
+
+                return nota > 0
+                  ? {
+                      avaliadorMatricula: avaliador.matricula,
+                      avaliadorNome: avaliador.nome,
+                      nota,
+                      dataAtualizacao: new Date().toISOString(),
+                    }
+                  : undefined;
+              })
+              .filter((voto) => voto !== undefined),
             notaFinal: calcularMediaSubcriterio(criterio.id, subcriterio),
           };
         }),
@@ -575,6 +762,24 @@ function EditarFeedbackPage() {
                 : "❌ Desligado"}
             </span>
           </div>
+        </div>
+      </div>
+
+      <div
+        style={{
+          border: "1px solid #ddd",
+          borderRadius: "12px",
+          padding: "16px 20px",
+          marginBottom: "20px",
+          backgroundColor: permissoes.podeAvaliar ? "#F8F1FF" : "#FAFAFA",
+        }}
+      >
+        <strong>Permissão nesta avaliação:</strong>{" "}
+        {permissoes.papeisPermitidos.length > 0
+          ? permissoes.papeisPermitidos.join(" + ")
+          : "Somente consulta"}
+        <div style={{ marginTop: "6px", color: "#666", fontSize: "13px" }}>
+          Usuário atual: {usuarioAtual?.nome ?? "Não selecionado"}
         </div>
       </div>
 
@@ -934,7 +1139,7 @@ function EditarFeedbackPage() {
                           >
                             Nota do Colegiado
                           </div>
-                          {renderNotas(criterio.id, subcriterio, "colegiado")}
+                          {renderVotosColegiado(criterio.id, subcriterio)}
                         </div>
                       </div>
                     </div>
@@ -955,6 +1160,7 @@ function EditarFeedbackPage() {
                     </label>
                     <textarea
                       value={avaliacoes[criterio.id].observacaoGerente}
+                      disabled={!permissoes.podeAvaliarComoGerente}
                       onChange={(event) =>
                         atualizarObservacao(
                           criterio.id,
@@ -980,6 +1186,7 @@ function EditarFeedbackPage() {
                     </label>
                     <textarea
                       value={avaliacoes[criterio.id].observacaoCoordenador}
+                      disabled={!permissoes.podeAvaliarComoCoordenador}
                       onChange={(event) =>
                         atualizarObservacao(
                           criterio.id,
@@ -1217,6 +1424,7 @@ function EditarFeedbackPage() {
                 </label>
                 <textarea
                   value={feedbackFinalGerente}
+                  disabled={!permissoes.podeAvaliarComoGerente}
                   onChange={(event) => setFeedbackFinalGerente(event.target.value)}
                   style={{
                     width: "100%",
@@ -1236,6 +1444,7 @@ function EditarFeedbackPage() {
                 </label>
                 <textarea
                   value={feedbackFinalCoordenador}
+                  disabled={!permissoes.podeAvaliarComoCoordenador}
                   onChange={(event) =>
                     setFeedbackFinalCoordenador(event.target.value)
                   }
@@ -1264,6 +1473,7 @@ function EditarFeedbackPage() {
       >
         <button
           onClick={handleSalvarAlteracoes}
+          disabled={!permissoes.podeAvaliar}
           style={{
             padding: "12px 24px",
             borderRadius: "10px",
