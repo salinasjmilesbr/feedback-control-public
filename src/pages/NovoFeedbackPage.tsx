@@ -5,6 +5,7 @@ import { saveFeedback, getFeedbacksByColaborador,} from "../services/feedbackSto
 import type { Feedback } from "../types/Feedback";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import { obterPermissoesAvaliacao } from "../services/permissaoAvaliacao";
+import { calcularProgressoAvaliacao } from "../services/progressoAvaliacao";
 
 const criterios = [
   {
@@ -458,6 +459,32 @@ function NovoFeedbackPage() {
       ? 0
       : Math.round((subcriteriosConcluidos / totalSubcriterios) * 100);
 
+  const progressoAvaliacao = calcularProgressoAvaliacao(
+    criterios,
+    avaliacoes,
+    votosColegiado,
+    colaborador,
+    colaboradores,
+    feedbackFinalGerente,
+    feedbackFinalCoordenador
+  );
+
+  function alterarStatus(novoStatus: Feedback["status"]) {
+    if (
+      novoStatus !== "RASCUNHO" &&
+      !progressoAvaliacao.completo
+    ) {
+      alert(
+        `A avaliação ainda não está completa.\n\n${progressoAvaliacao.pendencias.join(
+          "\n"
+        )}`
+      );
+      return;
+    }
+
+    setStatus(novoStatus);
+  }
+
   const totalFeedbacksFinaisPreenchidos = [
     feedbackFinalGerente,
     feedbackFinalCoordenador,
@@ -513,6 +540,15 @@ function NovoFeedbackPage() {
   }
 
   function handleSalvarFeedback() {
+    if (status !== "RASCUNHO" && !progressoAvaliacao.completo) {
+      alert(
+        `Não é possível salvar com este status.\n\n${progressoAvaliacao.pendencias.join(
+          "\n"
+        )}`
+      );
+      return;
+    }
+
     const novoFeedback = {
       id: crypto.randomUUID(),
       colaboradorId: colaborador!.matricula,
@@ -795,7 +831,7 @@ if (feedbackExistente) {
             <input
               type="radio"
               checked={status === "RASCUNHO"}
-              onChange={() => setStatus("RASCUNHO")}
+              onChange={() => alterarStatus("RASCUNHO")}
             />
             {" "}Rascunho 📝
           </label>
@@ -804,7 +840,7 @@ if (feedbackExistente) {
             <input
               type="radio"
               checked={status === "PRONTA_PARA_FEEDBACK"}
-              onChange={() => setStatus("PRONTA_PARA_FEEDBACK")}
+              onChange={() => alterarStatus("PRONTA_PARA_FEEDBACK")}
             />
             {" "}Pronta para Feedback 🎯
           </label>
@@ -813,10 +849,69 @@ if (feedbackExistente) {
             <input
               type="radio"
               checked={status === "CONCLUIDA"}
-              onChange={() => setStatus("CONCLUIDA")}
+              onChange={() => alterarStatus("CONCLUIDA")}
             />
             {" "}Concluída ✅
           </label>
+        </div>
+
+        <div
+          style={{
+            marginTop: "18px",
+            paddingTop: "16px",
+            borderTop: "1px solid #eee",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              gap: "10px",
+              flexWrap: "wrap",
+            }}
+          >
+            {progressoAvaliacao.gerente.necessario && (
+              <span>
+                Gerente: {progressoAvaliacao.gerente.percentual}%
+              </span>
+            )}
+            {progressoAvaliacao.coordenador.necessario && (
+              <span>
+                Coordenador: {progressoAvaliacao.coordenador.percentual}%
+              </span>
+            )}
+            {progressoAvaliacao.colegiado.necessario && (
+              <span>
+                Colegiado: {progressoAvaliacao.colegiado.percentual}%
+              </span>
+            )}
+          </div>
+
+          {!progressoAvaliacao.completo && (
+            <div
+              style={{
+                marginTop: "10px",
+                color: "#8A6D00",
+                fontSize: "13px",
+              }}
+            >
+              Ainda faltam: {
+                progressoAvaliacao.pendencias.join(" • ")
+              }
+            </div>
+          )}
+
+          {progressoAvaliacao.completo && (
+            <div
+              style={{
+                marginTop: "10px",
+                color: "#107C41",
+                fontSize: "13px",
+                fontWeight: "bold",
+              }}
+            >
+              Todas as notas e feedbacks finais obrigatórios foram preenchidos.
+            </div>
+          )}
         </div>
       </div>
 
