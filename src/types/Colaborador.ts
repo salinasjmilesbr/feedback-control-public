@@ -3,6 +3,11 @@ export type StatusColaborador =
   | "LICENCA"
   | "DESLIGADO";
 
+export type FuncaoColaborador =
+  | "GERENTE"
+  | "COORDENADOR"
+  | "ANALISTA";
+
 export interface Colaborador {
   matricula: number;
   status: StatusColaborador;
@@ -11,7 +16,13 @@ export interface Colaborador {
   email: string;
   cargo: string;
   area: string;
+
+  funcao?: FuncaoColaborador;
+  gestorDiretoMatricula?: number;
+
+  // Campos temporários para compatibilidade durante a migração.
   respondePara: string;
+  gerente?: string;
 
   dataAdmissao?: string;
   dataInicioLicenca?: string;

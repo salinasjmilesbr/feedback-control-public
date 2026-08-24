@@ -1,6 +1,6 @@
 import type { Colaborador } from "../types/Colaborador";
 import { Link } from "react-router-dom";
-import { evaluationTeam } from "../data/evaluationTeam";
+import { getColaboradorByMatricula } from "../services/colaboradorStorage";
 
 function formatarNome(nome: string) {
   return nome
@@ -19,11 +19,9 @@ interface Props {
 }
 
 function ColaboradorCard({ colaborador }: Props) {
-  const evaluationInfo = evaluationTeam.find(
-    (item) =>
-      String(item.matricula) ===
-      String(colaborador.matricula)
-  );
+  const gestorDireto = colaborador.gestorDiretoMatricula
+    ? getColaboradorByMatricula(colaborador.gestorDiretoMatricula)
+    : undefined;
 
   return (
     <div
@@ -66,24 +64,13 @@ function ColaboradorCard({ colaborador }: Props) {
             {colaborador.cargo}
           </p>
 
-  <p>
-  <strong>Coordenador Direto:</strong>{" "}
-  {evaluationInfo?.coordenadorDireto
-    ? formatarNome(
-        evaluationInfo.coordenadorDireto
-      )
-    : "-"}
-</p>
-
-<p>
-  <strong>Gerente:</strong>{" "}
-  {evaluationInfo?.gerente
-    ? formatarNome(
-        evaluationInfo.gerente
-      )
-    : "-"}
-</p>
-</div>
+          {gestorDireto && (
+            <p>
+              <strong>Gestor direto:</strong>{" "}
+              {formatarNome(gestorDireto.nome)}
+            </p>
+          )}
+        </div>
 
         <div
           style={{
@@ -97,12 +84,12 @@ function ColaboradorCard({ colaborador }: Props) {
             }}
           >
             <strong>Status:</strong>{" "}
-             {colaborador.status === "ATIVO"
-                ? "✅ Ativo"
-                : colaborador.status === "LICENCA"
-                ? "🟡 Em licença"
-                : "❌ Desligado"}
-            </p>
+            {colaborador.status === "ATIVO"
+              ? "✅ Ativo"
+              : colaborador.status === "LICENCA"
+              ? "🟡 Em licença"
+              : "❌ Desligado"}
+          </p>
 
           <Link
             to={`/colaborador/${colaborador.matricula}`}

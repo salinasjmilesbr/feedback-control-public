@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ColaboradorCard from "../components/ColaboradorCard";
-import { colaboradores } from "../data/colaboradores";
-import { evaluationTeam } from "../data/evaluationTeam";
+import { getColaboradores } from "../services/colaboradorStorage";
 import type { StatusColaborador } from "../types/Colaborador";
 
 type StatusFiltro = "TODOS" | StatusColaborador;
 
 function ColaboradoresPage() {
   const navigate = useNavigate();
+  const colaboradores = getColaboradores();
+
   const [busca, setBusca] = useState("");
   const [coordenadorFiltro, setCoordenadorFiltro] = useState("TODOS");
   const [statusFiltro, setStatusFiltro] = useState<StatusFiltro>("TODOS");
@@ -16,31 +17,34 @@ function ColaboradoresPage() {
   const coordenadores = [
     "TODOS",
     ...Array.from(
-      new Set(evaluationTeam.map((member) => member.coordenadorDireto))
+      new Set(
+        colaboradores
+          .map((colaborador) => colaborador.respondePara)
+          .filter((coordenador) => coordenador.trim() !== "")
+      )
     ).sort((a, b) => a.localeCompare(b, "pt-BR")),
   ];
 
-  const colaboradoresAvaliaveis = colaboradores.filter((colaborador) => {
-    const membroEquipe = evaluationTeam.find(
-      (member) => String(member.matricula) === String(colaborador.matricula)
-    );
+  const colaboradoresFiltrados = colaboradores
+    .filter((colaborador) => {
+      const correspondeBusca = colaborador.nome
+        .toLowerCase()
+        .includes(busca.toLowerCase());
 
-    if (!membroEquipe) return false;
+      const correspondeCoordenador =
+        coordenadorFiltro === "TODOS" ||
+        colaborador.respondePara === coordenadorFiltro;
 
-    const correspondeCoordenador =
-      coordenadorFiltro === "TODOS" ||
-      membroEquipe.coordenadorDireto === coordenadorFiltro;
+      const correspondeStatus =
+        statusFiltro === "TODOS" ||
+        colaborador.status === statusFiltro;
 
-    const correspondeStatus =
-      statusFiltro === "TODOS" || colaborador.status === statusFiltro;
-
-    return correspondeCoordenador && correspondeStatus;
-  });
-
-  const colaboradoresFiltrados = colaboradoresAvaliaveis
-    .filter((colaborador) =>
-      colaborador.nome.toLowerCase().includes(busca.toLowerCase())
-    )
+      return (
+        correspondeBusca &&
+        correspondeCoordenador &&
+        correspondeStatus
+      );
+    })
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
   return (
@@ -99,14 +103,18 @@ function ColaboradoresPage() {
       >
         {coordenadores.map((coordenador) => (
           <option key={coordenador} value={coordenador}>
-            {coordenador === "TODOS" ? "Todas as Equipes" : coordenador}
+            {coordenador === "TODOS"
+              ? "Todas as Equipes"
+              : coordenador}
           </option>
         ))}
       </select>
 
       <select
         value={statusFiltro}
-        onChange={(e) => setStatusFiltro(e.target.value as StatusFiltro)}
+        onChange={(e) =>
+          setStatusFiltro(e.target.value as StatusFiltro)
+        }
         style={{
           width: "100%",
           maxWidth: "500px",
