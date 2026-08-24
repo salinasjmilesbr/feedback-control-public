@@ -231,6 +231,8 @@ function EditarFeedbackPage() {
     );
   }
 
+  const feedbackAtual = feedback;
+
   const avaliadoresColegiado = (
     colaborador.avaliadoresColegiadoMatriculas ?? []
   )
@@ -691,10 +693,16 @@ function EditarFeedbackPage() {
       return;
     }
 
-    const feedbackAtualizado = {
-      ...feedback,
+    const agora = new Date().toISOString();
 
-      dataUltimaAtualizacao: new Date().toISOString(),
+    const feedbackAtualizado = {
+      ...feedbackAtual,
+
+      dataUltimaAtualizacao: agora,
+      dataConclusao:
+        status === "CONCLUIDA"
+          ? feedbackAtual.dataConclusao ?? agora
+          : feedbackAtual.dataConclusao,
 
       status,
     

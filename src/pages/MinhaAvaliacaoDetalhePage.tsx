@@ -1,6 +1,7 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import { getFeedbacksByColaborador } from "../services/feedbackStorage";
+import { exportarAvaliacaoPdf } from "../services/exportarAvaliacaoPdf";
 
 function MinhaAvaliacaoDetalhePage() {
   const navigate = useNavigate();
@@ -38,21 +39,46 @@ function MinhaAvaliacaoDetalhePage() {
 
   return (
     <div style={{ padding: "30px" }}>
-      <button
-        type="button"
-        onClick={() => navigate("/")}
+      <div
         style={{
-          padding: "10px 16px",
-          borderRadius: "8px",
-          border: "1px solid #660099",
-          backgroundColor: "#fff",
-          color: "#660099",
-          cursor: "pointer",
-          fontWeight: "bold",
+          display: "flex",
+          justifyContent: "space-between",
+          gap: "12px",
+          alignItems: "center",
         }}
       >
-        ← Voltar
-      </button>
+        <button
+          type="button"
+          onClick={() => navigate("/")}
+          style={{
+            padding: "10px 16px",
+            borderRadius: "8px",
+            border: "1px solid #660099",
+            backgroundColor: "#fff",
+            color: "#660099",
+            cursor: "pointer",
+            fontWeight: "bold",
+          }}
+        >
+          ← Voltar
+        </button>
+
+        <button
+          type="button"
+          onClick={() => exportarAvaliacaoPdf(usuarioAtual, feedback)}
+          style={{
+            padding: "10px 16px",
+            borderRadius: "8px",
+            border: "none",
+            backgroundColor: "#660099",
+            color: "#fff",
+            cursor: "pointer",
+            fontWeight: "bold",
+          }}
+        >
+          Exportar PDF
+        </button>
+      </div>
 
       <h1 style={{ textAlign: "center" }}>Minha Avaliação</h1>
 
@@ -277,14 +303,6 @@ function MinhaAvaliacaoDetalhePage() {
         do colegiado.
       </div>
 
-      <div style={{
-        marginTop: "20px",
-        textAlign: "center",
-        color: "#777",
-        fontSize: "13px",
-      }}>
-        Exportação em PDF por ciclo será adicionada em uma próxima etapa.
-      </div>
     </div>
   );
 }

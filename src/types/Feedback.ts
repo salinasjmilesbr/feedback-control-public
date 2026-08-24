@@ -46,6 +46,7 @@ export interface Feedback {
 
   dataCriacao?: string;
   dataUltimaAtualizacao?: string;
+  dataConclusao?: string;
 
   ano: number;
   ciclo: 1 | 2 | 3;

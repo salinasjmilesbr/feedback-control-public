@@ -559,14 +559,17 @@ function NovoFeedbackPage() {
       return;
     }
 
+    const agora = new Date().toISOString();
+
     const novoFeedback = {
       id: crypto.randomUUID(),
       colaboradorId: colaborador!.matricula,
       colaboradorNome: colaborador!.nome,
-      data: new Date().toISOString(),
+      data: agora,
 
-      dataCriacao: new Date().toISOString(),
-      dataUltimaAtualizacao: new Date().toISOString(),
+      dataCriacao: agora,
+      dataUltimaAtualizacao: agora,
+      dataConclusao: status === "CONCLUIDA" ? agora : undefined,
 
       ano: anoAvaliacao,
       ciclo: cicloAvaliacao,

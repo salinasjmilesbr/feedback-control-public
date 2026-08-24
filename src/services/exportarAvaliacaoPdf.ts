@@ -1,0 +1,319 @@
+import jsPDF from "jspdf";
+import type { Colaborador } from "../types/Colaborador";
+import type { Feedback } from "../types/Feedback";
+import { getColaboradores } from "./colaboradorStorage";
+
+function limparNomeArquivo(valor: string) {
+  return valor
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+}
+
+function formatarSenioridade(
+  senioridade: Colaborador["senioridade"]
+) {
+  if (senioridade === "JUNIOR") return "Júnior";
+  if (senioridade === "PLENO") return "Pleno";
+  if (senioridade === "SENIOR") return "Sênior";
+  return "-";
+}
+
+function formatarFuncao(funcao: Colaborador["funcao"]) {
+  if (funcao === "GERENTE") return "Gerente";
+  if (funcao === "COORDENADOR") return "Coordenador";
+  if (funcao === "ANALISTA") return "Analista";
+  return "-";
+}
+
+function formatarData(data?: string) {
+  if (!data) return "-";
+
+  const valor = new Date(data);
+
+  if (Number.isNaN(valor.getTime())) return "-";
+
+  return valor.toLocaleDateString("pt-BR");
+}
+
+function obterAvaliadores(colaborador: Colaborador) {
+  const colaboradores = getColaboradores();
+
+  const gestorDireto = colaborador.gestorDiretoMatricula
+    ? colaboradores.find(
+        (item) =>
+          item.matricula === colaborador.gestorDiretoMatricula
+      )
+    : undefined;
+
+  const coordenador =
+    gestorDireto?.funcao === "COORDENADOR"
+      ? gestorDireto
+      : undefined;
+
+  const gerente =
+    gestorDireto?.funcao === "GERENTE"
+      ? gestorDireto
+      : coordenador?.gestorDiretoMatricula
+      ? colaboradores.find(
+          (item) =>
+            item.matricula ===
+            coordenador.gestorDiretoMatricula
+        )
+      : undefined;
+
+  const colegiado = (
+    colaborador.avaliadoresColegiadoMatriculas ?? []
+  )
+    .map((matricula) =>
+      colaboradores.find(
+        (item) => item.matricula === matricula
+      )
+    )
+    .filter((item) => item !== undefined);
+
+  return {
+    gerente,
+    coordenador,
+    colegiado,
+  };
+}
+
+export function exportarAvaliacaoPdf(
+  colaborador: Colaborador,
+  feedback: Feedback
+) {
+  const avaliadores = obterAvaliadores(colaborador);
+  const dataConclusao =
+    feedback.dataConclusao ??
+    feedback.dataUltimaAtualizacao ??
+    feedback.data;
+
+  const pdf = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  });
+
+  const margem = 16;
+  const larguraPagina = pdf.internal.pageSize.getWidth();
+  const alturaPagina = pdf.internal.pageSize.getHeight();
+  const larguraTexto = larguraPagina - margem * 2;
+  let y = 18;
+
+  function garantirEspaco(alturaNecessaria: number) {
+    if (y + alturaNecessaria > alturaPagina - 16) {
+      pdf.addPage();
+      y = 18;
+    }
+  }
+
+  function escreverTexto(
+    texto: string,
+    tamanho = 10,
+    negrito = false,
+    espacamentoDepois = 3
+  ) {
+    if (!texto.trim()) return;
+
+    pdf.setFont("helvetica", negrito ? "bold" : "normal");
+    pdf.setFontSize(tamanho);
+
+    const linhas = pdf.splitTextToSize(texto, larguraTexto);
+    const alturaLinha = tamanho * 0.42 + 1.5;
+    const alturaTotal = linhas.length * alturaLinha;
+
+    garantirEspaco(alturaTotal + espacamentoDepois);
+    pdf.text(linhas, margem, y);
+    y += alturaTotal + espacamentoDepois;
+  }
+
+  function escreverLinhaNotas(
+    notaGerente: number,
+    notaCoordenador: number,
+    notaColegiado: number,
+    notaFinal: number
+  ) {
+    const valor = (nota: number) =>
+      nota > 0 ? nota.toFixed(2) : "-";
+
+    escreverTexto(
+      `Gerente: ${valor(notaGerente)}    Coordenador: ${valor(
+        notaCoordenador
+      )}    Colegiado: ${valor(
+        notaColegiado
+      )}    Nota final: ${valor(notaFinal)}`,
+      9,
+      false,
+      4
+    );
+  }
+
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(18);
+  pdf.text("Relatorio de Avaliacao", margem, y);
+  y += 9;
+
+  escreverTexto(colaborador.nome, 13, true, 2);
+  escreverTexto(
+    `Matrícula: ${colaborador.matricula}`,
+    10,
+    false,
+    2
+  );
+  escreverTexto(
+    `${feedback.ano} - Ciclo ${feedback.ciclo} | Concluído em: ${formatarData(
+      dataConclusao
+    )}`,
+    10,
+    false,
+    3
+  );
+
+  escreverTexto(`Cargo: ${colaborador.cargo}`, 10, false, 1);
+  escreverTexto(`Área: ${colaborador.area}`, 10, false, 1);
+  escreverTexto(
+    `Função: ${formatarFuncao(colaborador.funcao)}`,
+    10,
+    false,
+    1
+  );
+  escreverTexto(
+    `Senioridade: ${formatarSenioridade(
+      colaborador.senioridade
+    )}`,
+    10,
+    false,
+    5
+  );
+
+  garantirEspaco(18);
+  pdf.setDrawColor(102, 0, 153);
+  pdf.roundedRect(margem, y, larguraTexto, 16, 2, 2);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(11);
+  pdf.text("Nota Final", margem + 4, y + 6);
+  pdf.setFontSize(17);
+  pdf.text(feedback.notaMedia.toFixed(2), margem + 4, y + 13);
+  y += 23;
+
+  escreverTexto("Avaliadores envolvidos", 12, true, 2);
+
+  if (avaliadores.gerente) {
+    escreverTexto(
+      `Gerente: ${avaliadores.gerente.nome}`,
+      10,
+      false,
+      1
+    );
+  }
+
+  if (avaliadores.coordenador) {
+    escreverTexto(
+      `Coordenador: ${avaliadores.coordenador.nome}`,
+      10,
+      false,
+      1
+    );
+  }
+
+  if (avaliadores.colegiado.length > 0) {
+    escreverTexto(
+      `Colegiado: ${avaliadores.colegiado
+        .map((avaliador) => avaliador.nome)
+        .join(", ")}`,
+      10,
+      false,
+      5
+    );
+  } else {
+    escreverTexto("Colegiado: -", 10, false, 5);
+  }
+
+  const criterios = feedback.criteriosDetalhados ?? [];
+
+  criterios.forEach((criterio, indice) => {
+    garantirEspaco(22);
+
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(12);
+    pdf.text(
+      `${indice + 1}. ${criterio.criterioNome} - ${criterio.nota.toFixed(2)}`,
+      margem,
+      y
+    );
+    y += 7;
+
+    criterio.subcriterios.forEach((subcriterio) => {
+      escreverTexto(subcriterio.nome, 10, true, 1);
+      escreverLinhaNotas(
+        subcriterio.notaGerente,
+        subcriterio.notaCoordenador,
+        subcriterio.notaColegiado,
+        subcriterio.notaFinal
+      );
+    });
+
+    if (criterio.observacaoGerente?.trim()) {
+      escreverTexto("Observacao do Gerente", 10, true, 1);
+      escreverTexto(criterio.observacaoGerente, 9, false, 4);
+    }
+
+    if (criterio.observacaoCoordenador?.trim()) {
+      escreverTexto("Observacao do Coordenador", 10, true, 1);
+      escreverTexto(criterio.observacaoCoordenador, 9, false, 4);
+    }
+
+    y += 3;
+  });
+
+  if (
+    feedback.feedbackFinalGerente?.trim() ||
+    feedback.feedbackFinalCoordenador?.trim()
+  ) {
+    garantirEspaco(16);
+    escreverTexto("Feedback Final", 13, true, 3);
+
+    if (feedback.feedbackFinalGerente?.trim()) {
+      escreverTexto("Gerente", 10, true, 1);
+      escreverTexto(feedback.feedbackFinalGerente, 9, false, 4);
+    }
+
+    if (feedback.feedbackFinalCoordenador?.trim()) {
+      escreverTexto("Coordenador", 10, true, 1);
+      escreverTexto(
+        feedback.feedbackFinalCoordenador,
+        9,
+        false,
+        4
+      );
+    }
+  }
+
+  const totalPaginas = pdf.getNumberOfPages();
+
+  for (let pagina = 1; pagina <= totalPaginas; pagina++) {
+    pdf.setPage(pagina);
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8);
+    pdf.setTextColor(100);
+    pdf.text(
+      `Pagina ${pagina} de ${totalPaginas}`,
+      larguraPagina - margem,
+      alturaPagina - 8,
+      { align: "right" }
+    );
+    pdf.setTextColor(0);
+  }
+
+  const nomeArquivo = [
+    "avaliacao",
+    limparNomeArquivo(colaborador.nome),
+    String(feedback.ano),
+    `ciclo-${feedback.ciclo}`,
+  ].join("-");
+
+  pdf.save(`${nomeArquivo}.pdf`);
+}
