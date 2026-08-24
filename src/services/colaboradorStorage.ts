@@ -1,6 +1,7 @@
 import type {
   Colaborador,
   FuncaoColaborador,
+  SenioridadeColaborador,
 } from "../types/Colaborador";
 import { colaboradores as colaboradoresIniciais } from "../data/colaboradores";
 
@@ -74,9 +75,54 @@ function migrarColaborador(colaborador: Colaborador): Colaborador {
   const funcao: FuncaoColaborador =
     colaborador.funcao ?? "ANALISTA";
 
+  let senioridade = colaborador.senioridade;
+  let cargo = colaborador.cargo;
+
+  if (funcao === "ANALISTA" && !senioridade) {
+    const cargoNormalizado = colaborador.cargo
+      .trim()
+      .toUpperCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+
+    const senioridadePorCargo: Array<{
+      termo: string;
+      senioridade: SenioridadeColaborador;
+    }> = [
+      { termo: "JUNIOR", senioridade: "JUNIOR" },
+      { termo: "PLENO", senioridade: "PLENO" },
+      { termo: "SENIOR", senioridade: "SENIOR" },
+    ];
+
+    const senioridadeEncontrada = senioridadePorCargo.find(
+      (item) => cargoNormalizado.includes(item.termo)
+    );
+
+    senioridade = senioridadeEncontrada?.senioridade;
+  }
+
+  if (
+    funcao === "ANALISTA" &&
+    /analista/i.test(colaborador.cargo)
+  ) {
+    const cargosDisponiveis = [
+      "Designer",
+      "Programador",
+      "Tráfego",
+      "QA",
+    ];
+
+    const indiceCargo =
+      Math.abs(colaborador.matricula) % cargosDisponiveis.length;
+
+    cargo = cargosDisponiveis[indiceCargo];
+  }
+
   return {
     ...colaborador,
+    cargo,
     funcao,
+    senioridade,
     gestorDiretoMatricula,
   };
 }

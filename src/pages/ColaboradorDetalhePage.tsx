@@ -351,6 +351,23 @@ function ColaboradorDetalhePage() {
                 : "❌ Desligado"}
             </span>
 
+            <Link to={`/colaborador/${colaborador.matricula}/editar`}>
+              <button
+                style={{
+                  padding: "12px 24px",
+                  borderRadius: "10px",
+                  border: "1px solid #660099",
+                  cursor: "pointer",
+                  backgroundColor: "#fff",
+                  color: "#660099",
+                  fontWeight: "bold",
+                  fontSize: "15px",
+                }}
+              >
+                Editar cadastro
+              </button>
+            </Link>
+
             <Link to={`/colaborador/${colaborador.matricula}/novo-feedback`}>
               <button
                 style={{

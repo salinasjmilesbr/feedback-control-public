@@ -22,6 +22,21 @@ function ColaboradorCard({ colaborador }: Props) {
   const gestorDireto = colaborador.gestorDiretoMatricula
     ? getColaboradorByMatricula(colaborador.gestorDiretoMatricula)
     : undefined;
+  const funcaoLabel =
+    colaborador.funcao === "GERENTE"
+      ? "Gerente"
+      : colaborador.funcao === "COORDENADOR"
+      ? "Coordenador"
+      : "Analista";
+
+  const senioridadeLabel =
+    colaborador.senioridade === "JUNIOR"
+      ? "Júnior"
+      : colaborador.senioridade === "PLENO"
+      ? "Pleno"
+      : colaborador.senioridade === "SENIOR"
+      ? "Sênior"
+      : undefined;
 
   return (
     <div
@@ -59,6 +74,18 @@ function ColaboradorCard({ colaborador }: Props) {
             lineHeight: "1.4",
           }}
         >
+          <p>
+            <strong>Função:</strong>{" "}
+            {funcaoLabel}
+          </p>
+
+          {senioridadeLabel && (
+            <p>
+              <strong>Senioridade:</strong>{" "}
+              {senioridadeLabel}
+            </p>
+          )}
+
           <p>
             <strong>Cargo:</strong>{" "}
             {colaborador.cargo}
