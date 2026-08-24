@@ -1,6 +1,6 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
 
-import { colaboradores } from "../data/colaboradores";
+import { getColaboradorByMatricula, getColaboradores } from "../services/colaboradorStorage";
 import { getFeedbacksByColaborador } from "../services/feedbackStorage";
 import type { Feedback } from "../types/Feedback";
 
@@ -107,9 +107,10 @@ function ColaboradorDetalhePage() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const colaborador = colaboradores.find(
-    (item) => item.matricula.toString() === id
-  );
+  const matricula = Number(id);
+  const colaborador = Number.isFinite(matricula)
+    ? getColaboradorByMatricula(matricula)
+    : undefined;
 
   if (!colaborador) {
     return (
@@ -118,6 +119,40 @@ function ColaboradorDetalhePage() {
       </div>
     );
   }
+
+  const todosColaboradores = getColaboradores();
+
+  const gestorDireto = colaborador.gestorDiretoMatricula
+    ? todosColaboradores.find(
+        (item) => item.matricula === colaborador.gestorDiretoMatricula
+      )
+    : undefined;
+
+  const avaliadoresColegiado = (
+    colaborador.avaliadoresColegiadoMatriculas ?? []
+  )
+    .map((matriculaAvaliador) =>
+      todosColaboradores.find(
+        (item) => item.matricula === matriculaAvaliador
+      )
+    )
+    .filter((item) => item !== undefined);
+
+  const funcaoLabel =
+    colaborador.funcao === "GERENTE"
+      ? "Gerente"
+      : colaborador.funcao === "COORDENADOR"
+      ? "Coordenador"
+      : "Analista";
+
+  const senioridadeLabel =
+    colaborador.senioridade === "JUNIOR"
+      ? "Júnior"
+      : colaborador.senioridade === "PLENO"
+      ? "Pleno"
+      : colaborador.senioridade === "SENIOR"
+      ? "Sênior"
+      : undefined;
 
   const feedbacks = getFeedbacksByColaborador(colaborador.matricula);
 
@@ -233,12 +268,66 @@ function ColaboradorDetalhePage() {
 
             <p
               style={{
-                margin: 0,
+                margin: "0 0 8px 0",
                 textAlign: "left",
               }}
             >
               <strong>Área:</strong> {colaborador.area}
             </p>
+
+            <p
+              style={{
+                margin: "0 0 8px 0",
+                textAlign: "left",
+              }}
+            >
+              <strong>Função:</strong> {funcaoLabel}
+            </p>
+
+            {senioridadeLabel && (
+              <p
+                style={{
+                  margin: "0 0 8px 0",
+                  textAlign: "left",
+                }}
+              >
+                <strong>Senioridade:</strong> {senioridadeLabel}
+              </p>
+            )}
+
+            {gestorDireto && (
+              <p
+                style={{
+                  margin: "0 0 8px 0",
+                  textAlign: "left",
+                }}
+              >
+                <strong>Gestor direto:</strong> {gestorDireto.nome}
+              </p>
+            )}
+
+            {avaliadoresColegiado.length > 0 && (
+              <div
+                style={{
+                  marginTop: "12px",
+                  textAlign: "left",
+                }}
+              >
+                <strong>Avaliadores do colegiado:</strong>
+                <ul
+                  style={{
+                    margin: "6px 0 0 20px",
+                    padding: 0,
+                  }}
+                >
+                  {avaliadoresColegiado.map((avaliador) => (
+                    <li key={avaliador.matricula}>
+                      {avaliador.nome}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
 
           <div

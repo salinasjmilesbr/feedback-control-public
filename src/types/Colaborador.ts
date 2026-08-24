@@ -8,6 +8,11 @@ export type FuncaoColaborador =
   | "COORDENADOR"
   | "ANALISTA";
 
+export type SenioridadeColaborador =
+  | "JUNIOR"
+  | "PLENO"
+  | "SENIOR";
+
 export interface Colaborador {
   matricula: number;
   status: StatusColaborador;
@@ -18,7 +23,9 @@ export interface Colaborador {
   area: string;
 
   funcao?: FuncaoColaborador;
+  senioridade?: SenioridadeColaborador;
   gestorDiretoMatricula?: number;
+  avaliadoresColegiadoMatriculas?: number[];
 
   // Campos temporários para compatibilidade durante a migração.
   respondePara: string;

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import type {
   Colaborador,
   FuncaoColaborador,
+  SenioridadeColaborador,
   StatusColaborador,
 } from "../types/Colaborador";
 import {
@@ -20,6 +21,8 @@ function NovoColaboradorPage() {
   const [cargo, setCargo] = useState("");
   const [area, setArea] = useState("");
   const [funcao, setFuncao] = useState<FuncaoColaborador>("ANALISTA");
+  const [senioridade, setSenioridade] = useState<SenioridadeColaborador>("JUNIOR");
+  const [avaliadoresColegiadoMatriculas, setAvaliadoresColegiadoMatriculas] = useState<number[]>([]);
   const [gestorDiretoMatricula, setGestorDiretoMatricula] = useState("");
   const [status, setStatus] = useState<StatusColaborador>("ATIVO");
   const [erro, setErro] = useState("");
@@ -32,6 +35,24 @@ function NovoColaboradorPage() {
           colaborador.funcao === "COORDENADOR")
     )
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+
+
+  const avaliadoresDisponiveis = colaboradoresExistentes
+    .filter(
+      (colaborador) =>
+        colaborador.status === "ATIVO" &&
+        (colaborador.funcao === "GERENTE" ||
+          colaborador.funcao === "COORDENADOR")
+    )
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+
+  function toggleAvaliador(matriculaAvaliador: number) {
+    setAvaliadoresColegiadoMatriculas((atuais) =>
+      atuais.includes(matriculaAvaliador)
+        ? atuais.filter((matricula) => matricula !== matriculaAvaliador)
+        : [...atuais, matriculaAvaliador]
+    );
+  }
 
   function handleSalvar() {
     setErro("");
@@ -68,6 +89,8 @@ function NovoColaboradorPage() {
       cargo: cargo.trim(),
       area: area.trim(),
       funcao,
+      senioridade: funcao === "ANALISTA" ? senioridade : undefined,
+      avaliadoresColegiadoMatriculas,
       gestorDiretoMatricula: gestorDireto?.matricula,
       respondePara: gestorDireto?.nome ?? "",
       status,
@@ -149,6 +172,24 @@ function NovoColaboradorPage() {
           </select>
         </label>
 
+        {funcao === "ANALISTA" && (
+          <label>
+            Senioridade
+            <select
+              value={senioridade}
+              onChange={(e) =>
+                setSenioridade(
+                  e.target.value as SenioridadeColaborador
+                )
+              }
+            >
+              <option value="JUNIOR">Júnior</option>
+              <option value="PLENO">Pleno</option>
+              <option value="SENIOR">Sênior</option>
+            </select>
+          </label>
+        )}
+
         <label>
           Gestor direto
           <select
@@ -166,6 +207,34 @@ function NovoColaboradorPage() {
             ))}
           </select>
         </label>
+
+        <fieldset
+          style={{
+            border: "1px solid #ccc",
+            borderRadius: "8px",
+            padding: "12px",
+          }}
+        >
+          <legend>Avaliadores do colegiado</legend>
+
+          <div style={{ display: "grid", gap: "8px" }}>
+            {avaliadoresDisponiveis.map((avaliador) => (
+              <label
+                key={avaliador.matricula}
+                style={{ display: "flex", gap: "8px", alignItems: "center" }}
+              >
+                <input
+                  type="checkbox"
+                  checked={avaliadoresColegiadoMatriculas.includes(
+                    avaliador.matricula
+                  )}
+                  onChange={() => toggleAvaliador(avaliador.matricula)}
+                />
+                {avaliador.nome}
+              </label>
+            ))}
+          </div>
+        </fieldset>
 
         <label>
           Status
