@@ -129,6 +129,24 @@ function ColaboradoresPage() {
           {usuarioAtual.funcao === "COORDENADOR" && (
             <button
               type="button"
+              onClick={() => navigate("/minhas-metas")}
+              style={{
+                padding: "10px 16px",
+                borderRadius: "8px",
+                border: "1px solid #660099",
+                backgroundColor: "#fff",
+                color: "#660099",
+                cursor: "pointer",
+                fontWeight: "600",
+              }}
+            >
+              Minhas Metas
+            </button>
+          )}
+
+          {usuarioAtual.funcao === "COORDENADOR" && (
+            <button
+              type="button"
               onClick={() => navigate("/minha-avaliacao")}
               style={{
                 padding: "10px 16px",

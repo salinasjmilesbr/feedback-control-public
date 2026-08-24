@@ -29,7 +29,32 @@ function MinhaAvaliacaoPage() {
       >
         <h1 style={{ margin: 0 }}>Minha Avaliação</h1>
 
-        {usuarioAtual.funcao === "COORDENADOR" && (
+        <div
+          style={{
+            display: "flex",
+            gap: "10px",
+            flexWrap: "wrap",
+          }}
+        >
+          {usuarioAtual.funcao !== "GERENTE" && (
+            <button
+              type="button"
+              onClick={() => navigate("/minhas-metas")}
+              style={{
+                padding: "10px 16px",
+                borderRadius: "8px",
+                border: "1px solid #660099",
+                backgroundColor: "#fff",
+                color: "#660099",
+                cursor: "pointer",
+                fontWeight: "600",
+              }}
+            >
+              Minhas Metas
+            </button>
+          )}
+
+          {usuarioAtual.funcao === "COORDENADOR" && (
           <button
             type="button"
             onClick={() => navigate("/")}
@@ -45,7 +70,8 @@ function MinhaAvaliacaoPage() {
           >
             Minha equipe
           </button>
-        )}
+          )}
+        </div>
       </div>
 
       <div style={{
