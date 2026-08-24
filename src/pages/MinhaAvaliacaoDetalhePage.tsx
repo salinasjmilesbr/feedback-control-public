@@ -2,6 +2,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import { getFeedbacksByColaborador } from "../services/feedbackStorage";
 import { exportarAvaliacaoPdf } from "../services/exportarAvaliacaoPdf";
+import { getObservacoesComunicadasByCiclo } from "../services/observacaoStorage";
+import { getCiclosAvaliacao } from "../services/cicloAvaliacaoStorage";
+import { getMetasDoColaboradorNoCiclo } from "../services/metaStorage";
 
 function MinhaAvaliacaoDetalhePage() {
   const navigate = useNavigate();
@@ -36,6 +39,39 @@ function MinhaAvaliacaoDetalhePage() {
   }
 
   const criterios = feedback.criteriosDetalhados ?? [];
+
+  const observacoesComunicadas = getObservacoesComunicadasByCiclo(
+    usuarioAtual.matricula,
+    feedback.ano,
+    feedback.ciclo
+  );
+
+  const cicloDaAvaliacao = getCiclosAvaliacao().find(
+    (ciclo) =>
+      ciclo.ano === feedback.ano &&
+      ciclo.ciclo === feedback.ciclo
+  );
+
+  const metasDoCiclo = cicloDaAvaliacao
+    ? getMetasDoColaboradorNoCiclo(
+        usuarioAtual.matricula,
+        cicloDaAvaliacao.id
+      )
+    : [];
+
+  const metasNegocio = metasDoCiclo.filter(
+    (meta) => meta.tipo === "NEGOCIO_PROJETO"
+  );
+
+  const metasIndividuais = metasDoCiclo.filter(
+    (meta) => meta.tipo === "INDIVIDUAL"
+  );
+
+  function labelStatusMeta(status: string) {
+    if (status === "ATINGIDA") return "Atingida";
+    if (status === "NAO_ATINGIDA") return "Não atingida";
+    return "Pendente / Não finalizada";
+  }
 
   return (
     <div style={{ padding: "30px" }}>
@@ -337,6 +373,177 @@ function MinhaAvaliacaoDetalhePage() {
                   </div>
                 </div>
               )}
+          </div>
+        </div>
+      )}
+
+      {metasDoCiclo.length > 0 && (
+        <div
+          style={{
+            marginTop: "20px",
+            border: "1px solid #ddd",
+            borderRadius: "12px",
+            padding: "18px",
+            backgroundColor: "#fff",
+          }}
+        >
+          <h3 style={{ marginTop: 0, color: "#660099" }}>
+            Metas do Ciclo
+          </h3>
+
+          {[
+            {
+              titulo: "Metas de Negócio / Projetos",
+              metas: metasNegocio,
+            },
+            {
+              titulo: "Metas Individuais",
+              metas: metasIndividuais,
+            },
+          ].map(
+            (grupo) =>
+              grupo.metas.length > 0 && (
+                <div
+                  key={grupo.titulo}
+                  style={{ marginTop: "16px" }}
+                >
+                  <h4 style={{ margin: "0 0 10px 0" }}>
+                    {grupo.titulo}
+                  </h4>
+
+                  <div style={{ display: "grid", gap: "12px" }}>
+                    {grupo.metas.map((meta, indice) => (
+                      <div
+                        key={meta.id}
+                        style={{
+                          padding: "14px",
+                          borderRadius: "10px",
+                          backgroundColor: "#F8F8F8",
+                          border: "1px solid #eee",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: "12px",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <strong>
+                            {indice + 1}. {meta.descricao}
+                          </strong>
+                          <span
+                            style={{
+                              fontSize: "12px",
+                              fontWeight: "bold",
+                              color:
+                                meta.status === "ATINGIDA"
+                                  ? "#107C41"
+                                  : meta.status === "NAO_ATINGIDA"
+                                  ? "#A4262C"
+                                  : "#8A6D00",
+                            }}
+                          >
+                            {labelStatusMeta(meta.status)}
+                          </span>
+                        </div>
+
+                        <div style={{ marginTop: "10px" }}>
+                          KPI: <strong>{meta.kpi}</strong>
+                        </div>
+
+                        <div style={{ marginTop: "5px" }}>
+                          Valor-alvo: <strong>{meta.valorAlvo}</strong>
+                        </div>
+
+                        <div style={{ marginTop: "5px" }}>
+                          Resultado final:{" "}
+                          {meta.resultadoFinal?.trim() ? (
+                            <strong>{meta.resultadoFinal}</strong>
+                          ) : (
+                            <span style={{ color: "#999" }}>
+                              Não informado
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+          )}
+        </div>
+      )}
+
+      {observacoesComunicadas.length > 0 && (
+        <div
+          style={{
+            marginTop: "20px",
+            border: "1px solid #ddd",
+            borderRadius: "12px",
+            padding: "18px",
+            backgroundColor: "#fff",
+          }}
+        >
+          <h3 style={{ marginTop: 0, color: "#660099" }}>
+            Observações do Ciclo
+          </h3>
+
+          <div style={{ display: "grid", gap: "12px" }}>
+            {observacoesComunicadas.map((observacao) => (
+              <div
+                key={observacao.id}
+                style={{
+                  padding: "12px",
+                  borderRadius: "8px",
+                  backgroundColor: "#F8F8F8",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                    flexWrap: "wrap",
+                    fontSize: "13px",
+                    color: "#666",
+                  }}
+                >
+                  <strong>
+                    {observacao.tipo === "POSITIVA"
+                      ? "Positiva"
+                      : observacao.tipo === "NEGATIVA"
+                      ? "Negativa"
+                      : "Neutra"}
+                  </strong>
+                  <span>
+                    {new Date(observacao.dataCriacao).toLocaleDateString(
+                      "pt-BR"
+                    )}
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    marginTop: "8px",
+                    whiteSpace: "pre-wrap",
+                  }}
+                >
+                  {observacao.texto}
+                </div>
+
+                <div
+                  style={{
+                    marginTop: "8px",
+                    fontSize: "12px",
+                    color: "#777",
+                  }}
+                >
+                  Registrada por {observacao.autorNome}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

@@ -2,6 +2,9 @@ import jsPDF from "jspdf";
 import type { Colaborador } from "../types/Colaborador";
 import type { Feedback } from "../types/Feedback";
 import { getColaboradores } from "./colaboradorStorage";
+import { getObservacoesComunicadasByCiclo } from "./observacaoStorage";
+import { getCiclosAvaliacao } from "./cicloAvaliacaoStorage";
+import { getMetasDoColaboradorNoCiclo } from "./metaStorage";
 
 function limparNomeArquivo(valor: string) {
   return valor
@@ -87,6 +90,26 @@ export function exportarAvaliacaoPdf(
   feedback: Feedback
 ) {
   const avaliadores = obterAvaliadores(colaborador);
+
+  const observacoesComunicadas = getObservacoesComunicadasByCiclo(
+    colaborador.matricula,
+    feedback.ano,
+    feedback.ciclo
+  );
+
+  const cicloDaAvaliacao = getCiclosAvaliacao().find(
+    (ciclo) =>
+      ciclo.ano === feedback.ano &&
+      ciclo.ciclo === feedback.ciclo
+  );
+
+  const metasDoCiclo = cicloDaAvaliacao
+    ? getMetasDoColaboradorNoCiclo(
+        colaborador.matricula,
+        cicloDaAvaliacao.id
+      )
+    : [];
+
   const dataConclusao =
     feedback.dataConclusao ??
     feedback.dataUltimaAtualizacao ??
@@ -295,6 +318,98 @@ export function exportarAvaliacaoPdf(
 
     y += 3;
   });
+
+  if (metasDoCiclo.length > 0) {
+    garantirEspaco(18);
+    escreverTexto("Metas do Ciclo", 13, true, 3);
+
+    const gruposMetas = [
+      {
+        titulo: "Metas de Negócio / Projetos",
+        metas: metasDoCiclo.filter(
+          (meta) => meta.tipo === "NEGOCIO_PROJETO"
+        ),
+      },
+      {
+        titulo: "Metas Individuais",
+        metas: metasDoCiclo.filter(
+          (meta) => meta.tipo === "INDIVIDUAL"
+        ),
+      },
+    ];
+
+    gruposMetas.forEach((grupo) => {
+      if (grupo.metas.length === 0) return;
+
+      garantirEspaco(12);
+      escreverTexto(grupo.titulo, 10, true, 2);
+
+      grupo.metas.forEach((meta, indice) => {
+        garantirEspaco(28);
+
+        const statusMeta =
+          meta.status === "ATINGIDA"
+            ? "Atingida"
+            : meta.status === "NAO_ATINGIDA"
+            ? "Não atingida"
+            : "Pendente / Não finalizada";
+
+        escreverTexto(
+          `${indice + 1}. ${meta.descricao}`,
+          10,
+          true,
+          1
+        );
+        escreverTexto(`KPI: ${meta.kpi}`, 9, false, 1);
+        escreverTexto(
+          `Valor-alvo: ${meta.valorAlvo}`,
+          9,
+          false,
+          1
+        );
+        escreverTexto(
+          `Resultado final: ${
+            meta.resultadoFinal?.trim()
+              ? meta.resultadoFinal
+              : "Não informado"
+          }`,
+          9,
+          false,
+          1
+        );
+        escreverTexto(
+          `Status: ${statusMeta}`,
+          9,
+          true,
+          4
+        );
+      });
+    });
+  }
+
+  if (observacoesComunicadas.length > 0) {
+    garantirEspaco(16);
+    escreverTexto("Observações do Ciclo", 13, true, 3);
+
+    observacoesComunicadas.forEach((observacao) => {
+      const tipoObservacao =
+        observacao.tipo === "POSITIVA"
+          ? "Positiva"
+          : observacao.tipo === "NEGATIVA"
+          ? "Negativa"
+          : "Neutra";
+
+      escreverTexto(
+        `${tipoObservacao} | ${formatarData(
+          observacao.dataCriacao
+        )} | ${observacao.autorNome}`,
+        9,
+        true,
+        1
+      );
+      escreverTexto(observacao.texto, 9, false, 4);
+    });
+  }
 
   if (
     feedback.feedbackFinalGerente?.trim() ||
