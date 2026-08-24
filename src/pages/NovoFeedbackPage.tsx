@@ -482,6 +482,16 @@ function NovoFeedbackPage() {
       return;
     }
 
+    if (
+      novoStatus === "CONCLUIDA" &&
+      status === "RASCUNHO"
+    ) {
+      alert(
+        "A avaliação precisa passar primeiro por 'Pronta para Feedback' antes de ser concluída."
+      );
+      return;
+    }
+
     setStatus(novoStatus);
   }
 

@@ -548,6 +548,59 @@ function EditarFeedbackPage() {
     feedbackFinalCoordenador
   );
 
+  function preencherTudoParaTeste() {
+    const notaTeste = 4;
+
+    setAvaliacoes(() =>
+      criterios.reduce((acc, criterio) => {
+        acc[criterio.id] = {
+          notas: criterio.subcriterios.reduce((subAcc, subcriterio) => {
+            subAcc[subcriterio] = {
+              gerente: notaTeste,
+              coordenador: notaTeste,
+              colegiado:
+                avaliadoresColegiado.length > 0 ? notaTeste : 0,
+            };
+            return subAcc;
+          }, {} as Record<string, NotasPorAvaliador>),
+          observacaoGerente:
+            avaliacoes[criterio.id]?.observacaoGerente ?? "",
+          observacaoCoordenador:
+            avaliacoes[criterio.id]?.observacaoCoordenador ?? "",
+        };
+        return acc;
+      }, {} as Avaliacoes)
+    );
+
+    setVotosColegiado(() =>
+      criterios.reduce((acc, criterio) => {
+        acc[criterio.id] = {};
+
+        criterio.subcriterios.forEach((subcriterio) => {
+          acc[criterio.id][subcriterio] = {};
+
+          avaliadoresColegiado.forEach((avaliador) => {
+            acc[criterio.id][subcriterio][avaliador.matricula] =
+              notaTeste;
+          });
+        });
+
+        return acc;
+      }, {} as Record<
+        string,
+        Record<string, Record<number, number>>
+      >)
+    );
+
+    setFeedbackFinalGerente(
+      "Feedback final de teste preenchido automaticamente."
+    );
+    setFeedbackFinalCoordenador(
+      "Feedback final de teste preenchido automaticamente."
+    );
+    setStatus("RASCUNHO");
+  }
+
   function alterarStatus(novoStatus: Feedback["status"]) {
     if (
       novoStatus !== "RASCUNHO" &&
@@ -557,6 +610,16 @@ function EditarFeedbackPage() {
         `A avaliação ainda não está completa.\n\n${progressoAvaliacao.pendencias.join(
           "\n"
         )}`
+      );
+      return;
+    }
+
+    if (
+      novoStatus === "CONCLUIDA" &&
+      status === "RASCUNHO"
+    ) {
+      alert(
+        "A avaliação precisa passar primeiro por 'Pronta para Feedback' antes de ser concluída."
       );
       return;
     }
@@ -904,6 +967,25 @@ function EditarFeedbackPage() {
                 Colegiado: {progressoAvaliacao.colegiado.percentual}%
               </span>
             )}
+          </div>
+
+          <div style={{ marginTop: "12px" }}>
+            <button
+              type="button"
+              onClick={preencherTudoParaTeste}
+              style={{
+                padding: "8px 14px",
+                borderRadius: "8px",
+                border: "1px dashed #777",
+                backgroundColor: "#fff",
+                color: "#555",
+                cursor: "pointer",
+                fontSize: "13px",
+                fontWeight: "bold",
+              }}
+            >
+              Preencher tudo (teste)
+            </button>
           </div>
 
           {!progressoAvaliacao.completo && (
