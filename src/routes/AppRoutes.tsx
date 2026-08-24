@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import ColaboradoresPage from "../pages/ColaboradoresPage";
 import ColaboradorDetalhePage from "../pages/ColaboradorDetalhePage";
+import NovoColaboradorPage from "../pages/NovoColaboradorPage";
 import NovoFeedbackPage from "../pages/NovoFeedbackPage";
 import FeedbackDetalhePage from "../pages/FeedbackDetalhePage";
 import EditarFeedbackPage from "../pages/EditarFeedbackPage";
@@ -13,6 +14,11 @@ function AppRoutes() {
         <Route
           path="/"
           element={<ColaboradoresPage />}
+        />
+
+        <Route
+          path="/colaboradores/novo"
+          element={<NovoColaboradorPage />}
         />
 
         <Route
