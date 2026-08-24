@@ -3,7 +3,12 @@ import type { Colaborador } from "../types/Colaborador";
 import type { Feedback } from "../types/Feedback";
 import { criteriosAvaliacao } from "../data/modeloAvaliacao";
 import { getColaboradores } from "./colaboradorStorage";
-import { getFeedbacks, saveFeedback } from "./feedbackStorage";
+import {
+  deleteFeedback,
+  getFeedbacks,
+  saveFeedback,
+  updateFeedback,
+} from "./feedbackStorage";
 import { getColaboradoresVisiveis } from "./visibilidadeColaboradores";
 
 export type SituacaoAvaliacaoCiclo =
@@ -179,4 +184,232 @@ export function getPainelCiclo(
       situacao: getSituacaoAvaliacaoCiclo(feedback),
     };
   });
+}
+
+
+export function excluirAvaliacoesVaziasDoCiclo(
+  ciclo: CicloAvaliacao
+): {
+  excluidas: number;
+  bloqueadas: number;
+} {
+  const feedbacksDoCiclo = getFeedbacks().filter(
+    (feedback) =>
+      feedback.ano === ciclo.ano &&
+      feedback.ciclo === ciclo.ciclo
+  );
+
+  const preenchidas = feedbacksDoCiclo.filter(
+    (feedback) =>
+      feedback.status !== "RASCUNHO" ||
+      temPreenchimento(feedback)
+  );
+
+  if (preenchidas.length > 0) {
+    throw new Error(
+      `Não é possível excluir este ciclo porque ${preenchidas.length} avaliação${
+        preenchidas.length > 1 ? "ões já possuem" : " já possui"
+      } dados preenchidos.`
+    );
+  }
+
+  feedbacksDoCiclo.forEach((feedback) =>
+    deleteFeedback(feedback.id)
+  );
+
+  return {
+    excluidas: feedbacksDoCiclo.length,
+    bloqueadas: 0,
+  };
+}
+
+
+export interface PendenciaAvaliacao {
+  colaboradorId: number;
+  colaboradorNome: string;
+  papel: "Gerente" | "Coordenador" | "Colegiado";
+  quantidade: number;
+}
+
+function notasEsperadasDoSubcriterio(
+  colaborador: Colaborador,
+  subcriterio: NonNullable<Feedback["criteriosDetalhados"]>[number]["subcriterios"][number]
+): Array<{ papel: PendenciaAvaliacao["papel"]; preenchida: boolean }> {
+  const resultado: Array<{
+    papel: PendenciaAvaliacao["papel"];
+    preenchida: boolean;
+  }> = [
+    {
+      papel: "Gerente",
+      preenchida: subcriterio.notaGerente > 0,
+    },
+  ];
+
+  if (colaborador.funcao === "ANALISTA") {
+    resultado.push({
+      papel: "Coordenador",
+      preenchida: subcriterio.notaCoordenador > 0,
+    });
+
+    const esperadosColegiado =
+      colaborador.avaliadoresColegiadoMatriculas?.length ?? 0;
+    const votosRecebidos =
+      subcriterio.votosColegiado?.filter((voto) => voto.nota > 0).length ?? 0;
+
+    resultado.push({
+      papel: "Colegiado",
+      preenchida:
+        esperadosColegiado > 0
+          ? votosRecebidos >= esperadosColegiado
+          : subcriterio.notaColegiado > 0,
+    });
+  }
+
+  return resultado;
+}
+
+export function analisarPendenciasDoCiclo(
+  ciclo: CicloAvaliacao
+): PendenciaAvaliacao[] {
+  const colaboradores = getColaboradores();
+  const feedbacks = getFeedbacks().filter(
+    (feedback) =>
+      feedback.ano === ciclo.ano &&
+      feedback.ciclo === ciclo.ciclo
+  );
+
+  const pendencias = new Map<string, PendenciaAvaliacao>();
+
+  feedbacks.forEach((feedback) => {
+    const colaborador = colaboradores.find(
+      (item) => item.matricula === feedback.colaboradorId
+    );
+
+    if (!colaborador || colaborador.status !== "ATIVO") return;
+
+    feedback.criteriosDetalhados?.forEach((criterio) => {
+      criterio.subcriterios.forEach((subcriterio) => {
+        notasEsperadasDoSubcriterio(colaborador, subcriterio).forEach(
+          ({ papel, preenchida }) => {
+            if (preenchida) return;
+
+            const chave = `${colaborador.matricula}-${papel}`;
+            const atual = pendencias.get(chave);
+
+            if (atual) {
+              atual.quantidade += 1;
+            } else {
+              pendencias.set(chave, {
+                colaboradorId: colaborador.matricula,
+                colaboradorNome: colaborador.nome,
+                papel,
+                quantidade: 1,
+              });
+            }
+          }
+        );
+      });
+    });
+  });
+
+  return Array.from(pendencias.values()).sort((a, b) =>
+    a.colaboradorNome.localeCompare(b.colaboradorNome, "pt-BR")
+  );
+}
+
+function mediaNotasValidas(notas: number[]): number {
+  const validas = notas.filter((nota) => nota > 0);
+  if (validas.length === 0) return 0;
+  return validas.reduce((soma, nota) => soma + nota, 0) / validas.length;
+}
+
+function recalcularAvaliacaoParcial(
+  feedback: Feedback,
+  colaborador: Colaborador,
+  pendencias: PendenciaAvaliacao[]
+): Feedback {
+  const criteriosDetalhados = (feedback.criteriosDetalhados ?? []).map(
+    (criterio) => {
+      const subcriterios = criterio.subcriterios.map((subcriterio) => {
+        const notas = [subcriterio.notaGerente];
+
+        if (colaborador.funcao === "ANALISTA") {
+          notas.push(
+            subcriterio.notaCoordenador,
+            subcriterio.notaColegiado
+          );
+        }
+
+        return {
+          ...subcriterio,
+          notaFinal: mediaNotasValidas(notas),
+        };
+      });
+
+      return {
+        ...criterio,
+        subcriterios,
+        nota: mediaNotasValidas(
+          subcriterios.map((subcriterio) => subcriterio.notaFinal)
+        ),
+      };
+    }
+  );
+
+  const notaMedia = mediaNotasValidas(
+    criteriosDetalhados.map((criterio) => criterio.nota)
+  );
+
+  const pendenciasDesteColaborador = pendencias
+    .filter(
+      (item) => item.colaboradorId === feedback.colaboradorId
+    )
+    .map(
+      (item) =>
+        `${item.papel}: ${item.quantidade} nota${
+          item.quantidade === 1 ? "" : "s"
+        } pendente${item.quantidade === 1 ? "" : "s"}`
+    );
+
+  const agora = new Date().toISOString();
+
+  return {
+    ...feedback,
+    criteriosDetalhados,
+    notaMedia,
+    status: "CONCLUIDA",
+    dataConclusao: feedback.dataConclusao ?? agora,
+    dataUltimaAtualizacao: agora,
+    encerradaComPendencias: pendenciasDesteColaborador.length > 0,
+    pendenciasEncerramento: pendenciasDesteColaborador,
+  };
+}
+
+export function concluirAvaliacoesNoEncerramentoDoCiclo(
+  ciclo: CicloAvaliacao,
+  pendencias: PendenciaAvaliacao[]
+): void {
+  const colaboradores = getColaboradores();
+
+  getFeedbacks()
+    .filter(
+      (feedback) =>
+        feedback.ano === ciclo.ano &&
+        feedback.ciclo === ciclo.ciclo
+    )
+    .forEach((feedback) => {
+      const colaborador = colaboradores.find(
+        (item) => item.matricula === feedback.colaboradorId
+      );
+
+      if (!colaborador) return;
+
+      updateFeedback(
+        recalcularAvaliacaoParcial(
+          feedback,
+          colaborador,
+          pendencias
+        )
+      );
+    });
 }

@@ -94,6 +94,12 @@ export function criarCiclo(
 ): CicloAvaliacao {
   const ciclos = getCiclosAvaliacao();
 
+  if (ativarAgora && ciclos.some((item) => item.status === "ATIVO")) {
+    throw new Error(
+      "Já existe um ciclo ativo. Encerre o ciclo atual antes de ativar outro."
+    );
+  }
+
   if (
     ciclos.some(
       (item) => item.ano === ano && item.ciclo === ciclo
@@ -126,20 +132,7 @@ export function criarCiclo(
     dataAtivacao: ativarAgora ? agora : undefined,
   };
 
-  const atualizados = ativarAgora
-    ? ciclos.map((item) =>
-        item.status === "ATIVO"
-          ? {
-              ...item,
-              status: "ENCERRADO" as StatusCicloAvaliacao,
-              dataUltimaAtualizacao: agora,
-              dataEncerramento: agora,
-            }
-          : item
-      )
-    : ciclos;
-
-  persistir([...atualizados, novo]);
+  persistir([...ciclos, novo]);
   return novo;
 }
 
@@ -151,35 +144,39 @@ export function ativarCiclo(id: string): void {
     throw new Error("Ciclo não encontrado.");
   }
 
+  const outroAtivo = ciclos.find(
+    (item) => item.status === "ATIVO" && item.id !== id
+  );
+
+  if (outroAtivo) {
+    throw new Error(
+      `Já existe um ciclo ativo: ${outroAtivo.ano} • Ciclo ${outroAtivo.ciclo}. Encerre-o antes de ativar outro.`
+    );
+  }
+
   const agora = new Date().toISOString();
 
   persistir(
-    ciclos.map((item) => {
-      if (item.id === id) {
-        return {
-          ...item,
-          status: "ATIVO",
-          dataAtivacao: item.dataAtivacao ?? agora,
-          dataEncerramento: undefined,
-          dataUltimaAtualizacao: agora,
-        };
-      }
-
-      if (item.status === "ATIVO") {
-        return {
-          ...item,
-          status: "ENCERRADO",
-          dataEncerramento: agora,
-          dataUltimaAtualizacao: agora,
-        };
-      }
-
-      return item;
-    })
+    ciclos.map((item) =>
+      item.id === id
+        ? {
+            ...item,
+            status: "ATIVO",
+            dataAtivacao: item.dataAtivacao ?? agora,
+            dataEncerramento: undefined,
+            encerradoComPendencias: false,
+            quantidadePendencias: 0,
+            dataUltimaAtualizacao: agora,
+          }
+        : item
+    )
   );
 }
 
-export function encerrarCiclo(id: string): void {
+export function encerrarCiclo(
+  id: string,
+  quantidadePendencias = 0
+): void {
   const ciclos = getCiclosAvaliacao();
   const alvo = ciclos.find((item) => item.id === id);
 
@@ -196,13 +193,14 @@ export function encerrarCiclo(id: string): void {
             ...item,
             status: "ENCERRADO",
             dataEncerramento: agora,
+            encerradoComPendencias: quantidadePendencias > 0,
+            quantidadePendencias,
             dataUltimaAtualizacao: agora,
           }
         : item
     )
   );
 }
-
 
 export function atualizarPeriodoCiclo(
   id: string,
@@ -252,4 +250,58 @@ export function formatarPeriodoCiclo(
     new Date(`${valor}T12:00:00`).toLocaleDateString("pt-BR");
 
   return `${formatar(dataInicio)} a ${formatar(dataFim)}`;
+}
+
+
+export function atualizarStatusCiclo(
+  id: string,
+  novoStatus: StatusCicloAvaliacao
+): void {
+  if (novoStatus === "ATIVO") {
+    ativarCiclo(id);
+    return;
+  }
+
+  const ciclos = getCiclosAvaliacao();
+  const alvo = ciclos.find((item) => item.id === id);
+
+  if (!alvo) {
+    throw new Error("Ciclo não encontrado.");
+  }
+
+  if (novoStatus === "ENCERRADO") {
+    throw new Error(
+      "O encerramento deve ser feito pela validação de pendências."
+    );
+  }
+
+  if (alvo.status === "ATIVO" && novoStatus === "PLANEJADO") {
+    throw new Error(
+      "Um ciclo ativo não pode voltar diretamente para Planejado. Encerre o ciclo primeiro."
+    );
+  }
+
+  const agora = new Date().toISOString();
+
+  persistir(
+    ciclos.map((item) =>
+      item.id === id
+        ? {
+            ...item,
+            status: novoStatus,
+            dataUltimaAtualizacao: agora,
+          }
+        : item
+    )
+  );
+}
+
+export function excluirCiclo(id: string): void {
+  const ciclos = getCiclosAvaliacao();
+
+  if (!ciclos.some((item) => item.id === id)) {
+    throw new Error("Ciclo não encontrado.");
+  }
+
+  persistir(ciclos.filter((item) => item.id !== id));
 }

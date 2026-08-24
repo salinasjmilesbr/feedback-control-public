@@ -2,7 +2,6 @@ import jsPDF from "jspdf";
 import type { Colaborador } from "../types/Colaborador";
 import type { Feedback } from "../types/Feedback";
 import { getColaboradores } from "./colaboradorStorage";
-import { getObservacoesComunicadasByCiclo } from "./observacaoStorage";
 
 function limparNomeArquivo(valor: string) {
   return valor
@@ -88,11 +87,6 @@ export function exportarAvaliacaoPdf(
   feedback: Feedback
 ) {
   const avaliadores = obterAvaliadores(colaborador);
-  const observacoesComunicadas = getObservacoesComunicadasByCiclo(
-    colaborador.matricula,
-    feedback.ano,
-    feedback.ciclo
-  );
   const dataConclusao =
     feedback.dataConclusao ??
     feedback.dataUltimaAtualizacao ??
@@ -144,7 +138,7 @@ export function exportarAvaliacaoPdf(
     notaFinal: number
   ) {
     const valor = (nota: number) =>
-      nota > 0 ? nota.toFixed(2) : "-";
+      nota > 0 ? nota.toFixed(2) : "Não avaliado";
 
     const partes = [`Gerente: ${valor(notaGerente)}`];
 
@@ -197,6 +191,21 @@ export function exportarAvaliacaoPdf(
       5
     );
   } else {
+    y += 3;
+  }
+
+  if (feedback.encerradaComPendencias) {
+    escreverTexto(
+      "Avaliação parcialmente concluída. O ciclo foi encerrado com notas pendentes. As médias consideram somente as avaliações efetivamente realizadas.",
+      10,
+      true,
+      2
+    );
+
+    (feedback.pendenciasEncerramento ?? []).forEach((pendencia) =>
+      escreverTexto(`• ${pendencia}`, 9, false, 1)
+    );
+
     y += 3;
   }
 
@@ -286,30 +295,6 @@ export function exportarAvaliacaoPdf(
 
     y += 3;
   });
-
-  if (observacoesComunicadas.length > 0) {
-    garantirEspaco(16);
-    escreverTexto("Observações do Ciclo", 13, true, 3);
-
-    observacoesComunicadas.forEach((observacao) => {
-      const tipo =
-        observacao.tipo === "POSITIVA"
-          ? "Positiva"
-          : observacao.tipo === "NEGATIVA"
-          ? "Negativa"
-          : "Neutra";
-
-      escreverTexto(
-        `${tipo} | ${formatarData(
-          observacao.dataCriacao
-        )} | ${observacao.autorNome}`,
-        9,
-        true,
-        1
-      );
-      escreverTexto(observacao.texto, 9, false, 4);
-    });
-  }
 
   if (
     feedback.feedbackFinalGerente?.trim() ||

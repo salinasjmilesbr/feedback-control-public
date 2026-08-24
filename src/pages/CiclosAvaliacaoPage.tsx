@@ -2,14 +2,21 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import {
-  ativarCiclo,
   criarCiclo,
   encerrarCiclo,
+  excluirCiclo,
   getCiclosAvaliacao,
   atualizarPeriodoCiclo,
+  atualizarStatusCiclo,
   formatarPeriodoCiclo,
 } from "../services/cicloAvaliacaoStorage";
-import { criarAvaliacoesDoCicloAtivado } from "../services/cicloEquipeService";
+import {
+  analisarPendenciasDoCiclo,
+  concluirAvaliacoesNoEncerramentoDoCiclo,
+  criarAvaliacoesDoCicloAtivado,
+  excluirAvaliacoesVaziasDoCiclo,
+} from "../services/cicloEquipeService";
+import type { StatusCicloAvaliacao } from "../types/CicloAvaliacao";
 
 function CiclosAvaliacaoPage() {
   const navigate = useNavigate();
@@ -19,8 +26,11 @@ function CiclosAvaliacaoPage() {
   const [ciclo, setCiclo] = useState<1 | 2 | 3>(1);
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
-  const [ativarAgora, setAtivarAgora] = useState(true);
+  const [ativarAgora, setAtivarAgora] = useState(false);
   const [editandoPeriodoId, setEditandoPeriodoId] = useState<string | null>(null);
+  const [editandoStatusId, setEditandoStatusId] = useState<string | null>(null);
+  const [statusEdicao, setStatusEdicao] =
+    useState<StatusCicloAvaliacao>("PLANEJADO");
   const [periodoInicioEdicao, setPeriodoInicioEdicao] = useState("");
   const [periodoFimEdicao, setPeriodoFimEdicao] = useState("");
   const [erro, setErro] = useState("");
@@ -67,6 +77,52 @@ function CiclosAvaliacaoPage() {
           : "Não foi possível criar o ciclo."
       );
     }
+  }
+
+  function encerrarComValidacao(
+    item: ReturnType<typeof getCiclosAvaliacao>[number]
+  ) {
+    setErro("");
+
+    const pendencias = analisarPendenciasDoCiclo(item);
+    const totalPendencias = pendencias.reduce(
+      (soma, pendencia) => soma + pendencia.quantidade,
+      0
+    );
+
+    if (pendencias.length > 0) {
+      const resumo = pendencias
+        .map(
+          (pendencia) =>
+            `${pendencia.colaboradorNome} — ${pendencia.papel}: ${pendencia.quantidade} nota${
+              pendencia.quantidade === 1 ? "" : "s"
+            } pendente${pendencia.quantidade === 1 ? "" : "s"}`
+        )
+        .join("\n");
+
+      const confirmar = window.confirm(
+        `Este ciclo possui pendências:\n\n${resumo}\n\nDeseja encerrar mesmo assim? As médias usarão somente as notas recebidas e as avaliações serão marcadas como parcialmente concluídas.`
+      );
+
+      if (!confirmar) return;
+
+      concluirAvaliacoesNoEncerramentoDoCiclo(item, pendencias);
+      encerrarCiclo(item.id, totalPendencias);
+      setEditandoStatusId(null);
+      setVersao((valor) => valor + 1);
+      return;
+    }
+
+    const confirmar = window.confirm(
+      "Todas as avaliações estão completas. Deseja encerrar este ciclo?"
+    );
+
+    if (!confirmar) return;
+
+    concluirAvaliacoesNoEncerramentoDoCiclo(item, []);
+    encerrarCiclo(item.id, 0);
+    setEditandoStatusId(null);
+    setVersao((valor) => valor + 1);
   }
 
   return (
@@ -306,8 +362,25 @@ function CiclosAvaliacaoPage() {
                   ? "Ativo"
                   : item.status === "PLANEJADO"
                   ? "Planejado"
+                  : item.encerradoComPendencias
+                  ? "Encerrado com pendências"
                   : "Encerrado"}
               </div>
+              {item.encerradoComPendencias &&
+                (item.quantidadePendencias ?? 0) > 0 && (
+                  <div
+                    style={{
+                      marginTop: "6px",
+                      color: "#A4262C",
+                      fontSize: "13px",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    {item.quantidadePendencias} nota
+                    {item.quantidadePendencias === 1 ? "" : "s"} pendente
+                    {item.quantidadePendencias === 1 ? "" : "s"}
+                  </div>
+                )}
             </div>
 
             <div
@@ -433,62 +506,152 @@ function CiclosAvaliacaoPage() {
                 Painel da equipe
               </button>
 
-              {item.status !== "ATIVO" && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    ativarCiclo(item.id);
-
-                    const cicloAtivado = getCiclosAvaliacao().find(
-                      (cicloAtual) => cicloAtual.id === item.id
-                    );
-
-                    if (cicloAtivado) {
-                      criarAvaliacoesDoCicloAtivado(cicloAtivado);
+              {editandoStatusId === item.id ? (
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "8px",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <select
+                    value={statusEdicao}
+                    onChange={(event) =>
+                      setStatusEdicao(
+                        event.target.value as StatusCicloAvaliacao
+                      )
                     }
+                    style={{
+                      padding: "9px 10px",
+                      borderRadius: "8px",
+                      border: "1px solid #999",
+                    }}
+                  >
+                    <option value="PLANEJADO">Planejado</option>
+                    <option value="ATIVO">Ativo</option>
+                    <option value="ENCERRADO">Encerrado</option>
+                  </select>
 
-                    setVersao((valor) => valor + 1);
-                  }}
-                  style={{
-                    padding: "9px 13px",
-                    borderRadius: "8px",
-                    border: "1px solid #660099",
-                    backgroundColor: "#fff",
-                    color: "#660099",
-                    cursor: "pointer",
-                    fontWeight: "bold",
-                  }}
-                >
-                  Ativar
-                </button>
-              )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      try {
+                        if (statusEdicao === "ENCERRADO") {
+                          encerrarComValidacao(item);
+                          return;
+                        }
 
-              {item.status === "ATIVO" && (
+                        atualizarStatusCiclo(item.id, statusEdicao);
+
+                        if (statusEdicao === "ATIVO") {
+                          const cicloAtivado =
+                            getCiclosAvaliacao().find(
+                              (cicloAtual) =>
+                                cicloAtual.id === item.id
+                            );
+
+                          if (cicloAtivado) {
+                            criarAvaliacoesDoCicloAtivado(
+                              cicloAtivado
+                            );
+                          }
+                        }
+
+                        setEditandoStatusId(null);
+                        setErro("");
+                        setVersao((valor) => valor + 1);
+                      } catch (error) {
+                        setErro(
+                          error instanceof Error
+                            ? error.message
+                            : "Não foi possível atualizar o status."
+                        );
+                      }
+                    }}
+                    style={{
+                      padding: "9px 12px",
+                      borderRadius: "8px",
+                      border: "none",
+                      backgroundColor: "#660099",
+                      color: "#fff",
+                      cursor: "pointer",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    Salvar status
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setEditandoStatusId(null)}
+                    style={{
+                      padding: "9px 12px",
+                      borderRadius: "8px",
+                      border: "1px solid #999",
+                      backgroundColor: "#fff",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              ) : (
                 <button
                   type="button"
                   onClick={() => {
-                    const confirmar = window.confirm(
-                      "Encerrar o ciclo ativo? Novas avaliações ficarão bloqueadas até outro ciclo ser ativado."
-                    );
-
-                    if (!confirmar) return;
-
-                    encerrarCiclo(item.id);
-                    setVersao((valor) => valor + 1);
+                    setEditandoStatusId(item.id);
+                    setStatusEdicao(item.status);
+                    setErro("");
                   }}
                   style={{
                     padding: "9px 13px",
                     borderRadius: "8px",
-                    border: "1px solid #A4262C",
+                    border: "1px solid #777",
                     backgroundColor: "#fff",
-                    color: "#A4262C",
+                    color: "#555",
                     cursor: "pointer",
                     fontWeight: "bold",
                   }}
                 >
-                  Encerrar ciclo
+                  Editar status
                 </button>
               )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  const confirmar = window.confirm(
+                    `Excluir ${item.ano} • Ciclo ${item.ciclo}?\n\nAvaliações vazias criadas automaticamente também serão excluídas. Avaliações que já possuam dados impedem a exclusão.`
+                  );
+
+                  if (!confirmar) return;
+
+                  try {
+                    excluirAvaliacoesVaziasDoCiclo(item);
+                    excluirCiclo(item.id);
+                    setErro("");
+                    setVersao((valor) => valor + 1);
+                  } catch (error) {
+                    setErro(
+                      error instanceof Error
+                        ? error.message
+                        : "Não foi possível excluir o ciclo."
+                    );
+                  }
+                }}
+                style={{
+                  padding: "9px 13px",
+                  borderRadius: "8px",
+                  border: "1px solid #A4262C",
+                  backgroundColor: "#fff",
+                  color: "#A4262C",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                }}
+              >
+                Excluir ciclo
+              </button>
             </div>
           </div>
         ))}

@@ -14,4 +14,6 @@ export interface CicloAvaliacao {
   dataUltimaAtualizacao: string;
   dataAtivacao?: string;
   dataEncerramento?: string;
+  encerradoComPendencias?: boolean;
+  quantidadePendencias?: number;
 }

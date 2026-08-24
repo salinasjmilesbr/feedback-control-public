@@ -58,5 +58,7 @@ export interface Feedback {
   criteriosDetalhados?: FeedbackCriterioDetalhado[];
   feedbackFinalGerente?: string;
   feedbackFinalCoordenador?: string;
+  encerradaComPendencias?: boolean;
+  pendenciasEncerramento?: string[];
   
 }
