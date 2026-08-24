@@ -39,6 +39,21 @@ export function getMetasDoColaboradorNoCiclo(
     );
 }
 
+export function getMetasDoCiclo(
+  cicloId: string,
+  incluirExcluidas = false
+): Meta[] {
+  return getTodasMetas()
+    .filter(
+      (meta) =>
+        meta.cicloId === cicloId &&
+        (incluirExcluidas || !meta.excluida)
+    )
+    .sort((a, b) =>
+      a.colaboradorNome.localeCompare(b.colaboradorNome, "pt-BR")
+    );
+}
+
 export function contarMetasPorTipo(
   colaboradorMatricula: number,
   cicloId: string,
@@ -229,6 +244,126 @@ export function excluirMeta(
                 descricaoAnterior: meta.descricao,
                 kpiAnterior: meta.kpi,
                 valorAlvoAnterior: meta.valorAlvo,
+              },
+            ],
+          }
+        : meta
+    )
+  );
+}
+
+
+export function atualizarAcompanhamentoMeta(
+  id: string,
+  colaborador: Colaborador,
+  ciclo: CicloAvaliacao,
+  resultadoAtual: string,
+  progressoPercentual: number
+): void {
+  validarCicloAtivo(ciclo);
+
+  if (!resultadoAtual.trim()) {
+    throw new Error("Informe o resultado atual da meta.");
+  }
+
+  if (
+    !Number.isFinite(progressoPercentual) ||
+    progressoPercentual < 0 ||
+    progressoPercentual > 100
+  ) {
+    throw new Error("O progresso deve estar entre 0% e 100%.");
+  }
+
+  const metas = getTodasMetas();
+  const atual = metas.find((meta) => meta.id === id);
+
+  if (
+    !atual ||
+    atual.excluida ||
+    atual.colaboradorMatricula !== colaborador.matricula ||
+    atual.cicloId !== ciclo.id
+  ) {
+    throw new Error("Meta não encontrada.");
+  }
+
+  const agora = new Date().toISOString();
+
+  persistir(
+    metas.map((meta) =>
+      meta.id === id
+        ? {
+            ...meta,
+            resultadoAtual: resultadoAtual.trim(),
+            progressoPercentual,
+            dataUltimoAcompanhamento: agora,
+            dataUltimaAtualizacao: agora,
+            historico: [
+              ...meta.historico,
+              {
+                id: crypto.randomUUID(),
+                acao: "ATUALIZACAO_PROGRESSO",
+                data: agora,
+                autorMatricula: colaborador.matricula,
+                autorNome: colaborador.nome,
+                resultadoAtualAnterior: meta.resultadoAtual,
+                progressoPercentualAnterior:
+                  meta.progressoPercentual,
+              },
+            ],
+          }
+        : meta
+    )
+  );
+}
+
+
+export function finalizarMeta(
+  id: string,
+  colaborador: Colaborador,
+  ciclo: CicloAvaliacao,
+  resultadoFinal: string,
+  atingida: boolean
+): void {
+  validarCicloAtivo(ciclo);
+
+  if (!resultadoFinal.trim()) {
+    throw new Error("Informe o resultado final da meta.");
+  }
+
+  const metas = getTodasMetas();
+  const atual = metas.find((meta) => meta.id === id);
+
+  if (
+    !atual ||
+    atual.excluida ||
+    atual.colaboradorMatricula !== colaborador.matricula ||
+    atual.cicloId !== ciclo.id
+  ) {
+    throw new Error("Meta não encontrada.");
+  }
+
+  const agora = new Date().toISOString();
+
+  persistir(
+    metas.map((meta) =>
+      meta.id === id
+        ? {
+            ...meta,
+            resultadoFinal: resultadoFinal.trim(),
+            atingida,
+            status: atingida ? "ATINGIDA" : "NAO_ATINGIDA",
+            dataFechamento: agora,
+            dataUltimaAtualizacao: agora,
+            historico: [
+              ...meta.historico,
+              {
+                id: crypto.randomUUID(),
+                acao: "FINALIZACAO",
+                data: agora,
+                autorMatricula: colaborador.matricula,
+                autorNome: colaborador.nome,
+                resultadoFinalAnterior: meta.resultadoFinal,
+                atingidaAnterior: meta.atingida,
               },
             ],
           }

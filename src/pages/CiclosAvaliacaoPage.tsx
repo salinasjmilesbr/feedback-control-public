@@ -109,14 +109,28 @@ function CiclosAvaliacaoPage() {
       const resumo = pendencias
         .map(
           (pendencia) =>
-            `${pendencia.colaboradorNome} — ${pendencia.papel}: ${pendencia.quantidade} nota${
-              pendencia.quantidade === 1 ? "" : "s"
-            } pendente${pendencia.quantidade === 1 ? "" : "s"}`
+            pendencia.papel === "Metas"
+              ? `${pendencia.colaboradorNome} — Metas: ${
+                  pendencia.quantidade
+                } meta${
+                  pendencia.quantidade === 1 ? "" : "s"
+                } sem fechamento${
+                  pendencia.detalhes?.length
+                    ? ` (${pendencia.detalhes.join(", ")})`
+                    : ""
+                }`
+              : `${pendencia.colaboradorNome} — ${pendencia.papel}: ${
+                  pendencia.quantidade
+                } nota${
+                  pendencia.quantidade === 1 ? "" : "s"
+                } pendente${
+                  pendencia.quantidade === 1 ? "" : "s"
+                }`
         )
         .join("\n");
 
       const confirmar = window.confirm(
-        `Este ciclo possui pendências:\n\n${resumo}\n\nDeseja encerrar mesmo assim? As médias usarão somente as notas recebidas e as avaliações serão marcadas como parcialmente concluídas.`
+        `Este ciclo possui pendências:\n\n${resumo}\n\nDeseja encerrar mesmo assim? As médias usarão somente as notas recebidas, avaliações incompletas serão marcadas como parciais e metas sem fechamento permanecerão registradas como pendências do ciclo.`
       );
 
       if (!confirmar) return;

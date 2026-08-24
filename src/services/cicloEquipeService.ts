@@ -10,6 +10,7 @@ import {
   updateFeedback,
 } from "./feedbackStorage";
 import { getColaboradoresVisiveis } from "./visibilidadeColaboradores";
+import { getMetasDoCiclo } from "./metaStorage";
 
 export type SituacaoAvaliacaoCiclo =
   | "NAO_INICIADA"
@@ -405,8 +406,9 @@ export function excluirAvaliacoesVaziasDoCiclo(
 export interface PendenciaAvaliacao {
   colaboradorId: number;
   colaboradorNome: string;
-  papel: "Gerente" | "Coordenador" | "Colegiado";
+  papel: "Gerente" | "Coordenador" | "Colegiado" | "Metas";
   quantidade: number;
+  detalhes?: string[];
 }
 
 function notasEsperadasDoSubcriterio(
@@ -490,6 +492,34 @@ export function analisarPendenciasDoCiclo(
     });
   });
 
+  const metasPendentes = getMetasDoCiclo(ciclo.id).filter(
+    (meta) =>
+      meta.status === "EM_ANDAMENTO" ||
+      !meta.resultadoFinal?.trim() ||
+      typeof meta.atingida !== "boolean"
+  );
+
+  metasPendentes.forEach((meta) => {
+    const chave = `${meta.colaboradorMatricula}-Metas`;
+    const atual = pendencias.get(chave);
+
+    if (atual) {
+      atual.quantidade += 1;
+      atual.detalhes = [
+        ...(atual.detalhes ?? []),
+        meta.descricao,
+      ];
+    } else {
+      pendencias.set(chave, {
+        colaboradorId: meta.colaboradorMatricula,
+        colaboradorNome: meta.colaboradorNome,
+        papel: "Metas",
+        quantidade: 1,
+        detalhes: [meta.descricao],
+      });
+    }
+  });
+
   return Array.from(pendencias.values()).sort((a, b) =>
     a.colaboradorNome.localeCompare(b.colaboradorNome, "pt-BR")
   );
@@ -540,7 +570,9 @@ function recalcularAvaliacaoParcial(
 
   const pendenciasDesteColaborador = pendencias
     .filter(
-      (item) => item.colaboradorId === feedback.colaboradorId
+      (item) =>
+        item.colaboradorId === feedback.colaboradorId &&
+        item.papel !== "Metas"
     )
     .map(
       (item) =>

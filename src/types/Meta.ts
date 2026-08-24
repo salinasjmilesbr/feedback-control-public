@@ -10,6 +10,8 @@ export type StatusMeta =
 export type AcaoHistoricoMeta =
   | "CRIACAO"
   | "EDICAO"
+  | "ATUALIZACAO_PROGRESSO"
+  | "FINALIZACAO"
   | "EXCLUSAO";
 
 export interface HistoricoMeta {
@@ -22,6 +24,10 @@ export interface HistoricoMeta {
   descricaoAnterior?: string;
   kpiAnterior?: string;
   valorAlvoAnterior?: string;
+  resultadoAtualAnterior?: string;
+  progressoPercentualAnterior?: number;
+  resultadoFinalAnterior?: string;
+  atingidaAnterior?: boolean;
 }
 
 export interface Meta {
@@ -41,10 +47,15 @@ export interface Meta {
 
   status: StatusMeta;
 
-  // Campos preparados para a etapa de acompanhamento.
+  // Acompanhamento durante o ciclo.
   resultadoAtual?: string;
+  progressoPercentual?: number;
+  dataUltimoAcompanhamento?: string;
+
+  // Campos preparados para o fechamento da meta.
   resultadoFinal?: string;
   atingida?: boolean;
+  dataFechamento?: string;
 
   dataCriacao: string;
   dataUltimaAtualizacao: string;
