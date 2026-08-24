@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import InicioPage from "../pages/InicioPage";
 import MinhaAvaliacaoPage from "../pages/MinhaAvaliacaoPage";
 import MinhaAvaliacaoDetalhePage from "../pages/MinhaAvaliacaoDetalhePage";
+import CiclosAvaliacaoPage from "../pages/CiclosAvaliacaoPage";
 import ColaboradorDetalhePage from "../pages/ColaboradorDetalhePage";
 import NovoColaboradorPage from "../pages/NovoColaboradorPage";
 import EditarColaboradorPage from "../pages/EditarColaboradorPage";
@@ -27,6 +28,11 @@ function AppRoutes() {
         <Route
           path="/minha-avaliacao/:feedbackId"
           element={<MinhaAvaliacaoDetalhePage />}
+        />
+
+        <Route
+          path="/ciclos"
+          element={<CiclosAvaliacaoPage />}
         />
 
         <Route

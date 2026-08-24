@@ -6,6 +6,10 @@ import type { Feedback } from "../types/Feedback";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import { obterPermissoesAvaliacao } from "../services/permissaoAvaliacao";
 import { calcularProgressoAvaliacao } from "../services/progressoAvaliacao";
+import {
+  getCicloAtivo,
+  formatarPeriodoCiclo,
+} from "../services/cicloAvaliacaoStorage";
 
 const criterios = [
   {
@@ -136,13 +140,10 @@ function NovoFeedbackPage() {
   const [feedbackFinalGerente, setFeedbackFinalGerente] = useState("");
   const [feedbackFinalCoordenador, setFeedbackFinalCoordenador] = useState("");
   const [status, setStatus] = useState<Feedback["status"]>("RASCUNHO");
-  const [anoAvaliacao] = useState(new Date().getFullYear());
-  const [cicloAvaliacao, setCicloAvaliacao] = useState<1 | 2 | 3>(1);
   const [criterioAberto, setCriterioAberto] = useState<string>(criterios[0].id);
   const [feedbackFinalAberto, setFeedbackFinalAberto] = useState(false);
-  const feedbacksExistentes = getFeedbacksByColaborador(colaborador?.matricula ?? 0);
-  const ciclosUtilizados = feedbacksExistentes.filter((feedback) => feedback.ano === anoAvaliacao).map((feedback) => feedback.ciclo);
-  
+  const cicloAtivo = getCicloAtivo();
+    
   if (!colaborador) {
     return (
       <div style={{ padding: "30px" }}>
@@ -150,6 +151,35 @@ function NovoFeedbackPage() {
       </div>
     );
   }
+
+  if (!cicloAtivo) {
+    return (
+      <div style={{ padding: "30px" }}>
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          style={{ marginBottom: "16px" }}
+        >
+          ← Voltar
+        </button>
+        <h1>Nenhum ciclo ativo</h1>
+        <p>
+          Ative um ciclo de avaliação antes de criar uma nova avaliação.
+        </p>
+        {usuarioAtual?.funcao === "GERENTE" && (
+          <button
+            type="button"
+            onClick={() => navigate("/ciclos")}
+          >
+            Gerenciar ciclos
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  const anoAvaliacao = cicloAtivo.ano;
+  const cicloAvaliacao = cicloAtivo.ciclo;
 
   const avaliadoresColegiado = (
     colaborador.avaliadoresColegiadoMatriculas ?? []
@@ -740,39 +770,20 @@ if (feedbackExistente) {
               }}
             >
               <div>
-                <strong>Ano:</strong> {anoAvaliacao}
-              </div>
-
-              <div style={{ display: "flex", gap: "12px" }}>
-                <label>
-                  <input
-                    type="radio"
-                    checked={cicloAvaliacao === 1}
-                    disabled={ciclosUtilizados.includes(1)}
-                    onChange={() => setCicloAvaliacao(1)}
-                  />
-                  {" "}Ciclo 1
-                </label>
-
-                <label>
-                  <input
-                    type="radio"
-                    checked={cicloAvaliacao === 2}
-                    disabled={ciclosUtilizados.includes(2)}
-                    onChange={() => setCicloAvaliacao(2)}
-                  />
-                  {" "}Ciclo 2
-                </label>
-
-                <label>
-                  <input
-                    type="radio"
-                    checked={cicloAvaliacao === 3}
-                    disabled={ciclosUtilizados.includes(3)}
-                    onChange={() => setCicloAvaliacao(3)}
-                  />
-                  {" "}Ciclo 3
-                </label>
+                <strong>Ciclo ativo:</strong>{" "}
+                {anoAvaliacao} • Ciclo {cicloAvaliacao}
+                <div
+                  style={{
+                    marginTop: "4px",
+                    color: "#666",
+                    fontSize: "13px",
+                  }}
+                >
+                  {formatarPeriodoCiclo(
+                    cicloAtivo.dataInicio,
+                    cicloAtivo.dataFim
+                  )}
+                </div>
               </div>
             </div>
           </div>

@@ -11,6 +11,11 @@ import {
   getObservacoesByColaborador,
 } from "../services/observacaoStorage";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
+import {
+  getCicloAtivo,
+  getCiclosAvaliacao,
+  formatarPeriodoCiclo,
+} from "../services/cicloAvaliacaoStorage";
 
 type Props = {
   colaborador: Colaborador;
@@ -49,6 +54,8 @@ function formatarData(data: string) {
 
 function ObservacoesColaborador({ colaborador }: Props) {
   const { usuarioAtual } = useUsuarioAtual();
+  const cicloAtivo = getCicloAtivo();
+  const ciclosDisponiveis = getCiclosAvaliacao();
 
   const [versao, setVersao] = useState(0);
   const [formAberto, setFormAberto] = useState(false);
@@ -56,8 +63,12 @@ function ObservacoesColaborador({ colaborador }: Props) {
   const [tipo, setTipo] = useState<TipoObservacao>("NEUTRA");
   const [texto, setTexto] = useState("");
   const [comunicado, setComunicado] = useState(false);
-  const [ano, setAno] = useState(new Date().getFullYear());
-  const [ciclo, setCiclo] = useState<1 | 2 | 3>(1);
+  const [ano, setAno] = useState(
+    cicloAtivo?.ano ?? new Date().getFullYear()
+  );
+  const [ciclo, setCiclo] = useState<1 | 2 | 3>(
+    cicloAtivo?.ciclo ?? 1
+  );
   const [mostrarExcluidas, setMostrarExcluidas] = useState(false);
   const [historicoAberto, setHistoricoAberto] = useState<string | null>(
     null
@@ -80,8 +91,8 @@ function ObservacoesColaborador({ colaborador }: Props) {
     setTipo("NEUTRA");
     setTexto("");
     setComunicado(false);
-    setAno(new Date().getFullYear());
-    setCiclo(1);
+    setAno(cicloAtivo?.ano ?? new Date().getFullYear());
+    setCiclo(cicloAtivo?.ciclo ?? 1);
     setErro("");
     setFormAberto(false);
   }
@@ -221,8 +232,8 @@ function ObservacoesColaborador({ colaborador }: Props) {
                   setTipo("NEUTRA");
                   setTexto("");
                   setComunicado(false);
-                  setAno(new Date().getFullYear());
-                  setCiclo(1);
+                  setAno(cicloAtivo?.ano ?? new Date().getFullYear());
+                  setCiclo(cicloAtivo?.ciclo ?? 1);
                   setErro("");
                   setFormAberto(true);
                 }
@@ -281,56 +292,41 @@ function ObservacoesColaborador({ colaborador }: Props) {
               </select>
             </label>
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "minmax(140px, 1fr) minmax(140px, 1fr)",
-                gap: "12px",
-              }}
-            >
-              <label>
-                <strong>Ano</strong>
-                <input
-                  type="number"
-                  min={2020}
-                  max={2100}
-                  value={ano}
-                  onChange={(event) =>
-                    setAno(Number(event.target.value))
-                  }
-                  style={{
-                    width: "100%",
-                    marginTop: "6px",
-                    padding: "10px",
-                    borderRadius: "8px",
-                    border: "1px solid #ccc",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </label>
+            <label>
+              <strong>Ciclo da observação</strong>
+              <select
+                value={`${ano}-${ciclo}`}
+                onChange={(event) => {
+                  const [anoSelecionado, cicloSelecionado] =
+                    event.target.value.split("-");
 
-              <label>
-                <strong>Ciclo</strong>
-                <select
-                  value={ciclo}
-                  onChange={(event) =>
-                    setCiclo(Number(event.target.value) as 1 | 2 | 3)
-                  }
-                  style={{
-                    width: "100%",
-                    marginTop: "6px",
-                    padding: "10px",
-                    borderRadius: "8px",
-                    border: "1px solid #ccc",
-                    boxSizing: "border-box",
-                  }}
-                >
-                  <option value={1}>Ciclo 1</option>
-                  <option value={2}>Ciclo 2</option>
-                  <option value={3}>Ciclo 3</option>
-                </select>
-              </label>
-            </div>
+                  setAno(Number(anoSelecionado));
+                  setCiclo(Number(cicloSelecionado) as 1 | 2 | 3);
+                }}
+                style={{
+                  width: "100%",
+                  marginTop: "6px",
+                  padding: "10px",
+                  borderRadius: "8px",
+                  border: "1px solid #ccc",
+                  boxSizing: "border-box",
+                }}
+              >
+                {ciclosDisponiveis.map((item) => (
+                  <option
+                    key={item.id}
+                    value={`${item.ano}-${item.ciclo}`}
+                  >
+                    {item.ano} • Ciclo {item.ciclo} —{" "}
+                    {formatarPeriodoCiclo(
+                      item.dataInicio,
+                      item.dataFim
+                    )}
+                    {item.status === "ATIVO" ? " (Ativo)" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
 
             <label>
               <strong>Observação</strong>
