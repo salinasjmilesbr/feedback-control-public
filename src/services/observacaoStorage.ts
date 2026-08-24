@@ -47,11 +47,27 @@ export function getObservacoesComunicadasByColaborador(
   );
 }
 
+export function getObservacoesComunicadasByCiclo(
+  colaboradorMatricula: number,
+  ano: number,
+  ciclo: 1 | 2 | 3
+): Observacao[] {
+  return getObservacoesComunicadasByColaborador(
+    colaboradorMatricula
+  ).filter(
+    (observacao) =>
+      observacao.ano === ano &&
+      observacao.ciclo === ciclo
+  );
+}
+
 export function criarObservacao(
   colaboradorMatricula: number,
   tipo: TipoObservacao,
   texto: string,
   comunicado: boolean,
+  ano: number,
+  ciclo: 1 | 2 | 3,
   autor: Colaborador
 ): Observacao {
   const agora = new Date().toISOString();
@@ -62,6 +78,8 @@ export function criarObservacao(
     tipo,
     texto: texto.trim(),
     comunicado,
+    ano,
+    ciclo,
     autorMatricula: autor.matricula,
     autorNome: autor.nome,
     dataCriacao: agora,
@@ -88,6 +106,8 @@ export function atualizarObservacao(
   tipo: TipoObservacao,
   texto: string,
   comunicado: boolean,
+  ano: number,
+  ciclo: 1 | 2 | 3,
   autor: Colaborador
 ): void {
   const observacoes = getTodasObservacoes();
@@ -107,6 +127,8 @@ export function atualizarObservacao(
             tipo,
             texto: texto.trim(),
             comunicado,
+            ano,
+            ciclo,
             dataUltimaAtualizacao: agora,
             historico: [
               ...item.historico,
@@ -119,6 +141,8 @@ export function atualizarObservacao(
                 textoAnterior: item.texto,
                 tipoAnterior: item.tipo,
                 comunicadoAnterior: item.comunicado,
+                anoAnterior: item.ano,
+                cicloAnterior: item.ciclo,
               },
             ],
           }

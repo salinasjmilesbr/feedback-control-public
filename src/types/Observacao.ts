@@ -17,6 +17,8 @@ export interface HistoricoObservacao {
   textoAnterior?: string;
   tipoAnterior?: TipoObservacao;
   comunicadoAnterior?: boolean;
+  anoAnterior?: number;
+  cicloAnterior?: 1 | 2 | 3;
 }
 
 export interface Observacao {
@@ -25,6 +27,10 @@ export interface Observacao {
   tipo: TipoObservacao;
   texto: string;
   comunicado: boolean;
+
+  // Opcional para manter compatibilidade com observações antigas.
+  ano?: number;
+  ciclo?: 1 | 2 | 3;
 
   autorMatricula: number;
   autorNome: string;

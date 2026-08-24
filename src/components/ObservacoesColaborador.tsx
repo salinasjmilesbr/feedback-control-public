@@ -56,6 +56,8 @@ function ObservacoesColaborador({ colaborador }: Props) {
   const [tipo, setTipo] = useState<TipoObservacao>("NEUTRA");
   const [texto, setTexto] = useState("");
   const [comunicado, setComunicado] = useState(false);
+  const [ano, setAno] = useState(new Date().getFullYear());
+  const [ciclo, setCiclo] = useState<1 | 2 | 3>(1);
   const [mostrarExcluidas, setMostrarExcluidas] = useState(false);
   const [historicoAberto, setHistoricoAberto] = useState<string | null>(
     null
@@ -78,6 +80,8 @@ function ObservacoesColaborador({ colaborador }: Props) {
     setTipo("NEUTRA");
     setTexto("");
     setComunicado(false);
+    setAno(new Date().getFullYear());
+    setCiclo(1);
     setErro("");
     setFormAberto(false);
   }
@@ -87,6 +91,8 @@ function ObservacoesColaborador({ colaborador }: Props) {
     setTipo(observacao.tipo);
     setTexto(observacao.texto);
     setComunicado(observacao.comunicado);
+    setAno(observacao.ano ?? new Date().getFullYear());
+    setCiclo(observacao.ciclo ?? 1);
     setErro("");
     setFormAberto(true);
   }
@@ -106,6 +112,8 @@ function ObservacoesColaborador({ colaborador }: Props) {
           tipo,
           texto,
           comunicado,
+          ano,
+          ciclo,
           usuarioAtual
         );
       } else {
@@ -114,6 +122,8 @@ function ObservacoesColaborador({ colaborador }: Props) {
           tipo,
           texto,
           comunicado,
+          ano,
+          ciclo,
           usuarioAtual
         );
       }
@@ -211,6 +221,8 @@ function ObservacoesColaborador({ colaborador }: Props) {
                   setTipo("NEUTRA");
                   setTexto("");
                   setComunicado(false);
+                  setAno(new Date().getFullYear());
+                  setCiclo(1);
                   setErro("");
                   setFormAberto(true);
                 }
@@ -268,6 +280,57 @@ function ObservacoesColaborador({ colaborador }: Props) {
                 <option value="NEGATIVA">Negativa</option>
               </select>
             </label>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "minmax(140px, 1fr) minmax(140px, 1fr)",
+                gap: "12px",
+              }}
+            >
+              <label>
+                <strong>Ano</strong>
+                <input
+                  type="number"
+                  min={2020}
+                  max={2100}
+                  value={ano}
+                  onChange={(event) =>
+                    setAno(Number(event.target.value))
+                  }
+                  style={{
+                    width: "100%",
+                    marginTop: "6px",
+                    padding: "10px",
+                    borderRadius: "8px",
+                    border: "1px solid #ccc",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </label>
+
+              <label>
+                <strong>Ciclo</strong>
+                <select
+                  value={ciclo}
+                  onChange={(event) =>
+                    setCiclo(Number(event.target.value) as 1 | 2 | 3)
+                  }
+                  style={{
+                    width: "100%",
+                    marginTop: "6px",
+                    padding: "10px",
+                    borderRadius: "8px",
+                    border: "1px solid #ccc",
+                    boxSizing: "border-box",
+                  }}
+                >
+                  <option value={1}>Ciclo 1</option>
+                  <option value={2}>Ciclo 2</option>
+                  <option value={3}>Ciclo 3</option>
+                </select>
+              </label>
+            </div>
 
             <label>
               <strong>Observação</strong>
@@ -399,6 +462,21 @@ function ObservacoesColaborador({ colaborador }: Props) {
                     }}
                   >
                     {labelsTipo[observacao.tipo]}
+                  </span>
+
+                  <span
+                    style={{
+                      padding: "4px 9px",
+                      borderRadius: "999px",
+                      fontSize: "12px",
+                      fontWeight: "bold",
+                      backgroundColor: "#E8F4FF",
+                      color: "#0078D4",
+                    }}
+                  >
+                    {observacao.ano && observacao.ciclo
+                      ? `${observacao.ano} • Ciclo ${observacao.ciclo}`
+                      : "Sem ciclo"}
                   </span>
 
                   <span

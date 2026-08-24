@@ -2,6 +2,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import { getFeedbacksByColaborador } from "../services/feedbackStorage";
 import { exportarAvaliacaoPdf } from "../services/exportarAvaliacaoPdf";
+import { getObservacoesComunicadasByCiclo } from "../services/observacaoStorage";
 
 function MinhaAvaliacaoDetalhePage() {
   const navigate = useNavigate();
@@ -36,6 +37,11 @@ function MinhaAvaliacaoDetalhePage() {
   }
 
   const criterios = feedback.criteriosDetalhados ?? [];
+  const observacoesComunicadas = getObservacoesComunicadasByCiclo(
+    usuarioAtual.matricula,
+    feedback.ano,
+    feedback.ciclo
+  );
 
   return (
     <div style={{ padding: "30px" }}>
@@ -292,6 +298,78 @@ function MinhaAvaliacaoDetalhePage() {
                   </div>
                 </div>
               )}
+          </div>
+        </div>
+      )}
+
+      {observacoesComunicadas.length > 0 && (
+        <div
+          style={{
+            marginTop: "20px",
+            border: "1px solid #ddd",
+            borderRadius: "12px",
+            padding: "18px",
+            backgroundColor: "#fff",
+          }}
+        >
+          <h3 style={{ marginTop: 0, color: "#660099" }}>
+            Observações do Ciclo
+          </h3>
+
+          <div style={{ display: "grid", gap: "12px" }}>
+            {observacoesComunicadas.map((observacao) => (
+              <div
+                key={observacao.id}
+                style={{
+                  padding: "12px",
+                  borderRadius: "8px",
+                  backgroundColor: "#F8F8F8",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                    flexWrap: "wrap",
+                    fontSize: "13px",
+                    color: "#666",
+                  }}
+                >
+                  <strong>
+                    {observacao.tipo === "POSITIVA"
+                      ? "Positiva"
+                      : observacao.tipo === "NEGATIVA"
+                      ? "Negativa"
+                      : "Neutra"}
+                  </strong>
+                  <span>
+                    {new Date(observacao.dataCriacao).toLocaleDateString(
+                      "pt-BR"
+                    )}
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    marginTop: "8px",
+                    whiteSpace: "pre-wrap",
+                  }}
+                >
+                  {observacao.texto}
+                </div>
+
+                <div
+                  style={{
+                    marginTop: "8px",
+                    fontSize: "12px",
+                    color: "#777",
+                  }}
+                >
+                  Registrada por {observacao.autorNome}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
