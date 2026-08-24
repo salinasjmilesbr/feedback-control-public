@@ -9,6 +9,11 @@ export interface CicloAvaliacao {
   ciclo: 1 | 2 | 3;
   dataInicio?: string;
   dataFim?: string;
+
+  // Quantidades máximas de metas permitidas no ciclo.
+  // Opcionais para manter compatibilidade com ciclos antigos.
+  quantidadeMetasNegocio?: 0 | 1 | 2 | 3;
+  quantidadeMetasIndividuais?: 0 | 1 | 2 | 3;
   status: StatusCicloAvaliacao;
   dataCriacao: string;
   dataUltimaAtualizacao: string;

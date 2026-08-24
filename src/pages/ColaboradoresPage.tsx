@@ -90,6 +90,24 @@ function ColaboradoresPage() {
             justifyContent: "flex-end",
           }}
         >
+          {usuarioAtual.funcao === "GERENTE" && (
+            <button
+              type="button"
+              onClick={() => navigate("/ciclos")}
+              style={{
+                padding: "10px 16px",
+                borderRadius: "8px",
+                border: "1px solid #660099",
+                backgroundColor: "#fff",
+                color: "#660099",
+                cursor: "pointer",
+                fontWeight: "600",
+              }}
+            >
+              Ciclos de Avaliação
+            </button>
+          )}
+
           {usuarioAtual.funcao === "COORDENADOR" && (
             <button
               type="button"

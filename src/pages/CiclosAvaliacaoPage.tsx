@@ -6,6 +6,7 @@ import {
   encerrarCiclo,
   excluirCiclo,
   getCiclosAvaliacao,
+  atualizarConfiguracaoMetasCiclo,
   atualizarPeriodoCiclo,
   atualizarStatusCiclo,
   formatarPeriodoCiclo,
@@ -26,6 +27,10 @@ function CiclosAvaliacaoPage() {
   const [ciclo, setCiclo] = useState<1 | 2 | 3>(1);
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
+  const [quantidadeMetasNegocio, setQuantidadeMetasNegocio] =
+    useState<0 | 1 | 2 | 3>(0);
+  const [quantidadeMetasIndividuais, setQuantidadeMetasIndividuais] =
+    useState<0 | 1 | 2 | 3>(0);
   const [ativarAgora, setAtivarAgora] = useState(false);
   const [editandoPeriodoId, setEditandoPeriodoId] = useState<string | null>(null);
   const [editandoStatusId, setEditandoStatusId] = useState<string | null>(null);
@@ -33,6 +38,12 @@ function CiclosAvaliacaoPage() {
     useState<StatusCicloAvaliacao>("PLANEJADO");
   const [periodoInicioEdicao, setPeriodoInicioEdicao] = useState("");
   const [periodoFimEdicao, setPeriodoFimEdicao] = useState("");
+  const [editandoMetasId, setEditandoMetasId] =
+    useState<string | null>(null);
+  const [metasNegocioEdicao, setMetasNegocioEdicao] =
+    useState<0 | 1 | 2 | 3>(0);
+  const [metasIndividuaisEdicao, setMetasIndividuaisEdicao] =
+    useState<0 | 1 | 2 | 3>(0);
   const [erro, setErro] = useState("");
 
   void versao;
@@ -60,6 +71,8 @@ function CiclosAvaliacaoPage() {
         ciclo,
         dataInicio,
         dataFim,
+        quantidadeMetasNegocio,
+        quantidadeMetasIndividuais,
         ativarAgora
       );
 
@@ -69,6 +82,8 @@ function CiclosAvaliacaoPage() {
 
       setDataInicio("");
       setDataFim("");
+      setQuantidadeMetasNegocio(0);
+      setQuantidadeMetasIndividuais(0);
       setVersao((valor) => valor + 1);
     } catch (error) {
       setErro(
@@ -263,6 +278,65 @@ function CiclosAvaliacaoPage() {
           </label>
         </div>
 
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(180px, 1fr) minmax(180px, 1fr)",
+            gap: "12px",
+            marginTop: "14px",
+          }}
+        >
+          <label>
+            <strong>Metas de Negócio/Projetos</strong>
+            <select
+              value={quantidadeMetasNegocio}
+              onChange={(event) =>
+                setQuantidadeMetasNegocio(
+                  Number(event.target.value) as 0 | 1 | 2 | 3
+                )
+              }
+              style={{
+                width: "100%",
+                marginTop: "6px",
+                padding: "10px",
+                borderRadius: "8px",
+                border: "1px solid #ccc",
+                boxSizing: "border-box",
+              }}
+            >
+              <option value={0}>0 metas</option>
+              <option value={1}>1 meta</option>
+              <option value={2}>2 metas</option>
+              <option value={3}>3 metas</option>
+            </select>
+          </label>
+
+          <label>
+            <strong>Metas Individuais</strong>
+            <select
+              value={quantidadeMetasIndividuais}
+              onChange={(event) =>
+                setQuantidadeMetasIndividuais(
+                  Number(event.target.value) as 0 | 1 | 2 | 3
+                )
+              }
+              style={{
+                width: "100%",
+                marginTop: "6px",
+                padding: "10px",
+                borderRadius: "8px",
+                border: "1px solid #ccc",
+                boxSizing: "border-box",
+              }}
+            >
+              <option value={0}>0 metas</option>
+              <option value={1}>1 meta</option>
+              <option value={2}>2 metas</option>
+              <option value={3}>3 metas</option>
+            </select>
+          </label>
+        </div>
+
         <label
           style={{
             display: "flex",
@@ -334,6 +408,19 @@ function CiclosAvaliacaoPage() {
                 }}
               >
                 {formatarPeriodoCiclo(item.dataInicio, item.dataFim)}
+              </div>
+
+              <div
+                style={{
+                  marginTop: "7px",
+                  color: "#555",
+                  fontSize: "14px",
+                }}
+              >
+                <strong>Metas:</strong>{" "}
+                Negócio/Projetos {item.quantidadeMetasNegocio ?? 0}
+                {" • "}
+                Individuais {item.quantidadeMetasIndividuais ?? 0}
               </div>
 
               <div
@@ -486,6 +573,140 @@ function CiclosAvaliacaoPage() {
                 >
                   Editar período
                 </button>
+              )}
+            </div>
+
+            <div
+              style={{
+                minWidth: "300px",
+                flex: "1 1 340px",
+              }}
+            >
+              {item.status === "PLANEJADO" ? (
+                editandoMetasId === item.id ? (
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr auto",
+                      gap: "8px",
+                      alignItems: "end",
+                    }}
+                  >
+                    <label style={{ fontSize: "12px" }}>
+                      Metas Negócio
+                      <select
+                        value={metasNegocioEdicao}
+                        onChange={(event) =>
+                          setMetasNegocioEdicao(
+                            Number(event.target.value) as 0 | 1 | 2 | 3
+                          )
+                        }
+                        style={{
+                          width: "100%",
+                          marginTop: "4px",
+                          padding: "8px",
+                          boxSizing: "border-box",
+                        }}
+                      >
+                        <option value={0}>0</option>
+                        <option value={1}>1</option>
+                        <option value={2}>2</option>
+                        <option value={3}>3</option>
+                      </select>
+                    </label>
+
+                    <label style={{ fontSize: "12px" }}>
+                      Metas Individuais
+                      <select
+                        value={metasIndividuaisEdicao}
+                        onChange={(event) =>
+                          setMetasIndividuaisEdicao(
+                            Number(event.target.value) as 0 | 1 | 2 | 3
+                          )
+                        }
+                        style={{
+                          width: "100%",
+                          marginTop: "4px",
+                          padding: "8px",
+                          boxSizing: "border-box",
+                        }}
+                      >
+                        <option value={0}>0</option>
+                        <option value={1}>1</option>
+                        <option value={2}>2</option>
+                        <option value={3}>3</option>
+                      </select>
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        try {
+                          atualizarConfiguracaoMetasCiclo(
+                            item.id,
+                            metasNegocioEdicao,
+                            metasIndividuaisEdicao
+                          );
+                          setEditandoMetasId(null);
+                          setErro("");
+                          setVersao((valor) => valor + 1);
+                        } catch (error) {
+                          setErro(
+                            error instanceof Error
+                              ? error.message
+                              : "Não foi possível atualizar as metas."
+                          );
+                        }
+                      }}
+                      style={{
+                        padding: "9px 12px",
+                        borderRadius: "8px",
+                        border: "none",
+                        backgroundColor: "#660099",
+                        color: "#fff",
+                        cursor: "pointer",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      Salvar
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditandoMetasId(item.id);
+                      setMetasNegocioEdicao(
+                        item.quantidadeMetasNegocio ?? 0
+                      );
+                      setMetasIndividuaisEdicao(
+                        item.quantidadeMetasIndividuais ?? 0
+                      );
+                      setErro("");
+                    }}
+                    style={{
+                      padding: "9px 13px",
+                      borderRadius: "8px",
+                      border: "1px solid #777",
+                      backgroundColor: "#fff",
+                      color: "#555",
+                      cursor: "pointer",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    Editar metas
+                  </button>
+                )
+              ) : (
+                <div
+                  style={{
+                    fontSize: "12px",
+                    color: "#777",
+                    fontWeight: "600",
+                  }}
+                >
+                  Metas bloqueadas após o início do ciclo
+                </div>
               )}
             </div>
 

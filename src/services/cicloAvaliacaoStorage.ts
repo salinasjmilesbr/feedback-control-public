@@ -90,6 +90,8 @@ export function criarCiclo(
   ciclo: 1 | 2 | 3,
   dataInicio: string,
   dataFim: string,
+  quantidadeMetasNegocio: 0 | 1 | 2 | 3,
+  quantidadeMetasIndividuais: 0 | 1 | 2 | 3,
   ativarAgora = false
 ): CicloAvaliacao {
   const ciclos = getCiclosAvaliacao();
@@ -126,6 +128,8 @@ export function criarCiclo(
     ciclo,
     dataInicio,
     dataFim,
+    quantidadeMetasNegocio,
+    quantidadeMetasIndividuais,
     status: ativarAgora ? "ATIVO" : "PLANEJADO",
     dataCriacao: agora,
     dataUltimaAtualizacao: agora,
@@ -289,6 +293,40 @@ export function atualizarStatusCiclo(
         ? {
             ...item,
             status: novoStatus,
+            dataUltimaAtualizacao: agora,
+          }
+        : item
+    )
+  );
+}
+
+export function atualizarConfiguracaoMetasCiclo(
+  id: string,
+  quantidadeMetasNegocio: 0 | 1 | 2 | 3,
+  quantidadeMetasIndividuais: 0 | 1 | 2 | 3
+): void {
+  const ciclos = getCiclosAvaliacao();
+  const alvo = ciclos.find((item) => item.id === id);
+
+  if (!alvo) {
+    throw new Error("Ciclo não encontrado.");
+  }
+
+  if (alvo.status !== "PLANEJADO") {
+    throw new Error(
+      "A configuração de metas só pode ser alterada enquanto o ciclo estiver Planejado."
+    );
+  }
+
+  const agora = new Date().toISOString();
+
+  persistir(
+    ciclos.map((item) =>
+      item.id === id
+        ? {
+            ...item,
+            quantidadeMetasNegocio,
+            quantidadeMetasIndividuais,
             dataUltimaAtualizacao: agora,
           }
         : item
