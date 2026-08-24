@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { getColaboradorByMatricula, getColaboradores } from "../services/colaboradorStorage";
 import { getFeedbacksByColaborador } from "../services/feedbackStorage";
 import type { Feedback } from "../types/Feedback";
+import ObservacoesColaborador from "../components/ObservacoesColaborador";
 
 const criterioSiglas = [
   "DT",
@@ -586,6 +587,8 @@ function ColaboradorDetalhePage() {
                 </div>
 
                 </div>
+
+      <ObservacoesColaborador colaborador={colaborador} />
 
       <div
         style={{
