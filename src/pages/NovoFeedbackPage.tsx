@@ -3,6 +3,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { getColaboradorByMatricula, getColaboradores } from "../services/colaboradorStorage";
 import { saveFeedback, getFeedbacksByColaborador,} from "../services/feedbackStorage";
 import type { Feedback } from "../types/Feedback";
+import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
+import { obterPermissoesAvaliacao } from "../services/permissaoAvaliacao";
 
 const criterios = [
   {
@@ -117,6 +119,7 @@ function criarEstadoInicial(): Avaliacoes {
 function NovoFeedbackPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { usuarioAtual } = useUsuarioAtual();
 
   const matricula = Number(id);
   const colaborador = Number.isFinite(matricula)
@@ -156,6 +159,18 @@ function NovoFeedbackPage() {
       )
     )
     .filter((item) => item !== undefined);
+
+  const permissoes = obterPermissoesAvaliacao(
+    usuarioAtual,
+    colaborador,
+    colaboradores
+  );
+
+  function podeEditarPapel(papel: PapelAvaliador) {
+    if (papel === "gerente") return permissoes.podeAvaliarComoGerente;
+    if (papel === "coordenador") return permissoes.podeAvaliarComoCoordenador;
+    return permissoes.podeAvaliarComoColegiado;
+  }
 
   function atualizarNota(
     criterioId: string,
@@ -279,6 +294,7 @@ function NovoFeedbackPage() {
                       type="radio"
                       name={`${criterioId}-${subcriterio}-colegiado-${avaliador.matricula}`}
                       checked={valorAtual === nota}
+                      disabled={usuarioAtual?.matricula !== avaliador.matricula}
                       onChange={() =>
                         atualizarVotoColegiado(
                           criterioId,
@@ -486,6 +502,7 @@ function NovoFeedbackPage() {
               type="radio"
               name={`${criterioId}-${subcriterio}-${papel}`}
               checked={valorAtual === nota}
+              disabled={!podeEditarPapel(papel)}
               onChange={() => atualizarNota(criterioId, subcriterio, papel, nota)}
             />
             {nota}
@@ -729,6 +746,22 @@ if (feedbackExistente) {
             </span>
           </div>
         </div>
+      </div>
+
+      <div
+        style={{
+          border: "1px solid #ddd",
+          borderRadius: "12px",
+          padding: "14px 20px",
+          marginBottom: "20px",
+          backgroundColor: "#F8F1FF",
+          textAlign: "left",
+        }}
+      >
+        <strong>Permissões nesta avaliação:</strong>{" "}
+        {permissoes.papeisPermitidos.length > 0
+          ? permissoes.papeisPermitidos.join(" + ")
+          : "Somente consulta"}
       </div>
 
       <div
@@ -1108,6 +1141,7 @@ if (feedbackExistente) {
                     </label>
                     <textarea
                       value={avaliacoes[criterio.id].observacaoGerente}
+                      disabled={!permissoes.podeAvaliarComoGerente}
                       onChange={(event) =>
                         atualizarObservacao(
                           criterio.id,
@@ -1133,6 +1167,7 @@ if (feedbackExistente) {
                     </label>
                     <textarea
                       value={avaliacoes[criterio.id].observacaoCoordenador}
+                      disabled={!permissoes.podeAvaliarComoCoordenador}
                       onChange={(event) =>
                         atualizarObservacao(
                           criterio.id,
@@ -1371,6 +1406,7 @@ if (feedbackExistente) {
                 </label>
                 <textarea
                   value={feedbackFinalGerente}
+                  disabled={!permissoes.podeAvaliarComoGerente}
                   onChange={(event) => setFeedbackFinalGerente(event.target.value)}
                   style={{
                     width: "100%",
@@ -1390,6 +1426,7 @@ if (feedbackExistente) {
                 </label>
                 <textarea
                   value={feedbackFinalCoordenador}
+                  disabled={!permissoes.podeAvaliarComoCoordenador}
                   onChange={(event) =>
                     setFeedbackFinalCoordenador(event.target.value)
                   }
@@ -1418,6 +1455,7 @@ if (feedbackExistente) {
       >
         <button
           onClick={handleSalvarFeedback}
+          disabled={!permissoes.podeAvaliar}
           style={{
             padding: "12px 24px",
             borderRadius: "10px",
