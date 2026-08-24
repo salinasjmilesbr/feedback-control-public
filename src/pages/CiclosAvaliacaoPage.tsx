@@ -9,6 +9,7 @@ import {
   atualizarPeriodoCiclo,
   formatarPeriodoCiclo,
 } from "../services/cicloAvaliacaoStorage";
+import { criarAvaliacoesDoCicloAtivado } from "../services/cicloEquipeService";
 
 function CiclosAvaliacaoPage() {
   const navigate = useNavigate();
@@ -44,13 +45,18 @@ function CiclosAvaliacaoPage() {
     setErro("");
 
     try {
-      criarCiclo(
+      const novoCiclo = criarCiclo(
         ano,
         ciclo,
         dataInicio,
         dataFim,
         ativarAgora
       );
+
+      if (ativarAgora) {
+        criarAvaliacoesDoCicloAtivado(novoCiclo);
+      }
+
       setDataInicio("");
       setDataFim("");
       setVersao((valor) => valor + 1);
@@ -411,11 +417,36 @@ function CiclosAvaliacaoPage() {
             </div>
 
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => navigate(`/ciclos/${item.id}`)}
+                style={{
+                  padding: "9px 13px",
+                  borderRadius: "8px",
+                  border: "1px solid #660099",
+                  backgroundColor: "#fff",
+                  color: "#660099",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                }}
+              >
+                Painel da equipe
+              </button>
+
               {item.status !== "ATIVO" && (
                 <button
                   type="button"
                   onClick={() => {
                     ativarCiclo(item.id);
+
+                    const cicloAtivado = getCiclosAvaliacao().find(
+                      (cicloAtual) => cicloAtual.id === item.id
+                    );
+
+                    if (cicloAtivado) {
+                      criarAvaliacoesDoCicloAtivado(cicloAtivado);
+                    }
+
                     setVersao((valor) => valor + 1);
                   }}
                   style={{

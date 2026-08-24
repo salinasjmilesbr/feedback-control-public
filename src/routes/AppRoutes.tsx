@@ -4,6 +4,7 @@ import InicioPage from "../pages/InicioPage";
 import MinhaAvaliacaoPage from "../pages/MinhaAvaliacaoPage";
 import MinhaAvaliacaoDetalhePage from "../pages/MinhaAvaliacaoDetalhePage";
 import CiclosAvaliacaoPage from "../pages/CiclosAvaliacaoPage";
+import PainelCicloPage from "../pages/PainelCicloPage";
 import ColaboradorDetalhePage from "../pages/ColaboradorDetalhePage";
 import NovoColaboradorPage from "../pages/NovoColaboradorPage";
 import EditarColaboradorPage from "../pages/EditarColaboradorPage";
@@ -33,6 +34,11 @@ function AppRoutes() {
         <Route
           path="/ciclos"
           element={<CiclosAvaliacaoPage />}
+        />
+
+        <Route
+          path="/ciclos/:cicloId"
+          element={<PainelCicloPage />}
         />
 
         <Route
