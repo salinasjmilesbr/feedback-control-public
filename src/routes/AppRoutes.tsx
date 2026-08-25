@@ -1,4 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import UsuarioAtualBar from "../components/UsuarioAtualBar";
+import NavegacaoPrincipal from "../components/NavegacaoPrincipal";
+import AppFooter from "../components/AppFooter";
 
 import InicioPage from "../pages/InicioPage";
 import MinhaAvaliacaoPage from "../pages/MinhaAvaliacaoPage";
@@ -13,10 +16,14 @@ import EditarColaboradorPage from "../pages/EditarColaboradorPage";
 import NovoFeedbackPage from "../pages/NovoFeedbackPage";
 import FeedbackDetalhePage from "../pages/FeedbackDetalhePage";
 import EditarFeedbackPage from "../pages/EditarFeedbackPage";
+import ConfiguracoesAparenciaPage from "../pages/ConfiguracoesAparenciaPage";
 
 function AppRoutes() {
   return (
     <BrowserRouter>
+      <UsuarioAtualBar />
+      <NavegacaoPrincipal />
+      <main className="app-main">
       <Routes>
         <Route
           path="/"
@@ -54,6 +61,11 @@ function AppRoutes() {
         />
 
         <Route
+          path="/configuracoes/aparencia"
+          element={<ConfiguracoesAparenciaPage />}
+        />
+
+        <Route
           path="/colaboradores/novo"
           element={<NovoColaboradorPage />}
         />
@@ -84,6 +96,8 @@ function AppRoutes() {
         />
         
       </Routes>
+      </main>
+      <AppFooter />
     </BrowserRouter>
   );
 }

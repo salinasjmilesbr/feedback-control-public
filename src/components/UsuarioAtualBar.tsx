@@ -1,84 +1,92 @@
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
+import { useBranding } from "../contexts/BrandingContext";
+
+function obterIniciais(nome: string) {
+  const partes = nome.trim().split(/\s+/).filter(Boolean);
+
+  if (partes.length === 0) return "?";
+  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
+
+  return `${partes[0][0]}${partes[partes.length - 1][0]}`.toUpperCase();
+}
 
 function UsuarioAtualBar() {
-  const { usuarioAtual, usuariosDisponiveis, selecionarUsuario } =
-    useUsuarioAtual();
+  const {
+    usuarioAtual,
+    usuariosDisponiveis,
+    selecionarUsuario,
+  } = useUsuarioAtual();
+  const { branding } = useBranding();
 
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: "16px",
-        padding: "12px 30px",
-        borderBottom: "1px solid #ddd",
-        backgroundColor: "#F8F1FF",
-        flexWrap: "wrap",
-      }}
-    >
-      <div>
-        <strong>Usuário atual</strong>
-        <div style={{ fontSize: "13px", color: "#666", marginTop: "2px" }}>
-          Modo de desenvolvimento para testar permissões
+    <header className="app-header">
+      <div className="app-header__inner">
+      <div className="app-header__brand">
+        {branding.logoDataUrl ? (
+          <img
+            src={branding.logoDataUrl}
+            alt={`Logo ${branding.nomeSistema}`}
+            className="app-header__logo"
+          />
+        ) : (
+          <div className="app-header__logo-placeholder">
+            {branding.nomeSistema.slice(0, 1).toUpperCase() || "V"}
+          </div>
+        )}
+
+        <div className="app-header__brand-copy">
+          <strong>{branding.nomeSistema}</strong>
+          <span className="app-header__subtitle">
+            {branding.subtituloSistema ||
+              "Performance & Feedback Management"}
+          </span>
         </div>
       </div>
 
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "12px",
-          flexWrap: "wrap",
-        }}
-      >
-        <select
-          value={usuarioAtual?.matricula ?? ""}
-          onChange={(event) => selecionarUsuario(Number(event.target.value))}
-          style={{
-            minWidth: "280px",
-            padding: "9px 12px",
-            borderRadius: "8px",
-            border: "1px solid #bbb",
-            backgroundColor: "#fff",
-          }}
-        >
-          {usuariosDisponiveis.map((usuario) => (
-            <option key={usuario.matricula} value={usuario.matricula}>
-              {usuario.nome} -{" "}
-              {usuario.funcao === "GERENTE"
-                ? "Gerente"
-                : usuario.funcao === "COORDENADOR"
-                ? "Coordenador"
-                : usuario.funcao === "CONSULTOR"
-                ? "Consultor"
-                : "Analista"}
-            </option>
-          ))}
-        </select>
+      <div className="app-header__user">
+        <div className="app-header__user-control">
+          <label htmlFor="usuario-atual">Usuário atual</label>
+          <select
+            id="usuario-atual"
+            value={usuarioAtual?.matricula ?? ""}
+            onChange={(event) =>
+              selecionarUsuario(Number(event.target.value))
+            }
+          >
+            {usuariosDisponiveis.map((usuario) => (
+              <option
+                key={usuario.matricula}
+                value={usuario.matricula}
+              >
+                {usuario.nome} -{" "}
+                {usuario.funcao === "GERENTE"
+                  ? "Gerente"
+                  : usuario.funcao === "COORDENADOR"
+                  ? "Coordenador"
+                  : usuario.funcao === "CONSULTOR"
+                  ? "Consultor"
+                  : "Analista"}
+              </option>
+            ))}
+          </select>
+        </div>
 
         {usuarioAtual && (
-          <span
-            style={{
-              padding: "7px 11px",
-              borderRadius: "999px",
-              backgroundColor: "#660099",
-              color: "#fff",
-              fontSize: "12px",
-              fontWeight: "bold",
-            }}
-          >
-            {usuarioAtual.funcao === "GERENTE"
-              ? "GERENTE"
-              : usuarioAtual.funcao === "COORDENADOR"
-              ? "COORDENADOR"
-              : usuarioAtual.funcao === "CONSULTOR"
-              ? "CONSULTOR"
-              : "ANALISTA"}
-          </span>
+          <div className="app-header__profile">
+            <div
+              className="app-header__avatar"
+              aria-hidden="true"
+            >
+              {obterIniciais(usuarioAtual.nome)}
+            </div>
+            <span className="app-role-badge">
+              {usuarioAtual.funcao}
+            </span>
+          </div>
         )}
       </div>
-    </div>
+      </div>
+    </header>
   );
 }
 

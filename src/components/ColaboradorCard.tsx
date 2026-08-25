@@ -8,10 +8,21 @@ function formatarNome(nome: string) {
     .split(" ")
     .map(
       (palavra) =>
-        palavra.charAt(0).toUpperCase() +
-        palavra.slice(1)
+        palavra.charAt(0).toUpperCase() + palavra.slice(1)
     )
     .join(" ");
+}
+
+function obterIniciais(nome: string) {
+  const partes = nome
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (partes.length === 0) return "?";
+  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
+
+  return `${partes[0][0]}${partes[partes.length - 1][0]}`.toUpperCase();
 }
 
 interface Props {
@@ -22,6 +33,7 @@ function ColaboradorCard({ colaborador }: Props) {
   const gestorDireto = colaborador.gestorDiretoMatricula
     ? getColaboradorByMatricula(colaborador.gestorDiretoMatricula)
     : undefined;
+
   const funcaoLabel =
     colaborador.funcao === "GERENTE"
       ? "Gerente"
@@ -40,106 +52,85 @@ function ColaboradorCard({ colaborador }: Props) {
       ? "Sênior"
       : undefined;
 
+  const statusLabel =
+    colaborador.status === "ATIVO"
+      ? "Ativo"
+      : colaborador.status === "LICENCA"
+      ? "Em licença"
+      : "Desligado";
+
+  const statusClass =
+    colaborador.status === "ATIVO"
+      ? "is-active"
+      : colaborador.status === "LICENCA"
+      ? "is-leave"
+      : "is-inactive";
+
   return (
-    <div
-      style={{
-        border: "1px solid #ddd",
-        borderRadius: "12px",
-        padding: "20px",
-        marginBottom: "10px",
-        background: "#fff",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-      }}
-    >
-      <h3
-        style={{
-          textAlign: "center",
-          marginBottom: "12px",
-          color: "#444",
-        }}
-      >
-        {colaborador.nome}
-      </h3>
+    <article className="collaborator-card">
+      <div className="collaborator-card__top">
+        <div className="collaborator-card__avatar" aria-hidden="true">
+          {obterIniciais(colaborador.nome)}
+        </div>
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: "20px",
-        }}
-      >
-        <div
-          style={{
-            flex: 1,
-            textAlign: "left",
-            lineHeight: "1.4",
-          }}
-        >
-          <p>
-            <strong>Função:</strong>{" "}
+        <div className="collaborator-card__identity">
+          <h3>{formatarNome(colaborador.nome)}</h3>
+          <div className="collaborator-card__role">
             {funcaoLabel}
-          </p>
-
-          {senioridadeLabel && (
-            <p>
-              <strong>Senioridade:</strong>{" "}
-              {senioridadeLabel}
-            </p>
-          )}
-
-          <p>
-            <strong>Cargo:</strong>{" "}
+            {senioridadeLabel ? ` • ${senioridadeLabel}` : ""}
+          </div>
+          <div className="collaborator-card__position">
             {colaborador.cargo}
-          </p>
-
-          {gestorDireto && (
-            <p>
-              <strong>Gestor direto:</strong>{" "}
-              {formatarNome(gestorDireto.nome)}
-            </p>
-          )}
+          </div>
         </div>
 
-        <div
-          style={{
-            minWidth: "180px",
-            textAlign: "right",
-          }}
-        >
-          <p
-            style={{
-              marginBottom: "10px",
-            }}
-          >
-            <strong>Status:</strong>{" "}
-            {colaborador.status === "ATIVO"
-              ? "✅ Ativo"
-              : colaborador.status === "LICENCA"
-              ? "🟡 Em licença"
-              : "❌ Desligado"}
-          </p>
-
-          <Link
-            to={`/colaborador/${colaborador.matricula}`}
-          >
-            <button
-              style={{
-                padding: "8px 16px",
-                cursor: "pointer",
-                borderRadius: "6px",
-                border: "1px solid #660099",
-                background: "#660099",
-                color: "#fff",
-                fontWeight: "bold",
-              }}
-            >
-              Ver Histórico
-            </button>
-          </Link>
-        </div>
+        <span className={`status-pill ${statusClass}`}>
+          {statusLabel}
+        </span>
       </div>
-    </div>
+
+      <div className="collaborator-card__divider" />
+
+      <div className="collaborator-card__details">
+        {gestorDireto && (
+          <div className="collaborator-card__detail">
+            <span className="collaborator-card__detail-icon">↳</span>
+            <div>
+              <small>Gestor direto</small>
+              <strong>{formatarNome(gestorDireto.nome)}</strong>
+            </div>
+          </div>
+        )}
+
+        {colaborador.area && (
+          <div className="collaborator-card__detail">
+            <span className="collaborator-card__detail-icon">▦</span>
+            <div>
+              <small>Área</small>
+              <strong>{colaborador.area}</strong>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="collaborator-card__footer">
+        <div className="collaborator-card__matricula">
+          <span className="collaborator-card__detail-icon" aria-hidden="true">▣</span>
+          <div>
+            <small>Matrícula</small>
+            <strong>{colaborador.matricula}</strong>
+          </div>
+        </div>
+
+        <Link
+          className="collaborator-card__link"
+          to={`/colaborador/${colaborador.matricula}`}
+        >
+          Ver histórico
+          <span aria-hidden="true">→</span>
+        </Link>
+      </div>
+    </article>
   );
 }
 

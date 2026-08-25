@@ -1,13 +1,14 @@
 import AppRoutes from "./routes/AppRoutes";
-import UsuarioAtualBar from "./components/UsuarioAtualBar";
 import { UsuarioAtualProvider } from "./contexts/UsuarioAtualContext";
+import { BrandingProvider } from "./contexts/BrandingContext";
 
 function App() {
   return (
-    <UsuarioAtualProvider>
-      <UsuarioAtualBar />
-      <AppRoutes />
-    </UsuarioAtualProvider>
+    <BrandingProvider>
+      <UsuarioAtualProvider>
+        <AppRoutes />
+      </UsuarioAtualProvider>
+    </BrandingProvider>
   );
 }
 

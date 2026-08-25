@@ -13,12 +13,12 @@ function ColaboradoresPage() {
   const { usuarioAtual } = useUsuarioAtual();
   const colaboradores = getColaboradores();
 
+  const [busca, setBusca] = useState("");
+  const [coordenadorFiltro, setCoordenadorFiltro] = useState("TODOS");
+  const [statusFiltro, setStatusFiltro] = useState<StatusFiltro>("TODOS");
+
   if (!usuarioAtual) {
-    return (
-      <div style={{ padding: "30px" }}>
-        <h1>Usuário atual não definido</h1>
-      </div>
-    );
+    return <div className="virtus-page">Usuário atual não definido.</div>;
   }
 
   const colaboradoresVisiveis = getColaboradoresVisiveis(
@@ -26,26 +26,26 @@ function ColaboradoresPage() {
     colaboradores
   );
 
-  const [busca, setBusca] = useState("");
-  const [coordenadorFiltro, setCoordenadorFiltro] = useState("TODOS");
-  const [statusFiltro, setStatusFiltro] = useState<StatusFiltro>("TODOS");
-
   const coordenadores = [
     "TODOS",
     ...Array.from(
       new Set(
         colaboradoresVisiveis
           .map((colaborador) => colaborador.respondePara)
-          .filter((coordenador) => coordenador.trim() !== "")
+          .filter((nome) => nome.trim() !== "")
       )
     ).sort((a, b) => a.localeCompare(b, "pt-BR")),
   ];
 
+  const termo = busca.trim().toLowerCase();
+
   const colaboradoresFiltrados = colaboradoresVisiveis
     .filter((colaborador) => {
-      const correspondeBusca = colaborador.nome
-        .toLowerCase()
-        .includes(busca.toLowerCase());
+      const correspondeBusca =
+        termo === "" ||
+        colaborador.nome.toLowerCase().includes(termo) ||
+        colaborador.cargo.toLowerCase().includes(termo) ||
+        colaborador.area.toLowerCase().includes(termo);
 
       const correspondeCoordenador =
         coordenadorFiltro === "TODOS" ||
@@ -63,197 +63,158 @@ function ColaboradoresPage() {
     })
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
+  const temFiltro =
+    termo !== "" ||
+    coordenadorFiltro !== "TODOS" ||
+    statusFiltro !== "TODOS";
+
+  function limparFiltros() {
+    setBusca("");
+    setCoordenadorFiltro("TODOS");
+    setStatusFiltro("TODOS");
+  }
+
   return (
-    <div style={{ padding: "30px" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "20px",
-        }}
-      >
-        <div>
-          <h1 style={{ margin: 0 }}>Colaboradores</h1>
-          <p style={{ margin: "6px 0 0 0", color: "#666" }}>
-            {usuarioAtual.funcao === "GERENTE"
-              ? "Sua estrutura hierárquica"
-              : "Sua equipe e avaliações em que participa"}
+    <main className="virtus-page collaborators-v2">
+      <section className="virtus-page-header">
+        <div className="virtus-page-header__copy">
+          <h1>Colaboradores</h1>
+          <p>
+            Gerencie os colaboradores, visualize avaliações e acompanhe o
+            desempenho da equipe.
           </p>
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            gap: "10px",
-            flexWrap: "wrap",
-            justifyContent: "flex-end",
-          }}
-        >
+        <div className="virtus-page-actions">
           {usuarioAtual.funcao === "GERENTE" && (
-            <button
-              type="button"
-              onClick={() => navigate("/ciclos")}
-              style={{
-                padding: "10px 16px",
-                borderRadius: "8px",
-                border: "1px solid #660099",
-                backgroundColor: "#fff",
-                color: "#660099",
-                cursor: "pointer",
-                fontWeight: "600",
-              }}
-            >
-              Ciclos de Avaliação
-            </button>
+            <>
+              <button
+                className="virtus-btn virtus-btn--outline"
+                onClick={() => navigate("/configuracoes/aparencia")}
+              >
+                <span aria-hidden="true">◉</span>
+                Identidade Visual
+              </button>
+              <button
+                className="virtus-btn virtus-btn--outline"
+                onClick={() => navigate("/ciclos")}
+              >
+                <span aria-hidden="true">▣</span>
+                Ciclos de Avaliação
+              </button>
+            </>
           )}
 
           {usuarioAtual.funcao === "COORDENADOR" && (
             <button
-              type="button"
+              className="virtus-btn virtus-btn--outline"
               onClick={() => navigate("/painel-ciclos")}
-              style={{
-                padding: "10px 16px",
-                borderRadius: "8px",
-                border: "1px solid #660099",
-                backgroundColor: "#fff",
-                color: "#660099",
-                cursor: "pointer",
-                fontWeight: "600",
-              }}
             >
+              <span aria-hidden="true">▣</span>
               Painel de Ciclos
             </button>
           )}
 
-          {usuarioAtual.funcao === "COORDENADOR" && (
-            <button
-              type="button"
-              onClick={() => navigate("/minhas-metas")}
-              style={{
-                padding: "10px 16px",
-                borderRadius: "8px",
-                border: "1px solid #660099",
-                backgroundColor: "#fff",
-                color: "#660099",
-                cursor: "pointer",
-                fontWeight: "600",
-              }}
-            >
-              Minhas Metas
-            </button>
-          )}
-
-          {usuarioAtual.funcao === "COORDENADOR" && (
-            <button
-              type="button"
-              onClick={() => navigate("/minha-avaliacao")}
-              style={{
-                padding: "10px 16px",
-                borderRadius: "8px",
-                border: "1px solid #660099",
-                backgroundColor: "#fff",
-                color: "#660099",
-                cursor: "pointer",
-                fontWeight: "600",
-              }}
-            >
-              Minha Avaliação
-            </button>
-          )}
-
           <button
-            type="button"
+            className="virtus-btn virtus-btn--primary"
             onClick={() => navigate("/colaboradores/novo")}
-            style={{
-              padding: "10px 16px",
-              borderRadius: "8px",
-              border: "none",
-              cursor: "pointer",
-              fontWeight: "600",
-            }}
           >
-            + Novo colaborador
+            <span className="virtus-btn__plus" aria-hidden="true">＋</span>
+            Novo colaborador
           </button>
         </div>
-      </div>
+      </section>
 
-      <input
-        type="text"
-        placeholder="Buscar colaborador..."
-        value={busca}
-        onChange={(e) => setBusca(e.target.value)}
-        style={{
-          width: "100%",
-          maxWidth: "500px",
-          padding: "10px",
-          marginBottom: "15px",
-          borderRadius: "8px",
-          border: "1px solid #ccc",
-        }}
-      />
+      <section className="virtus-filter-card">
+        <div className="virtus-filter-grid">
+          <label className="virtus-field virtus-field--search">
+            <span>Buscar colaborador</span>
+            <div className="virtus-input-wrap">
+              <span className="virtus-search-icon" aria-hidden="true">⌕</span>
+              <input
+                value={busca}
+                onChange={(event) => setBusca(event.target.value)}
+                placeholder="Buscar por nome, cargo ou área..."
+              />
+            </div>
+          </label>
 
-      <select
-        value={coordenadorFiltro}
-        onChange={(e) => setCoordenadorFiltro(e.target.value)}
-        style={{
-          width: "100%",
-          maxWidth: "500px",
-          padding: "10px",
-          marginBottom: "15px",
-          borderRadius: "8px",
-          border: "1px solid #ccc",
-        }}
-      >
-        {coordenadores.map((coordenador) => (
-          <option key={coordenador} value={coordenador}>
-            {coordenador === "TODOS"
-              ? "Todas as Equipes"
-              : coordenador}
-          </option>
-        ))}
-      </select>
+          <label className="virtus-field">
+            <span>Equipe / Coordenador</span>
+            <select
+              value={coordenadorFiltro}
+              onChange={(event) => setCoordenadorFiltro(event.target.value)}
+            >
+              {coordenadores.map((coordenador) => (
+                <option key={coordenador} value={coordenador}>
+                  {coordenador === "TODOS" ? "Todas as Equipes" : coordenador}
+                </option>
+              ))}
+            </select>
+          </label>
 
-      <select
-        value={statusFiltro}
-        onChange={(e) =>
-          setStatusFiltro(e.target.value as StatusFiltro)
-        }
-        style={{
-          width: "100%",
-          maxWidth: "500px",
-          padding: "10px",
-          marginBottom: "25px",
-          borderRadius: "8px",
-          border: "1px solid #ccc",
-        }}
-      >
-        <option value="TODOS">Todos os status</option>
-        <option value="ATIVO">Ativos</option>
-        <option value="LICENCA">Em licença</option>
-        <option value="DESLIGADO">Desligados</option>
-      </select>
+          <label className="virtus-field">
+            <span>Status</span>
+            <select
+              value={statusFiltro}
+              onChange={(event) =>
+                setStatusFiltro(event.target.value as StatusFiltro)
+              }
+            >
+              <option value="TODOS">Todos os status</option>
+              <option value="ATIVO">Ativos</option>
+              <option value="LICENCA">Em licença</option>
+              <option value="DESLIGADO">Desligados</option>
+            </select>
+          </label>
 
-      <p
-        style={{
-          marginBottom: "20px",
-          color: "#666",
-          fontWeight: "500",
-        }}
-      >
-        {colaboradoresFiltrados.length}{" "}
-        {colaboradoresFiltrados.length === 1
-          ? "colaborador encontrado"
-          : "colaboradores encontrados"}
-      </p>
+          <button
+            className="virtus-btn virtus-btn--filter"
+            onClick={limparFiltros}
+            disabled={!temFiltro}
+          >
+            <span aria-hidden="true">▽</span>
+            Limpar filtros
+          </button>
+        </div>
 
-      {colaboradoresFiltrados.map((colaborador) => (
-        <ColaboradorCard
-          key={colaborador.matricula}
-          colaborador={colaborador}
-        />
-      ))}
-    </div>
+        <div className="virtus-filter-footer">
+          <div>
+            <strong>{colaboradoresFiltrados.length}</strong>{" "}
+            {colaboradoresFiltrados.length === 1
+              ? "colaborador encontrado"
+              : "colaboradores encontrados"}
+          </div>
+          <div className="virtus-view-info">
+            Exibindo {colaboradoresFiltrados.length} de{" "}
+            {colaboradoresVisiveis.length}
+            <span
+              className="virtus-view-toggle is-active"
+              aria-label="Visualização em grade"
+              title="Visualização em grade"
+            >
+              ▦
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {colaboradoresFiltrados.length > 0 ? (
+        <section className="virtus-collaborators-grid">
+          {colaboradoresFiltrados.map((colaborador) => (
+            <ColaboradorCard
+              key={colaborador.matricula}
+              colaborador={colaborador}
+            />
+          ))}
+        </section>
+      ) : (
+        <section className="virtus-empty">
+          <h2>Nenhum colaborador encontrado</h2>
+          <p>Altere os filtros para ampliar os resultados.</p>
+        </section>
+      )}
+    </main>
   );
 }
 
