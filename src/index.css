@@ -1716,3 +1716,106 @@ body {
     justify-content: center;
   }
 }
+
+
+/* =========================================================
+   VIRTUS DESIGN SYSTEM — Typography scale
+   Standard adopted from this checkpoint onward:
+   12px = readable labels/status
+   13px = operational content/values
+   10–11px = auxiliary-only information
+   ========================================================= */
+:root {
+  --virtus-font-aux: 11px;
+  --virtus-font-label: 12px;
+  --virtus-font-body: 13px;
+  --virtus-font-body-strong: 13px;
+  --virtus-font-nav: 13px;
+}
+
+/* Product shell */
+.app-header__subtitle {
+  font-size: var(--virtus-font-label);
+}
+
+.app-header__user-control label {
+  font-size: var(--virtus-font-label);
+}
+
+.app-header__user select {
+  font-size: var(--virtus-font-body);
+}
+
+.app-role-badge {
+  font-size: var(--virtus-font-label);
+}
+
+.app-nav a {
+  font-size: var(--virtus-font-nav);
+}
+
+/* Collaborators — readable operational text */
+.virtus-page-header__copy p {
+  font-size: var(--virtus-font-body);
+}
+
+.virtus-btn,
+.virtus-page-actions .virtus-btn {
+  font-size: var(--virtus-font-label);
+}
+
+.virtus-field {
+  font-size: var(--virtus-font-label);
+}
+
+.virtus-field input,
+.virtus-field select {
+  font-size: var(--virtus-font-body);
+}
+
+.virtus-btn--filter {
+  font-size: var(--virtus-font-label);
+}
+
+.virtus-filter-footer {
+  font-size: var(--virtus-font-label);
+}
+
+.virtus-filter-footer strong {
+  font-size: var(--virtus-font-body);
+}
+
+.virtus-view-info {
+  font-size: var(--virtus-font-label);
+}
+
+.virtus-collaborators-grid .collaborator-card__identity h3 {
+  font-size: 15px;
+}
+
+.virtus-collaborators-grid .collaborator-card__role,
+.virtus-collaborators-grid .collaborator-card__position {
+  font-size: var(--virtus-font-label);
+}
+
+.virtus-collaborators-grid .status-pill {
+  font-size: var(--virtus-font-label);
+}
+
+.virtus-collaborators-grid .collaborator-card__detail small,
+.virtus-collaborators-grid .collaborator-card__matricula small {
+  font-size: var(--virtus-font-label);
+}
+
+.virtus-collaborators-grid .collaborator-card__detail strong,
+.virtus-collaborators-grid .collaborator-card__matricula strong {
+  font-size: var(--virtus-font-body);
+}
+
+.virtus-collaborators-grid .collaborator-card__link {
+  font-size: var(--virtus-font-label);
+}
+
+.app-footer {
+  font-size: var(--virtus-font-label);
+}

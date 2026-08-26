@@ -18,6 +18,7 @@ import {
   excluirAvaliacoesVaziasDoCiclo,
 } from "../services/cicloEquipeService";
 import type { StatusCicloAvaliacao } from "../types/CicloAvaliacao";
+import "../styles/ciclos.css";
 
 function CiclosAvaliacaoPage() {
   const navigate = useNavigate();
@@ -38,8 +39,7 @@ function CiclosAvaliacaoPage() {
     useState<StatusCicloAvaliacao>("PLANEJADO");
   const [periodoInicioEdicao, setPeriodoInicioEdicao] = useState("");
   const [periodoFimEdicao, setPeriodoFimEdicao] = useState("");
-  const [editandoMetasId, setEditandoMetasId] =
-    useState<string | null>(null);
+  const [editandoMetasId, setEditandoMetasId] = useState<string | null>(null);
   const [metasNegocioEdicao, setMetasNegocioEdicao] =
     useState<0 | 1 | 2 | 3>(0);
   const [metasIndividuaisEdicao, setMetasIndividuaisEdicao] =
@@ -50,21 +50,35 @@ function CiclosAvaliacaoPage() {
 
   if (!usuarioAtual || usuarioAtual.funcao !== "GERENTE") {
     return (
-      <div style={{ padding: "30px" }}>
-        <button type="button" onClick={() => navigate("/")}>
-          ← Voltar
-        </button>
-        <h1>Acesso restrito</h1>
-        <p>A gestão dos ciclos está disponível apenas para gerentes.</p>
-      </div>
+      <main className="virtus-page">
+        <section className="cycle-empty">
+          <h1>Acesso restrito</h1>
+          <p>A gestão dos ciclos está disponível apenas para gerentes.</p>
+          <button className="cycle-btn cycle-btn--secondary" onClick={() => navigate("/")}>
+            Voltar ao início
+          </button>
+        </section>
+      </main>
     );
   }
 
-  const ciclos = getCiclosAvaliacao();
+  const ciclos = getCiclosAvaliacao().sort((a, b) => {
+    if (a.status !== b.status) {
+      if (a.status === "ATIVO") return -1;
+      if (b.status === "ATIVO") return 1;
+      if (a.status === "PLANEJADO") return -1;
+      if (b.status === "PLANEJADO") return 1;
+    }
+    if (a.ano !== b.ano) return b.ano - a.ano;
+    return b.ciclo - a.ciclo;
+  });
+
+  const totalAtivos = ciclos.filter((item) => item.status === "ATIVO").length;
+  const totalPlanejados = ciclos.filter((item) => item.status === "PLANEJADO").length;
+  const totalEncerrados = ciclos.filter((item) => item.status === "ENCERRADO").length;
 
   function criar() {
     setErro("");
-
     try {
       const novoCiclo = criarCiclo(
         ano,
@@ -107,25 +121,20 @@ function CiclosAvaliacaoPage() {
 
     if (pendencias.length > 0) {
       const resumo = pendencias
-        .map(
-          (pendencia) =>
-            pendencia.papel === "Metas"
-              ? `${pendencia.colaboradorNome} — Metas: ${
-                  pendencia.quantidade
-                } meta${
-                  pendencia.quantidade === 1 ? "" : "s"
-                } sem fechamento${
-                  pendencia.detalhes?.length
-                    ? ` (${pendencia.detalhes.join(", ")})`
-                    : ""
-                }`
-              : `${pendencia.colaboradorNome} — ${pendencia.papel}: ${
-                  pendencia.quantidade
-                } nota${
-                  pendencia.quantidade === 1 ? "" : "s"
-                } pendente${
-                  pendencia.quantidade === 1 ? "" : "s"
-                }`
+        .map((pendencia) =>
+          pendencia.papel === "Metas"
+            ? `${pendencia.colaboradorNome} — Metas: ${pendencia.quantidade} meta${
+                pendencia.quantidade === 1 ? "" : "s"
+              } sem fechamento${
+                pendencia.detalhes?.length
+                  ? ` (${pendencia.detalhes.join(", ")})`
+                  : ""
+              }`
+            : `${pendencia.colaboradorNome} — ${pendencia.papel}: ${
+                pendencia.quantidade
+              } nota${pendencia.quantidade === 1 ? "" : "s"} pendente${
+                pendencia.quantidade === 1 ? "" : "s"
+              }`
         )
         .join("\n");
 
@@ -154,154 +163,123 @@ function CiclosAvaliacaoPage() {
     setVersao((valor) => valor + 1);
   }
 
+  function salvarStatus(
+    item: ReturnType<typeof getCiclosAvaliacao>[number]
+  ) {
+    try {
+      if (statusEdicao === "ENCERRADO") {
+        encerrarComValidacao(item);
+        return;
+      }
+
+      atualizarStatusCiclo(item.id, statusEdicao);
+
+      if (statusEdicao === "ATIVO") {
+        const cicloAtivado = getCiclosAvaliacao().find(
+          (cicloAtual) => cicloAtual.id === item.id
+        );
+        if (cicloAtivado) criarAvaliacoesDoCicloAtivado(cicloAtivado);
+      }
+
+      setEditandoStatusId(null);
+      setErro("");
+      setVersao((valor) => valor + 1);
+    } catch (error) {
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível atualizar o status."
+      );
+    }
+  }
+
   return (
-    <div style={{ padding: "30px", maxWidth: "1000px", margin: "0 auto" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: "16px",
-          alignItems: "center",
-          marginBottom: "24px",
-        }}
-      >
+    <main className="virtus-page cycle-page">
+      <section className="cycle-page-header">
         <div>
-          <h1 style={{ margin: 0 }}>Ciclos de Avaliação</h1>
-          <p style={{ margin: "6px 0 0 0", color: "#666" }}>
-            Existe apenas um ciclo ativo por vez.
+          <h1>Ciclos de Avaliação</h1>
+          <p>
+            Configure períodos, metas e acompanhe a evolução de cada ciclo.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => navigate("/")}
-          style={{
-            padding: "10px 16px",
-            borderRadius: "8px",
-            border: "1px solid #660099",
-            backgroundColor: "#fff",
-            color: "#660099",
-            cursor: "pointer",
-            fontWeight: "bold",
-          }}
-        >
-          ← Voltar
-        </button>
-      </div>
+        <div className="cycle-summary">
+          <div>
+            <strong>{ciclos.length}</strong>
+            <span>Total</span>
+          </div>
+          <div>
+            <strong>{totalAtivos}</strong>
+            <span>Ativo</span>
+          </div>
+          <div>
+            <strong>{totalPlanejados}</strong>
+            <span>Planejados</span>
+          </div>
+          <div>
+            <strong>{totalEncerrados}</strong>
+            <span>Encerrados</span>
+          </div>
+        </div>
+      </section>
 
-      <div
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: "12px",
-          padding: "18px",
-          backgroundColor: "#fff",
-          marginBottom: "22px",
-        }}
-      >
-        <h3 style={{ marginTop: 0 }}>Novo ciclo</h3>
+      <section className="cycle-create-card">
+        <div className="cycle-section-heading">
+          <div>
+            <span className="cycle-eyebrow">Novo ciclo</span>
+            <h2>Configuração inicial</h2>
+          </div>
+          <span className="cycle-helper">Apenas um ciclo pode ficar ativo por vez.</span>
+        </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(140px, 1fr) minmax(140px, 1fr)",
-            gap: "12px",
-          }}
-        >
-          <label>
-            <strong>Ano</strong>
+        <div className="cycle-form-grid cycle-form-grid--four">
+          <label className="cycle-field">
+            <span>Ano</span>
             <input
               type="number"
               min={2020}
               max={2100}
               value={ano}
               onChange={(event) => setAno(Number(event.target.value))}
-              style={{
-                width: "100%",
-                marginTop: "6px",
-                padding: "10px",
-                borderRadius: "8px",
-                border: "1px solid #ccc",
-                boxSizing: "border-box",
-              }}
             />
           </label>
 
-          <label>
-            <strong>Ciclo</strong>
+          <label className="cycle-field">
+            <span>Ciclo</span>
             <select
               value={ciclo}
               onChange={(event) =>
                 setCiclo(Number(event.target.value) as 1 | 2 | 3)
               }
-              style={{
-                width: "100%",
-                marginTop: "6px",
-                padding: "10px",
-                borderRadius: "8px",
-                border: "1px solid #ccc",
-                boxSizing: "border-box",
-              }}
             >
               <option value={1}>Ciclo 1</option>
               <option value={2}>Ciclo 2</option>
               <option value={3}>Ciclo 3</option>
             </select>
           </label>
-        </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(160px, 1fr) minmax(160px, 1fr)",
-            gap: "12px",
-            marginTop: "14px",
-          }}
-        >
-          <label>
-            <strong>Início do ciclo</strong>
+          <label className="cycle-field">
+            <span>Início</span>
             <input
               type="date"
               value={dataInicio}
               onChange={(event) => setDataInicio(event.target.value)}
-              style={{
-                width: "100%",
-                marginTop: "6px",
-                padding: "10px",
-                borderRadius: "8px",
-                border: "1px solid #ccc",
-                boxSizing: "border-box",
-              }}
             />
           </label>
 
-          <label>
-            <strong>Fim do ciclo</strong>
+          <label className="cycle-field">
+            <span>Fim</span>
             <input
               type="date"
               value={dataFim}
               onChange={(event) => setDataFim(event.target.value)}
-              style={{
-                width: "100%",
-                marginTop: "6px",
-                padding: "10px",
-                borderRadius: "8px",
-                border: "1px solid #ccc",
-                boxSizing: "border-box",
-              }}
             />
           </label>
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(180px, 1fr) minmax(180px, 1fr)",
-            gap: "12px",
-            marginTop: "14px",
-          }}
-        >
-          <label>
-            <strong>Metas de Negócio/Projetos</strong>
+        <div className="cycle-form-grid cycle-form-grid--two">
+          <label className="cycle-field">
+            <span>Metas de Negócio / Projetos</span>
             <select
               value={quantidadeMetasNegocio}
               onChange={(event) =>
@@ -309,14 +287,6 @@ function CiclosAvaliacaoPage() {
                   Number(event.target.value) as 0 | 1 | 2 | 3
                 )
               }
-              style={{
-                width: "100%",
-                marginTop: "6px",
-                padding: "10px",
-                borderRadius: "8px",
-                border: "1px solid #ccc",
-                boxSizing: "border-box",
-              }}
             >
               <option value={0}>0 metas</option>
               <option value={1}>1 meta</option>
@@ -325,8 +295,8 @@ function CiclosAvaliacaoPage() {
             </select>
           </label>
 
-          <label>
-            <strong>Metas Individuais</strong>
+          <label className="cycle-field">
+            <span>Metas Individuais</span>
             <select
               value={quantidadeMetasIndividuais}
               onChange={(event) =>
@@ -334,14 +304,6 @@ function CiclosAvaliacaoPage() {
                   Number(event.target.value) as 0 | 1 | 2 | 3
                 )
               }
-              style={{
-                width: "100%",
-                marginTop: "6px",
-                padding: "10px",
-                borderRadius: "8px",
-                border: "1px solid #ccc",
-                boxSizing: "border-box",
-              }}
             >
               <option value={0}>0 metas</option>
               <option value={1}>1 meta</option>
@@ -351,547 +313,321 @@ function CiclosAvaliacaoPage() {
           </label>
         </div>
 
-        <label
-          style={{
-            display: "flex",
-            gap: "8px",
-            alignItems: "center",
-            marginTop: "14px",
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={ativarAgora}
-            onChange={(event) => setAtivarAgora(event.target.checked)}
-          />
-          Ativar este ciclo imediatamente
-        </label>
+        <div className="cycle-create-footer">
+          <label className="cycle-checkbox">
+            <input
+              type="checkbox"
+              checked={ativarAgora}
+              onChange={(event) => setAtivarAgora(event.target.checked)}
+            />
+            <span>
+              <strong>Ativar imediatamente</strong>
+              <small>Cria as avaliações automaticamente ao salvar.</small>
+            </span>
+          </label>
 
-        {erro && (
-          <div style={{ color: "#A4262C", marginTop: "12px" }}>
-            {erro}
+          <button className="cycle-btn cycle-btn--primary" onClick={criar}>
+            + Criar ciclo
+          </button>
+        </div>
+
+        {erro && <div className="cycle-alert cycle-alert--error">{erro}</div>}
+      </section>
+
+      <section className="cycle-list">
+        <div className="cycle-list-heading">
+          <div>
+            <span className="cycle-eyebrow">Histórico</span>
+            <h2>Ciclos cadastrados</h2>
           </div>
-        )}
+        </div>
 
-        <button
-          type="button"
-          onClick={criar}
-          style={{
-            marginTop: "14px",
-            padding: "10px 16px",
-            borderRadius: "8px",
-            border: "none",
-            backgroundColor: "#660099",
-            color: "#fff",
-            cursor: "pointer",
-            fontWeight: "bold",
-          }}
-        >
-          Criar ciclo
-        </button>
-      </div>
+        {ciclos.length === 0 ? (
+          <div className="cycle-empty">
+            <h3>Nenhum ciclo cadastrado</h3>
+            <p>Crie o primeiro ciclo usando o formulário acima.</p>
+          </div>
+        ) : (
+          ciclos.map((item) => {
+            const statusLabel =
+              item.status === "ATIVO"
+                ? "Ativo"
+                : item.status === "PLANEJADO"
+                ? "Planejado"
+                : item.encerradoComPendencias
+                ? "Encerrado com pendências"
+                : "Encerrado";
 
-      <div style={{ display: "grid", gap: "12px" }}>
-        {ciclos.map((item) => (
-          <div
-            key={item.id}
-            style={{
-              border:
-                item.status === "ATIVO"
-                  ? "1px solid #660099"
-                  : "1px solid #ddd",
-              borderRadius: "12px",
-              padding: "16px",
-              backgroundColor: "#fff",
-              display: "flex",
-              justifyContent: "space-between",
-              gap: "16px",
-              alignItems: "center",
-              flexWrap: "wrap",
-            }}
-          >
-            <div>
-              <div style={{ fontSize: "18px", fontWeight: "bold" }}>
-                {item.ano} • Ciclo {item.ciclo}
-              </div>
-              <div
-                style={{
-                  marginTop: "6px",
-                  color: "#555",
-                  fontSize: "14px",
-                }}
+            const statusClass =
+              item.status === "ATIVO"
+                ? "is-active"
+                : item.status === "PLANEJADO"
+                ? "is-planned"
+                : item.encerradoComPendencias
+                ? "is-warning"
+                : "is-closed";
+
+            return (
+              <article
+                key={item.id}
+                className={`cycle-card ${item.status === "ATIVO" ? "cycle-card--active" : ""}`}
               >
-                {formatarPeriodoCiclo(item.dataInicio, item.dataFim)}
-              </div>
+                <div className="cycle-card__main">
+                  <div className="cycle-card__identity">
+                    <div className="cycle-card__title-row">
+                      <h3>
+                        {item.ano} <span>•</span> Ciclo {item.ciclo}
+                      </h3>
+                      <span className={`cycle-status ${statusClass}`}>
+                        {statusLabel}
+                      </span>
+                    </div>
 
-              <div
-                style={{
-                  marginTop: "7px",
-                  color: "#555",
-                  fontSize: "14px",
-                }}
-              >
-                <strong>Metas:</strong>{" "}
-                Negócio/Projetos {item.quantidadeMetasNegocio ?? 0}
-                {" • "}
-                Individuais {item.quantidadeMetasIndividuais ?? 0}
-              </div>
-
-              <div
-                style={{
-                  marginTop: "6px",
-                  display: "inline-block",
-                  padding: "4px 9px",
-                  borderRadius: "999px",
-                  fontSize: "12px",
-                  fontWeight: "bold",
-                  backgroundColor:
-                    item.status === "ATIVO"
-                      ? "#E7F6EC"
-                      : item.status === "PLANEJADO"
-                      ? "#FFF4CE"
-                      : "#F2F2F2",
-                  color:
-                    item.status === "ATIVO"
-                      ? "#107C41"
-                      : item.status === "PLANEJADO"
-                      ? "#8A6D00"
-                      : "#555",
-                }}
-              >
-                {item.status === "ATIVO"
-                  ? "Ativo"
-                  : item.status === "PLANEJADO"
-                  ? "Planejado"
-                  : item.encerradoComPendencias
-                  ? "Encerrado com pendências"
-                  : "Encerrado"}
-              </div>
-              {item.encerradoComPendencias &&
-                (item.quantidadePendencias ?? 0) > 0 && (
-                  <div
-                    style={{
-                      marginTop: "6px",
-                      color: "#A4262C",
-                      fontSize: "13px",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    {item.quantidadePendencias} nota
-                    {item.quantidadePendencias === 1 ? "" : "s"} pendente
-                    {item.quantidadePendencias === 1 ? "" : "s"}
+                    <div className="cycle-card__meta-grid">
+                      <div>
+                        <small>Período</small>
+                        <strong>
+                          {formatarPeriodoCiclo(item.dataInicio, item.dataFim)}
+                        </strong>
+                      </div>
+                      <div>
+                        <small>Metas de Negócio</small>
+                        <strong>{item.quantidadeMetasNegocio ?? 0}</strong>
+                      </div>
+                      <div>
+                        <small>Metas Individuais</small>
+                        <strong>{item.quantidadeMetasIndividuais ?? 0}</strong>
+                      </div>
+                      {item.encerradoComPendencias && (
+                        <div>
+                          <small>Pendências</small>
+                          <strong className="cycle-danger">
+                            {item.quantidadePendencias ?? 0}
+                          </strong>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
-            </div>
-
-            <div
-              style={{
-                minWidth: "280px",
-                flex: "1 1 320px",
-              }}
-            >
-              {editandoPeriodoId === item.id ? (
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr auto",
-                    gap: "8px",
-                    alignItems: "end",
-                  }}
-                >
-                  <label style={{ fontSize: "12px" }}>
-                    Início
-                    <input
-                      type="date"
-                      value={periodoInicioEdicao}
-                      onChange={(event) =>
-                        setPeriodoInicioEdicao(event.target.value)
-                      }
-                      style={{
-                        width: "100%",
-                        marginTop: "4px",
-                        padding: "8px",
-                        boxSizing: "border-box",
-                      }}
-                    />
-                  </label>
-
-                  <label style={{ fontSize: "12px" }}>
-                    Fim
-                    <input
-                      type="date"
-                      value={periodoFimEdicao}
-                      onChange={(event) =>
-                        setPeriodoFimEdicao(event.target.value)
-                      }
-                      style={{
-                        width: "100%",
-                        marginTop: "4px",
-                        padding: "8px",
-                        boxSizing: "border-box",
-                      }}
-                    />
-                  </label>
 
                   <button
-                    type="button"
-                    onClick={() => {
-                      try {
-                        atualizarPeriodoCiclo(
-                          item.id,
-                          periodoInicioEdicao,
-                          periodoFimEdicao
-                        );
-                        setEditandoPeriodoId(null);
-                        setErro("");
-                        setVersao((valor) => valor + 1);
-                      } catch (error) {
-                        setErro(
-                          error instanceof Error
-                            ? error.message
-                            : "Não foi possível atualizar o período."
-                        );
-                      }
-                    }}
-                    style={{
-                      padding: "9px 12px",
-                      borderRadius: "8px",
-                      border: "none",
-                      backgroundColor: "#660099",
-                      color: "#fff",
-                      cursor: "pointer",
-                      fontWeight: "bold",
-                    }}
+                    className="cycle-btn cycle-btn--primary cycle-btn--panel"
+                    onClick={() => navigate(`/ciclos/${item.id}`)}
                   >
-                    Salvar
+                    Painel da equipe →
                   </button>
                 </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditandoPeriodoId(item.id);
-                    setPeriodoInicioEdicao(item.dataInicio ?? "");
-                    setPeriodoFimEdicao(item.dataFim ?? "");
-                    setErro("");
-                  }}
-                  style={{
-                    padding: "9px 13px",
-                    borderRadius: "8px",
-                    border: "1px solid #777",
-                    backgroundColor: "#fff",
-                    color: "#555",
-                    cursor: "pointer",
-                    fontWeight: "bold",
-                  }}
-                >
-                  Editar período
-                </button>
-              )}
-            </div>
 
-            <div
-              style={{
-                minWidth: "300px",
-                flex: "1 1 340px",
-              }}
-            >
-              {item.status === "PLANEJADO" ? (
-                editandoMetasId === item.id ? (
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr auto",
-                      gap: "8px",
-                      alignItems: "end",
-                    }}
-                  >
-                    <label style={{ fontSize: "12px" }}>
-                      Metas Negócio
-                      <select
-                        value={metasNegocioEdicao}
-                        onChange={(event) =>
-                          setMetasNegocioEdicao(
-                            Number(event.target.value) as 0 | 1 | 2 | 3
-                          )
-                        }
-                        style={{
-                          width: "100%",
-                          marginTop: "4px",
-                          padding: "8px",
-                          boxSizing: "border-box",
-                        }}
-                      >
-                        <option value={0}>0</option>
-                        <option value={1}>1</option>
-                        <option value={2}>2</option>
-                        <option value={3}>3</option>
-                      </select>
-                    </label>
-
-                    <label style={{ fontSize: "12px" }}>
-                      Metas Individuais
-                      <select
-                        value={metasIndividuaisEdicao}
-                        onChange={(event) =>
-                          setMetasIndividuaisEdicao(
-                            Number(event.target.value) as 0 | 1 | 2 | 3
-                          )
-                        }
-                        style={{
-                          width: "100%",
-                          marginTop: "4px",
-                          padding: "8px",
-                          boxSizing: "border-box",
-                        }}
-                      >
-                        <option value={0}>0</option>
-                        <option value={1}>1</option>
-                        <option value={2}>2</option>
-                        <option value={3}>3</option>
-                      </select>
-                    </label>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        try {
-                          atualizarConfiguracaoMetasCiclo(
-                            item.id,
-                            metasNegocioEdicao,
-                            metasIndividuaisEdicao
-                          );
-                          setEditandoMetasId(null);
-                          setErro("");
-                          setVersao((valor) => valor + 1);
-                        } catch (error) {
-                          setErro(
-                            error instanceof Error
-                              ? error.message
-                              : "Não foi possível atualizar as metas."
-                          );
-                        }
-                      }}
-                      style={{
-                        padding: "9px 12px",
-                        borderRadius: "8px",
-                        border: "none",
-                        backgroundColor: "#660099",
-                        color: "#fff",
-                        cursor: "pointer",
-                        fontWeight: "bold",
-                      }}
-                    >
-                      Salvar
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditandoMetasId(item.id);
-                      setMetasNegocioEdicao(
-                        item.quantidadeMetasNegocio ?? 0
-                      );
-                      setMetasIndividuaisEdicao(
-                        item.quantidadeMetasIndividuais ?? 0
-                      );
-                      setErro("");
-                    }}
-                    style={{
-                      padding: "9px 13px",
-                      borderRadius: "8px",
-                      border: "1px solid #777",
-                      backgroundColor: "#fff",
-                      color: "#555",
-                      cursor: "pointer",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    Editar metas
-                  </button>
-                )
-              ) : (
-                <div
-                  style={{
-                    fontSize: "12px",
-                    color: "#777",
-                    fontWeight: "600",
-                  }}
-                >
-                  Metas bloqueadas após o início do ciclo
-                </div>
-              )}
-            </div>
-
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              <button
-                type="button"
-                onClick={() => navigate(`/ciclos/${item.id}`)}
-                style={{
-                  padding: "9px 13px",
-                  borderRadius: "8px",
-                  border: "1px solid #660099",
-                  backgroundColor: "#fff",
-                  color: "#660099",
-                  cursor: "pointer",
-                  fontWeight: "bold",
-                }}
-              >
-                Painel da equipe
-              </button>
-
-              {editandoStatusId === item.id ? (
-                <div
-                  style={{
-                    display: "flex",
-                    gap: "8px",
-                    alignItems: "center",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <select
-                    value={statusEdicao}
-                    onChange={(event) =>
-                      setStatusEdicao(
-                        event.target.value as StatusCicloAvaliacao
-                      )
-                    }
-                    style={{
-                      padding: "9px 10px",
-                      borderRadius: "8px",
-                      border: "1px solid #999",
-                    }}
-                  >
-                    <option value="PLANEJADO">Planejado</option>
-                    <option value="ATIVO">Ativo</option>
-                    <option value="ENCERRADO">Encerrado</option>
-                  </select>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      try {
-                        if (statusEdicao === "ENCERRADO") {
-                          encerrarComValidacao(item);
-                          return;
-                        }
-
-                        atualizarStatusCiclo(item.id, statusEdicao);
-
-                        if (statusEdicao === "ATIVO") {
-                          const cicloAtivado =
-                            getCiclosAvaliacao().find(
-                              (cicloAtual) =>
-                                cicloAtual.id === item.id
-                            );
-
-                          if (cicloAtivado) {
-                            criarAvaliacoesDoCicloAtivado(
-                              cicloAtivado
-                            );
+                <div className="cycle-card__editors">
+                  <div className="cycle-editor">
+                    <span className="cycle-editor__label">Período</span>
+                    {editandoPeriodoId === item.id ? (
+                      <div className="cycle-inline-form cycle-inline-form--period">
+                        <input
+                          type="date"
+                          value={periodoInicioEdicao}
+                          onChange={(event) =>
+                            setPeriodoInicioEdicao(event.target.value)
                           }
-                        }
+                        />
+                        <input
+                          type="date"
+                          value={periodoFimEdicao}
+                          onChange={(event) =>
+                            setPeriodoFimEdicao(event.target.value)
+                          }
+                        />
+                        <button
+                          className="cycle-btn cycle-btn--small cycle-btn--primary"
+                          onClick={() => {
+                            try {
+                              atualizarPeriodoCiclo(
+                                item.id,
+                                periodoInicioEdicao,
+                                periodoFimEdicao
+                              );
+                              setEditandoPeriodoId(null);
+                              setErro("");
+                              setVersao((valor) => valor + 1);
+                            } catch (error) {
+                              setErro(
+                                error instanceof Error
+                                  ? error.message
+                                  : "Não foi possível atualizar o período."
+                              );
+                            }
+                          }}
+                        >
+                          Salvar
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        className="cycle-link-button"
+                        onClick={() => {
+                          setEditandoPeriodoId(item.id);
+                          setPeriodoInicioEdicao(item.dataInicio ?? "");
+                          setPeriodoFimEdicao(item.dataFim ?? "");
+                          setErro("");
+                        }}
+                      >
+                        Editar período
+                      </button>
+                    )}
+                  </div>
 
-                        setEditandoStatusId(null);
+                  <div className="cycle-editor">
+                    <span className="cycle-editor__label">Metas</span>
+                    {item.status === "PLANEJADO" ? (
+                      editandoMetasId === item.id ? (
+                        <div className="cycle-inline-form">
+                          <select
+                            value={metasNegocioEdicao}
+                            onChange={(event) =>
+                              setMetasNegocioEdicao(
+                                Number(event.target.value) as 0 | 1 | 2 | 3
+                              )
+                            }
+                          >
+                            <option value={0}>Negócio: 0</option>
+                            <option value={1}>Negócio: 1</option>
+                            <option value={2}>Negócio: 2</option>
+                            <option value={3}>Negócio: 3</option>
+                          </select>
+
+                          <select
+                            value={metasIndividuaisEdicao}
+                            onChange={(event) =>
+                              setMetasIndividuaisEdicao(
+                                Number(event.target.value) as 0 | 1 | 2 | 3
+                              )
+                            }
+                          >
+                            <option value={0}>Individual: 0</option>
+                            <option value={1}>Individual: 1</option>
+                            <option value={2}>Individual: 2</option>
+                            <option value={3}>Individual: 3</option>
+                          </select>
+
+                          <button
+                            className="cycle-btn cycle-btn--small cycle-btn--primary"
+                            onClick={() => {
+                              try {
+                                atualizarConfiguracaoMetasCiclo(
+                                  item.id,
+                                  metasNegocioEdicao,
+                                  metasIndividuaisEdicao
+                                );
+                                setEditandoMetasId(null);
+                                setErro("");
+                                setVersao((valor) => valor + 1);
+                              } catch (error) {
+                                setErro(
+                                  error instanceof Error
+                                    ? error.message
+                                    : "Não foi possível atualizar as metas."
+                                );
+                              }
+                            }}
+                          >
+                            Salvar
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          className="cycle-link-button"
+                          onClick={() => {
+                            setEditandoMetasId(item.id);
+                            setMetasNegocioEdicao(
+                              item.quantidadeMetasNegocio ?? 0
+                            );
+                            setMetasIndividuaisEdicao(
+                              item.quantidadeMetasIndividuais ?? 0
+                            );
+                            setErro("");
+                          }}
+                        >
+                          Editar metas
+                        </button>
+                      )
+                    ) : (
+                      <span className="cycle-muted">Bloqueadas após o início</span>
+                    )}
+                  </div>
+
+                  <div className="cycle-editor cycle-editor--actions">
+                    <span className="cycle-editor__label">Status</span>
+                    {editandoStatusId === item.id ? (
+                      <div className="cycle-inline-form">
+                        <select
+                          value={statusEdicao}
+                          onChange={(event) =>
+                            setStatusEdicao(
+                              event.target.value as StatusCicloAvaliacao
+                            )
+                          }
+                        >
+                          <option value="PLANEJADO">Planejado</option>
+                          <option value="ATIVO">Ativo</option>
+                          <option value="ENCERRADO">Encerrado</option>
+                        </select>
+                        <button
+                          className="cycle-btn cycle-btn--small cycle-btn--primary"
+                          onClick={() => salvarStatus(item)}
+                        >
+                          Salvar
+                        </button>
+                        <button
+                          className="cycle-btn cycle-btn--small cycle-btn--secondary"
+                          onClick={() => setEditandoStatusId(null)}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        className="cycle-link-button"
+                        onClick={() => {
+                          setEditandoStatusId(item.id);
+                          setStatusEdicao(item.status);
+                          setErro("");
+                        }}
+                      >
+                        Editar status
+                      </button>
+                    )}
+                  </div>
+
+                  <button
+                    className="cycle-link-button cycle-link-button--danger"
+                    onClick={() => {
+                      const confirmar = window.confirm(
+                        `Excluir ${item.ano} • Ciclo ${item.ciclo}?\n\nAvaliações vazias criadas automaticamente também serão excluídas. Avaliações que já possuam dados impedem a exclusão.`
+                      );
+                      if (!confirmar) return;
+
+                      try {
+                        excluirAvaliacoesVaziasDoCiclo(item);
+                        excluirCiclo(item.id);
                         setErro("");
                         setVersao((valor) => valor + 1);
                       } catch (error) {
                         setErro(
                           error instanceof Error
                             ? error.message
-                            : "Não foi possível atualizar o status."
+                            : "Não foi possível excluir o ciclo."
                         );
                       }
                     }}
-                    style={{
-                      padding: "9px 12px",
-                      borderRadius: "8px",
-                      border: "none",
-                      backgroundColor: "#660099",
-                      color: "#fff",
-                      cursor: "pointer",
-                      fontWeight: "bold",
-                    }}
                   >
-                    Salvar status
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setEditandoStatusId(null)}
-                    style={{
-                      padding: "9px 12px",
-                      borderRadius: "8px",
-                      border: "1px solid #999",
-                      backgroundColor: "#fff",
-                      cursor: "pointer",
-                    }}
-                  >
-                    Cancelar
+                    Excluir ciclo
                   </button>
                 </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditandoStatusId(item.id);
-                    setStatusEdicao(item.status);
-                    setErro("");
-                  }}
-                  style={{
-                    padding: "9px 13px",
-                    borderRadius: "8px",
-                    border: "1px solid #777",
-                    backgroundColor: "#fff",
-                    color: "#555",
-                    cursor: "pointer",
-                    fontWeight: "bold",
-                  }}
-                >
-                  Editar status
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => {
-                  const confirmar = window.confirm(
-                    `Excluir ${item.ano} • Ciclo ${item.ciclo}?\n\nAvaliações vazias criadas automaticamente também serão excluídas. Avaliações que já possuam dados impedem a exclusão.`
-                  );
-
-                  if (!confirmar) return;
-
-                  try {
-                    excluirAvaliacoesVaziasDoCiclo(item);
-                    excluirCiclo(item.id);
-                    setErro("");
-                    setVersao((valor) => valor + 1);
-                  } catch (error) {
-                    setErro(
-                      error instanceof Error
-                        ? error.message
-                        : "Não foi possível excluir o ciclo."
-                    );
-                  }
-                }}
-                style={{
-                  padding: "9px 13px",
-                  borderRadius: "8px",
-                  border: "1px solid #A4262C",
-                  backgroundColor: "#fff",
-                  color: "#A4262C",
-                  cursor: "pointer",
-                  fontWeight: "bold",
-                }}
-              >
-                Excluir ciclo
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
+              </article>
+            );
+          })
+        )}
+      </section>
+    </main>
   );
 }
 
