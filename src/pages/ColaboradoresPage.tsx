@@ -5,6 +5,9 @@ import { getColaboradores } from "../services/colaboradorStorage";
 import type { StatusColaborador } from "../types/Colaborador";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import { getColaboradoresVisiveis } from "../services/visibilidadeColaboradores";
+import { getCiclosAvaliacao } from "../services/cicloAvaliacaoStorage";
+import { gerarDadosTesteDoCiclo } from "../services/geradorDadosTeste";
+import "../styles/dados-teste.css";
 
 type StatusFiltro = "TODOS" | StatusColaborador;
 
@@ -16,6 +19,10 @@ function ColaboradoresPage() {
   const [busca, setBusca] = useState("");
   const [coordenadorFiltro, setCoordenadorFiltro] = useState("TODOS");
   const [statusFiltro, setStatusFiltro] = useState<StatusFiltro>("TODOS");
+  const ciclosDisponiveis = getCiclosAvaliacao();
+  const [cicloTesteId, setCicloTesteId] = useState(
+    ciclosDisponiveis[0]?.id ?? ""
+  );
 
   if (!usuarioAtual) {
     return <div className="virtus-page">Usuário atual não definido.</div>;
@@ -74,6 +81,48 @@ function ColaboradoresPage() {
     setStatusFiltro("TODOS");
   }
 
+  function gerarMassaTeste() {
+    if (!usuarioAtual) {
+      return;
+    }
+
+    const ciclo = ciclosDisponiveis.find(
+      (item) => item.id === cicloTesteId
+    );
+
+    if (!ciclo) {
+      alert("Selecione um ciclo para gerar os dados de teste.");
+      return;
+    }
+
+    const confirmar = window.confirm(
+      `Gerar uma nova massa de dados para ${ciclo.ano} • Ciclo ${ciclo.ciclo}?\n\n` +
+        "As avaliações, metas e observações já existentes nesse ciclo serão substituídas por dados aleatórios de teste."
+    );
+
+    if (!confirmar) return;
+
+    try {
+      const resultado = gerarDadosTesteDoCiclo(ciclo, usuarioAtual);
+
+      alert(
+        `Dados de teste gerados com sucesso.\n\n` +
+          `Colaboradores: ${resultado.colaboradores}\n` +
+          `Avaliações: ${resultado.avaliacoes}\n` +
+          `Metas: ${resultado.metas}\n` +
+          `Observações: ${resultado.observacoes}`
+      );
+
+      window.location.reload();
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível gerar os dados de teste."
+      );
+    }
+  }
+
   return (
     <main className="virtus-page collaborators-v2">
       <section className="virtus-page-header">
@@ -124,6 +173,50 @@ function ColaboradoresPage() {
           </button>
         </div>
       </section>
+
+      {usuarioAtual.funcao === "GERENTE" && ciclosDisponiveis.length > 0 && (
+        <section className="test-data-panel">
+          <div className="test-data-panel__copy">
+            <span className="test-data-panel__eyebrow">
+              Ferramenta temporária de desenvolvimento
+            </span>
+            <strong>Gerar dados de teste</strong>
+            <p>
+              Preenche avaliações, comentários, feedbacks finais, metas e
+              observações com dados variados para o ciclo selecionado.
+            </p>
+          </div>
+
+          <div className="test-data-panel__actions">
+            <label>
+              <span>Ciclo</span>
+              <select
+                value={cicloTesteId}
+                onChange={(event) => setCicloTesteId(event.target.value)}
+              >
+                {ciclosDisponiveis.map((ciclo) => (
+                  <option key={ciclo.id} value={ciclo.id}>
+                    {ciclo.ano} • Ciclo {ciclo.ciclo} —{" "}
+                    {ciclo.status === "ATIVO"
+                      ? "Ativo"
+                      : ciclo.status === "PLANEJADO"
+                      ? "Planejado"
+                      : "Encerrado"}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <button
+              type="button"
+              className="virtus-btn virtus-btn--outline test-data-panel__button"
+              onClick={gerarMassaTeste}
+            >
+              Gerar nova massa
+            </button>
+          </div>
+        </section>
+      )}
 
       <section className="virtus-filter-card">
         <div className="virtus-filter-grid">

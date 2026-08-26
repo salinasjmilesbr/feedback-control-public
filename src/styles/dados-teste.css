@@ -1,0 +1,88 @@
+.test-data-panel {
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border: 1px dashed #cbb8d4;
+  border-radius: 12px;
+  background: #fbf8fc;
+}
+
+.test-data-panel__copy {
+  min-width: 0;
+}
+
+.test-data-panel__eyebrow {
+  display: block;
+  margin-bottom: 3px;
+  color: #7b7181;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.test-data-panel__copy > strong {
+  display: block;
+  color: var(--brand-text);
+  font-size: 14px;
+}
+
+.test-data-panel__copy p {
+  margin: 4px 0 0;
+  color: var(--brand-text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.test-data-panel__actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.test-data-panel__actions label {
+  display: grid;
+  gap: 4px;
+}
+
+.test-data-panel__actions label > span {
+  color: #514a58;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.test-data-panel__actions select {
+  min-width: 220px;
+  height: 38px;
+  padding: 0 34px 0 10px;
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--brand-text);
+  font-size: 12px;
+}
+
+.test-data-panel__button {
+  min-height: 38px;
+}
+
+@media (max-width: 800px) {
+  .test-data-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .test-data-panel__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .test-data-panel__actions select,
+  .test-data-panel__button {
+    width: 100%;
+  }
+}
