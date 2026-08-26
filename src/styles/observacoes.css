@@ -1,0 +1,29 @@
+.observation-card {
+  position: relative;
+  overflow: hidden;
+  padding: 14px;
+  border: 1px solid #eee;
+  border-left-width: 4px;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.observation-card.is-positive {
+  border-left-color: #107c41;
+  background: linear-gradient(90deg, #f4fbf6, #fff 20%);
+}
+
+.observation-card.is-neutral {
+  border-left-color: #607080;
+  background: linear-gradient(90deg, #f6f8fa, #fff 20%);
+}
+
+.observation-card.is-negative {
+  border-left-color: #a4262c;
+  background: linear-gradient(90deg, #fff5f5, #fff 20%);
+}
+
+.observation-card.is-deleted {
+  opacity: .72;
+  filter: grayscale(.12);
+}

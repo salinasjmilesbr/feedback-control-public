@@ -3,6 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { useBranding } from "../contexts/BrandingContext";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import type { BrandingConfig } from "../types/Branding";
+import type { EscalaAvaliacao } from "../types/EscalaAvaliacao";
+import {
+  getEscalaAvaliacao,
+  restaurarEscalaAvaliacao,
+  salvarEscalaAvaliacao,
+} from "../services/escalaAvaliacaoStorage";
 
 function ConfiguracoesAparenciaPage() {
   const navigate = useNavigate();
@@ -10,6 +16,46 @@ function ConfiguracoesAparenciaPage() {
   const { branding, atualizarBranding, restaurarPadrao } = useBranding();
   const [form, setForm] = useState<BrandingConfig>(branding);
   const [mensagem, setMensagem] = useState("");
+  const [escala, setEscala] = useState<EscalaAvaliacao>(
+    getEscalaAvaliacao()
+  );
+  const [mensagemEscala, setMensagemEscala] = useState("");
+
+  function salvarEscala() {
+    salvarEscalaAvaliacao(escala);
+    setMensagemEscala("Régua de notas salva com sucesso.");
+  }
+
+  function restaurarEscala() {
+    const confirmar = window.confirm(
+      "Restaurar a régua de notas padrão?"
+    );
+    if (!confirmar) return;
+
+    setEscala(restaurarEscalaAvaliacao());
+    setMensagemEscala("Régua de notas restaurada.");
+  }
+
+  function atualizarItemEscala(
+    nota: number,
+    campo: "significado" | "descricao" | "cor",
+    valor: string
+  ) {
+    setEscala((atual) =>
+      atual.map((item) =>
+        item.nota === nota
+          ? {
+              ...item,
+              [campo]: valor,
+              ...(campo === "cor"
+                ? { corFundo: `${valor}18` }
+                : {}),
+            }
+          : item
+      )
+    );
+    setMensagemEscala("");
+  }
 
   if (!usuarioAtual || usuarioAtual.funcao !== "GERENTE") {
     return (
@@ -214,6 +260,102 @@ function ConfiguracoesAparenciaPage() {
           </div>
         </section>
       </div>
+
+      <section className="score-scale-settings">
+        <div className="score-scale-settings__header">
+          <div>
+            <span>Modelo de avaliação</span>
+            <h2>Régua de notas</h2>
+            <p>
+              Define o significado e a referência visual das notas usadas
+              nas avaliações. Médias decimais usam a nota inteira mais
+              próxima para determinar a cor.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            className="brand-button brand-button--secondary"
+            onClick={restaurarEscala}
+          >
+            Restaurar régua padrão
+          </button>
+        </div>
+
+        <div className="score-scale-settings__list">
+          {escala.map((item) => (
+            <article className="score-scale-settings__row" key={item.nota}>
+              <div
+                className="score-scale-settings__score"
+                style={{
+                  color: item.cor,
+                  backgroundColor: item.corFundo,
+                  borderColor: `${item.cor}44`,
+                }}
+              >
+                {item.nota}
+              </div>
+
+              <label>
+                <span>Significado</span>
+                <input
+                  value={item.significado}
+                  onChange={(event) =>
+                    atualizarItemEscala(
+                      item.nota,
+                      "significado",
+                      event.target.value
+                    )
+                  }
+                />
+              </label>
+
+              <label className="score-scale-settings__description">
+                <span>Descrição</span>
+                <textarea
+                  value={item.descricao}
+                  onChange={(event) =>
+                    atualizarItemEscala(
+                      item.nota,
+                      "descricao",
+                      event.target.value
+                    )
+                  }
+                />
+              </label>
+
+              <label className="score-scale-settings__color">
+                <span>Cor</span>
+                <input
+                  type="color"
+                  value={item.cor}
+                  onChange={(event) =>
+                    atualizarItemEscala(
+                      item.nota,
+                      "cor",
+                      event.target.value
+                    )
+                  }
+                />
+              </label>
+            </article>
+          ))}
+        </div>
+
+        {mensagemEscala && (
+          <div className="branding-message">{mensagemEscala}</div>
+        )}
+
+        <div className="score-scale-settings__actions">
+          <button
+            type="button"
+            className="brand-button brand-button--primary"
+            onClick={salvarEscala}
+          >
+            Salvar régua de notas
+          </button>
+        </div>
+      </section>
 
       {mensagem && <div className="branding-message">{mensagem}</div>}
 

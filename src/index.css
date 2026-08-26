@@ -1819,3 +1819,129 @@ body {
 .app-footer {
   font-size: var(--virtus-font-label);
 }
+
+
+/* =========================================================
+   Configurações — régua de notas
+   ========================================================= */
+.score-scale-settings {
+  max-width: 1280px;
+  margin: 22px auto 0;
+  padding: 20px;
+  border: 1px solid var(--brand-border);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(35, 27, 43, .05);
+}
+
+.score-scale-settings__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #eeeaf0;
+}
+
+.score-scale-settings__header > div > span {
+  color: var(--brand-primary);
+  font-size: var(--virtus-font-label);
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.score-scale-settings__header h2 {
+  margin: 3px 0 0;
+  font-size: 20px;
+}
+
+.score-scale-settings__header p {
+  max-width: 740px;
+  margin: 6px 0 0;
+  color: var(--brand-text-muted);
+  font-size: var(--virtus-font-body);
+  line-height: 1.45;
+}
+
+.score-scale-settings__list {
+  display: grid;
+}
+
+.score-scale-settings__row {
+  display: grid;
+  grid-template-columns: 58px minmax(180px, .8fr) minmax(360px, 2fr) 72px;
+  gap: 14px;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid #f0edf2;
+}
+
+.score-scale-settings__score {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border: 1px solid;
+  border-radius: 11px;
+  font-size: 22px;
+  font-weight: 850;
+}
+
+.score-scale-settings__row label {
+  display: grid;
+  gap: 5px;
+  color: #514a5a;
+  font-size: var(--virtus-font-label);
+  font-weight: 700;
+}
+
+.score-scale-settings__row input[type="text"],
+.score-scale-settings__row input:not([type]),
+.score-scale-settings__row textarea {
+  width: 100%;
+  padding: 9px 10px;
+  box-sizing: border-box;
+  border: 1px solid #d9d5df;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--brand-text);
+  font: inherit;
+  font-size: var(--virtus-font-body);
+}
+
+.score-scale-settings__row textarea {
+  min-height: 64px;
+  resize: vertical;
+  line-height: 1.4;
+}
+
+.score-scale-settings__color input {
+  width: 50px;
+  height: 38px;
+  padding: 2px;
+  border: 1px solid #d9d5df;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.score-scale-settings__actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 16px;
+}
+
+@media (max-width: 900px) {
+  .score-scale-settings__header {
+    flex-direction: column;
+  }
+
+  .score-scale-settings__row {
+    grid-template-columns: 58px 1fr;
+  }
+
+  .score-scale-settings__description {
+    grid-column: 1 / -1;
+  }
+}

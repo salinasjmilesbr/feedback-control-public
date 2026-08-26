@@ -11,6 +11,7 @@ import {
   getObservacoesByColaborador,
 } from "../services/observacaoStorage";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
+import "../styles/observacoes.css";
 import {
   getCicloAtivo,
   getCiclosAvaliacao,
@@ -422,15 +423,13 @@ function ObservacoesColaborador({ colaborador }: Props) {
           observacoes.map((observacao) => (
             <div
               key={observacao.id}
-              style={{
-                border: "1px solid #eee",
-                borderRadius: "10px",
-                padding: "14px",
-                backgroundColor: observacao.excluida
-                  ? "#F5F5F5"
-                  : "#fff",
-                opacity: observacao.excluida ? 0.75 : 1,
-              }}
+              className={`observation-card ${
+                observacao.tipo === "POSITIVA"
+                  ? "is-positive"
+                  : observacao.tipo === "NEGATIVA"
+                  ? "is-negative"
+                  : "is-neutral"
+              } ${observacao.excluida ? "is-deleted" : ""}`}
             >
               <div
                 style={{
@@ -457,6 +456,13 @@ function ObservacoesColaborador({ colaborador }: Props) {
                       fontWeight: "bold",
                     }}
                   >
+                    <span aria-hidden="true">
+                      {observacao.tipo === "POSITIVA"
+                        ? "✓ "
+                        : observacao.tipo === "NEGATIVA"
+                        ? "! "
+                        : "• "}
+                    </span>
                     {labelsTipo[observacao.tipo]}
                   </span>
 

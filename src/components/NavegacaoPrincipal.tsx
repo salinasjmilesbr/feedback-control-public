@@ -100,7 +100,7 @@ function NavegacaoPrincipal() {
             to="/minha-avaliacao"
             icon={<IconClipboard />}
           >
-            Minha avaliação
+            Minhas avaliações
           </NavItem>
         )}
 
