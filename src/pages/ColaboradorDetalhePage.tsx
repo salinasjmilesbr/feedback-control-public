@@ -1,9 +1,159 @@
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import ObservacoesColaborador from "../components/ObservacoesColaborador";
 import { getColaboradorByMatricula, getColaboradores } from "../services/colaboradorStorage";
 import { getFeedbacksByColaborador } from "../services/feedbackStorage";
+import { getObservacoesByColaborador } from "../services/observacaoStorage";
+import {
+  getEscalaAvaliacao,
+  getItemEscalaPorNota,
+} from "../services/escalaAvaliacaoStorage";
 import type { Feedback } from "../types/Feedback";
-import ObservacoesColaborador from "../components/ObservacoesColaborador";
+import "../styles/colaborador-detalhe.css";
+
+function Icon({
+  children,
+  size = 18,
+}: {
+  children: ReactNode;
+  size?: number;
+}) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {children}
+    </svg>
+  );
+}
+
+function IconEdit() {
+  return (
+    <Icon>
+      <path d="M4 20h4l11-11-4-4L4 16v4Z" />
+      <path d="m13.5 6.5 4 4" />
+    </Icon>
+  );
+}
+
+function IconPlus() {
+  return (
+    <Icon>
+      <path d="M12 5v14M5 12h14" />
+    </Icon>
+  );
+}
+
+function IconChart() {
+  return (
+    <Icon>
+      <path d="M4 20V11M10 20V6M16 20v-4M22 20H2" />
+    </Icon>
+  );
+}
+
+function IconStar() {
+  return (
+    <Icon>
+      <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z" />
+    </Icon>
+  );
+}
+
+function IconTrend() {
+  return (
+    <Icon>
+      <path d="m4 17 6-6 4 4 6-8" />
+      <path d="M15 7h5v5" />
+    </Icon>
+  );
+}
+
+function IconCheck() {
+  return (
+    <Icon>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8 12 2.7 2.7L16.5 9" />
+    </Icon>
+  );
+}
+
+function IconCalendar() {
+  return (
+    <Icon>
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M8 3v4M16 3v4M3 10h18" />
+    </Icon>
+  );
+}
+
+function IconBuilding() {
+  return (
+    <Icon>
+      <path d="M4 21V5h11v16M15 10h5v11M8 9h3M8 13h3M8 17h3" />
+    </Icon>
+  );
+}
+
+function IconManager() {
+  return (
+    <Icon>
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3.5 19c.6-3.4 2.5-5.2 5.5-5.2 2 0 3.5.8 4.4 2.3" />
+      <path d="M16 14h5M18.5 11.5v5" />
+    </Icon>
+  );
+}
+
+function IconPositive() {
+  return (
+    <Icon size={20}>
+      <path d="M7 10v10H4V10h3ZM7 18h9.5a2 2 0 0 0 1.9-1.4l1.3-4A2 2 0 0 0 17.8 10H14l.7-3.3A2.2 2.2 0 0 0 10.5 5L7 10Z" />
+    </Icon>
+  );
+}
+
+function IconNeutral() {
+  return (
+    <Icon size={20}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9 10h.01M15 10h.01M9 15h6" />
+    </Icon>
+  );
+}
+
+function IconNegative() {
+  return (
+    <Icon size={20}>
+      <path d="M7 14V4H4v10h3ZM7 6h9.5a2 2 0 0 1 1.9 1.4l1.3 4A2 2 0 0 1 17.8 14H14l.7 3.3a2.2 2.2 0 0 1-4.2 1.7L7 14Z" />
+    </Icon>
+  );
+}
+
+function IconCompetency() {
+  return (
+    <Icon size={16}>
+      <path d="M12 3 14 8l5 .6-3.7 3.5 1 5-4.3-2.5-4.3 2.5 1-5L5 8.6 10 8l2-5Z" />
+    </Icon>
+  );
+}
+
+function IconChevron({ aberto }: { aberto: boolean }) {
+  return (
+    <Icon size={17}>
+      <path d={aberto ? "m6 14 6-6 6 6" : "m6 10 6 6 6-6"} />
+    </Icon>
+  );
+}
 
 const criterioSiglas = [
   "DT",
@@ -36,35 +186,8 @@ function normalizarTexto(valor: string) {
 }
 
 function calcularPercentual(parte: number, total: number) {
-  if (total === 0) {
-    return 0;
-  }
-
+  if (total === 0) return 0;
   return Math.round((parte / total) * 100);
-}
-
-function obterCorPercentual(percentual: number) {
-  if (percentual === 100) {
-    return {
-      backgroundColor: "#E7F6EC",
-      color: "#107C41",
-      borderColor: "#B7E3C4",
-    };
-  }
-
-  if (percentual >= 50) {
-    return {
-      backgroundColor: "#FFF4CE",
-      color: "#8A6D00",
-      borderColor: "#F7D774",
-    };
-  }
-
-  return {
-    backgroundColor: "#FDE7E9",
-    color: "#A4262C",
-    borderColor: "#F3B6BC",
-  };
 }
 
 function calcularPreenchimentoFeedback(feedback: Feedback) {
@@ -72,41 +195,58 @@ function calcularPreenchimentoFeedback(feedback: Feedback) {
     feedback.criteriosDetalhados?.flatMap((criterio) => criterio.subcriterios) ?? [];
 
   const totalSubcriterios = subcriterios.length;
-  const totalNotasPossiveis = totalSubcriterios * 3;
-
-  const notasGerentePreenchidas = subcriterios.filter(
-    (subcriterio) => subcriterio.notaGerente > 0
+  const gerente = subcriterios.filter((item) => item.notaGerente > 0).length;
+  const coordenador = subcriterios.filter(
+    (item) => item.notaCoordenador > 0
   ).length;
-
-  const notasCoordenadorPreenchidas = subcriterios.filter(
-    (subcriterio) => subcriterio.notaCoordenador > 0
-  ).length;
-
-  const notasColegiadoPreenchidas = subcriterios.filter(
-    (subcriterio) => subcriterio.notaColegiado > 0
-  ).length;
-
-  const notasPreenchidas =
-    notasGerentePreenchidas +
-    notasCoordenadorPreenchidas +
-    notasColegiadoPreenchidas;
+  const colegiado = subcriterios.filter((item) => item.notaColegiado > 0).length;
 
   return {
-    geral: calcularPercentual(notasPreenchidas, totalNotasPossiveis),
-    gerente: calcularPercentual(notasGerentePreenchidas, totalSubcriterios),
-    coordenador: calcularPercentual(
-      notasCoordenadorPreenchidas,
-      totalSubcriterios
+    geral: calcularPercentual(
+      gerente + coordenador + colegiado,
+      totalSubcriterios * 3
     ),
-    colegiado: calcularPercentual(notasColegiadoPreenchidas, totalSubcriterios),
-    notasPreenchidas,
-    totalNotasPossiveis,
+    gerente: calcularPercentual(gerente, totalSubcriterios),
+    coordenador: calcularPercentual(coordenador, totalSubcriterios),
+    colegiado: calcularPercentual(colegiado, totalSubcriterios),
   };
+}
+
+function iniciais(nome: string) {
+  return nome
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((parte) => parte[0])
+    .join("")
+    .toUpperCase();
+}
+
+function labelStatusFeedback(status: Feedback["status"]) {
+  if (status === "CONCLUIDA") return "Concluída";
+  if (status === "PRONTA_PARA_FEEDBACK") return "Pronta para feedback";
+  return "Em andamento";
+}
+
+function classeStatusFeedback(status: Feedback["status"]) {
+  if (status === "CONCLUIDA") return "is-complete";
+  if (status === "PRONTA_PARA_FEEDBACK") return "is-ready";
+  return "is-progress";
+}
+
+function formatarData(valor?: string) {
+  if (!valor) return undefined;
+  return new Date(valor).toLocaleDateString("pt-BR");
 }
 
 function ColaboradorDetalhePage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [mostrarObservacoes, setMostrarObservacoes] = useState(false);
+  const [ordenacao, setOrdenacao] = useState<"RECENTES" | "ANTIGAS">("RECENTES");
+  const [avaliacoesAbertas, setAvaliacoesAbertas] = useState<Set<string>>(
+    () => new Set()
+  );
 
   const matricula = Number(id);
   const colaborador = Number.isFinite(matricula)
@@ -115,29 +255,27 @@ function ColaboradorDetalhePage() {
 
   if (!colaborador) {
     return (
-      <div style={{ padding: "30px" }}>
-        <h1>Colaborador não encontrado</h1>
-      </div>
+      <main className="virtus-page">
+        <section className="virtus-empty">
+          <h2>Colaborador não encontrado</h2>
+          <button
+            className="virtus-btn virtus-btn--outline"
+            type="button"
+            onClick={() => navigate("/")}
+          >
+            Voltar
+          </button>
+        </section>
+      </main>
     );
   }
 
   const todosColaboradores = getColaboradores();
-
   const gestorDireto = colaborador.gestorDiretoMatricula
     ? todosColaboradores.find(
         (item) => item.matricula === colaborador.gestorDiretoMatricula
       )
     : undefined;
-
-  const avaliadoresColegiado = (
-    colaborador.avaliadoresColegiadoMatriculas ?? []
-  )
-    .map((matriculaAvaliador) =>
-      todosColaboradores.find(
-        (item) => item.matricula === matriculaAvaliador
-      )
-    )
-    .filter((item) => item !== undefined);
 
   const funcaoLabel =
     colaborador.funcao === "GERENTE"
@@ -157,814 +295,489 @@ function ColaboradorDetalhePage() {
       ? "Sênior"
       : undefined;
 
-  const feedbacks = getFeedbacksByColaborador(colaborador.matricula);
+  const feedbacksBase = getFeedbacksByColaborador(colaborador.matricula);
+  const feedbacksOrdenados = [...feedbacksBase].sort((a, b) => {
+    const dataA = new Date(a.dataCriacao ?? a.data).getTime();
+    const dataB = new Date(b.dataCriacao ?? b.data).getTime();
+    return ordenacao === "RECENTES" ? dataB - dataA : dataA - dataB;
+  });
 
-  const feedbacksOrdenados = [...feedbacks].sort(
+  const feedbacksConcluidos = feedbacksBase.filter(
+    (feedback) => feedback.status === "CONCLUIDA"
+  );
+  const ultimaAvaliacao = [...feedbacksBase].sort(
     (a, b) =>
       new Date(b.dataCriacao ?? b.data).getTime() -
       new Date(a.dataCriacao ?? a.data).getTime()
-  );
+  )[0];
 
-  const quantidadeFeedbacks = feedbacks.length;
+  const notasValidas = feedbacksConcluidos
+    .map((feedback) => feedback.notaMedia)
+    .filter((nota) => nota > 0);
 
-  const medias = feedbacks.map((feedback) => feedback.notaMedia);
+  const ultimaNota = ultimaAvaliacao?.notaMedia ?? 0;
+  const melhorNota = notasValidas.length > 0 ? Math.max(...notasValidas) : 0;
+  const escala = getEscalaAvaliacao();
 
-  const ultimaMedia =
-    feedbacksOrdenados.length > 0 ? feedbacksOrdenados[0].notaMedia : 0;
-
-  const maiorMedia = medias.length > 0 ? Math.max(...medias) : 0;
-
-  const menorMedia = medias.length > 0 ? Math.min(...medias) : 0;
-
-  const totalRascunho = feedbacks.filter(
-  (feedback) => feedback.status === "RASCUNHO"
+  const observacoes = getObservacoesByColaborador(colaborador.matricula);
+  const observacoesPositivas = observacoes.filter(
+    (observacao) => observacao.tipo === "POSITIVA"
+  ).length;
+  const observacoesNeutras = observacoes.filter(
+    (observacao) => observacao.tipo === "NEUTRA"
+  ).length;
+  const observacoesNegativas = observacoes.filter(
+    (observacao) => observacao.tipo === "NEGATIVA"
   ).length;
 
-  const totalProntaParaFeedback = feedbacks.filter(
-  (feedback) => feedback.status === "PRONTA_PARA_FEEDBACK"
-  ).length;
+  const idMaisRecente = [...feedbacksBase].sort(
+    (a, b) =>
+      new Date(b.dataCriacao ?? b.data).getTime() -
+      new Date(a.dataCriacao ?? a.data).getTime()
+  )[0]?.id;
 
-  const totalConcluida = feedbacks.filter(
-  (feedback) => feedback.status === "CONCLUIDA"
-  ).length;
+  function estaAberta(feedbackId: string) {
+    return avaliacoesAbertas.size === 0
+      ? feedbackId === idMaisRecente
+      : avaliacoesAbertas.has(feedbackId);
+  }
+
+  function alternarAvaliacao(feedbackId: string) {
+    setAvaliacoesAbertas((atual) => {
+      const proximo = new Set(atual);
+
+      if (proximo.size === 0 && idMaisRecente) {
+        proximo.add(idMaisRecente);
+      }
+
+      if (proximo.has(feedbackId)) {
+        proximo.delete(feedbackId);
+      } else {
+        proximo.add(feedbackId);
+      }
+
+      return proximo;
+    });
+  }
+
+  function estiloNota(valor: number) {
+    if (valor <= 0) {
+      return {
+        "--score-color": "var(--brand-primary)",
+        "--score-bg": "#f7f3f9",
+        "--score-border": "#e7dbea",
+      } as CSSProperties;
+    }
+
+    const faixa = getItemEscalaPorNota(valor, escala);
+    return {
+      "--score-color": faixa.cor,
+      "--score-bg": faixa.corFundo,
+      "--score-border": `${faixa.cor}44`,
+    } as CSSProperties;
+  }
+
+  function labelNota(valor: number) {
+    if (valor <= 0) return "Sem nota";
+    return getItemEscalaPorNota(valor, escala).significado;
+  }
 
   return (
-    <div style={{ padding: "30px" }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-        }}
+    <main className="virtus-page collaborator-detail-v3">
+      <button
+        type="button"
+        className="collaborator-detail-back"
+        onClick={() => navigate("/")}
       >
-        <button
-          onClick={() => navigate("/")}
-          style={{
-            padding: "10px 20px",
-            borderRadius: "10px",
-            border: "1px solid #660099",
-            backgroundColor: "#fff",
-            color: "#660099",
-            cursor: "pointer",
-            fontWeight: "bold",
-            fontSize: "16px",
-            marginTop: "3px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          ← Voltar
-        </button>
+        ← Voltar para colaboradores
+      </button>
 
-        <h1
-          style={{
-            margin: 0,
-            fontSize: "36px",
-            flex: 1,
-            textAlign: "center",
-          }}
-        >
-          Detalhe do Colaborador
-        </h1>
+      <section className="collaborator-profile-card">
+        <div className="collaborator-profile-card__identity">
+          <div className="collaborator-profile-avatar" aria-hidden="true">
+            {iniciais(colaborador.nome)}
+          </div>
 
-        <div style={{ width: "85px" }} />
-      </div>
-
-      <div
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: "10px",
-          padding: "20px",
-          marginTop: "20px",
-          backgroundColor: "#fff",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            gap: "20px",
-          }}
-        >
-          <div>
-            <h2
-              style={{
-                margin: 0,
-                marginBottom: "12px",
-                textAlign: "left",
-                color: "#660099",
-                fontSize: "24px",
-              }}
-            >
-              {colaborador.nome}
-            </h2>
-
-            <p
-              style={{
-                margin: "0 0 8px 0",
-                textAlign: "left",
-              }}
-            >
-              <strong>Matrícula:</strong> {colaborador.matricula}
-            </p>
-
-            <p
-              style={{
-                margin: "0 0 8px 0",
-                textAlign: "left",
-              }}
-            >
-              <strong>Área:</strong> {colaborador.area}
-            </p>
-
-            <p
-              style={{
-                margin: "0 0 8px 0",
-                textAlign: "left",
-              }}
-            >
-              <strong>Função:</strong> {funcaoLabel}
-            </p>
-
-            {senioridadeLabel && (
-              <p
-                style={{
-                  margin: "0 0 8px 0",
-                  textAlign: "left",
-                }}
+          <div className="collaborator-profile-copy">
+            <div className="collaborator-profile-title">
+              <h1>{colaborador.nome}</h1>
+              <span
+                className={`collaborator-status ${
+                  colaborador.status === "ATIVO"
+                    ? "is-active"
+                    : colaborador.status === "LICENCA"
+                    ? "is-leave"
+                    : "is-inactive"
+                }`}
               >
-                <strong>Senioridade:</strong> {senioridadeLabel}
-              </p>
-            )}
+                {colaborador.status === "ATIVO"
+                  ? "Ativo"
+                  : colaborador.status === "LICENCA"
+                  ? "Em licença"
+                  : "Desligado"}
+              </span>
+            </div>
+
+            <div className="collaborator-profile-role">
+              {funcaoLabel}
+              {senioridadeLabel ? ` • ${senioridadeLabel}` : ""}
+            </div>
+
+            <div className="collaborator-profile-data">
+              <span>
+                <span className="collaborator-inline-icon">
+                  <IconBuilding />
+                </span>
+                {colaborador.area}
+              </span>
+              <span>Matrícula {colaborador.matricula}</span>
+            </div>
 
             {gestorDireto && (
-              <p
-                style={{
-                  margin: "0 0 8px 0",
-                  textAlign: "left",
-                }}
-              >
-                <strong>Gestor direto:</strong> {gestorDireto.nome}
-              </p>
-            )}
-
-            {avaliadoresColegiado.length > 0 && (
-              <div
-                style={{
-                  marginTop: "12px",
-                  textAlign: "left",
-                }}
-              >
-                <strong>Avaliadores do colegiado:</strong>
-                <ul
-                  style={{
-                    margin: "6px 0 0 20px",
-                    padding: 0,
-                  }}
-                >
-                  {avaliadoresColegiado.map((avaliador) => (
-                    <li key={avaliador.matricula}>
-                      {avaliador.nome}
-                    </li>
-                  ))}
-                </ul>
+              <div className="collaborator-profile-manager">
+                <span className="collaborator-inline-icon">
+                  <IconManager />
+                </span>
+                <span>
+                  Gestor: <strong>{gestorDireto.nome}</strong>
+                </span>
               </div>
             )}
           </div>
-
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "flex-end",
-              gap: "12px",
-              paddingTop: "12px",
-            }}
-          >
-            <span
-              style={{
-                fontWeight: "bold",
-              }}
-            >
-              {colaborador.status === "ATIVO"
-                ? "✅ Ativo"
-                : colaborador.status === "LICENCA"
-                ? "🟡 Em licença"
-                : "❌ Desligado"}
-            </span>
-
-            <Link to={`/colaborador/${colaborador.matricula}/editar`}>
-              <button
-                style={{
-                  padding: "12px 24px",
-                  borderRadius: "10px",
-                  border: "1px solid #660099",
-                  cursor: "pointer",
-                  backgroundColor: "#fff",
-                  color: "#660099",
-                  fontWeight: "bold",
-                  fontSize: "15px",
-                }}
-              >
-                Editar cadastro
-              </button>
-            </Link>
-
-            <Link to={`/colaborador/${colaborador.matricula}/novo-feedback`}>
-              <button
-                style={{
-                  padding: "12px 24px",
-                  borderRadius: "10px",
-                  border: "none",
-                  cursor: "pointer",
-                  backgroundColor: "#660099",
-                  color: "#fff",
-                  fontWeight: "bold",
-                  fontSize: "15px",
-                }}
-              >
-                + Novo Feedback
-              </button>
-            </Link>
-          </div>
         </div>
-      </div>
 
-      <div
-        style={{
-          marginTop: "20px",
-          border: "1px solid #ddd",
-          borderRadius: "10px",
-          padding: "20px",
-          backgroundColor: "#fff",
-          textAlign: "center",
-        }}
-      >
-        <h3>Indicadores do Colaborador</h3>
+        <div className="virtus-page-actions collaborator-profile-actions">
+          <Link
+            to={`/colaborador/${colaborador.matricula}/editar`}
+            className="virtus-btn virtus-btn--outline collaborator-link-button"
+          >
+            <IconEdit />
+            Editar cadastro
+          </Link>
 
-        <div
-          style={{
-            display: "flex",
-            gap: "16px",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            marginTop: "20px",
-          }}
+          <Link
+            to={`/colaborador/${colaborador.matricula}/novo-feedback`}
+            className="virtus-btn virtus-btn--primary collaborator-link-button"
+          >
+            <IconPlus />
+            Nova avaliação
+          </Link>
+        </div>
+      </section>
+
+      <section className="collaborator-kpis">
+        <article className="collaborator-kpi">
+          <span className="collaborator-kpi__icon">
+            <IconChart />
+          </span>
+          <div>
+            <small>Avaliações</small>
+            <strong>{feedbacksBase.length}</strong>
+            <span>Total realizadas</span>
+          </div>
+        </article>
+
+        <article
+          className="collaborator-kpi score-semantic"
+          style={estiloNota(ultimaNota)}
         >
-          <div
-            style={{
-              flex: 1,
-              minWidth: "150px",
-              border: "1px solid #eee",
-              borderRadius: "12px",
-              padding: "16px",
-              backgroundColor: "#F4E8FF",
-            }}
-          >
-            <div>Total de Avaliações</div>
-            <div
-              style={{
-                fontSize: "36px",
-                fontWeight: "bold",
-                marginTop: "8px",
-                color: "#660099",
-              }}
-            >
-              {quantidadeFeedbacks}
-            </div>
+          <span className="collaborator-kpi__icon">
+            <IconStar />
+          </span>
+          <div>
+            <small>Última nota</small>
+            <strong className="is-score">
+              {ultimaNota > 0 ? ultimaNota.toFixed(2) : "—"}
+            </strong>
+            <span className="collaborator-kpi__score-label">
+              {labelNota(ultimaNota)}
+            </span>
           </div>
+        </article>
 
-          <div
-            style={{
-              flex: 1,
-              minWidth: "150px",
-              border: "1px solid #eee",
-              borderRadius: "12px",
-              padding: "16px",
-              backgroundColor: "#E8F4FF",
-            }}
-          >
-            <div>Última Nota</div>
-            <div
-              style={{
-                fontSize: "36px",
-                fontWeight: "bold",
-                marginTop: "8px",
-                color: "#0078D4",
-              }}
-            >
-              {ultimaMedia.toFixed(2)}
-            </div>
+        <article
+          className="collaborator-kpi score-semantic"
+          style={estiloNota(melhorNota)}
+        >
+          <span className="collaborator-kpi__icon">
+            <IconTrend />
+          </span>
+          <div>
+            <small>Melhor nota</small>
+            <strong className="is-score">
+              {melhorNota > 0 ? melhorNota.toFixed(2) : "—"}
+            </strong>
+            <span className="collaborator-kpi__score-label">
+              {labelNota(melhorNota)}
+            </span>
           </div>
+        </article>
 
-          <div
-            style={{
-              flex: 1,
-              minWidth: "150px",
-              border: "1px solid #eee",
-              borderRadius: "12px",
-              padding: "16px",
-              backgroundColor: "#E8F8EF",
-            }}
-          >
-            <div>Melhor Nota</div>
-            <div
-              style={{
-                fontSize: "36px",
-                fontWeight: "bold",
-                marginTop: "8px",
-                color: "#107C41",
-              }}
-            >
-              {maiorMedia.toFixed(2)}
-            </div>
+        <article className="collaborator-kpi">
+          <span className="collaborator-kpi__icon">
+            <IconCheck />
+          </span>
+          <div>
+            <small>Concluídas</small>
+            <strong>{feedbacksConcluidos.length}</strong>
+            <span>
+              Das {feedbacksBase.length}{" "}
+              {feedbacksBase.length === 1 ? "avaliação" : "avaliações"}
+            </span>
           </div>
+        </article>
+      </section>
 
-          <div
-            style={{
-              flex: 1,
-              minWidth: "150px",
-              border: "1px solid #eee",
-              borderRadius: "8px",
-              padding: "16px",
-              backgroundColor: "#FFF4E5",
-            }}
-          >
-            <div>Menor Nota</div>
-            <div
-              style={{
-                fontSize: "36px",
-                fontWeight: "bold",
-                marginTop: "8px",
-                color: "#D97706",
-              }}
-            >
-              {menorMedia.toFixed(2)}
-            </div>
-          </div>          
+      <section className="collaborator-section">
+        <div className="collaborator-section-heading">
+          <h2>Observações</h2>
         </div>
 
-      <div
-        style={{
-          display: "flex",
-          gap: "16px",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          marginTop: "16px",
-        }}
-      >
-      
-          <div
-            style={{
-              flex: 1,
-              minWidth: "150px",
-              border: "1px solid #eee",
-              borderRadius: "12px",
-              padding: "16px",
-              backgroundColor: "#F4E8FF",
-            }}
+        <div className="collaborator-observation-summary">
+          <button
+            type="button"
+            className="collaborator-observation-kpi is-positive"
+            onClick={() => setMostrarObservacoes(true)}
           >
-            <div>Rascunho</div>
-            <div
-              style={{
-                fontSize: "36px",
-                fontWeight: "bold",
-                marginTop: "8px",
-                color: "#660099",
-              }}
-            >
-              {totalRascunho}
+            <span className="collaborator-observation-kpi__icon">
+              <IconPositive />
+            </span>
+            <span className="collaborator-observation-kpi__copy">
+              <small>Positivas</small>
+              <strong>{observacoesPositivas}</strong>
+              <em>Ver todas →</em>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            className="collaborator-observation-kpi is-neutral"
+            onClick={() => setMostrarObservacoes(true)}
+          >
+            <span className="collaborator-observation-kpi__icon">
+              <IconNeutral />
+            </span>
+            <span className="collaborator-observation-kpi__copy">
+              <small>Neutras</small>
+              <strong>{observacoesNeutras}</strong>
+              <em>Ver todas →</em>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            className="collaborator-observation-kpi is-negative"
+            onClick={() => setMostrarObservacoes(true)}
+          >
+            <span className="collaborator-observation-kpi__icon">
+              <IconNegative />
+            </span>
+            <span className="collaborator-observation-kpi__copy">
+              <small>Negativas</small>
+              <strong>{observacoesNegativas}</strong>
+              <em>Ver todas →</em>
+            </span>
+          </button>
+        </div>
+
+        {mostrarObservacoes && (
+          <div className="collaborator-observations-detail">
+            <div className="collaborator-observations-detail__top">
+              <strong>Todas as observações</strong>
+              <button
+                type="button"
+                className="virtus-btn virtus-btn--outline"
+                onClick={() => setMostrarObservacoes(false)}
+              >
+                Fechar
+              </button>
             </div>
+            <ObservacoesColaborador colaborador={colaborador} />
+          </div>
+        )}
+      </section>
+
+      <section className="collaborator-section">
+        <div className="collaborator-section-heading collaborator-section-heading--history">
+          <div>
+            <h2>Histórico de avaliações</h2>
           </div>
 
-          <div
-            style={{
-              flex: 1,
-              minWidth: "150px",
-              border: "1px solid #eee",
-              borderRadius: "12px",
-              padding: "16px",
-              backgroundColor: "#FFF4CE",
-            }}
-          >
-            <div>Pronta p/ Feedback</div>
-            <div
-              style={{
-                fontSize: "36px",
-                fontWeight: "bold",
-                marginTop: "8px",
-                color: "#8A6D00",
-              }}
+          <label className="collaborator-sort">
+            <span>Ordenar por:</span>
+            <select
+              value={ordenacao}
+              onChange={(event) =>
+                setOrdenacao(event.target.value as "RECENTES" | "ANTIGAS")
+              }
             >
-              {totalProntaParaFeedback}
-            </div>
+              <option value="RECENTES">Mais recentes</option>
+              <option value="ANTIGAS">Mais antigas</option>
+            </select>
+          </label>
+        </div>
+
+        {feedbacksOrdenados.length === 0 ? (
+          <div className="collaborator-history-empty">
+            Nenhuma avaliação registrada para este colaborador.
           </div>
-
-          <div
-            style={{
-              flex: 1,
-              minWidth: "150px",
-              border: "1px solid #eee",
-              borderRadius: "12px",
-              padding: "16px",
-              backgroundColor: "#E7F6EC",
-            }}
-          >
-            <div>Concluída</div>
-            <div
-              style={{
-                fontSize: "36px",
-                fontWeight: "bold",
-                marginTop: "8px",
-                color: "#107C41",
-              }}
-            >
-              {totalConcluida}
-            </div>
-          </div>
-
-                </div>
-
-                </div>
-
-      <ObservacoesColaborador colaborador={colaborador} />
-
-      <div
-        style={{
-          marginTop: "30px",
-          border: "1px solid #ddd",
-          borderRadius: "10px",
-          padding: "20px",
-          backgroundColor: "#fff",
-          textAlign: "center",
-        }}
-      >
-        <h3>Avaliações Realizadas</h3>
-
-        {feedbacks.length === 0 ? (
-          <p>Nenhum feedback registrado.</p>
         ) : (
-          <ul
-            style={{
-              listStyle: "none",
-              padding: 0,
-              margin: 0,
-            }}
-          >
+          <div className="collaborator-history">
             {feedbacksOrdenados.map((feedback) => {
               const preenchimento = calcularPreenchimentoFeedback(feedback);
-              const corGerente = obterCorPercentual(preenchimento.gerente);
-              const corCoordenador = obterCorPercentual(
-                preenchimento.coordenador
-              );
-              const corColegiado = obterCorPercentual(preenchimento.colegiado);
+              const dataInicio = formatarData(feedback.dataCriacao ?? feedback.data);
+              const dataFim = formatarData(feedback.dataConclusao);
+              const temNota = feedback.notaMedia > 0;
+              const aberta = estaAberta(feedback.id);
 
               return (
-                <li
+                <article
+                  className={`collaborator-evaluation-card score-semantic ${
+                    aberta ? "is-open" : "is-closed"
+                  }`}
+                  style={estiloNota(feedback.notaMedia)}
                   key={feedback.id}
-                  onMouseEnter={(event) => {
-                    event.currentTarget.style.transform = "translateY(-2px)";
-                    event.currentTarget.style.boxShadow =
-                      "0 4px 12px rgba(0,0,0,0.10)";
-                  }}
-                  onMouseLeave={(event) => {
-                    event.currentTarget.style.transform = "translateY(0)";
-                    event.currentTarget.style.boxShadow =
-                      "0 2px 6px rgba(0,0,0,0.05)";
-                  }}
-                  style={{
-                    marginBottom: "12px",
-                    border: "1px solid #eee",
-                    borderRadius: "12px",
-                    padding: "16px",
-                    backgroundColor: "#F8FBFF",
-                    textAlign: "left",
-                    cursor: "pointer",
-                    boxShadow: "0 2px 6px rgba(0,0,0,0.05)",
-                    transition: "all 0.2s ease",
-                  }}
                 >
-                  <Link
-                    to={`/colaborador/${colaborador.matricula}/feedback/${feedback.id}`}
-                    style={{
-                      color: "#660099",
-                      textDecoration: "none",
-                      display: "block",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                        gap: "20px",
-                      }}
+                  <header className="collaborator-evaluation-card__header">
+                    <button
+                      type="button"
+                      className="collaborator-evaluation-card__toggle"
+                      onClick={() => alternarAvaliacao(feedback.id)}
+                      aria-expanded={aberta}
                     >
-                      <div
-                        style={{
-                          minWidth: "190px",
-                          maxWidth: "260px",
-                        }}
+                      <span className="collaborator-evaluation-card__calendar">
+                        <IconCalendar />
+                      </span>
+                      <span className="collaborator-evaluation-card__cycle-copy">
+                        <span className="collaborator-evaluation-card__title">
+                          <strong>
+                            {feedback.ano} • Ciclo {feedback.ciclo}
+                          </strong>
+                          <span
+                            className={`collaborator-evaluation-status ${classeStatusFeedback(
+                              feedback.status
+                            )}`}
+                          >
+                            {labelStatusFeedback(feedback.status)}
+                          </span>
+                        </span>
+                        <small>
+                          {dataInicio ? `Início: ${dataInicio}` : ""}
+                          {dataFim ? ` • Conclusão: ${dataFim}` : ""}
+                        </small>
+                      </span>
+                    </button>
+
+                    <div className="collaborator-evaluation-card__actions">
+                      <Link
+                        className="virtus-btn virtus-btn--outline collaborator-link-button collaborator-link-button--compact"
+                        to={`/colaborador/${colaborador.matricula}/feedback/${feedback.id}`}
                       >
-                        <div
-                          style={{
-                            fontSize: "11px",
-                            textTransform: "uppercase",
-                            color: "#666",
-                            fontWeight: "bold",
-                            letterSpacing: "1px",
-                          }}
-                        >
-                          Nota Final
+                        {feedback.status === "CONCLUIDA"
+                          ? "Ver avaliação"
+                          : "Abrir avaliação"}{" "}
+                        →
+                      </Link>
+
+                      <button
+                        type="button"
+                        className="collaborator-chevron"
+                        onClick={() => alternarAvaliacao(feedback.id)}
+                        aria-label={aberta ? "Recolher avaliação" : "Expandir avaliação"}
+                      >
+                        <IconChevron aberto={aberta} />
+                      </button>
+                    </div>
+                  </header>
+
+                  {aberta && (
+                    <>
+                      <div className="collaborator-evaluation-summary">
+                        <div className="collaborator-evaluation-score">
+                          <small>
+                            {feedback.status === "CONCLUIDA"
+                              ? "Nota final"
+                              : "Nota atual / final"}
+                          </small>
+                          <strong>
+                            {temNota ? feedback.notaMedia.toFixed(2) : "—"}
+                          </strong>
+                          <span>{labelNota(feedback.notaMedia)}</span>
                         </div>
 
-                        <div
-                          style={{
-                            fontSize: "34px",
-                            fontWeight: "bold",
-                            color: "#0078D4",
-                            lineHeight: 1,
-                            marginTop: "4px",
-                          }}
-                        >
-                          {feedback.notaMedia.toFixed(2)}
+                        <div className="collaborator-evaluation-progress">
+                          <small>Progresso geral</small>
+                          <strong>{preenchimento.geral}%</strong>
+                          <span>Preenchimento total</span>
                         </div>
 
-                        <div
-                          style={{
-                            marginTop: "14px",
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
-                              gap: "10px",
-                              fontSize: "12px",
-                              color: "#555",
-                              fontWeight: "bold",
-                              marginBottom: "6px",
-                            }}
-                          >
-                            <span>Preenchimento</span>
-                            <span>{preenchimento.geral}%</span>
-                          </div>
-
-                          <div
-                            style={{
-                              width: "100%",
-                              height: "8px",
-                              borderRadius: "999px",
-                              backgroundColor: "#EDEDED",
-                              overflow: "hidden",
-                            }}
-                          >
-                            <div
-                              style={{
-                                width: `${preenchimento.geral}%`,
-                                height: "100%",
-                                borderRadius: "999px",
-                                backgroundColor: "#660099",
-                                transition: "width 0.2s ease-in-out",
-                              }}
-                            />
-                          </div>
-
-                          <div
-                            style={{
-                              marginTop: "8px",
-                              display: "flex",
-                              gap: "6px",
-                              flexWrap: "wrap",
-                            }}
-                          >
-                            <span
-                              title="Percentual preenchido pelo gerente"
-                              style={{
-                                padding: "4px 8px",
-                                borderRadius: "999px",
-                                border: `1px solid ${corGerente.borderColor}`,
-                                backgroundColor: corGerente.backgroundColor,
-                                color: corGerente.color,
-                                fontSize: "11px",
-                                fontWeight: "bold",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              G {preenchimento.gerente}%
-                            </span>
-
-                            <span
-                              title="Percentual preenchido pelo coordenador"
-                              style={{
-                                padding: "4px 8px",
-                                borderRadius: "999px",
-                                border: `1px solid ${corCoordenador.borderColor}`,
-                                backgroundColor: corCoordenador.backgroundColor,
-                                color: corCoordenador.color,
-                                fontSize: "11px",
-                                fontWeight: "bold",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              C {preenchimento.coordenador}%
-                            </span>
-
-                            <span
-                              title="Percentual preenchido pelo colegiado"
-                              style={{
-                                padding: "4px 8px",
-                                borderRadius: "999px",
-                                border: `1px solid ${corColegiado.borderColor}`,
-                                backgroundColor: corColegiado.backgroundColor,
-                                color: corColegiado.color,
-                                fontSize: "11px",
-                                fontWeight: "bold",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              COL {preenchimento.colegiado}%
-                            </span>
-                          </div>
-                        </div>
-
-                        <div
-                          style={{
-                            marginTop: "12px",
-                            fontSize: "13px",
-                            color: "#666",
-                            lineHeight: 1.5,
-                          }}
-                        >
-                          <div>
-                            📅 Avaliado em: {" "}
-                            {new Date(
-                              feedback.dataCriacao ?? feedback.data
-                            ).toLocaleDateString("pt-BR")}
-                          </div>
-
-                          {feedback.dataUltimaAtualizacao &&
-                            feedback.dataCriacao &&
-                            feedback.dataCriacao !==
-                              feedback.dataUltimaAtualizacao && (
-                              <div style={{ marginTop: "2px" }}>
-                                ✏️ Editado em: {" "}
-                                {new Date(
-                                  feedback.dataUltimaAtualizacao
-                                ).toLocaleDateString("pt-BR")}
+                        <div className="collaborator-evaluation-raters">
+                          <small>Progresso por avaliador</small>
+                          {[
+                            ["Gerente", preenchimento.gerente],
+                            ["Coordenador", preenchimento.coordenador],
+                            ["Colegiado", preenchimento.colegiado],
+                          ].map(([label, percentual]) => (
+                            <div className="collaborator-rater-progress" key={label}>
+                              <div>
+                                <span>{label}</span>
+                                <strong>{percentual}%</strong>
                               </div>
-                            )}
+                              <div className="collaborator-progress-track">
+                                <i style={{ width: `${percentual}%` }} />
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
 
-                      <div
-                        style={{
-                          flex: 1,
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "flex-end",
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "8px",
-                            flexWrap: "wrap",
-                            justifyContent: "flex-end",
-                          }}
-                        >
+                      <div className="collaborator-competencies">
+                        <small>Competências avaliadas</small>
+                        <div className="collaborator-competencies__grid">
                           {criterioSiglas.map((sigla) => {
-                            const nomeCriterioEsperado =
-                              criterioNomePorSigla[sigla];
-
-                            const criterioEncontrado =
-                              feedback.criteriosDetalhados?.find(
-                                (criterio) =>
-                                  normalizarTexto(criterio.criterioNome) ===
-                                  normalizarTexto(nomeCriterioEsperado)
-                              );
+                            const criterio = feedback.criteriosDetalhados?.find(
+                              (item) =>
+                                normalizarTexto(item.criterioNome) ===
+                                normalizarTexto(criterioNomePorSigla[sigla])
+                            );
+                            const nota = criterio?.nota ?? 0;
 
                             return (
                               <div
+                                className="collaborator-competency"
                                 key={sigla}
-                                title={criterioNomePorSigla[sigla]}
-                                style={{
-                                  width: "58px",
-                                  height: "58px",
-                                  border: "1px solid #660099",
-                                  borderRadius: "8px",
-                                  display: "flex",
-                                  flexDirection: "column",
-                                  justifyContent: "center",
-                                  alignItems: "center",
-                                  backgroundColor: "#FAFAFA",
-                                  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
-                                  transition: "all 0.2s ease",
-                                }}
                               >
-                                <div
-                                  style={{
-                                    fontSize: "10px",
-                                    color: "#666",
-                                    fontWeight: "bold",
-                                  }}
+                                <span className="collaborator-competency__icon">
+                                  <IconCompetency />
+                                </span>
+                                <span className="collaborator-competency__name">
+                                  {criterioNomePorSigla[sigla]}
+                                </span>
+                                <strong
+                                  style={
+                                    nota > 0
+                                      ? {
+                                          color: getItemEscalaPorNota(nota, escala).cor,
+                                        }
+                                      : undefined
+                                  }
                                 >
-                                  {sigla}
-                                </div>
-
-                                <div
-                                  style={{
-                                    fontSize: "16px",
-                                    color: "#660099",
-                                    fontWeight: "bold",
-                                  }}
-                                >
-                                  {criterioEncontrado?.nota.toFixed(1) ?? "-"}
-                                </div>
+                                  {nota > 0 ? nota.toFixed(1) : "—"}
+                                </strong>
                               </div>
                             );
                           })}
                         </div>
-
-                        <div
-                          style={{
-                            marginTop: "10px",
-                            display: "flex",
-                            justifyContent: "flex-end",
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "6px",
-                              padding: "4px 10px",
-                              borderRadius: "999px",
-                              backgroundColor: "#F4E8FF",
-                              color: "#660099",
-                              fontSize: "12px",
-                              fontWeight: "bold",
-                            }}
-                          >
-                            {feedback.ano ??
-                              new Date(feedback.data).getFullYear()}
-                            {" • "}
-                            Ciclo {feedback.ciclo ?? 1}
-                          </div>
-                          <div
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "6px",
-                              padding: "4px 10px",
-                              borderRadius: "999px",
-                              backgroundColor:
-                                feedback.status === "CONCLUIDA"
-                                  ? "#E7F6EC"
-                                  : feedback.status === "PRONTA_PARA_FEEDBACK"
-                                  ? "#FFF4CE"
-                                  : "#F4E8FF",
-                              color:
-                                feedback.status === "CONCLUIDA"
-                                  ? "#107C41"
-                                  : feedback.status === "PRONTA_PARA_FEEDBACK"
-                                  ? "#8A6D00"
-                                  : "#660099",
-                              fontSize: "12px",
-                              fontWeight: "bold",
-                              marginTop: "0px",
-                            }}
-                          >
-                            {feedback.status === "RASCUNHO" && "📝 Rascunho"}
-                            {feedback.status === "PRONTA_PARA_FEEDBACK" &&
-                              "🎯 Pronta para Feedback"}
-                            {feedback.status === "CONCLUIDA" && "✅ Concluída"}
-                          </div>
-                        </div>
                       </div>
-                    </div>
-
-                    <div
-                      style={{
-                        marginTop: "16px",
-                        fontSize: "14px",
-                        color: "#660099",
-                        fontWeight: "bold",
-                        textAlign: "right",
-                      }}
-                    >
-                      Ver Avaliação →
-                    </div>
-                  </Link>
-                </li>
+                    </>
+                  )}
+                </article>
               );
             })}
-          </ul>
+          </div>
         )}
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }
 
