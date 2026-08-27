@@ -1,18 +1,35 @@
-﻿import { useState } from "react";
+﻿import { type CSSProperties, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getColaboradorByMatricula } from "../services/colaboradorStorage";
-import { formatarNota } from "../services/escalaAvaliacaoStorage";
+import {
+  formatarNota,
+  getEscalaAvaliacao,
+  getItemEscalaPorNota,
+} from "../services/escalaAvaliacaoStorage";
 import {
   deleteFeedback,
   getFeedbacksByColaborador,
 } from "../services/feedbackStorage";
+import "../styles/avaliacoes.css";
+import "../styles/feedback-detalhe.css";
+
+function IconSpark() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.45 4.55L18 9l-4.55 1.45L12 15l-1.45-4.55L6 9l4.55-1.45L12 3Z" /><path d="m18 15 .85 2.15L21 18l-2.15.85L18 21l-.85-2.15L15 18l2.15-.85L18 15Z" /></svg>; }
+function IconPeople() { return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3" /><path d="M3.5 19c.6-3.4 2.5-5.2 5.5-5.2s4.9 1.8 5.5 5.2" /><circle cx="17" cy="9" r="2.2" /><path d="M15.7 14.2c2.9-.4 4.6 1 5 3.8" /></svg>; }
+function IconChart() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg>; }
+function IconChat() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v11H9l-5 4v-15Z" /><path d="M8 10h8M8 13h5" /></svg>; }
+function IconTarget() { return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="4" /><circle cx="12" cy="12" r="1" /></svg>; }
+function IconBook() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h9.5A2.5 2.5 0 0 1 17 7v13H7.5A2.5 2.5 0 0 1 5 17.5v-13Z" /><path d="M17 7h2a2 2 0 0 1 2 2v11h-4M8 8h6M8 12h6" /></svg>; }
+function IconShield() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 6v5c0 5.2-2.8 8.5-8 10-5.2-1.5-8-4.8-8-10V6l8-3Z" /><path d="m8.5 12 2.2 2.2 4.8-5" /></svg>; }
+function IconBolt() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m13 2-7 11h6l-1 9 7-12h-6l1-8Z" /></svg>; }
+
+const criterioIcons: ReactNode[] = [
+  <IconSpark />, <IconPeople />, <IconChart />, <IconChat />,
+  <IconTarget />, <IconBook />, <IconShield />, <IconBolt />,
+];
 
 function FeedbackDetalhePage() {
   const navigate = useNavigate();
   const { id, feedbackId } = useParams();
-  const [criterioAberto, setCriterioAberto] = useState<string>("");
-  const [feedbackFinalAberto, setFeedbackFinalAberto] = useState(false);
-
   const matricula = Number(id);
   const colaborador = Number.isFinite(matricula)
     ? getColaboradorByMatricula(matricula)
@@ -20,726 +37,255 @@ function FeedbackDetalhePage() {
 
   if (!colaborador) {
     return (
-      <div style={{ padding: "30px" }}>
-        <button
-          onClick={() => navigate(-1)}
-          style={{
-            marginBottom: "20px",
-            padding: "10px 16px",
-            borderRadius: "8px",
-            border: "1px solid #660099",
-            backgroundColor: "#fff",
-            color: "#660099",
-            cursor: "pointer",
-            fontWeight: "bold",
-          }}
-        >
-          ← Voltar
-        </button>
-
-        <h1>Colaborador não encontrado</h1>
-      </div>
+      <main className="virtus-page">
+        <section className="evaluation-empty">
+          <h1>Colaborador não encontrado</h1>
+          <button className="evaluation-btn evaluation-btn--secondary" onClick={() => navigate(-1)}>← Voltar</button>
+        </section>
+      </main>
     );
   }
 
-  const feedbacks = getFeedbacksByColaborador(colaborador.matricula);
-  const feedback = feedbacks.find((item) => item.id === feedbackId);
+  const feedback = getFeedbacksByColaborador(colaborador.matricula)
+    .find((item) => item.id === feedbackId);
 
   if (!feedback) {
     return (
-      <div style={{ padding: "30px" }}>
-        <button
-          onClick={() => navigate(`/colaborador/${colaborador.matricula}`)}
-          style={{
-            marginBottom: "20px",
-            padding: "10px 16px",
-            borderRadius: "8px",
-            border: "1px solid #660099",
-            backgroundColor: "#fff",
-            color: "#660099",
-            cursor: "pointer",
-            fontWeight: "bold",
-          }}
-        >
-          ← Voltar
-        </button>
-
-        <h1>Feedback não encontrado</h1>
-      </div>
+      <main className="virtus-page">
+        <section className="evaluation-empty">
+          <h1>Avaliação não encontrada</h1>
+          <button className="evaluation-btn evaluation-btn--secondary" onClick={() => navigate(`/colaborador/${colaborador.matricula}`)}>← Voltar</button>
+        </section>
+      </main>
     );
   }
 
-  const criteriosDetalhados = feedback.criteriosDetalhados ?? [];
-  const feedbackFinalGerente = feedback.feedbackFinalGerente ?? "";
-  const feedbackFinalCoordenador = feedback.feedbackFinalCoordenador ?? "";
+  const criterios = feedback.criteriosDetalhados ?? [];
+  const escala = getEscalaAvaliacao();
 
-  const totalFeedbacksFinaisPreenchidos = [
-    feedbackFinalGerente,
-    feedbackFinalCoordenador,
-  ].filter((texto) => texto.trim().length > 0).length;
+  function estiloNota(valor: number) {
+    const faixa = getItemEscalaPorNota(valor, escala);
+    return {
+      "--score-color": faixa.cor,
+      "--score-bg": faixa.corFundo,
+      "--score-border": `${faixa.cor}44`,
+    } as CSSProperties;
+  }
 
-  const statusFeedbackFinal =
-    totalFeedbacksFinaisPreenchidos === 0
-      ? "Pendente"
-      : `${totalFeedbacksFinaisPreenchidos} comentário${
-          totalFeedbacksFinaisPreenchidos > 1 ? "s" : ""
-        } preenchido${totalFeedbacksFinaisPreenchidos > 1 ? "s" : ""}`;
+  function labelNota(valor: number) {
+    return getItemEscalaPorNota(valor, escala).significado;
+  }
+
+  function iniciais(nome: string) {
+    return nome.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
+  }
+
+  function formatarData(data?: string) {
+    if (!data) return "—";
+    const valor = new Date(data);
+    return Number.isNaN(valor.getTime()) ? "—" : valor.toLocaleDateString("pt-BR");
+  }
+
+  function statusLabel() {
+    if (feedback!.status === "CONCLUIDA") return "Concluída";
+    if (feedback!.status === "PRONTA_PARA_FEEDBACK") return "Pronta para Feedback";
+    return "Rascunho";
+  }
 
   function handleExcluirFeedback() {
-    const confirmar = window.confirm("Deseja realmente excluir este feedback?");
-
-    if (!confirmar) {
-      return;
-    }
-
+    if (!window.confirm("Deseja realmente excluir este feedback?")) return;
     deleteFeedback(feedback!.id);
     alert("Feedback excluído com sucesso.");
     navigate(`/colaborador/${colaborador!.matricula}`);
   }
 
+  const feedbackFinalGerente = feedback.feedbackFinalGerente ?? "";
+  const feedbackFinalCoordenador = feedback.feedbackFinalCoordenador ?? "";
+  const temFeedbackFinal = Boolean(feedbackFinalGerente || feedbackFinalCoordenador);
+
   return (
-    <div style={{ padding: "30px" }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          marginBottom: "30px",
-        }}
-      >
-        <button
-          onClick={() => navigate(`/colaborador/${colaborador.matricula}`)}
-          style={{
-            padding: "10px 16px",
-            borderRadius: "8px",
-            border: "1px solid #660099",
-            backgroundColor: "#fff",
-            color: "#660099",
-            cursor: "pointer",
-            fontWeight: "bold",
-            marginTop: "3px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          ← Voltar
-        </button>
+    <main className="virtus-page evaluation-detail-page admin-evaluation-detail">
+      <section className="evaluation-detail-header">
+        <div>
+          <button type="button" className="evaluation-back-link" onClick={() => navigate(`/colaborador/${colaborador.matricula}`)}>
+            ← Voltar para o colaborador
+          </button>
+          <h1>Detalhes da Avaliação</h1>
+          <p>Consulta administrativa do resultado e dos registros do ciclo.</p>
+        </div>
 
-        <h1
-          style={{
-            flex: 1,
-            margin: 0,
-            textAlign: "center",
-            fontSize: "36px",
-          }}
-        >
-          Detalhes da Avaliação
-        </h1>
+        <div className="evaluation-detail-actions admin-evaluation-actions">
+          <button
+            type="button"
+            className="evaluation-btn evaluation-btn--secondary admin-evaluation-delete"
+            onClick={handleExcluirFeedback}
+          >
+            Excluir avaliação
+          </button>
+          <button
+            type="button"
+            className="evaluation-btn evaluation-btn--primary"
+            onClick={() => navigate(`/colaborador/${colaborador.matricula}/feedback/${feedback.id}/editar`)}
+          >
+            Editar avaliação
+          </button>
+        </div>
+      </section>
 
-        <div style={{ width: "100px" }}></div>
-      </div>
+      {feedback.encerradaComPendencias && (
+        <section className="evaluation-alert evaluation-alert--warning">
+          <strong>Avaliação parcialmente concluída.</strong>
+          <p>O ciclo foi encerrado com pendências. As médias consideram somente as avaliações efetivamente realizadas.</p>
+          {(feedback.pendenciasEncerramento?.length ?? 0) > 0 && (
+            <ul>{feedback.pendenciasEncerramento!.map((pendencia) => <li key={pendencia}>{pendencia}</li>)}</ul>
+          )}
+        </section>
+      )}
 
-      <div
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: "10px",
-          padding: "20px",
-          marginBottom: "20px",
-          backgroundColor: "#fff",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: "20px",
-          }}
-        >
-          <div style={{ flex: 1, textAlign: "left" }}>
-            <h2
-              style={{
-                margin: 0,
-                marginBottom: "12px",
-                color: "#660099",
-                textAlign: "left",
-              }}
-            >
-              {colaborador.nome}
-            </h2>
-            <p style={{ margin: "0 0 8px 0", textAlign: "left" }}>
-              <strong>Matrícula:</strong> {colaborador.matricula}
-            </p>
-            <p style={{ margin: "0 0 8px 0", textAlign: "left" }}>
-              <strong>Área:</strong> {colaborador.area}
-            </p>
-            <p style={{ margin: 0, textAlign: "left" }}>
-              <strong>Data da avaliação:</strong>{" "}
-              {new Date(feedback.data).toLocaleDateString("pt-BR")}
-            </p>
-            <div
-              style={{
-                marginTop: "12px",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "4px 10px",
-                borderRadius: "999px",
-                backgroundColor:
-                  feedback.status === "CONCLUIDA"
-                    ? "#E7F6EC"
-                    : feedback.status === "PRONTA_PARA_FEEDBACK"
-                    ? "#FFF4CE"
-                    : "#F4E8FF",
-                color:
-                  feedback.status === "CONCLUIDA"
-                    ? "#107C41"
-                    : feedback.status === "PRONTA_PARA_FEEDBACK"
-                    ? "#8A6D00"
-                    : "#660099",
-                fontSize: "12px",
-                fontWeight: "bold",
-              }}
-            >
-              {feedback.status === "RASCUNHO" && "📝 Rascunho"}
-              {feedback.status === "PRONTA_PARA_FEEDBACK" &&
-                "🎯 Pronta para Feedback"}
-              {feedback.status === "CONCLUIDA" && "✅ Concluída"}
+      <section className="admin-evaluation-profile">
+        <div className="admin-evaluation-profile__identity">
+          <div className="admin-evaluation-profile__avatar">{iniciais(colaborador.nome)}</div>
+          <div>
+            <div className="admin-evaluation-profile__title">
+              <h2>{colaborador.nome}</h2>
+              <span className={`admin-evaluation-person-status is-${colaborador.status.toLowerCase()}`}>
+                {colaborador.status === "ATIVO" ? "Ativo" : colaborador.status === "LICENCA" ? "Em licença" : "Desligado"}
+              </span>
+            </div>
+            <p>{colaborador.cargo}</p>
+            <div className="admin-evaluation-profile__meta">
+              <span>{colaborador.area}</span>
+              <span>Matrícula {colaborador.matricula}</span>
+              <span>Avaliação em {formatarData(feedback.data)}</span>
             </div>
           </div>
-
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "center",
-              alignItems: "flex-end",
-              gap: "12px",
-            }}
-          >
-            <span style={{ fontWeight: "bold" }}>
-              {colaborador.status === "ATIVO"
-                ? "✅ Ativo"
-                : colaborador.status === "LICENCA"
-                ? "🟡 Em licença"
-                : "❌ Desligado"}
-            </span>
-
-            <button
-              type="button"
-              onClick={() =>
-                navigate(
-                  `/colaborador/${colaborador.matricula}/feedback/${feedback.id}/editar`
-                )
-              }
-              style={{
-                padding: "10px 18px",
-                borderRadius: "10px",
-                border: "none",
-                cursor: "pointer",
-                backgroundColor: "#660099",
-                color: "#fff",
-                fontWeight: "bold",
-              }}
-            >
-              ✏️ Editar Avaliação
-            </button>
-
-            <button
-              type="button"
-              onClick={handleExcluirFeedback}
-              style={{
-                padding: "10px 18px",
-                borderRadius: "10px",
-                border: "1px solid #A80000",
-                cursor: "pointer",
-                backgroundColor: "#fff",
-                color: "#A80000",
-                fontWeight: "bold",
-              }}
-            >
-              🗑 Excluir Avaliação
-            </button>
-          </div>
         </div>
-      </div>
+        <span className={`admin-evaluation-status is-${feedback.status.toLowerCase()}`}>{statusLabel()}</span>
+      </section>
 
-      <div
-        style={{
-          marginTop: "20px",
-          border: "1px solid #660099",
-          borderRadius: "12px",
-          padding: "20px",
-          backgroundColor: "#fff",
-          textAlign: "center",
-        }}
-      >
-        <h3 style={{ marginTop: 0 }}>Resumo da Avaliação</h3>
+      <section className="evaluation-score-card" id="resumo">
+        <div className="evaluation-score-primary score-semantic evaluation-score-primary--semantic" style={estiloNota(feedback.notaMedia)}>
+          <span>Resultado do ciclo</span>
+          <strong>{formatarNota(feedback.notaMedia)}</strong>
+          <small>{labelNota(feedback.notaMedia)}</small>
+        </div>
+        <div className="evaluation-score-divider" />
+        <div className="evaluation-score-card__meta">
+          <div><small>Ano da avaliação</small><strong>{feedback.ano}</strong><p>Referência anual</p></div>
+          <div><small>Ciclo</small><strong>{feedback.ciclo}</strong><p>{feedback.ciclo === 1 ? "Primeiro ciclo do ano" : `${feedback.ciclo}º ciclo do ano`}</p></div>
+          <div><small>Critérios avaliados</small><strong>{criterios.length}</strong><p>Competências no ciclo</p></div>
+        </div>
+      </section>
 
-        {criteriosDetalhados.length > 0 ? (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-              gap: "16px",
-              marginTop: "20px",
-            }}
-          >
-            {criteriosDetalhados.map((criterio) => (
-              <div
-                key={criterio.criterioId}
-                style={{
-                  border: "1px solid #eee",
-                  borderRadius: "12px",
-                  padding: "16px",
-                  backgroundColor: "#F8FBFF",
-                }}
-              >
-                <div style={{ fontSize: "14px", color: "#555" }}>
-                  {criterio.criterioNome}
-                </div>
-                <div
-                  style={{
-                    marginTop: "8px",
-                    fontSize: "28px",
-                    fontWeight: "bold",
-                    color: "#0078D4",
-                  }}
-                >
-                  {formatarNota(criterio.nota)}
-                </div>
-              </div>
-            ))}
-          </div>
+      <nav className="evaluation-anchor-nav" aria-label="Seções da avaliação">
+        <a href="#resumo" className="is-primary">Resumo</a>
+        <a href="#criterios">Critérios</a>
+        {temFeedbackFinal && <a href="#conclusao">Feedback final</a>}
+      </nav>
+
+      <section className="evaluation-criteria" id="criterios">
+        <div className="evaluation-section-heading">
+          <div><span className="evaluation-eyebrow">Competências</span><h2>Critérios avaliados</h2></div>
+        </div>
+
+        {criterios.length === 0 ? (
+          <section className="evaluation-empty">
+            <p>Esta avaliação foi salva em um modelo anterior e não possui detalhes por critério.</p>
+          </section>
         ) : (
-          <p style={{ color: "#555" }}>
-            Esta avaliação foi salva em um modelo anterior e não possui detalhes por critério.
-          </p>
-        )}
-
-        <div
-          style={{
-            marginTop: "24px",
-            paddingTop: "20px",
-            borderTop: "1px solid #ddd",
-          }}
-        >
-          <div style={{ fontSize: "16px", color: "#555" }}>Nota Final</div>
-          <div
-            style={{
-              marginTop: "8px",
-              fontSize: "36px",
-              fontWeight: "bold",
-              color: "#660099",
-            }}
-          >
-            {formatarNota(feedback.notaMedia)}
-          </div>
-        </div>
-      </div>
-
-      {criteriosDetalhados.map((criterio) => {
-        const estaAberto = criterioAberto === criterio.criterioId;
-        const subcriteriosAvaliadosDoCriterio = criterio.subcriterios.filter(
-          (subcriterio) =>
-            subcriterio.notaGerente > 0 &&
-            subcriterio.notaCoordenador > 0 &&
-            subcriterio.notaColegiado > 0
-        ).length;
-        const criterioConcluido =
-          subcriteriosAvaliadosDoCriterio === criterio.subcriterios.length;
-
-        return (
-          <div
-            key={criterio.criterioId}
-            style={{
-              marginTop: "20px",
-              border: estaAberto ? "1px solid #660099" : "1px solid #ddd",
-              borderRadius: "12px",
-              backgroundColor: "#fff",
-              overflow: "hidden",
-            }}
-          >
-            <button
-              type="button"
-              onClick={() =>
-                setCriterioAberto((criterioAtual) =>
-                  criterioAtual === criterio.criterioId ? "" : criterio.criterioId
-                )
-              }
-              style={{
-                width: "100%",
-                padding: "18px 20px",
-                border: "none",
-                backgroundColor: estaAberto ? "#F8F1FF" : "#fff",
-                cursor: "pointer",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: "16px",
-                textAlign: "left",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "12px",
-                  flex: 1,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: "18px",
-                    color: "#660099",
-                    fontWeight: "bold",
-                    width: "20px",
-                  }}
-                >
-                  {estaAberto ? "▼" : "▶"}
-                </span>
-
-                <div>
-                  <h3
-                    style={{
-                      margin: 0,
-                      color: "#660099",
-                    }}
-                  >
-                    {criterio.criterioNome}
-                  </h3>
-                  <p
-                    style={{
-                      margin: "6px 0 0 0",
-                      color: "#555",
-                      fontSize: "14px",
-                    }}
-                  >
-                    {subcriteriosAvaliadosDoCriterio} de {criterio.subcriterios.length} subcritérios avaliados
-                  </p>
+          <div className="evaluation-criteria-list">
+            {criterios.map((criterio, criterioIndex) => (
+              <article key={criterio.criterioId} className="evaluation-criterion-card evaluation-criterion-card--matrix">
+                <div className="evaluation-criterion-card__accent" />
+                <div className="evaluation-criterion-card__header">
+                  <div className="evaluation-criterion-heading">
+                    <span className="evaluation-criterion-icon">{criterioIcons[criterioIndex % criterioIcons.length]}</span>
+                    <div>
+                      <div className="evaluation-criterion-kicker">Competência {criterioIndex + 1}</div>
+                      <h3>{criterio.criterioNome}</h3>
+                      <span className="evaluation-criterion-count">
+                        {criterio.subcriterios.length} {criterio.subcriterios.length === 1 ? "subcritério" : "subcritérios"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="evaluation-criterion-score evaluation-criterion-score--featured score-semantic" style={estiloNota(criterio.nota)}>
+                    <span>Nota final</span><strong>{formatarNota(criterio.nota)}</strong><small>{labelNota(criterio.nota)}</small>
+                  </div>
                 </div>
-              </div>
 
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "10px",
-                  flexWrap: "wrap",
-                  justifyContent: "flex-end",
-                }}
-              >
-                {criterioConcluido && (
-                  <span
-                    style={{
-                      padding: "6px 10px",
-                      borderRadius: "999px",
-                      backgroundColor: "#E7F6EC",
-                      color: "#107C10",
-                      fontWeight: "bold",
-                      fontSize: "13px",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    Concluído
-                  </span>
-                )}
+                <div className="evaluation-subcriteria-matrix">
+                  <div className="evaluation-subcriteria-matrix__header">
+                    <span>Subcritério</span><span>Avaliações recebidas</span><span>Média do subcritério</span>
+                  </div>
 
-                <span
-                  style={{
-                    padding: "8px 14px",
-                    borderRadius: "12px",
-                    backgroundColor: "#E8F4FF",
-                    color: "#0078D4",
-                    fontWeight: "bold",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Nota {formatarNota(criterio.nota)}
-                </span>
-              </div>
-            </button>
-
-            {estaAberto && (
-              <div
-                style={{
-                  padding: "20px",
-                  borderTop: "1px solid #eee",
-                }}
-              >
-                <div style={{ display: "grid", gap: "18px" }}>
-                  {criterio.subcriterios.map((subcriterio) => (
-                    <div
-                      key={subcriterio.nome}
-                      style={{
-                        border: "1px solid #eee",
-                        borderRadius: "10px",
-                        padding: "16px",
-                        backgroundColor: "#FAFAFA",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          gap: "16px",
-                          marginBottom: "14px",
-                        }}
-                      >
-                        <div style={{ fontWeight: "bold", color: "#333" }}>
-                          {subcriterio.nome}
-                        </div>
-                        <div
-                          style={{
-                            padding: "6px 12px",
-                            borderRadius: "10px",
-                            backgroundColor: "#F4E8FF",
-                            color: "#660099",
-                            fontWeight: "bold",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          Média {formatarNota(subcriterio.notaFinal)}
-                        </div>
+                  {criterio.subcriterios.map((subcriterio, subIndex) => (
+                    <div key={subcriterio.nome} className="evaluation-subcriteria-matrix__row">
+                      <div className="evaluation-subcriterion-name">
+                        <span className="evaluation-subcriterion-index">{subIndex + 1}</span>
+                        <strong>{subcriterio.nome}</strong>
                       </div>
 
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                          gap: "14px",
-                          textAlign: "center",
-                        }}
-                      >
-                        <div>
-                          <strong>Gerente</strong>
-                          <div style={{ marginTop: "8px" }}>
-                            {subcriterio.notaGerente || "Não informado"}
-                          </div>
-                        </div>
-                        <div>
-                          <strong>Coordenador</strong>
-                          <div style={{ marginTop: "8px" }}>
-                            {subcriterio.notaCoordenador || "Não informado"}
-                          </div>
-                        </div>
-                        <div>
-                          <strong>Colegiado</strong>
-                          <div style={{ marginTop: "8px" }}>
-                            {subcriterio.notaColegiado > 0
-                              ? formatarNota(subcriterio.notaColegiado)
-                              : "Não informado"}
-                          </div>
-
-                          {(subcriterio.votosColegiado?.length ?? 0) > 0 && (
-                            <div
-                              style={{
-                                marginTop: "10px",
-                                display: "grid",
-                                gap: "6px",
-                                fontSize: "13px",
-                                color: "#555",
-                              }}
-                            >
-                              {subcriterio.votosColegiado?.map((voto) => (
-                                <div key={voto.avaliadorMatricula}>
-                                  {voto.avaliadorNome}:{" "}
-                                  <strong>{voto.nota}</strong>
+                      <div className="evaluation-rater-group">
+                        <div><span>Gerente</span><strong>{subcriterio.notaGerente > 0 ? formatarNota(subcriterio.notaGerente) : "—"}</strong></div>
+                        {colaborador.funcao === "ANALISTA" && (
+                          <>
+                            <div><span>Coordenador</span><strong>{subcriterio.notaCoordenador > 0 ? formatarNota(subcriterio.notaCoordenador) : "—"}</strong></div>
+                            <div>
+                              <span>Colegiado</span>
+                              <strong>{subcriterio.notaColegiado > 0 ? formatarNota(subcriterio.notaColegiado) : "—"}</strong>
+                              {(subcriterio.votosColegiado?.length ?? 0) > 0 && (
+                                <div className="admin-evaluation-collegiate-votes">
+                                  {subcriterio.votosColegiado!.map((voto) => (
+                                    <small key={voto.avaliadorMatricula}>{voto.avaliadorNome}: <b>{formatarNota(voto.nota)}</b></small>
+                                  ))}
                                 </div>
-                              ))}
+                              )}
                             </div>
-                          )}
-                        </div>
+                          </>
+                        )}
+                      </div>
+
+                      <div className="evaluation-subcriterion-average score-semantic" style={estiloNota(subcriterio.notaFinal)}>
+                        <small>Média</small><strong>{formatarNota(subcriterio.notaFinal)}</strong><span>{labelNota(subcriterio.notaFinal)}</span>
                       </div>
                     </div>
                   ))}
                 </div>
 
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-                    gap: "16px",
-                    marginTop: "20px",
-                  }}
-                >
-                  <div>
-                    <h4 style={{ margin: "0 0 8px 0", color: "#333" }}>
-                      Observação do Gerente
-                    </h4>
-                    <div
-                      style={{
-                        minHeight: "70px",
-                        padding: "12px",
-                        borderRadius: "8px",
-                        border: "1px solid #ddd",
-                        backgroundColor: "#FAFAFA",
-                        whiteSpace: "pre-wrap",
-                      }}
-                    >
-                      {criterio.observacaoGerente || "Sem observação registrada."}
-                    </div>
+                {(criterio.observacaoGerente || criterio.observacaoCoordenador) && (
+                  <div className="evaluation-comments">
+                    {criterio.observacaoGerente && <div className="evaluation-comment"><strong>Observação do Gerente</strong><p>{criterio.observacaoGerente}</p></div>}
+                    {colaborador.funcao === "ANALISTA" && criterio.observacaoCoordenador && <div className="evaluation-comment"><strong>Observação do Coordenador</strong><p>{criterio.observacaoCoordenador}</p></div>}
                   </div>
-
-                  <div>
-                    <h4 style={{ margin: "0 0 8px 0", color: "#333" }}>
-                      Observação do Coordenador
-                    </h4>
-                    <div
-                      style={{
-                        minHeight: "70px",
-                        padding: "12px",
-                        borderRadius: "8px",
-                        border: "1px solid #ddd",
-                        backgroundColor: "#FAFAFA",
-                        whiteSpace: "pre-wrap",
-                      }}
-                    >
-                      {criterio.observacaoCoordenador || "Sem observação registrada."}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        );
-      })}
-
-      <div
-        style={{
-          marginTop: "20px",
-          border: feedbackFinalAberto ? "1px solid #660099" : "1px solid #ddd",
-          borderRadius: "12px",
-          backgroundColor: "#fff",
-          overflow: "hidden",
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => setFeedbackFinalAberto((estadoAtual) => !estadoAtual)}
-          style={{
-            width: "100%",
-            padding: "18px 20px",
-            border: "none",
-            backgroundColor: feedbackFinalAberto ? "#F8F1FF" : "#fff",
-            cursor: "pointer",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: "16px",
-            textAlign: "left",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "12px",
-              flex: 1,
-            }}
-          >
-            <span
-              style={{
-                fontSize: "18px",
-                color: "#660099",
-                fontWeight: "bold",
-                width: "20px",
-              }}
-            >
-              {feedbackFinalAberto ? "▼" : "▶"}
-            </span>
-
-            <div>
-              <h3
-                style={{
-                  margin: 0,
-                  color: "#660099",
-                }}
-              >
-                Feedback Final
-              </h3>
-              <p
-                style={{
-                  margin: "6px 0 0 0",
-                  color: "#555",
-                  fontSize: "14px",
-                }}
-              >
-                Consolidado final da avaliação
-              </p>
-            </div>
-          </div>
-
-          <span
-            style={{
-              padding: "8px 14px",
-              borderRadius: "12px",
-              backgroundColor:
-                totalFeedbacksFinaisPreenchidos > 0 ? "#E7F6EC" : "#FFF4CE",
-              color: totalFeedbacksFinaisPreenchidos > 0 ? "#107C10" : "#8A6D00",
-              fontWeight: "bold",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {statusFeedbackFinal}
-          </span>
-        </button>
-
-        {feedbackFinalAberto && (
-          <div
-            style={{
-              padding: "20px",
-              borderTop: "1px solid #eee",
-            }}
-          >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                gap: "16px",
-              }}
-            >
-              <div>
-                <h4 style={{ margin: "0 0 8px 0", color: "#333" }}>
-                  Feedback Final do Gerente
-                </h4>
-                <div
-                  style={{
-                    minHeight: "120px",
-                    padding: "12px",
-                    borderRadius: "8px",
-                    border: "1px solid #ddd",
-                    backgroundColor: "#FAFAFA",
-                    whiteSpace: "pre-wrap",
-                  }}
-                >
-                  {feedbackFinalGerente || "Sem feedback final registrado."}
-                </div>
-              </div>
-
-              <div>
-                <h4 style={{ margin: "0 0 8px 0", color: "#333" }}>
-                  Feedback Final do Coordenador
-                </h4>
-                <div
-                  style={{
-                    minHeight: "120px",
-                    padding: "12px",
-                    borderRadius: "8px",
-                    border: "1px solid #ddd",
-                    backgroundColor: "#FAFAFA",
-                    whiteSpace: "pre-wrap",
-                  }}
-                >
-                  {feedbackFinalCoordenador || "Sem feedback final registrado."}
-                </div>
-              </div>
-            </div>
+                )}
+              </article>
+            ))}
           </div>
         )}
-      </div>
-    </div>
+      </section>
+
+      <section className="evaluation-content-card admin-evaluation-final" id="conclusao">
+        <div className="evaluation-section-heading">
+          <div><span className="evaluation-eyebrow">Conclusão</span><h2>Feedback Final</h2></div>
+          <span className={`admin-evaluation-final__status ${temFeedbackFinal ? "is-complete" : "is-pending"}`}>
+            {temFeedbackFinal ? "Registrado" : "Pendente"}
+          </span>
+        </div>
+
+        <div className="admin-evaluation-final__grid">
+          <div>
+            <strong>Feedback Final do Gerente</strong>
+            <p>{feedbackFinalGerente || "Sem feedback final registrado."}</p>
+          </div>
+          {colaborador.funcao === "ANALISTA" && (
+            <div>
+              <strong>Feedback Final do Coordenador</strong>
+              <p>{feedbackFinalCoordenador || "Sem feedback final registrado."}</p>
+            </div>
+          )}
+        </div>
+      </section>
+    </main>
   );
 }
 

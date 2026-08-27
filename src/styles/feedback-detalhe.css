@@ -1,0 +1,58 @@
+.admin-evaluation-detail { color: var(--brand-text); }
+.admin-evaluation-actions { display:flex; gap:10px; flex-wrap:wrap; }
+.admin-evaluation-delete { color:#a4262c; border-color:#d9a9ad; }
+.admin-evaluation-delete:hover { background:#fdf3f4; }
+
+.admin-evaluation-profile {
+  display:flex; align-items:center; justify-content:space-between; gap:24px;
+  margin-bottom:18px; padding:18px 20px; border:1px solid #e7e3eb;
+  border-radius:12px; background:#fff; box-shadow:0 4px 14px rgba(35,27,43,.05);
+}
+.admin-evaluation-profile__identity { display:flex; align-items:center; gap:14px; min-width:0; }
+.admin-evaluation-profile__avatar {
+  width:58px; height:58px; flex:0 0 58px; display:grid; place-items:center;
+  border-radius:50%; background:#efe5f4; color:var(--brand-primary);
+  font-size:17px; font-weight:800;
+}
+.admin-evaluation-profile__title { display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
+.admin-evaluation-profile__title h2 { margin:0; font-size:20px; line-height:1.15; font-weight:720; }
+.admin-evaluation-profile__identity p { margin:4px 0 0; color:var(--brand-primary); font-size:13px; font-weight:650; }
+.admin-evaluation-profile__meta { display:flex; gap:6px 14px; flex-wrap:wrap; margin-top:6px; color:var(--brand-text-muted); font-size:12px; }
+
+.admin-evaluation-person-status, .admin-evaluation-status, .admin-evaluation-final__status {
+  display:inline-flex; align-items:center; min-height:25px; padding:0 9px;
+  border-radius:999px; font-size:12px; font-weight:750; white-space:nowrap;
+}
+.admin-evaluation-person-status.is-ativo { background:#e7f6ec; color:#107c41; }
+.admin-evaluation-person-status.is-licenca { background:#fff4ce; color:#806000; }
+.admin-evaluation-person-status.is-desligado { background:#f4f1f5; color:#655d69; }
+.admin-evaluation-status.is-concluida { background:#e7f6ec; color:#107c41; }
+.admin-evaluation-status.is-pronta_para_feedback { background:#fff4ce; color:#806000; }
+.admin-evaluation-status.is-rascunho { background:#f4eaf8; color:var(--brand-primary); }
+
+.admin-evaluation-detail .evaluation-score-card { margin-bottom:14px; }
+.admin-evaluation-detail .evaluation-score-card__meta p { margin:4px 0 0; color:var(--brand-text-muted); font-size:12px; }
+.admin-evaluation-detail .evaluation-anchor-nav { margin-bottom:0; }
+
+.admin-evaluation-collegiate-votes { display:grid; gap:2px; margin-top:6px; padding-top:6px; border-top:1px solid #ece8ee; }
+.admin-evaluation-collegiate-votes small { color:var(--brand-text-muted); font-size:11px; font-weight:500; }
+.admin-evaluation-collegiate-votes b { color:var(--brand-text); }
+
+.admin-evaluation-final { margin-top:24px; padding:20px; }
+.admin-evaluation-final__status.is-complete { background:#e7f6ec; color:#107c41; }
+.admin-evaluation-final__status.is-pending { background:#fff4ce; color:#806000; }
+.admin-evaluation-final__grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.admin-evaluation-final__grid > div {
+  min-height:130px; padding:16px; border:1px solid #e9e5eb; border-radius:10px; background:#faf9fb;
+}
+.admin-evaluation-final__grid strong { font-size:13px; }
+.admin-evaluation-final__grid p { margin:9px 0 0; color:var(--brand-text); font-size:13px; line-height:1.55; white-space:pre-wrap; }
+
+@media (max-width:760px) {
+  .admin-evaluation-profile { align-items:flex-start; flex-direction:column; }
+  .admin-evaluation-final__grid { grid-template-columns:1fr; }
+}
+@media (max-width:520px) {
+  .admin-evaluation-profile__identity { align-items:flex-start; }
+  .admin-evaluation-profile__avatar { width:48px; height:48px; flex-basis:48px; }
+}

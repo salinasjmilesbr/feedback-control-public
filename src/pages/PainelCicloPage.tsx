@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from "react-router-dom";
+﻿import { useNavigate, useParams } from "react-router-dom";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import {
   getCiclosAvaliacao,
@@ -10,6 +10,7 @@ import {
   type SituacaoAvaliacaoCiclo,
 } from "../services/cicloEquipeService";
 import "../styles/ciclos.css";
+import "../styles/equipe-colegiado.css";
 
 const labelsSituacao: Record<SituacaoAvaliacaoCiclo, string> = {
   NAO_INICIADA: "Não iniciada",
@@ -72,6 +73,22 @@ function PainelCicloPage() {
 
   const linhas = getPainelCiclo(ciclo, usuarioAtual);
 
+  const separarPorVinculo = usuarioAtual.funcao === "COORDENADOR";
+
+  const linhasEquipeDireta = separarPorVinculo
+    ? linhas.filter(
+        (linha) =>
+          linha.colaborador.gestorDiretoMatricula === usuarioAtual.matricula
+      )
+    : linhas;
+
+  const linhasColegiado = separarPorVinculo
+    ? linhas.filter(
+        (linha) =>
+          linha.colaborador.gestorDiretoMatricula !== usuarioAtual.matricula
+      )
+    : [];
+
   const totais = linhas.reduce(
     (acc, linha) => {
       acc[linha.situacao] += 1;
@@ -97,66 +114,26 @@ function PainelCicloPage() {
     },
   ];
 
-  return (
-    <main className="virtus-page cycle-panel-page">
-      <section className="cycle-page-header">
-        <div>
-          <button
-            className="cycle-back-link"
-            onClick={() =>
-              navigate(
-                usuarioAtual.funcao === "COORDENADOR"
-                  ? "/painel-ciclos"
-                  : "/ciclos"
-              )
-            }
-          >
-            ← Voltar aos ciclos
-          </button>
-          <h1>
-            {ciclo.ano} <span>•</span> Ciclo {ciclo.ciclo}
-          </h1>
-          <p>{formatarPeriodoCiclo(ciclo.dataInicio, ciclo.dataFim)}</p>
-        </div>
-
-        <span
-          className={`cycle-status ${
-            ciclo.status === "ATIVO"
-              ? "is-active"
-              : ciclo.encerradoComPendencias
-              ? "is-warning"
-              : "is-closed"
-          }`}
-        >
-          {ciclo.status === "ATIVO"
-            ? "Ativo"
-            : ciclo.encerradoComPendencias
-            ? "Encerrado com pendências"
-            : "Encerrado"}
-        </span>
-      </section>
-
-      <section className="cycle-kpis">
-        {indicadores.map((indicador) => (
-          <div className="cycle-kpi" key={indicador.label}>
-            <span>{indicador.label}</span>
-            <strong>{indicador.valor}</strong>
-          </div>
-        ))}
-      </section>
-
-      <section className="cycle-table-card">
+  function renderTabelaGrupo(
+    linhasGrupo: typeof linhas,
+    titulo: string,
+    descricao: string,
+    eyebrow: string
+  ) {
+    return (
+      <section className="cycle-table-card cycle-team-group">
         <div className="cycle-table-heading">
           <div>
-            <span className="cycle-eyebrow">Acompanhamento</span>
-            <h2>Equipe no ciclo</h2>
+            <span className="cycle-eyebrow">{eyebrow}</span>
+            <h2>{titulo}</h2>
+            <p className="cycle-team-group__description">{descricao}</p>
           </div>
-          <span>{linhas.length} colaboradores</span>
+          <span>{linhasGrupo.length} colaboradores</span>
         </div>
 
-        {linhas.length === 0 ? (
-          <div className="cycle-empty">
-            <p>Nenhum colaborador elegível na sua estrutura.</p>
+        {linhasGrupo.length === 0 ? (
+          <div className="cycle-empty cycle-team-group__empty">
+            <p>Nenhum colaborador neste grupo.</p>
           </div>
         ) : (
           <div className="cycle-table-wrap">
@@ -170,8 +147,11 @@ function PainelCicloPage() {
                 <div></div>
               </div>
 
-              {linhas.map((linha) => (
-                <div className="cycle-table__row" key={linha.colaborador.matricula}>
+              {linhasGrupo.map((linha) => (
+                <div
+                  className="cycle-table__row"
+                  key={linha.colaborador.matricula}
+                >
                   <div className="cycle-person">
                     <div className="cycle-person__avatar">
                       {linha.colaborador.nome
@@ -246,8 +226,83 @@ function PainelCicloPage() {
           </div>
         )}
       </section>
+    );
+  }
+
+  return (
+    <main className="virtus-page cycle-panel-page">
+      <section className="cycle-page-header">
+        <div>
+          <button
+            className="cycle-back-link"
+            onClick={() =>
+              navigate(
+                usuarioAtual.funcao === "COORDENADOR"
+                  ? "/painel-ciclos"
+                  : "/ciclos"
+              )
+            }
+          >
+            ← Voltar aos ciclos
+          </button>
+          <h1>
+            {ciclo.ano} <span>•</span> Ciclo {ciclo.ciclo}
+          </h1>
+          <p>{formatarPeriodoCiclo(ciclo.dataInicio, ciclo.dataFim)}</p>
+        </div>
+
+        <span
+          className={`cycle-status ${
+            ciclo.status === "ATIVO"
+              ? "is-active"
+              : ciclo.encerradoComPendencias
+              ? "is-warning"
+              : "is-closed"
+          }`}
+        >
+          {ciclo.status === "ATIVO"
+            ? "Ativo"
+            : ciclo.encerradoComPendencias
+            ? "Encerrado com pendências"
+            : "Encerrado"}
+        </span>
+      </section>
+
+      <section className="cycle-kpis">
+        {indicadores.map((indicador) => (
+          <div className="cycle-kpi" key={indicador.label}>
+            <span>{indicador.label}</span>
+            <strong>{indicador.valor}</strong>
+          </div>
+        ))}
+      </section>
+
+      {separarPorVinculo ? (
+        <div className="cycle-team-groups">
+          {renderTabelaGrupo(
+            linhasEquipeDireta,
+            "Minha equipe direta",
+            "Colaboradores que respondem diretamente para você neste ciclo.",
+            "Responsabilidade direta"
+          )}
+          {renderTabelaGrupo(
+            linhasColegiado,
+            "Avaliações como colegiado",
+            "Colaboradores de outras equipes em que você participa como avaliador do colegiado.",
+            "Participação adicional"
+          )}
+        </div>
+      ) : (
+        renderTabelaGrupo(
+          linhas,
+          "Equipe no ciclo",
+          "Acompanhamento das avaliações elegíveis na estrutura.",
+          "Acompanhamento"
+        )
+      )}
     </main>
   );
 }
 
 export default PainelCicloPage;
+

@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ColaboradorCard from "../components/ColaboradorCard";
 import { getColaboradores } from "../services/colaboradorStorage";
@@ -8,6 +8,7 @@ import { getColaboradoresVisiveis } from "../services/visibilidadeColaboradores"
 import { getCiclosAvaliacao } from "../services/cicloAvaliacaoStorage";
 import { gerarDadosTesteDoCiclo } from "../services/geradorDadosTeste";
 import "../styles/dados-teste.css";
+import "../styles/equipe-colegiado.css";
 
 type StatusFiltro = "TODOS" | StatusColaborador;
 
@@ -74,6 +75,22 @@ function ColaboradoresPage() {
     termo !== "" ||
     coordenadorFiltro !== "TODOS" ||
     statusFiltro !== "TODOS";
+
+  const separarPorVinculo = usuarioAtual.funcao === "COORDENADOR";
+
+  const equipeDireta = separarPorVinculo
+    ? colaboradoresFiltrados.filter(
+        (colaborador) =>
+          colaborador.gestorDiretoMatricula === usuarioAtual.matricula
+      )
+    : colaboradoresFiltrados;
+
+  const avaliacoesColegiado = separarPorVinculo
+    ? colaboradoresFiltrados.filter(
+        (colaborador) =>
+          colaborador.gestorDiretoMatricula !== usuarioAtual.matricula
+      )
+    : [];
 
   function limparFiltros() {
     setBusca("");
@@ -293,14 +310,81 @@ function ColaboradoresPage() {
       </section>
 
       {colaboradoresFiltrados.length > 0 ? (
-        <section className="virtus-collaborators-grid">
-          {colaboradoresFiltrados.map((colaborador) => (
-            <ColaboradorCard
-              key={colaborador.matricula}
-              colaborador={colaborador}
-            />
-          ))}
-        </section>
+        separarPorVinculo ? (
+          <div className="virtus-collaborator-groups">
+            <section className="virtus-collaborator-group">
+              <div className="virtus-collaborator-group__heading">
+                <div>
+                  <span className="virtus-collaborator-group__eyebrow">
+                    Responsabilidade direta
+                  </span>
+                  <h2>Minha equipe direta</h2>
+                  <p>Colaboradores que respondem diretamente para você.</p>
+                </div>
+                <span className="virtus-collaborator-group__count">
+                  {equipeDireta.length}
+                </span>
+              </div>
+
+              {equipeDireta.length > 0 ? (
+                <div className="virtus-collaborators-grid">
+                  {equipeDireta.map((colaborador) => (
+                    <ColaboradorCard
+                      key={colaborador.matricula}
+                      colaborador={colaborador}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="virtus-group-empty">
+                  Nenhum colaborador da sua equipe direta corresponde aos filtros.
+                </div>
+              )}
+            </section>
+
+            <section className="virtus-collaborator-group">
+              <div className="virtus-collaborator-group__heading">
+                <div>
+                  <span className="virtus-collaborator-group__eyebrow">
+                    Participação adicional
+                  </span>
+                  <h2>Avaliações como colegiado</h2>
+                  <p>
+                    Colaboradores de outras equipes em que você participa como
+                    avaliador do colegiado.
+                  </p>
+                </div>
+                <span className="virtus-collaborator-group__count">
+                  {avaliacoesColegiado.length}
+                </span>
+              </div>
+
+              {avaliacoesColegiado.length > 0 ? (
+                <div className="virtus-collaborators-grid">
+                  {avaliacoesColegiado.map((colaborador) => (
+                    <ColaboradorCard
+                      key={colaborador.matricula}
+                      colaborador={colaborador}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="virtus-group-empty">
+                  Nenhuma avaliação como colegiado corresponde aos filtros.
+                </div>
+              )}
+            </section>
+          </div>
+        ) : (
+          <section className="virtus-collaborators-grid">
+            {colaboradoresFiltrados.map((colaborador) => (
+              <ColaboradorCard
+                key={colaborador.matricula}
+                colaborador={colaborador}
+              />
+            ))}
+          </section>
+        )
       ) : (
         <section className="virtus-empty">
           <h2>Nenhum colaborador encontrado</h2>
@@ -312,3 +396,4 @@ function ColaboradoresPage() {
 }
 
 export default ColaboradoresPage;
+

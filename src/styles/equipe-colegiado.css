@@ -1,0 +1,94 @@
+﻿/* Separação entre equipe direta e participação como colegiado */
+
+.virtus-collaborator-groups,
+.cycle-team-groups {
+  display: grid;
+  gap: 24px;
+}
+
+.virtus-collaborator-group {
+  min-width: 0;
+}
+
+.virtus-collaborator-group__heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin: 0 0 12px;
+}
+
+.virtus-collaborator-group__heading h2 {
+  margin: 3px 0 0;
+  color: var(--brand-text);
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.virtus-collaborator-group__heading p {
+  margin: 5px 0 0;
+  color: var(--brand-text-muted);
+  font-size: 12px;
+}
+
+.virtus-collaborator-group__eyebrow {
+  color: var(--brand-primary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.virtus-collaborator-group__count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 32px;
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid #e7e3eb;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--brand-primary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.virtus-group-empty {
+  padding: 18px 20px;
+  border: 1px dashed #ddd7e2;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--brand-text-muted);
+  font-size: 12px;
+}
+
+.cycle-team-group + .cycle-team-group {
+  margin-top: 0;
+}
+
+.cycle-team-group__description {
+  margin: 5px 0 0;
+  color: var(--brand-text-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.cycle-team-group__empty {
+  border: 0;
+  border-top: 1px solid #f0edf2;
+  border-radius: 0;
+  text-align: left;
+}
+
+@media (max-width: 760px) {
+  .virtus-collaborator-group__heading {
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 520px) {
+  .virtus-collaborator-group__heading {
+    flex-direction: column;
+    gap: 8px;
+  }
+}

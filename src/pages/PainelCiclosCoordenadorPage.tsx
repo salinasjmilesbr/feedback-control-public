@@ -1,203 +1,68 @@
 import { useNavigate } from "react-router-dom";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
-import {
-  formatarPeriodoCiclo,
-  getCiclosAvaliacao,
-} from "../services/cicloAvaliacaoStorage";
+import { formatarPeriodoCiclo, getCiclosAvaliacao } from "../services/cicloAvaliacaoStorage";
+import "../styles/ciclos.css";
+import "../styles/painel-ciclos-coordenador.css";
 
 function PainelCiclosCoordenadorPage() {
   const navigate = useNavigate();
   const { usuarioAtual } = useUsuarioAtual();
 
   if (!usuarioAtual || usuarioAtual.funcao !== "COORDENADOR") {
-    return (
-      <div style={{ padding: "30px" }}>
-        <h1>Acesso restrito</h1>
-        <p>Esta visão está disponível apenas para coordenadores.</p>
-      </div>
-    );
+    return <main className="virtus-page"><section className="cycle-empty">
+      <h1>Acesso restrito</h1><p>Esta visão está disponível apenas para coordenadores.</p>
+      <button type="button" className="cycle-btn cycle-btn--secondary" onClick={() => navigate("/")}>Voltar ao início</button>
+    </section></main>;
   }
 
   const ciclos = getCiclosAvaliacao()
-    .filter(
-      (ciclo) =>
-        ciclo.status === "ATIVO" || ciclo.status === "ENCERRADO"
-    )
-    .sort((a, b) => {
-      if (a.status !== b.status) {
-        return a.status === "ATIVO" ? -1 : 1;
-      }
+    .filter(c => c.status === "ATIVO" || c.status === "ENCERRADO")
+    .sort((a,b) => a.status !== b.status ? (a.status === "ATIVO" ? -1 : 1) : a.ano !== b.ano ? b.ano-a.ano : b.ciclo-a.ciclo);
 
-      if (a.ano !== b.ano) return b.ano - a.ano;
-      return b.ciclo - a.ciclo;
-    });
+  const ativos = ciclos.filter(c => c.status === "ATIVO").length;
+  const encerrados = ciclos.filter(c => c.status === "ENCERRADO").length;
+  const comPendencias = ciclos.filter(c => c.encerradoComPendencias).length;
 
-  return (
-    <div
-      style={{
-        padding: "30px",
-        maxWidth: "1000px",
-        margin: "0 auto",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: "16px",
-          flexWrap: "wrap",
-          marginBottom: "24px",
-        }}
-      >
-        <div>
-          <h1 style={{ margin: 0 }}>Painel de Ciclos</h1>
-          <p style={{ margin: "6px 0 0 0", color: "#666" }}>
-            Acompanhe o ciclo ativo e consulte o histórico da sua equipe.
-          </p>
-        </div>
+  return <main className="virtus-page coordinator-cycles-page">
+    <section className="cycle-page-header coordinator-cycles-header">
+      <div><h1>Painel de Ciclos</h1><p>Acompanhe o ciclo ativo e consulte o histórico de avaliações da sua equipe.</p></div>
+      <button type="button" className="cycle-btn cycle-btn--secondary coordinator-cycles-back" onClick={() => navigate("/")}>← Minha equipe</button>
+    </section>
 
-        <button
-          type="button"
-          onClick={() => navigate("/")}
-          style={{
-            padding: "10px 16px",
-            borderRadius: "8px",
-            border: "1px solid #660099",
-            backgroundColor: "#fff",
-            color: "#660099",
-            cursor: "pointer",
-            fontWeight: "600",
-          }}
-        >
-          ← Minha equipe
-        </button>
+    <section className="coordinator-cycles-kpis" aria-label="Resumo dos ciclos">
+      {[["Ciclos disponíveis",ciclos.length],["Ativos",ativos],["Encerrados",encerrados],["Com pendências",comPendencias]].map(([label,valor]) =>
+        <article className="coordinator-cycle-kpi" key={String(label)}><span>{label}</span><strong>{valor}</strong></article>
+      )}
+    </section>
+
+    <section className="coordinator-cycles-section">
+      <div className="cycle-list-heading coordinator-cycles-heading">
+        <div><span className="cycle-eyebrow">Acompanhamento</span><h2>Ciclos da equipe</h2></div>
+        <span className="coordinator-cycles-count">{ciclos.length} {ciclos.length === 1 ? "ciclo" : "ciclos"}</span>
       </div>
 
-      {ciclos.length === 0 ? (
-        <div
-          style={{
-            padding: "20px",
-            border: "1px solid #ddd",
-            borderRadius: "12px",
-            backgroundColor: "#fff",
-            color: "#666",
-          }}
-        >
-          Nenhum ciclo ativo ou encerrado disponível.
-        </div>
-      ) : (
-        <div style={{ display: "grid", gap: "14px" }}>
-          {ciclos.map((ciclo) => (
-            <div
-              key={ciclo.id}
-              style={{
-                padding: "18px",
-                border: "1px solid #ddd",
-                borderRadius: "12px",
-                backgroundColor: "#fff",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: "16px",
-                flexWrap: "wrap",
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    display: "flex",
-                    gap: "10px",
-                    alignItems: "center",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <strong style={{ fontSize: "18px" }}>
-                    {ciclo.ano} • Ciclo {ciclo.ciclo}
-                  </strong>
-
-                  <span
-                    style={{
-                      padding: "4px 9px",
-                      borderRadius: "999px",
-                      fontSize: "12px",
-                      fontWeight: "bold",
-                      backgroundColor:
-                        ciclo.status === "ATIVO"
-                          ? "#E7F6EC"
-                          : ciclo.encerradoComPendencias
-                          ? "#FDE7E9"
-                          : "#F2F2F2",
-                      color:
-                        ciclo.status === "ATIVO"
-                          ? "#107C41"
-                          : ciclo.encerradoComPendencias
-                          ? "#A4262C"
-                          : "#555",
-                    }}
-                  >
-                    {ciclo.status === "ATIVO"
-                      ? "Ativo"
-                      : ciclo.encerradoComPendencias
-                      ? "Encerrado com pendências"
-                      : "Encerrado"}
-                  </span>
-                </div>
-
-                <div
-                  style={{
-                    marginTop: "7px",
-                    color: "#666",
-                    fontSize: "14px",
-                  }}
-                >
-                  {formatarPeriodoCiclo(
-                    ciclo.dataInicio,
-                    ciclo.dataFim
-                  )}
-                </div>
-
-                {ciclo.encerradoComPendencias &&
-                  (ciclo.quantidadePendencias ?? 0) > 0 && (
-                    <div
-                      style={{
-                        marginTop: "6px",
-                        color: "#A4262C",
-                        fontSize: "13px",
-                      }}
-                    >
-                      {ciclo.quantidadePendencias} nota
-                      {ciclo.quantidadePendencias === 1 ? "" : "s"}{" "}
-                      pendente
-                      {ciclo.quantidadePendencias === 1 ? "" : "s"} no
-                      encerramento
-                    </div>
-                  )}
+      {ciclos.length === 0 ? <div className="cycle-empty"><h3>Nenhum ciclo disponível</h3><p>Não há ciclos ativos ou encerrados disponíveis para consulta no momento.</p></div> :
+      <div className="coordinator-cycles-list">{ciclos.map(ciclo => {
+        const pendencias=ciclo.quantidadePendencias ?? 0;
+        const statusClass=ciclo.status==="ATIVO"?"is-active":ciclo.encerradoComPendencias?"is-warning":"is-closed";
+        return <article key={ciclo.id} className={`cycle-card coordinator-cycle-card ${ciclo.status==="ATIVO"?"cycle-card--active":""}`}>
+          <div className="cycle-card__main coordinator-cycle-card__main">
+            <div className="cycle-card__identity">
+              <div className="cycle-card__title-row"><h3>{ciclo.ano} <span>•</span> Ciclo {ciclo.ciclo}</h3>
+                <span className={`cycle-status ${statusClass}`}>{ciclo.status==="ATIVO"?"Ativo":ciclo.encerradoComPendencias?"Encerrado com pendências":"Encerrado"}</span>
               </div>
-
-              <button
-                type="button"
-                onClick={() => navigate(`/ciclos/${ciclo.id}`)}
-                style={{
-                  padding: "10px 14px",
-                  borderRadius: "8px",
-                  border: "1px solid #660099",
-                  backgroundColor: "#fff",
-                  color: "#660099",
-                  cursor: "pointer",
-                  fontWeight: "bold",
-                }}
-              >
-                {ciclo.status === "ATIVO"
-                  ? "Acompanhar ciclo"
-                  : "Consultar ciclo"}
-              </button>
+              <div className="coordinator-cycle-card__details">
+                <div><small>Período</small><strong>{formatarPeriodoCiclo(ciclo.dataInicio,ciclo.dataFim)}</strong></div>
+                <div><small>Situação</small><strong>{ciclo.status==="ATIVO"?"Avaliações em andamento":ciclo.encerradoComPendencias?`${pendencias} nota${pendencias===1?"":"s"} pendente${pendencias===1?"":"s"}`:"Ciclo concluído"}</strong></div>
+              </div>
             </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+            <button type="button" className={`cycle-btn cycle-btn--panel ${ciclo.status==="ATIVO"?"cycle-btn--primary":"cycle-btn--secondary"}`} onClick={() => navigate(`/ciclos/${ciclo.id}`)}>
+              {ciclo.status==="ATIVO"?"Acompanhar ciclo":"Consultar ciclo"}
+            </button>
+          </div>
+        </article>;
+      })}</div>}
+    </section>
+  </main>;
 }
-
 export default PainelCiclosCoordenadorPage;
