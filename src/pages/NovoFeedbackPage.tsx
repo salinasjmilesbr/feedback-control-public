@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getColaboradorByMatricula, getColaboradores } from "../services/colaboradorStorage";
 import { saveFeedback, getFeedbacksByColaborador,} from "../services/feedbackStorage";
@@ -6,6 +6,7 @@ import type { Feedback } from "../types/Feedback";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import { obterPermissoesAvaliacao } from "../services/permissaoAvaliacao";
 import { calcularProgressoAvaliacao } from "../services/progressoAvaliacao";
+import { formatarNota } from "../services/escalaAvaliacaoStorage";
 import {
   getCicloAtivo,
   formatarPeriodoCiclo,
@@ -1147,7 +1148,7 @@ if (feedbackExistente) {
                     whiteSpace: "nowrap",
                   }}
                 >
-                  Nota {calcularNotaCriterio(criterio.id).toFixed(2)}
+                  Nota {formatarNota(calcularNotaCriterio(criterio.id))}
                 </span>
               </div>
             </button>
@@ -1192,7 +1193,7 @@ if (feedbackExistente) {
                             whiteSpace: "nowrap",
                           }}
                         >
-                          Média {calcularMediaSubcriterio(criterio.id, subcriterio).toFixed(2)}
+                          Média {formatarNota(calcularMediaSubcriterio(criterio.id, subcriterio))}
                         </div>
                       </div>
 
@@ -1407,7 +1408,7 @@ if (feedbackExistente) {
                   color: "#0078D4",
                 }}
               >
-                {calcularNotaCriterio(criterio.id).toFixed(2)}
+                {formatarNota(calcularNotaCriterio(criterio.id))}
               </div>
             </div>
           ))}
@@ -1429,7 +1430,7 @@ if (feedbackExistente) {
               color: "#660099",
             }}
           >
-            {notaMedia.toFixed(2)}
+            {formatarNota(notaMedia)}
           </div>
         </div>
 
@@ -1608,3 +1609,4 @@ if (feedbackExistente) {
 }
 
 export default NovoFeedbackPage;
+

@@ -1,9 +1,10 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getColaboradorByMatricula, getColaboradores } from "../services/colaboradorStorage";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import { obterPermissoesAvaliacao } from "../services/permissaoAvaliacao";
 import { calcularProgressoAvaliacao } from "../services/progressoAvaliacao";
+import { formatarNota } from "../services/escalaAvaliacaoStorage";
 import { getFeedbacksByColaborador, updateFeedback, } from "../services/feedbackStorage";
 import type { Feedback } from "../types/Feedback";
 
@@ -1232,7 +1233,7 @@ function EditarFeedbackPage() {
                     whiteSpace: "nowrap",
                   }}
                 >
-                  Nota {calcularNotaCriterio(criterio.id).toFixed(2)}
+                  Nota {formatarNota(calcularNotaCriterio(criterio.id))}
                 </span>
               </div>
             </button>
@@ -1277,7 +1278,7 @@ function EditarFeedbackPage() {
                             whiteSpace: "nowrap",
                           }}
                         >
-                          Média {calcularMediaSubcriterio(criterio.id, subcriterio).toFixed(2)}
+                          Média {formatarNota(calcularMediaSubcriterio(criterio.id, subcriterio))}
                         </div>
                       </div>
 
@@ -1492,7 +1493,7 @@ function EditarFeedbackPage() {
                   color: "#0078D4",
                 }}
               >
-                {calcularNotaCriterio(criterio.id).toFixed(2)}
+                {formatarNota(calcularNotaCriterio(criterio.id))}
               </div>
             </div>
           ))}
@@ -1514,7 +1515,7 @@ function EditarFeedbackPage() {
               color: "#660099",
             }}
           >
-            {notaMedia.toFixed(2)}
+            {formatarNota(notaMedia)}
           </div>
         </div>
       </div>
@@ -1692,3 +1693,4 @@ function EditarFeedbackPage() {
 }
 
 export default EditarFeedbackPage;
+

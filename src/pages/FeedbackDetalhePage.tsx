@@ -1,6 +1,7 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getColaboradorByMatricula } from "../services/colaboradorStorage";
+import { formatarNota } from "../services/escalaAvaliacaoStorage";
 import {
   deleteFeedback,
   getFeedbacksByColaborador,
@@ -305,7 +306,7 @@ function FeedbackDetalhePage() {
                     color: "#0078D4",
                   }}
                 >
-                  {criterio.nota.toFixed(2)}
+                  {formatarNota(criterio.nota)}
                 </div>
               </div>
             ))}
@@ -332,7 +333,7 @@ function FeedbackDetalhePage() {
               color: "#660099",
             }}
           >
-            {feedback.notaMedia.toFixed(2)}
+            {formatarNota(feedback.notaMedia)}
           </div>
         </div>
       </div>
@@ -454,7 +455,7 @@ function FeedbackDetalhePage() {
                     whiteSpace: "nowrap",
                   }}
                 >
-                  Nota {criterio.nota.toFixed(2)}
+                  Nota {formatarNota(criterio.nota)}
                 </span>
               </div>
             </button>
@@ -499,7 +500,7 @@ function FeedbackDetalhePage() {
                             whiteSpace: "nowrap",
                           }}
                         >
-                          Média {subcriterio.notaFinal.toFixed(2)}
+                          Média {formatarNota(subcriterio.notaFinal)}
                         </div>
                       </div>
 
@@ -527,7 +528,7 @@ function FeedbackDetalhePage() {
                           <strong>Colegiado</strong>
                           <div style={{ marginTop: "8px" }}>
                             {subcriterio.notaColegiado > 0
-                              ? subcriterio.notaColegiado.toFixed(2)
+                              ? formatarNota(subcriterio.notaColegiado)
                               : "Não informado"}
                           </div>
 
@@ -743,3 +744,4 @@ function FeedbackDetalhePage() {
 }
 
 export default FeedbackDetalhePage;
+

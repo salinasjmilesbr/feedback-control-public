@@ -1,10 +1,11 @@
-import jsPDF from "jspdf";
+﻿import jsPDF from "jspdf";
 import type { Colaborador } from "../types/Colaborador";
 import type { Feedback } from "../types/Feedback";
 import { getColaboradores } from "./colaboradorStorage";
 import { getObservacoesComunicadasByCiclo } from "./observacaoStorage";
 import { getCiclosAvaliacao } from "./cicloAvaliacaoStorage";
 import { getMetasDoColaboradorNoCiclo } from "./metaStorage";
+import { formatarNota } from "./escalaAvaliacaoStorage";
 
 function limparNomeArquivo(valor: string) {
   return valor
@@ -161,7 +162,7 @@ export function exportarAvaliacaoPdf(
     notaFinal: number
   ) {
     const valor = (nota: number) =>
-      nota > 0 ? nota.toFixed(2) : "Não avaliado";
+      nota > 0 ? formatarNota(nota) : "Não avaliado";
 
     const partes = [`Gerente: ${valor(notaGerente)}`];
 
@@ -239,7 +240,7 @@ export function exportarAvaliacaoPdf(
   pdf.setFontSize(11);
   pdf.text("Nota Final", margem + 4, y + 6);
   pdf.setFontSize(17);
-  pdf.text(feedback.notaMedia.toFixed(2), margem + 4, y + 13);
+  pdf.text(formatarNota(feedback.notaMedia), margem + 4, y + 13);
   y += 23;
 
   escreverTexto("Avaliadores envolvidos", 12, true, 2);
@@ -287,7 +288,7 @@ export function exportarAvaliacaoPdf(
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(12);
     pdf.text(
-      `${indice + 1}. ${criterio.criterioNome} - ${criterio.nota.toFixed(2)}`,
+      `${indice + 1}. ${criterio.criterioNome} - ${formatarNota(criterio.nota)}`,
       margem,
       y
     );
@@ -463,3 +464,5 @@ export function exportarAvaliacaoPdf(
 
   pdf.save(`${nomeArquivo}.pdf`);
 }
+
+
