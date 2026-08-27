@@ -1,0 +1,1868 @@
+.new-evaluation-page {
+  display: grid;
+  gap: 18px;
+}
+
+.new-evaluation-page .new-evaluation-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.new-evaluation-page .new-evaluation-header__back {
+  border: 0;
+  background: transparent;
+  color: var(--brand-primary);
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 6px;
+}
+
+.new-evaluation-page .new-evaluation-header h1 {
+  margin: 0;
+  color: var(--brand-text);
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.new-evaluation-page .new-evaluation-header p {
+  margin: 7px 0 0;
+  color: var(--brand-text-muted);
+  font-size: 13px;
+}
+
+.new-evaluation-person {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+  padding: 18px 20px;
+  border: 1px solid var(--brand-border);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.new-evaluation-person__name {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.new-evaluation-person__avatar {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 46px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--brand-primary) 12%, #fff);
+  color: var(--brand-primary);
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.new-evaluation-person__name h2 {
+  margin: 0;
+  color: var(--brand-text);
+  font-size: 18px;
+}
+
+.new-evaluation-person__name p {
+  margin: 4px 0 0;
+  color: var(--brand-text-muted);
+  font-size: 12px;
+}
+
+.new-evaluation-cycle {
+  min-width: 210px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 22%, #fff);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--brand-primary) 5%, #fff);
+  text-align: center;
+}
+
+.new-evaluation-cycle span,
+.new-evaluation-progress-card__label {
+  display: block;
+  color: var(--brand-text-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+
+.new-evaluation-cycle strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--brand-primary);
+  font-size: 18px;
+}
+
+.new-evaluation-cycle small {
+  display: block;
+  margin-top: 4px;
+  color: var(--brand-text-muted);
+  font-size: 11px;
+}
+
+.new-evaluation-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(260px, .8fr);
+  gap: 14px;
+}
+
+.new-evaluation-progress-card,
+.new-evaluation-role-card {
+  padding: 17px 18px;
+  border: 1px solid var(--brand-border);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.new-evaluation-progress-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.new-evaluation-progress-card__top h3,
+.new-evaluation-role-card h3 {
+  margin: 3px 0 0;
+  color: var(--brand-text);
+  font-size: 15px;
+}
+
+.new-evaluation-progress-card__percent {
+  color: var(--brand-primary);
+  font-size: 27px;
+  font-weight: 850;
+}
+
+.new-evaluation-progress-track {
+  height: 9px;
+  margin-top: 13px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #ececf0;
+}
+
+.new-evaluation-progress-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand-primary);
+  transition: width .2s ease;
+}
+
+.new-evaluation-progress-meta,
+.new-evaluation-role-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 11px;
+  color: var(--brand-text-muted);
+  font-size: 11px;
+}
+
+.new-evaluation-role-list span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #f5f3f7;
+  font-weight: 700;
+}
+
+.new-evaluation-section-heading {
+  margin: 5px 0 -2px;
+}
+
+.new-evaluation-section-heading span {
+  color: var(--brand-primary);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.new-evaluation-section-heading h2 {
+  margin: 3px 0 0;
+  color: var(--brand-text);
+  font-size: 19px;
+}
+
+.new-evaluation-criterion {
+  overflow: hidden;
+  border: 1px solid var(--brand-border);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.new-evaluation-criterion.is-open {
+  border-color: color-mix(in srgb, var(--brand-primary) 40%, var(--brand-border));
+  box-shadow: 0 8px 24px rgba(44, 31, 52, .06);
+}
+
+.new-evaluation-criterion__toggle {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 17px;
+  border: 0;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.new-evaluation-criterion.is-open .new-evaluation-criterion__toggle {
+  background: color-mix(in srgb, var(--brand-primary) 4%, #fff);
+}
+
+.new-evaluation-criterion__icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--brand-primary) 9%, #fff);
+  color: var(--brand-primary);
+}
+
+.new-evaluation-criterion__icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.new-evaluation-criterion__title strong {
+  display: block;
+  color: var(--brand-text);
+  font-size: 14px;
+}
+
+.new-evaluation-criterion__title small {
+  display: block;
+  margin-top: 3px;
+  color: var(--brand-text-muted);
+  font-size: 11px;
+}
+
+.new-evaluation-criterion__status {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #f3f3f5;
+  color: #65606a;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.new-evaluation-criterion__status.is-complete {
+  background: #e7f6ec;
+  color: #107c41;
+}
+
+.new-evaluation-criterion__score {
+  min-width: 58px;
+  padding: 6px 9px;
+  border: 1px solid var(--score-border, #e3e0e6);
+  border-radius: 10px;
+  background: var(--score-bg, #f6f6f8);
+  color: var(--score-color, var(--brand-text));
+  text-align: center;
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.new-evaluation-criterion__body {
+  padding: 17px;
+  border-top: 1px solid var(--brand-border);
+}
+
+.new-evaluation-subcriteria {
+  display: grid;
+  gap: 12px;
+}
+
+.new-evaluation-subcriterion {
+  display: grid;
+  grid-template-columns: minmax(190px, .9fr) minmax(0, 2fr) 104px;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid #ece9ef;
+  border-radius: 12px;
+  background: #fbfbfc;
+}
+
+.new-evaluation-subcriterion__name {
+  color: var(--brand-text);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.new-evaluation-raters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.new-evaluation-rater {
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid #ece9ef;
+}
+
+.new-evaluation-rater > strong {
+  display: block;
+  margin-bottom: 7px;
+  color: #5d5662;
+  font-size: 10px;
+}
+
+.new-evaluation-note-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.new-evaluation-note-option {
+  position: relative;
+}
+
+.new-evaluation-note-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.new-evaluation-note-option span {
+  width: 27px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #ddd9e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #58515e;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.new-evaluation-note-option input:checked + span {
+  border-color: var(--brand-primary);
+  background: var(--brand-primary);
+  color: #fff;
+}
+
+.new-evaluation-note-option input:disabled + span {
+  opacity: .42;
+  cursor: not-allowed;
+}
+
+.new-evaluation-subcriterion__average {
+  padding: 9px;
+  border: 1px solid var(--score-border, #e2dfe5);
+  border-radius: 10px;
+  background: var(--score-bg, #fff);
+  text-align: center;
+}
+
+.new-evaluation-subcriterion__average small {
+  display: block;
+  color: #6c6570;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.new-evaluation-subcriterion__average strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--score-color, var(--brand-text));
+  font-size: 17px;
+}
+
+.new-evaluation-comments {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.new-evaluation-comment label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--brand-text);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.new-evaluation-comment textarea {
+  width: 100%;
+  min-height: 92px;
+  box-sizing: border-box;
+  padding: 10px 11px;
+  resize: vertical;
+  border: 1px solid var(--brand-border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--brand-text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.new-evaluation-comment textarea:disabled {
+  background: #f7f7f8;
+  color: #8b858e;
+}
+
+.new-evaluation-nav-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.new-evaluation-nav-actions button {
+  min-height: 36px;
+  padding: 0 13px;
+  border: 1px solid var(--brand-border);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--brand-primary);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .new-evaluation-overview,
+  .new-evaluation-person {
+    grid-template-columns: 1fr;
+  }
+
+  .new-evaluation-cycle {
+    min-width: 0;
+  }
+
+  .new-evaluation-subcriterion {
+    grid-template-columns: 1fr;
+  }
+
+  .new-evaluation-raters {
+    grid-template-columns: 1fr;
+  }
+
+  .new-evaluation-comments {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .new-evaluation-criterion__toggle {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .new-evaluation-criterion__status {
+    display: none;
+  }
+}
+
+.new-evaluation-status-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px 20px;
+  padding: 15px 18px;
+  border: 1px solid var(--brand-border);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.new-evaluation-status-card h3 {
+  margin: 3px 0 0;
+  color: var(--brand-text);
+  font-size: 15px;
+}
+
+.new-evaluation-status-options {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.new-evaluation-status-options label {
+  position: relative;
+}
+
+.new-evaluation-status-options input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.new-evaluation-status-options span {
+  display: block;
+  padding: 7px 10px;
+  border: 1px solid var(--brand-border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--brand-text-muted);
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.new-evaluation-status-options label.is-active span {
+  border-color: var(--brand-primary);
+  background: color-mix(in srgb, var(--brand-primary) 9%, #fff);
+  color: var(--brand-primary);
+}
+
+.new-evaluation-status-card__message {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid #efedf1;
+  color: #8a6d00;
+  font-size: 11px;
+}
+
+.new-evaluation-status-card__message.is-complete {
+  color: #107c41;
+  font-weight: 750;
+}
+
+@media (max-width: 760px) {
+  .new-evaluation-status-card {
+    grid-template-columns: 1fr;
+  }
+
+  .new-evaluation-status-options {
+    justify-content: flex-start;
+  }
+}
+
+
+/* 7B — consolidação visual e tipográfica */
+.new-evaluation-page {
+  font-size: var(--virtus-font-body);
+}
+
+.new-evaluation-page .new-evaluation-header h1 {
+  font-size: 29px;
+  line-height: 1.08;
+  letter-spacing: -0.45px;
+  font-weight: 740;
+}
+
+.new-evaluation-page .new-evaluation-header p {
+  font-size: var(--virtus-font-body);
+}
+
+.new-evaluation-page .new-evaluation-header__back {
+  font-size: var(--virtus-font-label);
+}
+
+.new-evaluation-person {
+  padding: 16px 18px;
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(35, 27, 43, 0.05);
+}
+
+.new-evaluation-person__name h2 {
+  font-size: 17px;
+  font-weight: 750;
+}
+
+.new-evaluation-person__name p {
+  font-size: var(--virtus-font-body);
+}
+
+.new-evaluation-cycle span,
+.new-evaluation-progress-card__label {
+  font-size: var(--virtus-font-label);
+}
+
+.new-evaluation-cycle strong {
+  font-size: 20px;
+}
+
+.new-evaluation-cycle small,
+.new-evaluation-progress-meta,
+.new-evaluation-role-list {
+  font-size: var(--virtus-font-label);
+}
+
+.new-evaluation-progress-card,
+.new-evaluation-role-card,
+.new-evaluation-status-card {
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(35, 27, 43, 0.04);
+}
+
+.new-evaluation-progress-card__top h3,
+.new-evaluation-role-card h3,
+.new-evaluation-status-card h3 {
+  font-size: 16px;
+}
+
+.new-evaluation-progress-card__percent {
+  font-size: 30px;
+}
+
+.new-evaluation-status-options span {
+  padding: 8px 12px;
+  font-size: var(--virtus-font-label);
+}
+
+.new-evaluation-status-card__message {
+  font-size: var(--virtus-font-label);
+  line-height: 1.45;
+}
+
+.new-evaluation-section-heading span {
+  font-size: var(--virtus-font-label);
+  letter-spacing: 0.08em;
+}
+
+.new-evaluation-section-heading h2 {
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.new-evaluation-criterion {
+  border-radius: 12px;
+}
+
+.new-evaluation-criterion__toggle {
+  padding: 17px 19px !important;
+}
+
+.new-evaluation-criterion__title strong,
+.new-evaluation-criterion__title h3 {
+  font-size: 15px !important;
+  line-height: 1.25;
+  font-weight: 750 !important;
+}
+
+.new-evaluation-criterion__title small,
+.new-evaluation-criterion__title p {
+  margin-top: 5px !important;
+  font-size: var(--virtus-font-label) !important;
+  line-height: 1.35;
+}
+
+.new-evaluation-criterion__status {
+  font-size: var(--virtus-font-label);
+}
+
+.new-evaluation-criterion__score {
+  min-width: 58px;
+  padding: 7px 10px;
+  border: 1px solid var(--score-border, #e2dfe5);
+  border-radius: 9px;
+  background: var(--score-bg, #faf9fb);
+  color: var(--score-color, var(--brand-text-muted));
+  font-size: 18px;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.new-evaluation-criterion__score.is-empty {
+  border-color: #e7e3eb;
+  background: #faf9fb;
+  color: #9b949f;
+}
+
+.new-evaluation-criterion__body {
+  padding: 16px 19px !important;
+}
+
+.new-evaluation-subcriteria {
+  gap: 10px !important;
+}
+
+.new-evaluation-subcriterion {
+  padding: 13px 14px !important;
+  border-color: #eeeaf0 !important;
+  border-radius: 9px !important;
+  background: #fff !important;
+}
+
+.new-evaluation-subcriterion > div:first-child {
+  margin-bottom: 11px !important;
+}
+
+.new-evaluation-subcriterion > div:first-child > div:first-child {
+  color: var(--brand-text) !important;
+  font-size: var(--virtus-font-body) !important;
+  line-height: 1.4;
+  font-weight: 650 !important;
+}
+
+.new-evaluation-subcriterion__average {
+  min-width: 86px;
+  padding: 7px 10px;
+  border: 1px solid var(--score-border, #e7e3eb);
+  border-radius: 8px;
+  background: var(--score-bg, #faf9fb);
+  text-align: center;
+}
+
+.new-evaluation-subcriterion__average small {
+  display: block;
+  color: var(--brand-text-muted);
+  font-size: var(--virtus-font-label);
+}
+
+.new-evaluation-subcriterion__average strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--score-color, var(--brand-text));
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.new-evaluation-subcriterion__average.is-empty strong {
+  color: #9b949f;
+}
+
+.new-evaluation-subcriterion > div:nth-child(2) {
+  gap: 10px !important;
+}
+
+.new-evaluation-subcriterion > div:nth-child(2) > div {
+  padding: 10px 11px;
+  border: 1px solid #eeeaf0;
+  border-radius: 8px;
+  background: #faf9fb;
+  text-align: left !important;
+}
+
+.new-evaluation-subcriterion > div:nth-child(2) > div > div:first-child {
+  margin-bottom: 8px !important;
+  color: var(--brand-text-muted) !important;
+  font-size: var(--virtus-font-label) !important;
+  font-weight: 760 !important;
+}
+
+.new-evaluation-note-options {
+  justify-content: flex-start;
+  gap: 6px;
+}
+
+.new-evaluation-note-option span {
+  width: 31px;
+  height: 31px;
+  border-radius: 7px;
+  font-size: var(--virtus-font-body);
+}
+
+.new-evaluation-collegiate-list {
+  display: grid;
+  gap: 9px;
+}
+
+.new-evaluation-collegiate-member {
+  min-width: 0;
+}
+
+.new-evaluation-collegiate-member > strong {
+  display: block;
+  margin-bottom: 7px;
+  overflow: hidden;
+  color: var(--brand-text);
+  font-size: var(--virtus-font-label);
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.new-evaluation-rater-empty {
+  padding: 8px 0;
+  color: var(--brand-text-muted);
+  font-size: var(--virtus-font-label);
+}
+
+.new-evaluation-comment label,
+.new-evaluation-page textarea,
+.new-evaluation-page button {
+  font-family: inherit;
+}
+
+.new-evaluation-comment label {
+  font-size: var(--virtus-font-label);
+}
+
+.new-evaluation-comment textarea {
+  font-size: var(--virtus-font-body);
+  line-height: 1.45;
+}
+
+.new-evaluation-nav-actions button {
+  min-height: 40px;
+  padding: 0 15px;
+  font-size: var(--virtus-font-label);
+}
+
+@media (max-width: 1000px) {
+  .new-evaluation-subcriterion > div:nth-child(2) {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .new-evaluation-criterion__score {
+    font-size: 17px;
+  }
+
+  .new-evaluation-note-option span {
+    width: 34px;
+    height: 34px;
+  }
+}
+
+/* 7C — votação e alinhamento de navegação */
+.new-evaluation-note-options {
+  display: grid !important;
+  grid-template-columns: repeat(5, 44px);
+  gap: 8px !important;
+  justify-content: start !important;
+  margin-top: 0 !important;
+}
+
+.new-evaluation-note-option span {
+  width: 44px !important;
+  height: 44px !important;
+  box-sizing: border-box;
+  border-radius: 9px !important;
+  font-size: 15px !important;
+  font-weight: 800;
+  transition: transform .12s ease, border-color .12s ease, background .12s ease;
+}
+
+.new-evaluation-note-option:not(:has(input:disabled)) span:hover {
+  transform: translateY(-1px);
+  border-color: var(--brand-primary);
+}
+
+.new-evaluation-subcriterion > div:nth-child(2) {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(250px, 1fr)) !important;
+  align-items: stretch !important;
+  gap: 12px !important;
+}
+
+.new-evaluation-subcriterion > div:nth-child(2) > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding: 13px 14px !important;
+}
+
+.new-evaluation-subcriterion > div:nth-child(2) > div > div:first-child {
+  min-height: 20px;
+  margin-bottom: 10px !important;
+  display: flex;
+  align-items: center;
+}
+
+.new-evaluation-collegiate-list {
+  align-content: start;
+  gap: 12px;
+}
+
+.new-evaluation-collegiate-member {
+  display: grid;
+  gap: 8px;
+}
+
+.new-evaluation-collegiate-member > strong {
+  min-height: 18px;
+  margin: 0;
+}
+
+.new-evaluation-criterion--scroll-target {
+  scroll-margin-top: 18px;
+}
+
+@media (max-width: 1050px) {
+  .new-evaluation-subcriterion > div:nth-child(2) {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .new-evaluation-note-options {
+    grid-template-columns: repeat(5, minmax(42px, 1fr));
+    width: 100%;
+  }
+
+  .new-evaluation-note-option span {
+    width: 100% !important;
+    min-width: 42px;
+  }
+}
+
+/* 7D — correção da votação, alinhamento e navegação */
+
+/* Desfaz o aumento indiscriminado da 7C. */
+.new-evaluation-note-options {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 6px !important;
+  width: auto !important;
+  margin-top: 0 !important;
+}
+
+.new-evaluation-note-option span {
+  width: 31px !important;
+  height: 31px !important;
+  min-width: 31px !important;
+  border-radius: 7px !important;
+  font-size: var(--virtus-font-body) !important;
+}
+
+/* Só o controle realmente editável recebe área de clique ampliada. */
+.new-evaluation-note-options.is-editable {
+  gap: 7px !important;
+}
+
+.new-evaluation-note-options.is-editable .new-evaluation-note-option span {
+  width: 42px !important;
+  height: 42px !important;
+  min-width: 42px !important;
+  border-radius: 9px !important;
+  font-size: 15px !important;
+}
+
+.new-evaluation-note-options.is-readonly .new-evaluation-note-option span {
+  cursor: default;
+}
+
+/* Colunas com altura diferente passam a se alinhar pelo centro do colegiado. */
+.new-evaluation-subcriterion > div:nth-child(2) {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(220px, 1fr)) !important;
+  align-items: stretch !important;
+  gap: 10px !important;
+}
+
+.new-evaluation-subcriterion > div:nth-child(2) > div {
+  display: flex !important;
+  flex-direction: column;
+  justify-content: center !important;
+  min-width: 0;
+  padding: 11px 12px !important;
+}
+
+.new-evaluation-subcriterion > div:nth-child(2) > div:last-child {
+  justify-content: flex-start !important;
+}
+
+.new-evaluation-rater-title {
+  display: flex;
+  align-items: center;
+  min-height: 20px;
+  margin-bottom: 8px;
+}
+
+.new-evaluation-collegiate-list {
+  display: grid;
+  gap: 10px;
+}
+
+.new-evaluation-collegiate-member {
+  display: grid;
+  gap: 7px;
+}
+
+/* Média acompanha verticalmente o conteúdo mais alto do bloco. */
+.new-evaluation-subcriterion__average {
+  align-self: center;
+}
+
+/* O topo real do card fica abaixo do header fixo. */
+.new-evaluation-criterion,
+.new-evaluation-criterion--scroll-target {
+  scroll-margin-top: 92px;
+}
+
+/* A regra antiga da 7C não deve mais ampliar tudo. */
+@media (max-width: 560px) {
+  .new-evaluation-note-options {
+    display: flex !important;
+    width: auto !important;
+  }
+
+  .new-evaluation-note-option span {
+    width: 31px !important;
+    min-width: 31px !important;
+  }
+
+  .new-evaluation-note-options.is-editable .new-evaluation-note-option span {
+    width: 42px !important;
+    min-width: 42px !important;
+  }
+}
+
+@media (max-width: 1000px) {
+  .new-evaluation-subcriterion > div:nth-child(2) {
+    grid-template-columns: 1fr !important;
+  }
+
+  .new-evaluation-subcriterion > div:nth-child(2) > div {
+    justify-content: flex-start !important;
+  }
+}
+
+/* 7E — correção definitiva dos botões de voto */
+
+/*
+  A regra agora depende diretamente do atributo disabled do input.
+  Assim não precisamos confiar em classes dinâmicas para diferenciar
+  quem pode votar de quem está apenas visualizando.
+*/
+.new-evaluation-note-options {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 6px !important;
+  width: max-content !important;
+  max-width: 100%;
+  margin: 0 !important;
+}
+
+.new-evaluation-note-option {
+  flex: 0 0 auto !important;
+}
+
+.new-evaluation-note-option span {
+  width: 30px !important;
+  height: 30px !important;
+  min-width: 30px !important;
+  box-sizing: border-box !important;
+  border-radius: 7px !important;
+  font-size: 13px !important;
+}
+
+/* Somente opções realmente clicáveis recebem área maior. */
+.new-evaluation-note-option:has(input:not(:disabled)) span {
+  width: 38px !important;
+  height: 38px !important;
+  min-width: 38px !important;
+  border-radius: 8px !important;
+  font-size: 14px !important;
+  cursor: pointer !important;
+}
+
+/* Impede qualquer quebra da nota 5 para uma segunda linha. */
+.new-evaluation-note-option,
+.new-evaluation-note-option span,
+.new-evaluation-note-option input {
+  white-space: nowrap !important;
+}
+
+/*
+  Quando Colegiado for mais alto, os blocos de Gerente e Coordenador
+  ficam centralizados verticalmente em relação à altura da linha.
+*/
+.new-evaluation-subcriterion > div:nth-child(2) {
+  align-items: stretch !important;
+}
+
+.new-evaluation-subcriterion > div:nth-child(2) > div {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+}
+
+.new-evaluation-subcriterion > div:nth-child(2) > div:last-child {
+  justify-content: flex-start !important;
+}
+
+@media (max-width: 1000px) {
+  .new-evaluation-note-options {
+    width: auto !important;
+    max-width: 100% !important;
+  }
+
+  .new-evaluation-subcriterion > div:nth-child(2) > div,
+  .new-evaluation-subcriterion > div:nth-child(2) > div:last-child {
+    justify-content: flex-start !important;
+  }
+}
+
+/* 7F — ajuste de largura dos botões de voto */
+
+/*
+  O problema restante é puramente geométrico:
+  5 botões grandes + gaps ultrapassam a largura útil da coluna.
+  Mantemos boa área de clique, mas reduzimos levemente os controles editáveis.
+*/
+.new-evaluation-note-options.is-editable,
+.new-evaluation-note-options:has(input:not(:disabled)) {
+  gap: 5px !important;
+}
+
+.new-evaluation-note-option:has(input:not(:disabled)) span {
+  width: 35px !important;
+  height: 35px !important;
+  min-width: 35px !important;
+  font-size: 14px !important;
+}
+
+/* Evita que a sequência encoste na borda do box. */
+.new-evaluation-subcriterion > div:nth-child(2) > div {
+  overflow: hidden;
+}
+
+.new-evaluation-note-options {
+  max-width: 100% !important;
+}
+
+/* Mantém todos os cinco votos na mesma linha sem invadir a moldura. */
+.new-evaluation-note-options:has(input:not(:disabled)) {
+  width: fit-content !important;
+}
+
+@media (max-width: 560px) {
+  .new-evaluation-note-option:has(input:not(:disabled)) span {
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px !important;
+  }
+}
+
+/* 7G — ajuste geométrico final da área de voto */
+
+/*
+  O problema não é mais o tamanho isolado do botão, e sim a largura útil
+  interna da coluna após padding + bordas. Esta regra preserva os botões
+  clicáveis maiores sem encostar na moldura.
+*/
+.new-evaluation-subcriterion > div:nth-child(2) > div {
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+  overflow: visible !important;
+}
+
+.new-evaluation-note-options {
+  gap: 4px !important;
+  max-width: none !important;
+}
+
+.new-evaluation-note-option:has(input:not(:disabled)) span {
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+}
+
+.new-evaluation-note-options:has(input:not(:disabled)) {
+  width: auto !important;
+  max-width: 100% !important;
+}
+
+/* Garante uma pequena folga visual à direita da sequência 1–5. */
+.new-evaluation-rater,
+.new-evaluation-subcriterion > div:nth-child(2) > div {
+  box-sizing: border-box;
+}
+
+@media (max-width: 1000px) {
+  .new-evaluation-subcriterion > div:nth-child(2) > div {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+}
+
+/* 7H — aumenta a largura útil das molduras de avaliação */
+
+/*
+  Mantemos o tamanho atual dos botões.
+  A correção agora acontece na própria moldura de Gerente / Coordenador /
+  Colegiado, dando espaço horizontal suficiente para 1–5.
+*/
+.new-evaluation-subcriterion > div:nth-child(2) {
+  display: grid !important;
+  grid-template-columns:
+    minmax(215px, 1fr)
+    minmax(215px, 1fr)
+    minmax(250px, 1.18fr) !important;
+  gap: 12px !important;
+}
+
+.new-evaluation-subcriterion > div:nth-child(2) > div {
+  min-width: 0 !important;
+  width: 100%;
+  box-sizing: border-box;
+  padding-left: 12px !important;
+  padding-right: 12px !important;
+}
+
+/* Espaço interno garantido para a régua 1–5. */
+.new-evaluation-note-options {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+
+/* Mantém os cinco botões juntos e com folga da borda direita. */
+.new-evaluation-note-options:has(input:not(:disabled)),
+.new-evaluation-note-options.is-editable {
+  justify-content: flex-start !important;
+  padding-right: 4px;
+}
+
+/* Colegiado recebe um pouco mais de largura por poder conter 2 avaliadores. */
+.new-evaluation-subcriterion > div:nth-child(2) > div:last-child {
+  min-width: 250px !important;
+}
+
+@media (max-width: 1100px) {
+  .new-evaluation-subcriterion > div:nth-child(2) {
+    grid-template-columns:
+      minmax(205px, 1fr)
+      minmax(205px, 1fr)
+      minmax(235px, 1.15fr) !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .new-evaluation-subcriterion > div:nth-child(2) {
+    grid-template-columns: 1fr !important;
+  }
+
+  .new-evaluation-subcriterion > div:nth-child(2) > div,
+  .new-evaluation-subcriterion > div:nth-child(2) > div:last-child {
+    min-width: 0 !important;
+  }
+}
+
+/* 7I — largura dinâmica da coluna de quem está votando */
+
+/*
+  Em vez de aumentar todas as molduras igualmente, a coluna do avaliador
+  que está realmente editável recebe mais espaço horizontal.
+  Isso preserva Gerente / Coordenador / Colegiado sem quebrar o layout.
+*/
+
+.new-evaluation-subcriterion > div:nth-child(2) {
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(0, 1fr)
+    minmax(0, 1fr) !important;
+}
+
+/* Gerente é quem está votando */
+.new-evaluation-subcriterion > div:nth-child(2):has(
+  > div:nth-child(1) input:not(:disabled)
+) {
+  grid-template-columns:
+    minmax(235px, 1.18fr)
+    minmax(190px, .91fr)
+    minmax(190px, .91fr) !important;
+}
+
+/* Coordenador é quem está votando */
+.new-evaluation-subcriterion > div:nth-child(2):has(
+  > div:nth-child(2) input:not(:disabled)
+) {
+  grid-template-columns:
+    minmax(190px, .91fr)
+    minmax(235px, 1.18fr)
+    minmax(190px, .91fr) !important;
+}
+
+/* Colegiado é quem está votando */
+.new-evaluation-subcriterion > div:nth-child(2):has(
+  > div:nth-child(3) input:not(:disabled)
+) {
+  grid-template-columns:
+    minmax(190px, .91fr)
+    minmax(190px, .91fr)
+    minmax(235px, 1.18fr) !important;
+}
+
+.new-evaluation-subcriterion > div:nth-child(2) > div,
+.new-evaluation-subcriterion > div:nth-child(2) > div:last-child {
+  min-width: 0 !important;
+}
+
+/* A linha 1–5 continua indivisível. */
+.new-evaluation-note-options {
+  flex-wrap: nowrap !important;
+}
+
+/* Folga interna adicional somente no bloco ativo. */
+.new-evaluation-subcriterion > div:nth-child(2) > div:has(
+  input:not(:disabled)
+) {
+  padding-left: 12px !important;
+  padding-right: 12px !important;
+}
+
+@media (max-width: 900px) {
+  .new-evaluation-subcriterion > div:nth-child(2),
+  .new-evaluation-subcriterion > div:nth-child(2):has(
+    > div:nth-child(1) input:not(:disabled)
+  ),
+  .new-evaluation-subcriterion > div:nth-child(2):has(
+    > div:nth-child(2) input:not(:disabled)
+  ),
+  .new-evaluation-subcriterion > div:nth-child(2):has(
+    > div:nth-child(3) input:not(:disabled)
+  ) {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* 7M — Resumo da Avaliação no padrão Competências Avaliadas */
+.new-evaluation-summary {
+  margin-top: 4px;
+  padding: 18px;
+  border: 1px solid var(--brand-border);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(35, 27, 43, .04);
+}
+
+.new-evaluation-summary__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #efecf1;
+}
+
+.new-evaluation-summary__header h2 {
+  margin: 4px 0 0;
+  color: var(--brand-text);
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.new-evaluation-summary__final {
+  min-width: 100px;
+  padding: 9px 13px;
+  border: 1px solid var(--score-border, #e7e3eb);
+  border-radius: 10px;
+  background: var(--score-bg, #faf9fb);
+  text-align: center;
+}
+
+.new-evaluation-summary__final span {
+  display: block;
+  color: var(--brand-text-muted);
+  font-size: var(--virtus-font-label);
+  font-weight: 750;
+}
+
+.new-evaluation-summary__final strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--score-color, #9b949f);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.new-evaluation-summary__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px 14px;
+  margin-top: 15px;
+}
+
+.new-evaluation-summary__item {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid #ece9ef;
+  border-radius: 9px;
+  background: #fbfafc;
+}
+
+.new-evaluation-summary__item.has-score {
+  border-color: var(--score-border, #ece9ef);
+  background: color-mix(in srgb, var(--score-bg, #fff) 38%, #fff);
+}
+
+.new-evaluation-summary__icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--score-bg, #f3eef6);
+  color: var(--score-color, var(--brand-primary));
+}
+
+.new-evaluation-summary__icon svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.new-evaluation-summary__content {
+  min-width: 0;
+}
+
+.new-evaluation-summary__content strong {
+  display: block;
+  overflow: hidden;
+  color: var(--brand-text);
+  font-size: var(--virtus-font-body);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.new-evaluation-summary__content small {
+  display: block;
+  margin-top: 2px;
+  color: var(--brand-text-muted);
+  font-size: var(--virtus-font-label);
+}
+
+.new-evaluation-summary__score {
+  min-width: 42px;
+  color: var(--score-color, #9b949f);
+  font-size: 18px;
+  font-weight: 850;
+  text-align: right;
+}
+
+@media (max-width: 760px) {
+  .new-evaluation-summary__header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .new-evaluation-summary__final {
+    min-width: 0;
+  }
+
+  .new-evaluation-summary__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 7N.1 — Feedback Final e ações */
+.new-evaluation-final-feedback {
+  border: 1px solid var(--brand-border) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 14px rgba(35,27,43,.04);
+}
+
+.new-evaluation-final-feedback.is-open {
+  border-color: color-mix(in srgb, var(--brand-primary) 42%, var(--brand-border)) !important;
+}
+
+.new-evaluation-final-feedback__toggle {
+  padding: 16px 18px !important;
+  background: #fff !important;
+}
+
+.new-evaluation-final-feedback.is-open .new-evaluation-final-feedback__toggle {
+  background: #fbf8fd !important;
+}
+
+.new-evaluation-final-feedback__toggle h3 {
+  color: var(--brand-text) !important;
+  font-size: 17px !important;
+  line-height: 1.2;
+}
+
+.new-evaluation-final-feedback__toggle p {
+  margin-top: 4px !important;
+  color: var(--brand-text-muted) !important;
+  font-size: var(--virtus-font-label) !important;
+}
+
+.new-evaluation-final-feedback__field label {
+  display: block;
+  color: var(--brand-text);
+  font-size: var(--virtus-font-body);
+  font-weight: 700;
+}
+
+.new-evaluation-final-feedback__field textarea {
+  min-height: 145px !important;
+  margin-top: 7px !important;
+  padding: 12px !important;
+  border: 1px solid #ded9e2 !important;
+  border-radius: 9px !important;
+  background: #fff;
+  color: var(--brand-text);
+  font-size: var(--virtus-font-body);
+  line-height: 1.45;
+  resize: vertical;
+  outline: none;
+}
+
+.new-evaluation-final-feedback__field textarea:focus {
+  border-color: var(--brand-primary) !important;
+  box-shadow: 0 0 0 3px rgba(102,0,153,.08);
+}
+
+.new-evaluation-final-feedback__field textarea:disabled {
+  background: #f8f7f9;
+  color: var(--brand-text-muted);
+}
+
+.new-evaluation-save-actions {
+  justify-content: flex-end !important;
+  padding: 16px 0 2px;
+  border-top: 1px solid #efecf1;
+}
+
+.new-evaluation-save-button {
+  min-width: 160px;
+  min-height: 42px;
+  padding: 0 18px !important;
+  border-radius: 9px !important;
+  background: var(--brand-primary) !important;
+  font-size: var(--virtus-font-body) !important;
+  font-weight: 750 !important;
+}
+
+.new-evaluation-save-button:disabled {
+  cursor: not-allowed !important;
+  opacity: .45;
+}
+
+@media(max-width:760px){
+  .new-evaluation-save-actions {
+    justify-content: stretch !important;
+  }
+
+  .new-evaluation-save-button {
+    width: 100%;
+  }
+}
+
+/* 7O — área ampliada para Feedback Final */
+.new-evaluation-final-feedback__field textarea {
+  min-height: 230px !important;
+  height: 230px;
+  padding: 14px !important;
+  line-height: 1.55 !important;
+  resize: vertical;
+}
+
+@media (max-width: 760px) {
+  .new-evaluation-final-feedback__field textarea {
+    min-height: 200px !important;
+    height: 200px;
+  }
+}
+
+/* 7P — identificação do colaborador no padrão do Histórico */
+.new-evaluation-person {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  padding: 16px 18px !important;
+}
+
+.new-evaluation-person__name {
+  align-items: center;
+  gap: 14px;
+}
+
+.new-evaluation-person__avatar {
+  width: 50px !important;
+  height: 50px !important;
+  flex: 0 0 50px !important;
+  border-radius: 50% !important;
+  background:
+    linear-gradient(
+      145deg,
+      var(--brand-secondary),
+      var(--brand-primary)
+    ) !important;
+  color: #fff !important;
+  font-size: 15px !important;
+  font-weight: 800 !important;
+  letter-spacing: .4px;
+  box-shadow: 0 3px 10px rgba(102, 0, 153, .15);
+}
+
+.new-evaluation-person__identity {
+  min-width: 0;
+}
+
+.new-evaluation-person__identity h2,
+.new-evaluation-person__name h2 {
+  margin: 0 0 5px !important;
+  color: var(--brand-text) !important;
+  font-size: 17px !important;
+  line-height: 1.25;
+  font-weight: 750 !important;
+}
+
+.new-evaluation-person__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  color: var(--brand-text-muted);
+  font-size: var(--virtus-font-label);
+  line-height: 1.35;
+}
+
+.new-evaluation-person__meta span + span::before {
+  content: "•";
+  margin-right: 10px;
+  color: #aaa3ad;
+}
+
+.new-evaluation-person__registration {
+  display: block;
+  margin-top: 4px;
+  color: #8a838e;
+  font-size: 10.5px;
+  line-height: 1.3;
+}
+
+.new-evaluation-cycle {
+  min-width: 220px;
+  padding: 12px 16px;
+  border-radius: 10px;
+}
+
+@media (max-width: 760px) {
+  .new-evaluation-person {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .new-evaluation-cycle {
+    min-width: 0;
+  }
+
+  .new-evaluation-person__meta {
+    display: grid;
+    gap: 2px;
+  }
+
+  .new-evaluation-person__meta span + span::before {
+    content: none;
+  }
+}
+
+/* 7Q — perfil fiel ao padrão do Histórico do Colaborador */
+.new-evaluation-person {
+  min-height: 122px;
+  padding: 22px 24px !important;
+  gap: 30px !important;
+  border-radius: 14px !important;
+}
+
+.new-evaluation-person__name {
+  gap: 18px !important;
+}
+
+.new-evaluation-person__avatar {
+  width: 76px !important;
+  height: 76px !important;
+  flex: 0 0 76px !important;
+  border-radius: 50% !important;
+  background: linear-gradient(145deg, #f1e6f7, #e7d5f0) !important;
+  color: var(--brand-primary) !important;
+  font-size: 28px !important;
+  font-weight: 850 !important;
+  box-shadow: none !important;
+}
+
+.new-evaluation-person__identity {
+  min-width: 0;
+}
+
+.new-evaluation-person__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.new-evaluation-person__title h2,
+.new-evaluation-person__name h2 {
+  margin: 0 !important;
+  color: var(--brand-text) !important;
+  font-size: 24px !important;
+  line-height: 1.12 !important;
+  letter-spacing: -0.25px;
+  font-weight: 750 !important;
+}
+
+.new-evaluation-person__status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-height: 24px;
+  padding: 0 9px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.new-evaluation-person__status.is-active {
+  border-color: #b7e3c4;
+  background: #e7f6ec;
+  color: #107c41;
+}
+
+.new-evaluation-person__status.is-leave {
+  border-color: #f7d774;
+  background: #fff4ce;
+  color: #8a6d00;
+}
+
+.new-evaluation-person__status.is-inactive {
+  border-color: #f3b6bc;
+  background: #fde7e9;
+  color: #a4262c;
+}
+
+.new-evaluation-person__role {
+  margin-top: 6px;
+  color: var(--brand-primary);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.new-evaluation-person__meta {
+  display: flex !important;
+  align-items: center;
+  gap: 10px !important;
+  margin-top: 8px;
+  color: var(--brand-text-muted);
+  font-size: 12px !important;
+}
+
+.new-evaluation-person__meta span + span::before {
+  content: "•" !important;
+  margin-right: 10px !important;
+  color: #b0aab5 !important;
+}
+
+.new-evaluation-cycle {
+  align-self: center;
+}
+
+@media (max-width: 760px) {
+  .new-evaluation-person {
+    min-height: 0;
+    padding: 18px !important;
+  }
+
+  .new-evaluation-person__avatar {
+    width: 62px !important;
+    height: 62px !important;
+    flex-basis: 62px !important;
+    font-size: 22px !important;
+  }
+
+  .new-evaluation-person__title h2,
+  .new-evaluation-person__name h2 {
+    font-size: 21px !important;
+  }
+
+  .new-evaluation-person__meta {
+    display: flex !important;
+    flex-wrap: wrap;
+  }
+
+  .new-evaluation-person__meta span + span::before {
+    content: "•" !important;
+  }
+}
+
+/* 7R — conteúdo do perfil alinhado ao Histórico do Colaborador */
+.new-evaluation-person__title h2,
+.new-evaluation-person__name h2 {
+  font-weight: 650 !important;
+}
+
+.new-evaluation-person__role {
+  margin-top: 6px;
+  color: var(--brand-primary);
+  font-size: 14px;
+  font-weight: 650 !important;
+}
+
+.new-evaluation-person__meta,
+.new-evaluation-person__manager {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  color: var(--brand-text-muted);
+  font-size: 12px;
+}
+
+.new-evaluation-person__meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.new-evaluation-person__inline-icon {
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 22px;
+  color: #5e5668;
+}
+
+.new-evaluation-person__inline-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.new-evaluation-person__manager strong {
+  color: var(--brand-text);
+  font-weight: 650;
+}
+
+@media (max-width: 760px) {
+  .new-evaluation-person__meta {
+    align-items: flex-start;
+  }
+
+  .new-evaluation-person__manager {
+    align-items: center;
+  }
+}
