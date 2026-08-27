@@ -6,6 +6,7 @@ import { getColaboradorByMatricula, getColaboradores } from "../services/colabor
 import { getFeedbacksByColaborador } from "../services/feedbackStorage";
 import { getObservacoesByColaborador } from "../services/observacaoStorage";
 import {
+  formatarNota,
   getEscalaAvaliacao,
   getItemEscalaPorNota,
 } from "../services/escalaAvaliacaoStorage";
@@ -139,10 +140,75 @@ function IconNegative() {
   );
 }
 
-function IconCompetency() {
+function IconSpark() {
   return (
-    <Icon size={16}>
-      <path d="M12 3 14 8l5 .6-3.7 3.5 1 5-4.3-2.5-4.3 2.5 1-5L5 8.6 10 8l2-5Z" />
+    <Icon size={17}>
+      <path d="m12 3 1.45 4.55L18 9l-4.55 1.45L12 15l-1.45-4.55L6 9l4.55-1.45L12 3Z" />
+      <path d="m18 15 .85 2.15L21 18l-2.15.85L18 21l-.85-2.15L15 18l2.15-.85L18 15Z" />
+    </Icon>
+  );
+}
+
+function IconPeople() {
+  return (
+    <Icon size={17}>
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3.5 19c.6-3.4 2.5-5.2 5.5-5.2s4.9 1.8 5.5 5.2" />
+      <circle cx="17" cy="9" r="2.2" />
+      <path d="M15.7 14.2c2.9-.4 4.6 1 5 3.8" />
+    </Icon>
+  );
+}
+
+function IconBars() {
+  return (
+    <Icon size={17}>
+      <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
+    </Icon>
+  );
+}
+
+function IconChat() {
+  return (
+    <Icon size={17}>
+      <path d="M4 5.5h16v11H9l-5 4v-15Z" />
+      <path d="M8 10h8M8 13h5" />
+    </Icon>
+  );
+}
+
+function IconTarget() {
+  return (
+    <Icon size={17}>
+      <circle cx="12" cy="12" r="8" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="12" cy="12" r="1" />
+    </Icon>
+  );
+}
+
+function IconBook() {
+  return (
+    <Icon size={17}>
+      <path d="M5 4.5h9.5A2.5 2.5 0 0 1 17 7v13H7.5A2.5 2.5 0 0 1 5 17.5v-13Z" />
+      <path d="M17 7h2a2 2 0 0 1 2 2v11h-4M8 8h6M8 12h6" />
+    </Icon>
+  );
+}
+
+function IconShield() {
+  return (
+    <Icon size={17}>
+      <path d="M12 3 20 6v5c0 5.2-2.8 8.5-8 10-5.2-1.5-8-4.8-8-10V6l8-3Z" />
+      <path d="m8.5 12 2.2 2.2 4.8-5" />
+    </Icon>
+  );
+}
+
+function IconBolt() {
+  return (
+    <Icon size={17}>
+      <path d="m13 2-7 11h6l-1 9 7-12h-6l1-8Z" />
     </Icon>
   );
 }
@@ -175,6 +241,17 @@ const criterioNomePorSigla: Record<(typeof criterioSiglas)[number], string> = {
   AF: "Adaptação e flexibilidade",
   CR: "Comprometimento e responsabilidade",
   DP: "Desenvolvimento profissional",
+};
+
+const criterioIconPorSigla: Record<(typeof criterioSiglas)[number], ReactNode> = {
+  DT: <IconSpark />,
+  PR: <IconPeople />,
+  CO: <IconBars />,
+  TE: <IconChat />,
+  PI: <IconTarget />,
+  AF: <IconBook />,
+  CR: <IconShield />,
+  DP: <IconBolt />,
 };
 
 function normalizarTexto(valor: string) {
@@ -487,7 +564,7 @@ function ColaboradorDetalhePage() {
           <div>
             <small>Última nota</small>
             <strong className="is-score">
-              {ultimaNota > 0 ? ultimaNota.toFixed(2) : "—"}
+              {ultimaNota > 0 ? formatarNota(ultimaNota) : "—"}
             </strong>
             <span className="collaborator-kpi__score-label">
               {labelNota(ultimaNota)}
@@ -505,7 +582,7 @@ function ColaboradorDetalhePage() {
           <div>
             <small>Melhor nota</small>
             <strong className="is-score">
-              {melhorNota > 0 ? melhorNota.toFixed(2) : "—"}
+              {melhorNota > 0 ? formatarNota(melhorNota) : "—"}
             </strong>
             <span className="collaborator-kpi__score-label">
               {labelNota(melhorNota)}
@@ -700,7 +777,7 @@ function ColaboradorDetalhePage() {
                               : "Nota atual / final"}
                           </small>
                           <strong>
-                            {temNota ? feedback.notaMedia.toFixed(2) : "—"}
+                            {temNota ? formatarNota(feedback.notaMedia) : "—"}
                           </strong>
                           <span>{labelNota(feedback.notaMedia)}</span>
                         </div>
@@ -744,25 +821,20 @@ function ColaboradorDetalhePage() {
 
                             return (
                               <div
-                                className="collaborator-competency"
+                                className={`collaborator-competency ${
+                                  nota > 0 ? "score-semantic has-score" : ""
+                                }`}
                                 key={sigla}
+                                style={nota > 0 ? estiloNota(nota) : undefined}
                               >
                                 <span className="collaborator-competency__icon">
-                                  <IconCompetency />
+                                  {criterioIconPorSigla[sigla]}
                                 </span>
                                 <span className="collaborator-competency__name">
                                   {criterioNomePorSigla[sigla]}
                                 </span>
-                                <strong
-                                  style={
-                                    nota > 0
-                                      ? {
-                                          color: getItemEscalaPorNota(nota, escala).cor,
-                                        }
-                                      : undefined
-                                  }
-                                >
-                                  {nota > 0 ? nota.toFixed(1) : "—"}
+                                <strong>
+                                  {nota > 0 ? formatarNota(nota) : "—"}
                                 </strong>
                               </div>
                             );

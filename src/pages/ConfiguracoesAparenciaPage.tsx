@@ -6,6 +6,7 @@ import type { BrandingConfig } from "../types/Branding";
 import type { EscalaAvaliacao } from "../types/EscalaAvaliacao";
 import {
   getEscalaAvaliacao,
+  getFaixaTexto,
   restaurarEscalaAvaliacao,
   salvarEscalaAvaliacao,
 } from "../services/escalaAvaliacaoStorage";
@@ -22,8 +23,17 @@ function ConfiguracoesAparenciaPage() {
   const [mensagemEscala, setMensagemEscala] = useState("");
 
   function salvarEscala() {
-    salvarEscalaAvaliacao(escala);
-    setMensagemEscala("Régua de notas salva com sucesso.");
+    try {
+      salvarEscalaAvaliacao(escala);
+      setEscala(getEscalaAvaliacao());
+      setMensagemEscala("Régua de notas salva com sucesso.");
+    } catch (error) {
+      setMensagemEscala(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível salvar a régua de notas."
+      );
+    }
   }
 
   function restaurarEscala() {
@@ -50,6 +60,23 @@ function ConfiguracoesAparenciaPage() {
               ...(campo === "cor"
                 ? { corFundo: `${valor}18` }
                 : {}),
+            }
+          : item
+      )
+    );
+    setMensagemEscala("");
+  }
+
+  function atualizarLimiteMinimo(
+    nota: number,
+    valor: number
+  ) {
+    setEscala((atual) =>
+      atual.map((item) =>
+        item.nota === nota
+          ? {
+              ...item,
+              limiteMinimo: valor,
             }
           : item
       )
@@ -96,7 +123,9 @@ function ConfiguracoesAparenciaPage() {
     atualizarBranding({
       ...form,
       nomeSistema: form.nomeSistema.trim() || "Feedback Control",
-      subtituloSistema: form.subtituloSistema.trim() || "Performance & Feedback Management",
+      subtituloSistema:
+        form.subtituloSistema.trim() ||
+        "Performance & Feedback Management",
     });
     setMensagem("Identidade visual salva com sucesso.");
   }
@@ -238,7 +267,10 @@ function ConfiguracoesAparenciaPage() {
               )}
               <div>
                 <strong>{form.nomeSistema || "Feedback Control"}</strong>
-                <span>{form.subtituloSistema || "Performance & Feedback Management"}</span>
+                <span>
+                  {form.subtituloSistema ||
+                    "Performance & Feedback Management"}
+                </span>
               </div>
             </div>
 
@@ -253,7 +285,10 @@ function ConfiguracoesAparenciaPage() {
             <button
               type="button"
               className="branding-preview__accent"
-              style={{ borderColor: form.corDestaque, color: form.corDestaque }}
+              style={{
+                borderColor: form.corDestaque,
+                color: form.corDestaque,
+              }}
             >
               Ação secundária
             </button>
@@ -267,9 +302,9 @@ function ConfiguracoesAparenciaPage() {
             <span>Modelo de avaliação</span>
             <h2>Régua de notas</h2>
             <p>
-              Define o significado e a referência visual das notas usadas
-              nas avaliações. Médias decimais usam a nota inteira mais
-              próxima para determinar a cor.
+              Define a faixa, o significado e a referência visual usados em
+              todo o Virtus. A classificação de médias decimais respeita os
+              limites configurados abaixo.
             </p>
           </div>
 
@@ -295,6 +330,43 @@ function ConfiguracoesAparenciaPage() {
               >
                 {item.nota}
               </div>
+
+              <label>
+                <span>Faixa da média</span>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "110px minmax(105px, 1fr)",
+                    gap: "8px",
+                    alignItems: "center",
+                  }}
+                >
+                  <input
+                    type="number"
+                    min={1}
+                    max={5}
+                    step={0.1}
+                    disabled={item.nota === 1}
+                    value={item.limiteMinimo}
+                    onChange={(event) =>
+                      atualizarLimiteMinimo(
+                        item.nota,
+                        Number(event.target.value)
+                      )
+                    }
+                    aria-label={`Limite inicial da nota ${item.nota}`}
+                  />
+                  <small
+                    style={{
+                      color: "#666",
+                      fontSize: "11px",
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    {getFaixaTexto(item, escala)}
+                  </small>
+                </div>
+              </label>
 
               <label>
                 <span>Significado</span>

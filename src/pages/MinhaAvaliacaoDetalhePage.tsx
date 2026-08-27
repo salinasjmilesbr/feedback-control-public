@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode } from "react";
+﻿import { useState, type CSSProperties, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import { getFeedbacksByColaborador } from "../services/feedbackStorage";
@@ -11,6 +11,7 @@ import {
 import { getColaboradores } from "../services/colaboradorStorage";
 import { getMetasDoColaboradorNoCiclo } from "../services/metaStorage";
 import {
+  formatarNota,
   getEscalaAvaliacao,
   getItemEscalaPorNota,
 } from "../services/escalaAvaliacaoStorage";
@@ -320,7 +321,7 @@ function MinhaAvaliacaoDetalhePage() {
           style={estiloNota(feedback.notaMedia)}
         >
           <span>Resultado do ciclo</span>
-          <strong>{feedback.notaMedia.toFixed(2)}</strong>
+          <strong>{formatarNota(feedback.notaMedia)}</strong>
           <small>{labelNota(feedback.notaMedia)}</small>
         </div>
 
@@ -401,7 +402,7 @@ function MinhaAvaliacaoDetalhePage() {
                 </div>
 
                 <div className="evaluation-history-compact-card__score">
-                  {item.notaMedia.toFixed(2)}
+                  {formatarNota(item.notaMedia)}
                 </div>
 
                 <div className="evaluation-history-compact-card__footer">
@@ -452,7 +453,7 @@ function MinhaAvaliacaoDetalhePage() {
                 <span className="evaluation-summary-metric__icon is-purple">☆</span>
                 <div>
                   <small>Nota final</small>
-                  <strong>{feedback.notaMedia.toFixed(2)} / 5</strong>
+                  <strong>{formatarNota(feedback.notaMedia)} / 5</strong>
                 </div>
               </div>
 
@@ -460,7 +461,7 @@ function MinhaAvaliacaoDetalhePage() {
                 <span className="evaluation-summary-metric__icon is-blue">▥</span>
                 <div>
                   <small>Média geral</small>
-                  <strong>{feedback.notaMedia.toFixed(2)}</strong>
+                  <strong>{formatarNota(feedback.notaMedia)}</strong>
                 </div>
               </div>
 
@@ -586,7 +587,7 @@ function MinhaAvaliacaoDetalhePage() {
                     style={estiloNota(criterio.nota)}
                   >
                     <span>Nota final</span>
-                    <strong>{criterio.nota.toFixed(2)}</strong>
+                    <strong>{formatarNota(criterio.nota)}</strong>
                     <small>{labelNota(criterio.nota)}</small>
                   </div>
                 </div>
@@ -615,7 +616,7 @@ function MinhaAvaliacaoDetalhePage() {
                           <span>Gerente</span>
                           <strong>
                             {subcriterio.notaGerente > 0
-                              ? subcriterio.notaGerente.toFixed(2)
+                              ? formatarNota(subcriterio.notaGerente)
                               : "—"}
                           </strong>
                         </div>
@@ -626,7 +627,7 @@ function MinhaAvaliacaoDetalhePage() {
                               <span>Coordenador</span>
                               <strong>
                                 {subcriterio.notaCoordenador > 0
-                                  ? subcriterio.notaCoordenador.toFixed(2)
+                                  ? formatarNota(subcriterio.notaCoordenador)
                                   : "—"}
                               </strong>
                             </div>
@@ -635,7 +636,7 @@ function MinhaAvaliacaoDetalhePage() {
                               <span>Colegiado</span>
                               <strong>
                                 {subcriterio.notaColegiado > 0
-                                  ? subcriterio.notaColegiado.toFixed(2)
+                                  ? formatarNota(subcriterio.notaColegiado)
                                   : "—"}
                               </strong>
                             </div>
@@ -648,7 +649,7 @@ function MinhaAvaliacaoDetalhePage() {
                         style={estiloNota(subcriterio.notaFinal)}
                       >
                         <small>Média</small>
-                        <strong>{subcriterio.notaFinal.toFixed(2)}</strong>
+                        <strong>{formatarNota(subcriterio.notaFinal)}</strong>
                         <span>{labelNota(subcriterio.notaFinal)}</span>
                       </div>
                     </div>
@@ -911,8 +912,8 @@ function MinhaAvaliacaoDetalhePage() {
             </div>
 
             <div className="score-scale-modal__footer">
-              Médias decimais usam a nota inteira mais próxima para a
-              referência visual.
+              Médias decimais são classificadas conforme as faixas definidas
+              na configuração da régua de notas.
             </div>
           </section>
         </div>
@@ -922,3 +923,4 @@ function MinhaAvaliacaoDetalhePage() {
 }
 
 export default MinhaAvaliacaoDetalhePage;
+

@@ -491,7 +491,7 @@
   display: block;
   margin: 5px 0;
   color: var(--score-color);
-  font-size: 27px;
+  font-size: 32px;
   line-height: 1;
 }
 
@@ -621,8 +621,26 @@
 
 .collaborator-competency strong {
   align-self: start;
-  margin-top: 2px;
-  font-size: 13px;
+  width: fit-content;
+  margin-top: 3px;
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 17px;
+  line-height: 1.05;
+  font-weight: 850;
+}
+
+.collaborator-competency.has-score strong {
+  border-color: var(--score-border);
+  background: var(--score-bg);
+  color: var(--score-color);
+}
+
+.collaborator-competency.has-score .collaborator-competency__icon {
+  border: 1px solid var(--score-border);
+  background: var(--score-bg);
+  color: var(--score-color);
 }
 
 .collaborator-history-empty {

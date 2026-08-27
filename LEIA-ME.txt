@@ -1,0 +1,18 @@
+PATCH 6D — Padronização de notas na página "Minha Avaliação > Detalhes"
+
+Este patch é cirúrgico e altera apenas:
+  src/pages/MinhaAvaliacaoDetalhePage.tsx
+
+O que muda:
+- adiciona o uso do formatarNota() central;
+- troca todas as notas exibidas com 2 casas por 1 casa decimal;
+- inclui Resultado do ciclo, Histórico, Resumo, Nota da competência,
+  Gerente, Coordenador, Colegiado e Média do subcritério;
+- atualiza o texto do modal "Régua de notas" para refletir as novas faixas configuráveis.
+
+Como aplicar:
+1. Extraia este ZIP na raiz do projeto.
+2. No PowerShell, na raiz do projeto, execute:
+     .\aplicar-patch.ps1
+3. Rode:
+     npm run build

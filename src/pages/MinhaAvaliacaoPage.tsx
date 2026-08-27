@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import { getFeedbacksByColaborador } from "../services/feedbackStorage";
 import {
+  formatarNota,
   getEscalaAvaliacao,
   getItemEscalaPorNota,
 } from "../services/escalaAvaliacaoStorage";
@@ -147,7 +148,7 @@ function MinhaAvaliacaoPage() {
                   </div>
 
                   <div className="evaluation-history-card__score">
-                    <strong>{feedback.notaMedia.toFixed(2)}</strong>
+                    <strong>{formatarNota(feedback.notaMedia)}</strong>
                     <div>
                       <span>Nota final</span>
                       <small>{labelNota(feedback.notaMedia)}</small>
