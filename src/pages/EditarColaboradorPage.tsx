@@ -11,6 +11,7 @@ import {
   getColaboradores,
   updateColaborador,
 } from "../services/colaboradorStorage";
+import "../styles/colaborador-form.css";
 
 function EditarColaboradorPage() {
   const navigate = useNavigate();
@@ -41,9 +42,7 @@ function EditarColaboradorPage() {
     colaborador?.avaliadoresColegiadoMatriculas ?? []
   );
   const [gestorDiretoMatricula, setGestorDiretoMatricula] =
-    useState(
-      colaborador?.gestorDiretoMatricula?.toString() ?? ""
-    );
+    useState(colaborador?.gestorDiretoMatricula?.toString() ?? "");
   const [status, setStatus] = useState<StatusColaborador>(
     colaborador?.status ?? "ATIVO"
   );
@@ -51,12 +50,19 @@ function EditarColaboradorPage() {
 
   if (!colaborador) {
     return (
-      <div style={{ padding: "30px" }}>
-        <h1>Colaborador não encontrado</h1>
-        <button type="button" onClick={() => navigate("/")}>
-          Voltar
-        </button>
-      </div>
+      <main className="virtus-page collaborator-form-page">
+        <section className="collaborator-form-empty-state">
+          <h1>Colaborador não encontrado</h1>
+          <p>Não foi possível localizar o cadastro solicitado.</p>
+          <button
+            type="button"
+            className="collaborator-form-btn collaborator-form-btn--secondary"
+            onClick={() => navigate("/")}
+          >
+            Voltar aos colaboradores
+          </button>
+        </section>
+      </main>
     );
   }
 
@@ -144,186 +150,264 @@ function EditarColaboradorPage() {
   }
 
   return (
-    <div style={{ padding: "30px", maxWidth: "700px" }}>
-      <h1>Editar colaborador</h1>
-
-      <div style={{ display: "grid", gap: "16px" }}>
-        <label>
-          Matrícula
-          <input
-            type="number"
-            value={colaboradorAtual.matricula}
-            disabled
-          />
-        </label>
-
-        <label>
-          Nome
-          <input
-            type="text"
-            value={nome}
-            onChange={(e) => setNome(e.target.value)}
-          />
-        </label>
-
-        <label>
-          E-mail
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </label>
-
-        <label>
-          Cargo
-          <input
-            type="text"
-            value={cargo}
-            onChange={(e) => setCargo(e.target.value)}
-          />
-        </label>
-
-        <label>
-          Área
-          <input
-            type="text"
-            value={area}
-            onChange={(e) => setArea(e.target.value)}
-          />
-        </label>
-
-        <label>
-          Função
-          <select
-            value={funcao}
-            onChange={(e) =>
-              setFuncao(e.target.value as FuncaoColaborador)
-            }
-          >
-            <option value="ANALISTA">Analista</option>
-            <option value="COORDENADOR">Coordenador</option>
-            <option value="CONSULTOR">Consultor</option>
-            <option value="GERENTE">Gerente</option>
-          </select>
-        </label>
-
-        {funcao === "ANALISTA" && (
-          <label>
-            Senioridade
-            <select
-              value={senioridade}
-              onChange={(e) =>
-                setSenioridade(
-                  e.target.value as SenioridadeColaborador
-                )
-              }
-            >
-              <option value="JUNIOR">Júnior</option>
-              <option value="PLENO">Pleno</option>
-              <option value="SENIOR">Sênior</option>
-            </select>
-          </label>
-        )}
-
-        <label>
-          Gestor direto
-          <select
-            value={gestorDiretoMatricula}
-            onChange={(e) =>
-              setGestorDiretoMatricula(e.target.value)
-            }
-          >
-            <option value="">Sem gestor direto</option>
-            {gestoresDisponiveis.map((gestor) => (
-              <option
-                key={gestor.matricula}
-                value={gestor.matricula}
-              >
-                {gestor.nome}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        {funcao === "ANALISTA" && (
-          <fieldset
-          style={{
-            border: "1px solid #ccc",
-            borderRadius: "8px",
-            padding: "12px",
-          }}
-        >
-          <legend>Avaliadores do colegiado</legend>
-
-          <div style={{ display: "grid", gap: "8px" }}>
-            {avaliadoresDisponiveis.map((avaliador) => (
-              <label
-                key={avaliador.matricula}
-                style={{
-                  display: "flex",
-                  gap: "8px",
-                  alignItems: "center",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={avaliadoresColegiadoMatriculas.includes(
-                    avaliador.matricula
-                  )}
-                  onChange={() =>
-                    toggleAvaliador(avaliador.matricula)
-                  }
-                />
-                {avaliador.nome}
-              </label>
-            ))}
-          </div>
-          </fieldset>
-        )}
-
-        <label>
-          Status
-          <select
-            value={status}
-            onChange={(e) =>
-              setStatus(e.target.value as StatusColaborador)
-            }
-          >
-            <option value="ATIVO">Ativo</option>
-            <option value="LICENCA">Em licença</option>
-            <option value="DESLIGADO">Desligado</option>
-          </select>
-        </label>
-
-        {erro && (
-          <p style={{ margin: 0, color: "#b00020" }}>
-            {erro}
-          </p>
-        )}
-
-        <div
-          style={{
-            display: "flex",
-            gap: "12px",
-            marginTop: "10px",
-          }}
-        >
+    <main className="virtus-page collaborator-form-page">
+      <section className="collaborator-form-header">
+        <div>
           <button
             type="button"
+            className="collaborator-form-back"
             onClick={() =>
               navigate(`/colaborador/${colaboradorAtual.matricula}`)
             }
           >
-            Cancelar
+            ← Voltar ao colaborador
           </button>
-
-          <button type="button" onClick={handleSalvar}>
-            Salvar alterações
-          </button>
+          <span className="collaborator-form-eyebrow">Cadastro</span>
+          <h1>Editar colaborador</h1>
+          <p>
+            Atualize dados profissionais, estrutura de gestão e participação
+            no colegiado.
+          </p>
         </div>
+
+        <div className="collaborator-form-profile">
+          <span className="collaborator-form-profile__avatar">
+            {colaboradorAtual.nome
+              .split(" ")
+              .filter(Boolean)
+              .slice(0, 2)
+              .map((parte) => parte[0])
+              .join("")
+              .toUpperCase()}
+          </span>
+          <div>
+            <strong>{colaboradorAtual.nome}</strong>
+            <small>Matrícula {colaboradorAtual.matricula}</small>
+          </div>
+        </div>
+      </section>
+
+      <section className="collaborator-form-card">
+        <div className="collaborator-form-card__heading">
+          <span className="collaborator-form-card__icon" aria-hidden="true">
+            01
+          </span>
+          <div>
+            <h2>Dados do colaborador</h2>
+            <p>Informações básicas usadas em toda a experiência do Virtus.</p>
+          </div>
+        </div>
+
+        <div className="collaborator-form-grid">
+          <label className="collaborator-field">
+            <span>Matrícula</span>
+            <input
+              type="number"
+              value={colaboradorAtual.matricula}
+              disabled
+            />
+            <small>A matrícula não pode ser alterada.</small>
+          </label>
+
+          <label className="collaborator-field collaborator-field--wide">
+            <span>Nome *</span>
+            <input
+              type="text"
+              value={nome}
+              onChange={(event) => setNome(event.target.value)}
+            />
+          </label>
+
+          <label className="collaborator-field collaborator-field--wide">
+            <span>E-mail *</span>
+            <input
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </label>
+
+          <label className="collaborator-field">
+            <span>Cargo *</span>
+            <input
+              type="text"
+              value={cargo}
+              onChange={(event) => setCargo(event.target.value)}
+            />
+          </label>
+
+          <label className="collaborator-field">
+            <span>Área *</span>
+            <input
+              type="text"
+              value={area}
+              onChange={(event) => setArea(event.target.value)}
+            />
+          </label>
+        </div>
+      </section>
+
+      <section className="collaborator-form-card">
+        <div className="collaborator-form-card__heading">
+          <span className="collaborator-form-card__icon" aria-hidden="true">
+            02
+          </span>
+          <div>
+            <h2>Estrutura organizacional</h2>
+            <p>Defina função, senioridade e gestor direto do colaborador.</p>
+          </div>
+        </div>
+
+        <div className="collaborator-form-grid">
+          <label className="collaborator-field">
+            <span>Função *</span>
+            <select
+              value={funcao}
+              onChange={(event) =>
+                setFuncao(event.target.value as FuncaoColaborador)
+              }
+            >
+              <option value="ANALISTA">Analista</option>
+              <option value="COORDENADOR">Coordenador</option>
+              <option value="CONSULTOR">Consultor</option>
+              <option value="GERENTE">Gerente</option>
+            </select>
+          </label>
+
+          {funcao === "ANALISTA" && (
+            <label className="collaborator-field">
+              <span>Senioridade *</span>
+              <select
+                value={senioridade}
+                onChange={(event) =>
+                  setSenioridade(
+                    event.target.value as SenioridadeColaborador
+                  )
+                }
+              >
+                <option value="JUNIOR">Júnior</option>
+                <option value="PLENO">Pleno</option>
+                <option value="SENIOR">Sênior</option>
+              </select>
+            </label>
+          )}
+
+          <label className="collaborator-field">
+            <span>Gestor direto</span>
+            <select
+              value={gestorDiretoMatricula}
+              onChange={(event) =>
+                setGestorDiretoMatricula(event.target.value)
+              }
+            >
+              <option value="">Sem gestor direto</option>
+              {gestoresDisponiveis.map((gestor) => (
+                <option key={gestor.matricula} value={gestor.matricula}>
+                  {gestor.nome}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="collaborator-field">
+            <span>Status *</span>
+            <select
+              value={status}
+              onChange={(event) =>
+                setStatus(event.target.value as StatusColaborador)
+              }
+            >
+              <option value="ATIVO">Ativo</option>
+              <option value="LICENCA">Em licença</option>
+              <option value="DESLIGADO">Desligado</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      {funcao === "ANALISTA" && (
+        <section className="collaborator-form-card">
+          <div className="collaborator-form-card__heading">
+            <span className="collaborator-form-card__icon" aria-hidden="true">
+              03
+            </span>
+            <div>
+              <h2>Avaliadores do colegiado</h2>
+              <p>
+                Selecione os gestores que participarão da avaliação colegiada.
+              </p>
+            </div>
+          </div>
+
+          {avaliadoresDisponiveis.length === 0 ? (
+            <div className="collaborator-form-empty">
+              Nenhum gerente ou coordenador ativo disponível.
+            </div>
+          ) : (
+            <div className="collaborator-reviewers">
+              {avaliadoresDisponiveis.map((avaliador) => {
+                const selecionado =
+                  avaliadoresColegiadoMatriculas.includes(avaliador.matricula);
+
+                return (
+                  <label
+                    key={avaliador.matricula}
+                    className={`collaborator-reviewer ${
+                      selecionado ? "is-selected" : ""
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selecionado}
+                      onChange={() => toggleAvaliador(avaliador.matricula)}
+                    />
+                    <span className="collaborator-reviewer__avatar">
+                      {avaliador.nome
+                        .split(" ")
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .map((parte) => parte[0])
+                        .join("")
+                        .toUpperCase()}
+                    </span>
+                    <span className="collaborator-reviewer__copy">
+                      <strong>{avaliador.nome}</strong>
+                      <small>
+                        {avaliador.funcao === "GERENTE"
+                          ? "Gerente"
+                          : "Coordenador"}
+                      </small>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
+
+      {erro && <div className="collaborator-form-error">{erro}</div>}
+
+      <div className="collaborator-form-actions">
+        <button
+          type="button"
+          className="collaborator-form-btn collaborator-form-btn--secondary"
+          onClick={() =>
+            navigate(`/colaborador/${colaboradorAtual.matricula}`)
+          }
+        >
+          Cancelar
+        </button>
+
+        <button
+          type="button"
+          className="collaborator-form-btn collaborator-form-btn--primary"
+          onClick={handleSalvar}
+        >
+          Salvar alterações
+        </button>
       </div>
-    </div>
+    </main>
   );
 }
 
