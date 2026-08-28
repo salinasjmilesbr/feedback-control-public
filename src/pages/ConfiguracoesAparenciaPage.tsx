@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent } from "react";
+﻿import { useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBranding } from "../contexts/BrandingContext";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
@@ -149,7 +149,7 @@ function ConfiguracoesAparenciaPage() {
   }
 
   return (
-    <div className="branding-page">
+    <div className="branding-page virtus-page">
       <div className="branding-page__header">
         <div>
           <h1 style={{ margin: 0 }}>Identidade visual</h1>
@@ -452,3 +452,4 @@ function ConfiguracoesAparenciaPage() {
 }
 
 export default ConfiguracoesAparenciaPage;
+
