@@ -12,7 +12,16 @@ export type AcaoHistoricoMeta =
   | "EDICAO"
   | "ATUALIZACAO_PROGRESSO"
   | "FINALIZACAO"
-  | "EXCLUSAO";
+  | "EXCLUSAO"
+  | "APROVACAO_COORDENADOR"
+  | "APROVACAO_GERENTE"
+  | "INVALIDACAO_APROVACOES";
+
+export interface AprovacaoMeta {
+  matricula: number;
+  nome: string;
+  data: string;
+}
 
 export interface HistoricoMeta {
   id: string;
@@ -46,6 +55,11 @@ export interface Meta {
   valorAlvo: string;
 
   status: StatusMeta;
+
+  // Aprovação formal da meta. Campos opcionais preservam compatibilidade
+  // com registros criados antes desta funcionalidade.
+  aprovacaoCoordenador?: AprovacaoMeta;
+  aprovacaoGerente?: AprovacaoMeta;
 
   // Acompanhamento durante o ciclo.
   resultadoAtual?: string;

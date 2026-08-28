@@ -1866,3 +1866,47 @@
     align-items: center;
   }
 }
+
+/* Aviso de metas sem aprovação formal */
+.new-evaluation-goals-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid #e4d8b6;
+  border-radius: 12px;
+  background: #fffaf0;
+  color: #5f4b00;
+}
+
+.new-evaluation-goals-warning__icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #fff4ce;
+  color: #765c00;
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.new-evaluation-goals-warning strong {
+  display: block;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.new-evaluation-goals-warning p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #716023;
+}
+
+@media (max-width: 600px) {
+  .new-evaluation-goals-warning {
+    padding: 12px;
+  }
+}

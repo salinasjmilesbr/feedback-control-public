@@ -6,9 +6,7 @@ const STORAGE_KEY = "feedback-control-metas";
 
 function getTodasMetas(): Meta[] {
   const data = localStorage.getItem(STORAGE_KEY);
-
   if (!data) return [];
-
   try {
     return JSON.parse(data) as Meta[];
   } catch {
@@ -59,16 +57,11 @@ export function contarMetasPorTipo(
   cicloId: string,
   tipo: TipoMeta
 ): number {
-  return getMetasDoColaboradorNoCiclo(
-    colaboradorMatricula,
-    cicloId
-  ).filter((meta) => meta.tipo === tipo).length;
+  return getMetasDoColaboradorNoCiclo(colaboradorMatricula, cicloId)
+    .filter((meta) => meta.tipo === tipo).length;
 }
 
-function limiteDoTipo(
-  ciclo: CicloAvaliacao,
-  tipo: TipoMeta
-): number {
+function limiteDoTipo(ciclo: CicloAvaliacao, tipo: TipoMeta): number {
   return tipo === "NEGOCIO_PROJETO"
     ? ciclo.quantidadeMetasNegocio ?? 0
     : ciclo.quantidadeMetasIndividuais ?? 0;
@@ -80,6 +73,28 @@ function validarCicloAtivo(ciclo: CicloAvaliacao) {
       "As metas só podem ser cadastradas ou alteradas enquanto o ciclo estiver Ativo."
     );
   }
+}
+
+export function metaExigeAprovacaoCoordenador(
+  colaborador: Colaborador,
+  colaboradores: Colaborador[]
+): boolean {
+  if (!colaborador.gestorDiretoMatricula) return false;
+  const gestorDireto = colaboradores.find(
+    (item) => item.matricula === colaborador.gestorDiretoMatricula
+  );
+  return gestorDireto?.funcao === "COORDENADOR";
+}
+
+export function metaEstaAprovada(
+  meta: Meta,
+  colaborador: Colaborador,
+  colaboradores: Colaborador[]
+): boolean {
+  const coordenadorOk =
+    !metaExigeAprovacaoCoordenador(colaborador, colaboradores) ||
+    Boolean(meta.aprovacaoCoordenador);
+  return coordenadorOk && Boolean(meta.aprovacaoGerente);
 }
 
 export function criarMeta(
@@ -108,9 +123,7 @@ export function criarMeta(
   }
 
   if (!descricao.trim() || !kpi.trim() || !valorAlvo.trim()) {
-    throw new Error(
-      "Preencha a descrição, o KPI e o valor-alvo da meta."
-    );
+    throw new Error("Preencha a descrição, o KPI e o valor-alvo da meta.");
   }
 
   const agora = new Date().toISOString();
@@ -130,19 +143,16 @@ export function criarMeta(
     dataCriacao: agora,
     dataUltimaAtualizacao: agora,
     excluida: false,
-    historico: [
-      {
-        id: crypto.randomUUID(),
-        acao: "CRIACAO",
-        data: agora,
-        autorMatricula: colaborador.matricula,
-        autorNome: colaborador.nome,
-      },
-    ],
+    historico: [{
+      id: crypto.randomUUID(),
+      acao: "CRIACAO",
+      data: agora,
+      autorMatricula: colaborador.matricula,
+      autorNome: colaborador.nome,
+    }],
   };
 
   persistir([...getTodasMetas(), meta]);
-
   return meta;
 }
 
@@ -157,10 +167,86 @@ export function atualizarMeta(
   validarCicloAtivo(ciclo);
 
   if (!descricao.trim() || !kpi.trim() || !valorAlvo.trim()) {
-    throw new Error(
-      "Preencha a descrição, o KPI e o valor-alvo da meta."
-    );
+    throw new Error("Preencha a descrição, o KPI e o valor-alvo da meta.");
   }
+
+  const metas = getTodasMetas();
+  const atual = metas.find((meta) => meta.id === id);
+
+  if (
+    !atual ||
+    atual.excluida ||
+    atual.colaboradorMatricula !== colaborador.matricula ||
+    atual.cicloId !== ciclo.id
+  ) {
+    throw new Error("Meta não encontrada.");
+  }
+
+  const novaDescricao = descricao.trim();
+  const novoKpi = kpi.trim();
+  const novoValorAlvo = valorAlvo.trim();
+  const alteracaoRelevante =
+    atual.descricao !== novaDescricao ||
+    atual.kpi !== novoKpi ||
+    atual.valorAlvo !== novoValorAlvo;
+  const agora = new Date().toISOString();
+
+  persistir(
+    metas.map((meta) => {
+      if (meta.id !== id) return meta;
+
+      const historico = [
+        ...meta.historico,
+        {
+          id: crypto.randomUUID(),
+          acao: "EDICAO" as const,
+          data: agora,
+          autorMatricula: colaborador.matricula,
+          autorNome: colaborador.nome,
+          descricaoAnterior: meta.descricao,
+          kpiAnterior: meta.kpi,
+          valorAlvoAnterior: meta.valorAlvo,
+        },
+      ];
+
+      if (
+        alteracaoRelevante &&
+        (meta.aprovacaoCoordenador || meta.aprovacaoGerente)
+      ) {
+        historico.push({
+          id: crypto.randomUUID(),
+          acao: "INVALIDACAO_APROVACOES",
+          data: agora,
+          autorMatricula: colaborador.matricula,
+          autorNome: colaborador.nome,
+        });
+      }
+
+      return {
+        ...meta,
+        descricao: novaDescricao,
+        kpi: novoKpi,
+        valorAlvo: novoValorAlvo,
+        aprovacaoCoordenador: alteracaoRelevante
+          ? undefined
+          : meta.aprovacaoCoordenador,
+        aprovacaoGerente: alteracaoRelevante
+          ? undefined
+          : meta.aprovacaoGerente,
+        dataUltimaAtualizacao: agora,
+        historico,
+      };
+    })
+  );
+}
+
+export function aprovarMeta(
+  id: string,
+  aprovador: Colaborador,
+  colaborador: Colaborador,
+  ciclo: CicloAvaliacao
+): void {
+  validarCicloAtivo(ciclo);
 
   const metas = getTodasMetas();
   const atual = metas.find((meta) => meta.id === id);
@@ -176,32 +262,72 @@ export function atualizarMeta(
 
   const agora = new Date().toISOString();
 
-  persistir(
-    metas.map((meta) =>
-      meta.id === id
-        ? {
-            ...meta,
-            descricao: descricao.trim(),
-            kpi: kpi.trim(),
-            valorAlvo: valorAlvo.trim(),
-            dataUltimaAtualizacao: agora,
-            historico: [
-              ...meta.historico,
-              {
-                id: crypto.randomUUID(),
-                acao: "EDICAO",
+  if (aprovador.funcao === "COORDENADOR") {
+    if (colaborador.gestorDiretoMatricula !== aprovador.matricula) {
+      throw new Error("Somente o coordenador direto pode aprovar esta meta.");
+    }
+    if (atual.aprovacaoCoordenador) return;
+
+    persistir(
+      metas.map((meta) =>
+        meta.id === id
+          ? {
+              ...meta,
+              aprovacaoCoordenador: {
+                matricula: aprovador.matricula,
+                nome: aprovador.nome,
                 data: agora,
-                autorMatricula: colaborador.matricula,
-                autorNome: colaborador.nome,
-                descricaoAnterior: meta.descricao,
-                kpiAnterior: meta.kpi,
-                valorAlvoAnterior: meta.valorAlvo,
               },
-            ],
-          }
-        : meta
-    )
-  );
+              dataUltimaAtualizacao: agora,
+              historico: [
+                ...meta.historico,
+                {
+                  id: crypto.randomUUID(),
+                  acao: "APROVACAO_COORDENADOR",
+                  data: agora,
+                  autorMatricula: aprovador.matricula,
+                  autorNome: aprovador.nome,
+                },
+              ],
+            }
+          : meta
+      )
+    );
+    return;
+  }
+
+  if (aprovador.funcao === "GERENTE") {
+    if (atual.aprovacaoGerente) return;
+
+    persistir(
+      metas.map((meta) =>
+        meta.id === id
+          ? {
+              ...meta,
+              aprovacaoGerente: {
+                matricula: aprovador.matricula,
+                nome: aprovador.nome,
+                data: agora,
+              },
+              dataUltimaAtualizacao: agora,
+              historico: [
+                ...meta.historico,
+                {
+                  id: crypto.randomUUID(),
+                  acao: "APROVACAO_GERENTE",
+                  data: agora,
+                  autorMatricula: aprovador.matricula,
+                  autorNome: aprovador.nome,
+                },
+              ],
+            }
+          : meta
+      )
+    );
+    return;
+  }
+
+  throw new Error("Este perfil não pode aprovar metas.");
 }
 
 export function excluirMeta(
@@ -210,7 +336,6 @@ export function excluirMeta(
   ciclo: CicloAvaliacao
 ): void {
   validarCicloAtivo(ciclo);
-
   const metas = getTodasMetas();
   const atual = metas.find((meta) => meta.id === id);
 
@@ -252,7 +377,6 @@ export function excluirMeta(
   );
 }
 
-
 export function atualizarAcompanhamentoMeta(
   id: string,
   colaborador: Colaborador,
@@ -265,7 +389,6 @@ export function atualizarAcompanhamentoMeta(
   if (!resultadoAtual.trim()) {
     throw new Error("Informe o resultado atual da meta.");
   }
-
   if (
     !Number.isFinite(progressoPercentual) ||
     progressoPercentual < 0 ||
@@ -306,8 +429,7 @@ export function atualizarAcompanhamentoMeta(
                 autorMatricula: colaborador.matricula,
                 autorNome: colaborador.nome,
                 resultadoAtualAnterior: meta.resultadoAtual,
-                progressoPercentualAnterior:
-                  meta.progressoPercentual,
+                progressoPercentualAnterior: meta.progressoPercentual,
               },
             ],
           }
@@ -315,7 +437,6 @@ export function atualizarAcompanhamentoMeta(
     )
   );
 }
-
 
 export function finalizarMeta(
   id: string,

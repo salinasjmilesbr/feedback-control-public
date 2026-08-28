@@ -1,4 +1,4 @@
-﻿import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import {
   getCiclosAvaliacao,
@@ -9,8 +9,13 @@ import {
   type ProgressoPapelPainel,
   type SituacaoAvaliacaoCiclo,
 } from "../services/cicloEquipeService";
+import { getColaboradores } from "../services/colaboradorStorage";
+import {
+  getMetasDoCiclo,
+} from "../services/metaStorage";
 import "../styles/ciclos.css";
 import "../styles/equipe-colegiado.css";
+import "../styles/metas-gestao.css";
 
 const labelsSituacao: Record<SituacaoAvaliacaoCiclo, string> = {
   NAO_INICIADA: "Não iniciada",
@@ -71,21 +76,24 @@ function PainelCicloPage() {
     );
   }
 
-  const linhas = getPainelCiclo(ciclo, usuarioAtual);
-
-  const separarPorVinculo = usuarioAtual.funcao === "COORDENADOR";
+  const usuario = usuarioAtual;
+  const cicloAtual = ciclo;
+  const linhas = getPainelCiclo(cicloAtual, usuario);
+  const colaboradores = getColaboradores();
+  const metasDoCiclo = getMetasDoCiclo(cicloAtual.id);
+  const separarPorVinculo = usuario.funcao === "COORDENADOR";
 
   const linhasEquipeDireta = separarPorVinculo
     ? linhas.filter(
         (linha) =>
-          linha.colaborador.gestorDiretoMatricula === usuarioAtual.matricula
+          linha.colaborador.gestorDiretoMatricula === usuario.matricula
       )
     : linhas;
 
   const linhasColegiado = separarPorVinculo
     ? linhas.filter(
         (linha) =>
-          linha.colaborador.gestorDiretoMatricula !== usuarioAtual.matricula
+          linha.colaborador.gestorDiretoMatricula !== usuario.matricula
       )
     : [];
 
@@ -102,6 +110,38 @@ function PainelCicloPage() {
     } as Record<SituacaoAvaliacaoCiclo, number>
   );
 
+  // Este KPI mostra somente o que depende do perfil que está vendo a tela:
+  // gerente -> aprovações do gerente pendentes;
+  // coordenador -> aprovações do coordenador direto pendentes.
+  const matriculasComAcessoAMetas = new Set(
+    linhas
+      .filter(
+        (linha) =>
+          usuario.funcao === "GERENTE" ||
+          linha.colaborador.gestorDiretoMatricula === usuario.matricula
+      )
+      .map((linha) => linha.colaborador.matricula)
+  );
+
+  const metasPendentesDoPerfil = metasDoCiclo.filter((meta) => {
+    if (!matriculasComAcessoAMetas.has(meta.colaboradorMatricula)) {
+      return false;
+    }
+
+    if (usuario.funcao === "GERENTE") {
+      return !meta.aprovacaoGerente;
+    }
+
+    const colaborador = colaboradores.find(
+      (item) => item.matricula === meta.colaboradorMatricula
+    );
+
+    return (
+      colaborador?.gestorDiretoMatricula === usuario.matricula &&
+      !meta.aprovacaoCoordenador
+    );
+  }).length;
+
   const indicadores = [
     { label: "Total", valor: linhas.length },
     { label: "Não iniciadas", valor: totais.NAO_INICIADA },
@@ -109,10 +149,22 @@ function PainelCicloPage() {
     { label: "Prontas p/ feedback", valor: totais.PRONTA_PARA_FEEDBACK },
     { label: "Concluídas", valor: totais.CONCLUIDA },
     {
-      label: "Com pendências",
-      valor: linhas.filter((linha) => linha.possuiPendencias).length,
+      label:
+        usuario.funcao === "GERENTE"
+          ? "Minhas aprovações de metas"
+          : "Minhas aprovações de metas",
+      valor: metasPendentesDoPerfil,
     },
   ];
+
+  function podeVerMetas(
+    colaborador: (typeof linhas)[number]["colaborador"]
+  ) {
+    return (
+      usuario.funcao === "GERENTE" ||
+      colaborador.gestorDiretoMatricula === usuario.matricula
+    );
+  }
 
   function renderTabelaGrupo(
     linhasGrupo: typeof linhas,
@@ -137,14 +189,14 @@ function PainelCicloPage() {
           </div>
         ) : (
           <div className="cycle-table-wrap">
-            <div className="cycle-table">
+            <div className="cycle-table cycle-table--responsive">
               <div className="cycle-table__row cycle-table__row--header">
                 <div>Colaborador</div>
                 <div>Gerente</div>
                 <div>Coordenador</div>
                 <div>Colegiado</div>
                 <div>Status geral</div>
-                <div></div>
+                <div>Ações</div>
               </div>
 
               {linhasGrupo.map((linha) => (
@@ -174,18 +226,35 @@ function PainelCicloPage() {
                     </div>
                   </div>
 
-                  {[linha.gerente, linha.coordenador, linha.colegiado].map(
-                    (progresso, indice) => (
-                      <span
-                        key={indice}
-                        className={`cycle-progress ${classePapel(progresso)}`}
-                      >
-                        {labelPapel(progresso)}
-                      </span>
-                    )
-                  )}
+                  <div className="cycle-mobile-field" data-label="Gerente">
+                    <span
+                      className={`cycle-progress ${classePapel(linha.gerente)}`}
+                    >
+                      {labelPapel(linha.gerente)}
+                    </span>
+                  </div>
 
-                  <div>
+                  <div className="cycle-mobile-field" data-label="Coordenador">
+                    <span
+                      className={`cycle-progress ${classePapel(
+                        linha.coordenador
+                      )}`}
+                    >
+                      {labelPapel(linha.coordenador)}
+                    </span>
+                  </div>
+
+                  <div className="cycle-mobile-field" data-label="Colegiado">
+                    <span
+                      className={`cycle-progress ${classePapel(
+                        linha.colegiado
+                      )}`}
+                    >
+                      {labelPapel(linha.colegiado)}
+                    </span>
+                  </div>
+
+                  <div className="cycle-mobile-field" data-label="Status geral">
                     <span
                       className={`cycle-general-status ${
                         linha.situacao === "CONCLUIDA"
@@ -206,20 +275,35 @@ function PainelCicloPage() {
                     )}
                   </div>
 
-                  {linha.feedback ? (
-                    <button
-                      className="cycle-btn cycle-btn--small cycle-btn--secondary"
-                      onClick={() =>
-                        navigate(
-                          `/colaborador/${linha.colaborador.matricula}/feedback/${linha.feedback!.id}/editar`
-                        )
-                      }
-                    >
-                      Abrir
-                    </button>
-                  ) : (
-                    <span className="cycle-muted">Não criada</span>
-                  )}
+                  <div className="cycle-row-actions">
+                    {podeVerMetas(linha.colaborador) && (
+                      <button
+                        className="cycle-btn cycle-btn--small cycle-btn--secondary"
+                        onClick={() =>
+                          navigate(
+                            `/ciclos/${cicloAtual.id}/colaborador/${linha.colaborador.matricula}/metas`
+                          )
+                        }
+                      >
+                        Acompanhar metas
+                      </button>
+                    )}
+
+                    {linha.feedback ? (
+                      <button
+                        className="cycle-btn cycle-btn--small cycle-btn--secondary"
+                        onClick={() =>
+                          navigate(
+                            `/colaborador/${linha.colaborador.matricula}/feedback/${linha.feedback!.id}/editar`
+                          )
+                        }
+                      >
+                        Abrir avaliação
+                      </button>
+                    ) : (
+                      <span className="cycle-muted">Avaliação não criada</span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -237,7 +321,7 @@ function PainelCicloPage() {
             className="cycle-back-link"
             onClick={() =>
               navigate(
-                usuarioAtual.funcao === "COORDENADOR"
+                usuario.funcao === "COORDENADOR"
                   ? "/painel-ciclos"
                   : "/ciclos"
               )
@@ -288,7 +372,7 @@ function PainelCicloPage() {
           {renderTabelaGrupo(
             linhasColegiado,
             "Avaliações como colegiado",
-            "Colaboradores de outras equipes em que você participa como avaliador do colegiado.",
+            "Colaboradores de outras equipes em que você participa como avaliador do colegiado. Metas não ficam disponíveis por vínculo de colegiado.",
             "Participação adicional"
           )}
         </div>
@@ -305,4 +389,3 @@ function PainelCicloPage() {
 }
 
 export default PainelCicloPage;
-

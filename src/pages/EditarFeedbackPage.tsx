@@ -7,6 +7,12 @@ import { calcularProgressoAvaliacao } from "../services/progressoAvaliacao";
 import { formatarNota } from "../services/escalaAvaliacaoStorage";
 import { getFeedbacksByColaborador, updateFeedback, } from "../services/feedbackStorage";
 import type { Feedback } from "../types/Feedback";
+import {
+  getMetasDoColaboradorNoCiclo,
+  metaEstaAprovada,
+} from "../services/metaStorage";
+import { getCiclosAvaliacao } from "../services/cicloAvaliacaoStorage";
+import "../styles/nova-avaliacao.css";
 
 const criterios = [
   {
@@ -233,6 +239,20 @@ function EditarFeedbackPage() {
   }
 
   const feedbackAtual = feedback;
+  const cicloDaAvaliacao = getCiclosAvaliacao().find(
+    (item) =>
+      item.ano === feedbackAtual.ano &&
+      item.ciclo === feedbackAtual.ciclo
+  );
+  const metasDoCiclo = cicloDaAvaliacao
+    ? getMetasDoColaboradorNoCiclo(
+        colaborador.matricula,
+        cicloDaAvaliacao.id
+      )
+    : [];
+  const metasSemAprovacaoFormal = metasDoCiclo.filter(
+    (meta) => !metaEstaAprovada(meta, colaborador, colaboradores)
+  );
 
   const avaliadoresColegiado = (
     colaborador.avaliadoresColegiadoMatriculas ?? []
@@ -890,6 +910,23 @@ function EditarFeedbackPage() {
           Usuário atual: {usuarioAtual?.nome ?? "Não selecionado"}
         </div>
       </div>
+
+      {metasSemAprovacaoFormal.length > 0 && (
+        <section className="new-evaluation-goals-warning" role="status">
+          <div className="new-evaluation-goals-warning__icon" aria-hidden="true">
+            !
+          </div>
+          <div>
+            <strong>Meta não formalmente aprovada</strong>
+            <p>
+              {metasSemAprovacaoFormal.length === 1
+                ? "Existe 1 meta deste ciclo que ainda não possui todas as aprovações formais."
+                : `Existem ${metasSemAprovacaoFormal.length} metas deste ciclo que ainda não possuem todas as aprovações formais.`}
+              {" "}A avaliação pode continuar normalmente.
+            </p>
+          </div>
+        </section>
+      )}
 
       <div
         style={{
@@ -1693,4 +1730,7 @@ function EditarFeedbackPage() {
 }
 
 export default EditarFeedbackPage;
+
+
+
 

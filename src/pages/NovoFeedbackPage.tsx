@@ -15,6 +15,10 @@ import {
   getCicloAtivo,
   formatarPeriodoCiclo,
 } from "../services/cicloAvaliacaoStorage";
+import {
+  getMetasDoColaboradorNoCiclo,
+  metaEstaAprovada,
+} from "../services/metaStorage";
 import "../styles/nova-avaliacao.css";
 
 const criterios = [
@@ -255,6 +259,13 @@ function NovoFeedbackPage() {
     : undefined;
   const anoAvaliacao = cicloAtivo.ano;
   const cicloAvaliacao = cicloAtivo.ciclo;
+  const metasDoCiclo = getMetasDoColaboradorNoCiclo(
+    colaborador.matricula,
+    cicloAtivo.id
+  );
+  const metasSemAprovacaoFormal = metasDoCiclo.filter(
+    (meta) => !metaEstaAprovada(meta, colaborador, colaboradores)
+  );
 
   const avaliadoresColegiado = (
     colaborador.avaliadoresColegiadoMatriculas ?? []
@@ -957,6 +968,23 @@ if (feedbackExistente) {
         )}
       </section>
 
+      {metasSemAprovacaoFormal.length > 0 && (
+        <section className="new-evaluation-goals-warning" role="status">
+          <div className="new-evaluation-goals-warning__icon" aria-hidden="true">
+            !
+          </div>
+          <div>
+            <strong>Meta não formalmente aprovada</strong>
+            <p>
+              {metasSemAprovacaoFormal.length === 1
+                ? "Existe 1 meta deste ciclo que ainda não possui todas as aprovações formais."
+                : `Existem ${metasSemAprovacaoFormal.length} metas deste ciclo que ainda não possuem todas as aprovações formais.`}
+              {" "}A avaliação pode continuar normalmente.
+            </p>
+          </div>
+        </section>
+      )}
+
       <div className="new-evaluation-section-heading">
         <span>Competências</span>
         <h2>Critérios avaliados</h2>
@@ -1536,6 +1564,9 @@ if (feedbackExistente) {
 }
 
 export default NovoFeedbackPage;
+
+
+
 
 
 

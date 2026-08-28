@@ -10,6 +10,7 @@ import CiclosAvaliacaoPage from "../pages/CiclosAvaliacaoPage";
 import PainelCicloPage from "../pages/PainelCicloPage";
 import PainelCiclosCoordenadorPage from "../pages/PainelCiclosCoordenadorPage";
 import MinhasMetasPage from "../pages/MinhasMetasPage";
+import AcompanhamentoMetasPage from "../pages/AcompanhamentoMetasPage";
 import ColaboradorDetalhePage from "../pages/ColaboradorDetalhePage";
 import NovoColaboradorPage from "../pages/NovoColaboradorPage";
 import EditarColaboradorPage from "../pages/EditarColaboradorPage";
@@ -24,78 +25,73 @@ function AppRoutes() {
       <UsuarioAtualBar />
       <NavegacaoPrincipal />
       <main className="app-main">
-      <Routes>
-        <Route
-          path="/"
-          element={<InicioPage />}
-        />
+        <Routes>
+          <Route path="/" element={<InicioPage />} />
 
-        <Route
-          path="/minha-avaliacao"
-          element={<MinhaAvaliacaoPage />}
-        />
+          <Route
+            path="/minha-avaliacao"
+            element={<MinhaAvaliacaoPage />}
+          />
 
-        <Route
-          path="/minha-avaliacao/:feedbackId"
-          element={<MinhaAvaliacaoDetalhePage />}
-        />
+          <Route
+            path="/minha-avaliacao/:feedbackId"
+            element={<MinhaAvaliacaoDetalhePage />}
+          />
 
-        <Route
-          path="/ciclos"
-          element={<CiclosAvaliacaoPage />}
-        />
+          <Route path="/ciclos" element={<CiclosAvaliacaoPage />} />
 
-        <Route
-          path="/ciclos/:cicloId"
-          element={<PainelCicloPage />}
-        />
+          <Route
+            path="/ciclos/:cicloId"
+            element={<PainelCicloPage />}
+          />
 
-        <Route
-          path="/painel-ciclos"
-          element={<PainelCiclosCoordenadorPage />}
-        />
+          <Route
+            path="/ciclos/:cicloId/colaborador/:id/metas"
+            element={<AcompanhamentoMetasPage />}
+          />
 
-        <Route
-          path="/minhas-metas"
-          element={<MinhasMetasPage />}
-        />
+          <Route
+            path="/painel-ciclos"
+            element={<PainelCiclosCoordenadorPage />}
+          />
 
-        <Route
-          path="/configuracoes/aparencia"
-          element={<ConfiguracoesAparenciaPage />}
-        />
+          <Route path="/minhas-metas" element={<MinhasMetasPage />} />
 
-        <Route
-          path="/colaboradores/novo"
-          element={<NovoColaboradorPage />}
-        />
+          <Route
+            path="/configuracoes/aparencia"
+            element={<ConfiguracoesAparenciaPage />}
+          />
 
-        <Route
-          path="/colaborador/:id"
-          element={<ColaboradorDetalhePage />}
-        />
+          <Route
+            path="/colaboradores/novo"
+            element={<NovoColaboradorPage />}
+          />
 
-        <Route
-          path="/colaborador/:id/editar"
-          element={<EditarColaboradorPage />}
-        />
+          <Route
+            path="/colaborador/:id"
+            element={<ColaboradorDetalhePage />}
+          />
 
-        <Route
-          path="/colaborador/:id/novo-feedback"
-          element={<NovoFeedbackPage />}
-        />
+          <Route
+            path="/colaborador/:id/editar"
+            element={<EditarColaboradorPage />}
+          />
 
-        <Route
-          path="/colaborador/:id/feedback/:feedbackId"
-          element={<FeedbackDetalhePage />}
-        />
+          <Route
+            path="/colaborador/:id/novo-feedback"
+            element={<NovoFeedbackPage />}
+          />
 
-        <Route
-          path="/colaborador/:id/feedback/:feedbackId/editar"
-          element={<EditarFeedbackPage />}
-        />
-        
-      </Routes>
+          <Route
+            path="/colaborador/:id/feedback/:feedbackId"
+            element={<FeedbackDetalhePage />}
+          />
+
+          <Route
+            path="/colaborador/:id/feedback/:feedbackId/editar"
+            element={<EditarFeedbackPage />}
+          />
+        </Routes>
       </main>
       <AppFooter />
     </BrowserRouter>
