@@ -1,4 +1,7 @@
+import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
+import { getCicloAtivo } from "./cicloAvaliacaoStorage";
+import { getColaboradorEfetivoNoCiclo } from "./historicoOrganizacionalStorage";
 
 export type PermissoesAvaliacao = {
   podeAvaliarComoGerente: boolean;
@@ -8,15 +11,30 @@ export type PermissoesAvaliacao = {
   papeisPermitidos: string[];
 };
 
+function efetivo(
+  colaborador: Colaborador,
+  colaboradores: Colaborador[],
+  ciclo?: CicloAvaliacao
+): Colaborador {
+  return ciclo
+    ? getColaboradorEfetivoNoCiclo(colaborador, ciclo, colaboradores)
+    : colaborador;
+}
+
 function encontrarGerenteResponsavel(
   colaborador: Colaborador,
-  colaboradores: Colaborador[]
+  colaboradores: Colaborador[],
+  ciclo?: CicloAvaliacao
 ): Colaborador | undefined {
   const porMatricula = new Map(
     colaboradores.map((item) => [item.matricula, item])
   );
 
-  let atual: Colaborador | undefined = colaborador;
+  let atual: Colaborador | undefined = efetivo(
+    colaborador,
+    colaboradores,
+    ciclo
+  );
   const visitados = new Set<number>();
 
   while (atual?.gestorDiretoMatricula) {
@@ -25,9 +43,10 @@ function encontrarGerenteResponsavel(
     }
 
     visitados.add(atual.gestorDiretoMatricula);
-    const gestor = porMatricula.get(atual.gestorDiretoMatricula);
+    const gestorBase = porMatricula.get(atual.gestorDiretoMatricula);
 
-    if (!gestor) return undefined;
+    if (!gestorBase) return undefined;
+    const gestor = efetivo(gestorBase, colaboradores, ciclo);
     if (gestor.funcao === "GERENTE") return gestor;
 
     atual = gestor;
@@ -39,7 +58,8 @@ function encontrarGerenteResponsavel(
 export function obterPermissoesAvaliacao(
   usuarioAtual: Colaborador | undefined,
   colaboradorAvaliado: Colaborador,
-  colaboradores: Colaborador[]
+  colaboradores: Colaborador[],
+  ciclo = getCicloAtivo()
 ): PermissoesAvaliacao {
   if (!usuarioAtual) {
     return {
@@ -51,9 +71,15 @@ export function obterPermissoesAvaliacao(
     };
   }
 
+  const colaboradorEfetivo = efetivo(
+    colaboradorAvaliado,
+    colaboradores,
+    ciclo
+  );
   const gerenteResponsavel = encontrarGerenteResponsavel(
     colaboradorAvaliado,
-    colaboradores
+    colaboradores,
+    ciclo
   );
 
   const podeAvaliarComoGerente =
@@ -61,13 +87,13 @@ export function obterPermissoesAvaliacao(
     gerenteResponsavel?.matricula === usuarioAtual.matricula;
 
   const podeAvaliarComoCoordenador =
-    colaboradorAvaliado.funcao === "ANALISTA" &&
+    colaboradorEfetivo.funcao === "ANALISTA" &&
     usuarioAtual.funcao === "COORDENADOR" &&
-    colaboradorAvaliado.gestorDiretoMatricula === usuarioAtual.matricula;
+    colaboradorEfetivo.gestorDiretoMatricula === usuarioAtual.matricula;
 
   const podeAvaliarComoColegiado =
-    colaboradorAvaliado.funcao === "ANALISTA" &&
-    (colaboradorAvaliado.avaliadoresColegiadoMatriculas?.includes(
+    colaboradorEfetivo.funcao === "ANALISTA" &&
+    (colaboradorEfetivo.avaliadoresColegiadoMatriculas?.includes(
       usuarioAtual.matricula
     ) ?? false);
 

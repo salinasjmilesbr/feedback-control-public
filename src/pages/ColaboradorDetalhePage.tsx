@@ -1,10 +1,12 @@
-import { useState, type CSSProperties, type ReactNode } from "react";
+﻿import { useLayoutEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import ObservacoesColaborador from "../components/ObservacoesColaborador";
 import { getColaboradorByMatricula, getColaboradores } from "../services/colaboradorStorage";
 import { getFeedbacksByColaborador } from "../services/feedbackStorage";
 import { getObservacoesByColaborador } from "../services/observacaoStorage";
+import { getHistoricoOrganizacional } from "../services/historicoOrganizacionalStorage";
+import type { MovimentacaoOrganizacional } from "../types/HistoricoOrganizacional";
 import {
   formatarNota,
   getEscalaAvaliacao,
@@ -313,12 +315,96 @@ function classeStatusFeedback(status: Feedback["status"]) {
 
 function formatarData(valor?: string) {
   if (!valor) return undefined;
-  return new Date(valor).toLocaleDateString("pt-BR");
+  const normalizada = valor.length === 10 ? `${valor}T12:00:00` : valor;
+  return new Date(normalizada).toLocaleDateString("pt-BR");
+}
+
+function labelTipoMovimentacao(tipo: MovimentacaoOrganizacional["tipo"]) {
+  if (tipo === "ADMISSAO") return "Admissão";
+  if (tipo === "LICENCA") return "Início de licença";
+  if (tipo === "RETORNO_LICENCA") return "Retorno de licença";
+  if (tipo === "DESLIGAMENTO") return "Desligamento";
+  return "Alteração organizacional";
+}
+
+function labelStatusOrganizacional(status?: string) {
+  if (status === "ATIVO") return "Ativo";
+  if (status === "LICENCA") return "Em licença";
+  if (status === "DESLIGADO") return "Desligado";
+  return status ?? "—";
+}
+
+function labelFuncaoOrganizacional(funcao?: string) {
+  if (funcao === "GERENTE") return "Gerente";
+  if (funcao === "COORDENADOR") return "Coordenador";
+  if (funcao === "CONSULTOR") return "Consultor";
+  if (funcao === "ANALISTA") return "Analista";
+  return funcao ?? "—";
+}
+
+function labelSenioridadeOrganizacional(senioridade?: string) {
+  if (senioridade === "JUNIOR") return "Júnior";
+  if (senioridade === "PLENO") return "Pleno";
+  if (senioridade === "SENIOR") return "Sênior";
+  return senioridade ?? "—";
+}
+
+function mudancasDaMovimentacao(movimento: MovimentacaoOrganizacional) {
+  const anterior = movimento.anterior;
+  const atual = movimento.atual;
+  const mudancas: string[] = [];
+
+  if (!anterior) {
+    mudancas.push(`${labelFuncaoOrganizacional(atual.funcao)} · ${atual.cargo}`);
+    if (atual.gestorDiretoNome) mudancas.push(`Gestor: ${atual.gestorDiretoNome}`);
+    return mudancas;
+  }
+
+  if (anterior.status !== atual.status) {
+    mudancas.push(
+      `Status: ${labelStatusOrganizacional(anterior.status)} → ${labelStatusOrganizacional(atual.status)}`
+    );
+  }
+  if (anterior.gestorDiretoMatricula !== atual.gestorDiretoMatricula) {
+    mudancas.push(
+      `Gestor: ${anterior.gestorDiretoNome ?? "Sem gestor"} → ${atual.gestorDiretoNome ?? "Sem gestor"}`
+    );
+  }
+  if (anterior.cargo !== atual.cargo) {
+    mudancas.push(`Cargo: ${anterior.cargo} → ${atual.cargo}`);
+  }
+  if (anterior.funcao !== atual.funcao) {
+    mudancas.push(
+      `Função: ${labelFuncaoOrganizacional(anterior.funcao)} → ${labelFuncaoOrganizacional(atual.funcao)}`
+    );
+  }
+  if (anterior.senioridade !== atual.senioridade) {
+    mudancas.push(
+      `Senioridade: ${labelSenioridadeOrganizacional(anterior.senioridade)} → ${labelSenioridadeOrganizacional(atual.senioridade)}`
+    );
+  }
+  if (anterior.area !== atual.area) {
+    mudancas.push(`Área: ${anterior.area} → ${atual.area}`);
+  }
+
+  const colegiadoAnterior = [...(anterior.avaliadoresColegiadoNomes ?? [])].sort();
+  const colegiadoAtual = [...(atual.avaliadoresColegiadoNomes ?? [])].sort();
+  if (JSON.stringify(colegiadoAnterior) !== JSON.stringify(colegiadoAtual)) {
+    mudancas.push(
+      `Colegiado: ${colegiadoAnterior.join(", ") || "Sem avaliadores"} → ${colegiadoAtual.join(", ") || "Sem avaliadores"}`
+    );
+  }
+
+  return mudancas;
 }
 
 function ColaboradorDetalhePage() {
   const { id } = useParams();
   const navigate = useNavigate();
+
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0);
+  }, [id]);
   const [mostrarObservacoes, setMostrarObservacoes] = useState(false);
   const [ordenacao, setOrdenacao] = useState<"RECENTES" | "ANTIGAS">("RECENTES");
   const [avaliacoesAbertas, setAvaliacoesAbertas] = useState<Set<string>>(
@@ -372,6 +458,9 @@ function ColaboradorDetalhePage() {
       ? "Sênior"
       : undefined;
 
+  const historicoOrganizacional = getHistoricoOrganizacional(
+    colaborador.matricula
+  );
   const feedbacksBase = getFeedbacksByColaborador(colaborador.matricula);
   const feedbacksOrdenados = [...feedbacksBase].sort((a, b) => {
     const dataA = new Date(a.dataCriacao ?? a.data).getTime();
@@ -849,8 +938,70 @@ function ColaboradorDetalhePage() {
           </div>
         )}
       </section>
+
+      <section className="collaborator-section collaborator-org-history-section">
+        <div className="collaborator-section-heading">
+          <div>
+            <h2>Histórico organizacional</h2>
+            <p className="collaborator-section-subtitle">
+              Movimentações registradas com data de vigência e contexto do ciclo.
+            </p>
+          </div>
+        </div>
+
+        {historicoOrganizacional.length === 0 ? (
+          <div className="collaborator-history-empty">
+            Nenhuma movimentação organizacional registrada ainda.
+          </div>
+        ) : (
+          <div className="collaborator-org-timeline">
+            {historicoOrganizacional.map((movimento) => {
+              const mudancas = mudancasDaMovimentacao(movimento);
+              return (
+                <article className="collaborator-org-event" key={movimento.id}>
+                  <div className="collaborator-org-event__rail" aria-hidden="true">
+                    <span />
+                  </div>
+                  <div className="collaborator-org-event__content">
+                    <header>
+                      <div>
+                        <strong>{labelTipoMovimentacao(movimento.tipo)}</strong>
+                        <span>{formatarData(movimento.dataVigencia)}</span>
+                      </div>
+                      <span className="collaborator-org-event__scope">
+                        {movimento.escopo === "SOMENTE_CICLOS_POSTERIORES"
+                          ? "Ciclos posteriores"
+                          : "Ciclo atual e posteriores"}
+                      </span>
+                    </header>
+
+                    {mudancas.length > 0 && (
+                      <div className="collaborator-org-event__changes">
+                        {mudancas.map((mudanca) => (
+                          <span key={mudanca}>{mudanca}</span>
+                        ))}
+                      </div>
+                    )}
+
+                    {(movimento.motivo || movimento.cicloReferenciaLabel) && (
+                      <footer>
+                        {movimento.motivo && <span>Motivo: {movimento.motivo}</span>}
+                        {movimento.cicloReferenciaLabel && (
+                          <span>Ciclo de referência: {movimento.cicloReferenciaLabel}</span>
+                        )}
+                      </footer>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
     </main>
   );
 }
 
 export default ColaboradorDetalhePage;
+

@@ -1,6 +1,9 @@
 import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
 import type { Meta, TipoMeta } from "../types/Meta";
+import { getCiclosAvaliacao } from "./cicloAvaliacaoStorage";
+import { getColaboradorEfetivoNoCiclo } from "./historicoOrganizacionalStorage";
+import { getColaboradores } from "./colaboradorStorage";
 
 const STORAGE_KEY = "feedback-control-metas";
 
@@ -75,15 +78,78 @@ function validarCicloAtivo(ciclo: CicloAvaliacao) {
   }
 }
 
+function getCicloDaMeta(meta: Meta): CicloAvaliacao | undefined {
+  return getCiclosAvaliacao().find((ciclo) => ciclo.id === meta.cicloId);
+}
+
+function getColaboradorEfetivoParaCiclo(
+  colaborador: Colaborador,
+  colaboradores: Colaborador[],
+  ciclo?: CicloAvaliacao
+): Colaborador {
+  return ciclo
+    ? getColaboradorEfetivoNoCiclo(colaborador, ciclo, colaboradores)
+    : colaborador;
+}
+
+function getGerenteResponsavelNoCiclo(
+  colaborador: Colaborador,
+  colaboradores: Colaborador[],
+  ciclo: CicloAvaliacao
+): Colaborador | undefined {
+  const porMatricula = new Map(
+    colaboradores.map((item) => [item.matricula, item])
+  );
+  const visitados = new Set<number>();
+  let atual = getColaboradorEfetivoNoCiclo(
+    colaborador,
+    ciclo,
+    colaboradores
+  );
+
+  while (atual.gestorDiretoMatricula) {
+    const matriculaGestor = atual.gestorDiretoMatricula;
+    if (visitados.has(matriculaGestor)) return undefined;
+    visitados.add(matriculaGestor);
+
+    const gestorBase = porMatricula.get(matriculaGestor);
+    if (!gestorBase) return undefined;
+
+    const gestor = getColaboradorEfetivoNoCiclo(
+      gestorBase,
+      ciclo,
+      colaboradores
+    );
+    if (gestor.funcao === "GERENTE") return gestor;
+    atual = gestor;
+  }
+
+  return undefined;
+}
+
 export function metaExigeAprovacaoCoordenador(
   colaborador: Colaborador,
-  colaboradores: Colaborador[]
+  colaboradores: Colaborador[],
+  ciclo?: CicloAvaliacao
 ): boolean {
-  if (!colaborador.gestorDiretoMatricula) return false;
-  const gestorDireto = colaboradores.find(
-    (item) => item.matricula === colaborador.gestorDiretoMatricula
+  const efetivo = getColaboradorEfetivoParaCiclo(
+    colaborador,
+    colaboradores,
+    ciclo
   );
-  return gestorDireto?.funcao === "COORDENADOR";
+  if (!efetivo.gestorDiretoMatricula) return false;
+
+  const gestorBase = colaboradores.find(
+    (item) => item.matricula === efetivo.gestorDiretoMatricula
+  );
+  if (!gestorBase) return false;
+
+  const gestor = getColaboradorEfetivoParaCiclo(
+    gestorBase,
+    colaboradores,
+    ciclo
+  );
+  return gestor.funcao === "COORDENADOR";
 }
 
 export function metaEstaAprovada(
@@ -91,10 +157,42 @@ export function metaEstaAprovada(
   colaborador: Colaborador,
   colaboradores: Colaborador[]
 ): boolean {
+  const ciclo = getCicloDaMeta(meta);
   const coordenadorOk =
-    !metaExigeAprovacaoCoordenador(colaborador, colaboradores) ||
+    !metaExigeAprovacaoCoordenador(colaborador, colaboradores, ciclo) ||
     Boolean(meta.aprovacaoCoordenador);
+
+  // Aprovações já realizadas continuam válidas mesmo após transferência.
   return coordenadorOk && Boolean(meta.aprovacaoGerente);
+}
+
+export function podeAprovarMetaNoCiclo(
+  aprovador: Colaborador,
+  colaborador: Colaborador,
+  colaboradores: Colaborador[],
+  ciclo: CicloAvaliacao
+): boolean {
+  const efetivo = getColaboradorEfetivoNoCiclo(
+    colaborador,
+    ciclo,
+    colaboradores
+  );
+
+  if (aprovador.funcao === "COORDENADOR") {
+    return efetivo.gestorDiretoMatricula === aprovador.matricula;
+  }
+
+  if (aprovador.funcao === "GERENTE") {
+    return (
+      getGerenteResponsavelNoCiclo(
+        colaborador,
+        colaboradores,
+        ciclo
+      )?.matricula === aprovador.matricula
+    );
+  }
+
+  return false;
 }
 
 export function criarMeta(
@@ -261,10 +359,13 @@ export function aprovarMeta(
   }
 
   const agora = new Date().toISOString();
+  const colaboradores = getColaboradores();
 
   if (aprovador.funcao === "COORDENADOR") {
-    if (colaborador.gestorDiretoMatricula !== aprovador.matricula) {
-      throw new Error("Somente o coordenador direto pode aprovar esta meta.");
+    if (!podeAprovarMetaNoCiclo(aprovador, colaborador, colaboradores, ciclo)) {
+      throw new Error(
+        "Somente o coordenador direto responsável neste ciclo pode aprovar esta meta."
+      );
     }
     if (atual.aprovacaoCoordenador) return;
 
@@ -297,6 +398,11 @@ export function aprovarMeta(
   }
 
   if (aprovador.funcao === "GERENTE") {
+    if (!podeAprovarMetaNoCiclo(aprovador, colaborador, colaboradores, ciclo)) {
+      throw new Error(
+        "Somente o gerente responsável neste ciclo pode aprovar esta meta."
+      );
+    }
     if (atual.aprovacaoGerente) return;
 
     persistir(

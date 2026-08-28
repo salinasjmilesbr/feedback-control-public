@@ -769,3 +769,125 @@
     border-right: 0;
   }
 }
+
+/* Histórico organizacional efetivo */
+.collaborator-section-subtitle {
+  margin: 5px 0 0;
+  color: var(--brand-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.collaborator-org-timeline {
+  display: grid;
+  gap: 0;
+  margin-top: 14px;
+}
+
+.collaborator-org-event {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+}
+
+.collaborator-org-event__rail {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+.collaborator-org-event__rail::after {
+  content: "";
+  position: absolute;
+  top: 18px;
+  bottom: -1px;
+  width: 1px;
+  background: var(--brand-border);
+}
+
+.collaborator-org-event:last-child .collaborator-org-event__rail::after {
+  display: none;
+}
+
+.collaborator-org-event__rail span {
+  position: relative;
+  z-index: 1;
+  width: 11px;
+  height: 11px;
+  margin-top: 17px;
+  border: 2px solid var(--brand-primary);
+  border-radius: 50%;
+  background: #fff;
+}
+
+.collaborator-org-event__content {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--brand-border);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.collaborator-org-event__content header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.collaborator-org-event__content header > div {
+  display: grid;
+  gap: 3px;
+}
+
+.collaborator-org-event__content header strong {
+  color: var(--brand-text);
+  font-size: 13px;
+}
+
+.collaborator-org-event__content header div > span,
+.collaborator-org-event__scope,
+.collaborator-org-event__content footer {
+  color: var(--brand-text-muted);
+  font-size: 11px;
+}
+
+.collaborator-org-event__scope {
+  padding: 4px 8px;
+  border: 1px solid var(--brand-border);
+  border-radius: 999px;
+  white-space: nowrap;
+  background: #faf8fb;
+}
+
+.collaborator-org-event__changes {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.collaborator-org-event__changes span {
+  color: var(--brand-text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.collaborator-org-event__content footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 14px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--brand-border);
+}
+
+@media (max-width: 720px) {
+  .collaborator-org-event__content header {
+    flex-direction: column;
+  }
+
+  .collaborator-org-event__scope {
+    white-space: normal;
+  }
+}

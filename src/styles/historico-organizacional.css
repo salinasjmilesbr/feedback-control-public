@@ -1,0 +1,26 @@
+.collaborator-form-card--movement {
+  border-color: color-mix(
+    in srgb,
+    var(--brand-primary) 24%,
+    var(--brand-border)
+  );
+}
+
+.collaborator-form-info {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(
+    in srgb,
+    var(--brand-primary) 18%,
+    var(--brand-border)
+  );
+  border-radius: 10px;
+  background: color-mix(
+    in srgb,
+    var(--brand-primary) 4%,
+    #fff
+  );
+  color: var(--brand-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}

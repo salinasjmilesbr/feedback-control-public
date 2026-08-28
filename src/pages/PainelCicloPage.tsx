@@ -9,19 +9,21 @@ import {
   type ProgressoPapelPainel,
   type SituacaoAvaliacaoCiclo,
 } from "../services/cicloEquipeService";
-import { getColaboradores } from "../services/colaboradorStorage";
 import {
   getMetasDoCiclo,
 } from "../services/metaStorage";
 import "../styles/ciclos.css";
 import "../styles/equipe-colegiado.css";
 import "../styles/metas-gestao.css";
+import "../styles/historico-ciclo.css";
 
 const labelsSituacao: Record<SituacaoAvaliacaoCiclo, string> = {
   NAO_INICIADA: "Não iniciada",
   EM_ANDAMENTO: "Em andamento",
   PRONTA_PARA_FEEDBACK: "Pronta para Feedback",
   CONCLUIDA: "Concluída",
+  SUSPENSA: "Suspensa",
+  NAO_APLICAVEL: "Não aplicável",
 };
 
 function labelPapel(progresso: ProgressoPapelPainel) {
@@ -79,7 +81,9 @@ function PainelCicloPage() {
   const usuario = usuarioAtual;
   const cicloAtual = ciclo;
   const linhas = getPainelCiclo(cicloAtual, usuario);
-  const colaboradores = getColaboradores();
+  const colaboradoresEfetivos = new Map(
+    linhas.map((linha) => [linha.colaborador.matricula, linha.colaborador])
+  );
   const metasDoCiclo = getMetasDoCiclo(cicloAtual.id);
   const separarPorVinculo = usuario.funcao === "COORDENADOR";
 
@@ -107,6 +111,8 @@ function PainelCicloPage() {
       EM_ANDAMENTO: 0,
       PRONTA_PARA_FEEDBACK: 0,
       CONCLUIDA: 0,
+      SUSPENSA: 0,
+      NAO_APLICAVEL: 0,
     } as Record<SituacaoAvaliacaoCiclo, number>
   );
 
@@ -132,9 +138,7 @@ function PainelCicloPage() {
       return !meta.aprovacaoGerente;
     }
 
-    const colaborador = colaboradores.find(
-      (item) => item.matricula === meta.colaboradorMatricula
-    );
+    const colaborador = colaboradoresEfetivos.get(meta.colaboradorMatricula);
 
     return (
       colaborador?.gestorDiretoMatricula === usuario.matricula &&
@@ -263,11 +267,19 @@ function PainelCicloPage() {
                           ? "is-feedback"
                           : linha.situacao === "EM_ANDAMENTO"
                           ? "is-progress"
+                          : linha.situacao === "SUSPENSA" ||
+                            linha.situacao === "NAO_APLICAVEL"
+                          ? "is-na"
                           : "is-not-started"
                       }`}
                     >
                       {labelsSituacao[linha.situacao]}
                     </span>
+                    {linha.motivoNaoAplicavel && (
+                      <small className="cycle-muted">
+                        {linha.motivoNaoAplicavel}
+                      </small>
+                    )}
                     {linha.feedback?.encerradaComPendencias && (
                       <small className="cycle-danger-text">
                         Encerrada com pendências

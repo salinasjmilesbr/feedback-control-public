@@ -63,6 +63,26 @@ const gestorMatriculaPorNome: Record<string, number> = {
   "RENATO FONSECA LIMA": 900004,
 };
 
+function formatarNomePessoa(nome?: string): string {
+  const texto = (nome ?? "").trim().replace(/\s+/g, " ");
+  if (!texto) return "";
+
+  const particulas = new Set(["da", "das", "de", "do", "dos", "e"]);
+
+  return texto
+    .toLocaleLowerCase("pt-BR")
+    .split(" ")
+    .map((parte, indice) => {
+      if (indice > 0 && particulas.has(parte)) return parte;
+      return parte
+        .split("-")
+        .map((trecho) =>
+          trecho ? trecho.charAt(0).toLocaleUpperCase("pt-BR") + trecho.slice(1) : trecho
+        )
+        .join("-");
+    })
+    .join(" ");
+}
 function normalizarNome(nome?: string): string {
   return (nome ?? "").trim().toUpperCase();
 }
@@ -120,6 +140,11 @@ function migrarColaborador(colaborador: Colaborador): Colaborador {
 
   return {
     ...colaborador,
+    nome: formatarNomePessoa(colaborador.nome),
+    respondePara: formatarNomePessoa(colaborador.respondePara),
+    gerente: colaborador.gerente
+      ? formatarNomePessoa(colaborador.gerente)
+      : colaborador.gerente,
     cargo,
     funcao,
     senioridade,

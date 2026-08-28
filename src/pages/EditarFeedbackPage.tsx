@@ -12,6 +12,7 @@ import {
   metaEstaAprovada,
 } from "../services/metaStorage";
 import { getCiclosAvaliacao } from "../services/cicloAvaliacaoStorage";
+import { getColaboradorEfetivoNoCiclo } from "../services/historicoOrganizacionalStorage";
 import "../styles/nova-avaliacao.css";
 
 const criterios = [
@@ -244,6 +245,14 @@ function EditarFeedbackPage() {
       item.ano === feedbackAtual.ano &&
       item.ciclo === feedbackAtual.ciclo
   );
+  const colaboradorEfetivo = cicloDaAvaliacao
+    ? getColaboradorEfetivoNoCiclo(
+        colaborador,
+        cicloDaAvaliacao,
+        colaboradores
+      )
+    : colaborador;
+
   const metasDoCiclo = cicloDaAvaliacao
     ? getMetasDoColaboradorNoCiclo(
         colaborador.matricula,
@@ -255,7 +264,7 @@ function EditarFeedbackPage() {
   );
 
   const avaliadoresColegiado = (
-    colaborador.avaliadoresColegiadoMatriculas ?? []
+    colaboradorEfetivo.avaliadoresColegiadoMatriculas ?? []
   )
     .map((matriculaAvaliador) =>
       colaboradores.find((item) => item.matricula === matriculaAvaliador)
@@ -265,7 +274,8 @@ function EditarFeedbackPage() {
   const permissoes = obterPermissoesAvaliacao(
     usuarioAtual,
     colaborador,
-    colaboradores
+    colaboradores,
+    cicloDaAvaliacao
   );
 
   function podeEditarPapel(papel: PapelAvaliador) {
@@ -786,7 +796,7 @@ function EditarFeedbackPage() {
       feedbackFinalCoordenador,
     } as Feedback;
 
-    updateFeedback(feedbackAtualizado);
+    updateFeedback(feedbackAtualizado, usuarioAtual);
     alert("Avaliação atualizada com sucesso.");
     navigate(`/colaborador/${colaborador!.matricula}/feedback/${feedback!.id}`);
   }
@@ -1730,6 +1740,7 @@ function EditarFeedbackPage() {
 }
 
 export default EditarFeedbackPage;
+
 
 
 

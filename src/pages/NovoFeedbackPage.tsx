@@ -19,6 +19,7 @@ import {
   getMetasDoColaboradorNoCiclo,
   metaEstaAprovada,
 } from "../services/metaStorage";
+import { getColaboradorEfetivoNoCiclo } from "../services/historicoOrganizacionalStorage";
 import "../styles/nova-avaliacao.css";
 
 const criterios = [
@@ -234,27 +235,33 @@ function NovoFeedbackPage() {
     );
   }
 
+  const colaboradorEfetivo = getColaboradorEfetivoNoCiclo(
+    colaborador,
+    cicloAtivo,
+    colaboradores
+  );
+
   const funcaoLabel =
-    colaborador.funcao === "GERENTE"
+    colaboradorEfetivo.funcao === "GERENTE"
       ? "Gerente"
-      : colaborador.funcao === "COORDENADOR"
+      : colaboradorEfetivo.funcao === "COORDENADOR"
       ? "Coordenador"
-      : colaborador.funcao === "CONSULTOR"
+      : colaboradorEfetivo.funcao === "CONSULTOR"
       ? "Consultor"
       : "Analista";
 
   const senioridadeLabel =
-    colaborador.senioridade === "JUNIOR"
+    colaboradorEfetivo.senioridade === "JUNIOR"
       ? "Júnior"
-      : colaborador.senioridade === "PLENO"
+      : colaboradorEfetivo.senioridade === "PLENO"
       ? "Pleno"
-      : colaborador.senioridade === "SENIOR"
+      : colaboradorEfetivo.senioridade === "SENIOR"
       ? "Sênior"
       : undefined;
 
-  const gestorDireto = colaborador.gestorDiretoMatricula
+  const gestorDireto = colaboradorEfetivo.gestorDiretoMatricula
     ? colaboradores.find(
-        (item) => item.matricula === colaborador.gestorDiretoMatricula
+        (item) => item.matricula === colaboradorEfetivo.gestorDiretoMatricula
       )
     : undefined;
   const anoAvaliacao = cicloAtivo.ano;
@@ -268,7 +275,7 @@ function NovoFeedbackPage() {
   );
 
   const avaliadoresColegiado = (
-    colaborador.avaliadoresColegiadoMatriculas ?? []
+    colaboradorEfetivo.avaliadoresColegiadoMatriculas ?? []
   )
     .map((matriculaAvaliador) =>
       colaboradores.find(
@@ -280,7 +287,8 @@ function NovoFeedbackPage() {
   const permissoes = obterPermissoesAvaliacao(
     usuarioAtual,
     colaborador,
-    colaboradores
+    colaboradores,
+    cicloAtivo
   );
 
   function podeEditarPapel(papel: PapelAvaliador) {
@@ -771,7 +779,7 @@ if (feedbackExistente) {
   return;
 }
 
-    saveFeedback(novoFeedback);
+    saveFeedback(novoFeedback, usuarioAtual);
     alert("Avaliação salva com sucesso.");
     navigate(`/colaborador/${colaborador!.matricula}`);
   }
@@ -1564,6 +1572,7 @@ if (feedbackExistente) {
 }
 
 export default NovoFeedbackPage;
+
 
 
 

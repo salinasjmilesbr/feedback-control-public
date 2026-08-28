@@ -15,7 +15,13 @@ export interface VotoColegiado {
 export interface FeedbackSubcriterioDetalhado {
   nome: string;
   notaGerente: number;
+  avaliadorGerenteMatricula?: number;
+  avaliadorGerenteNome?: string;
+  dataAvaliacaoGerente?: string;
   notaCoordenador: number;
+  avaliadorCoordenadorMatricula?: number;
+  avaliadorCoordenadorNome?: string;
+  dataAvaliacaoCoordenador?: string;
   notaColegiado: number;
   votosColegiado?: VotoColegiado[];
   notaFinal: number;
@@ -27,7 +33,13 @@ export interface FeedbackCriterioDetalhado {
   nota: number;
   subcriterios: FeedbackSubcriterioDetalhado[];
   observacaoGerente: string;
+  observacaoGerenteAutorMatricula?: number;
+  observacaoGerenteAutorNome?: string;
+  observacaoGerenteData?: string;
   observacaoCoordenador: string;
+  observacaoCoordenadorAutorMatricula?: number;
+  observacaoCoordenadorAutorNome?: string;
+  observacaoCoordenadorData?: string;
 }
 
 export type StatusFeedback =
@@ -57,7 +69,13 @@ export interface Feedback {
 
   criteriosDetalhados?: FeedbackCriterioDetalhado[];
   feedbackFinalGerente?: string;
+  feedbackFinalGerenteAutorMatricula?: number;
+  feedbackFinalGerenteAutorNome?: string;
+  feedbackFinalGerenteData?: string;
   feedbackFinalCoordenador?: string;
+  feedbackFinalCoordenadorAutorMatricula?: number;
+  feedbackFinalCoordenadorAutorNome?: string;
+  feedbackFinalCoordenadorData?: string;
   encerradaComPendencias?: boolean;
   pendenciasEncerramento?: string[];
   

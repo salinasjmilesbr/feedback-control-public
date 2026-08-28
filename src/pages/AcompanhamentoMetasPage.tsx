@@ -14,10 +14,13 @@ import {
   getMetasDoColaboradorNoCiclo,
   metaEstaAprovada,
   metaExigeAprovacaoCoordenador,
+  podeAprovarMetaNoCiclo,
 } from "../services/metaStorage";
+import { getColaboradorEfetivoNoCiclo } from "../services/historicoOrganizacionalStorage";
 import type { Meta } from "../types/Meta";
 import "../styles/ciclos.css";
 import "../styles/metas-gestao.css";
+import "../styles/historico-ciclo.css";
 
 function formatarDataHora(data?: string) {
   if (!data) return "Ainda não atualizado";
@@ -69,9 +72,18 @@ function AcompanhamentoMetasPage() {
   const usuario = usuarioAtual;
   const cicloAtual = ciclo;
   const colaboradorAtual = colaborador;
-  const podeAcessar =
-    usuario.funcao === "GERENTE" ||
-    colaboradorAtual.gestorDiretoMatricula === usuario.matricula;
+  const colaboradores = getColaboradores();
+  const colaboradorEfetivo = getColaboradorEfetivoNoCiclo(
+    colaboradorAtual,
+    cicloAtual,
+    colaboradores
+  );
+  const podeAcessar = podeAprovarMetaNoCiclo(
+    usuario,
+    colaboradorAtual,
+    colaboradores,
+    cicloAtual
+  );
 
   if (!podeAcessar) {
     return (
@@ -94,7 +106,6 @@ function AcompanhamentoMetasPage() {
   }
 
   void versao;
-  const colaboradores = getColaboradores();
   const metas = getMetasDoColaboradorNoCiclo(colaboradorAtual.matricula, cicloAtual.id);
 
   const negocio = metas.filter((meta) => meta.tipo === "NEGOCIO_PROJETO");
@@ -111,11 +122,22 @@ function AcompanhamentoMetasPage() {
       )
     : 0;
 
-  const pendentesDoPerfil = metas.filter((meta) =>
-    usuario.funcao === "GERENTE"
+  const pendentesDoPerfil = metas.filter((meta) => {
+    if (
+      !podeAprovarMetaNoCiclo(
+        usuario,
+        colaboradorAtual,
+        colaboradores,
+        cicloAtual
+      )
+    ) {
+      return false;
+    }
+
+    return usuario.funcao === "GERENTE"
       ? !meta.aprovacaoGerente
-      : !meta.aprovacaoCoordenador
-  ).length;
+      : !meta.aprovacaoCoordenador;
+  }).length;
 
   function aprovar(meta: Meta) {
     setErro("");
@@ -135,15 +157,21 @@ function AcompanhamentoMetasPage() {
   function renderMeta(meta: Meta, indice: number) {
     const exigeCoordenador = metaExigeAprovacaoCoordenador(
       colaboradorAtual,
-      colaboradores
+      colaboradores,
+      cicloAtual
     );
     const aprovada = metaEstaAprovada(meta, colaboradorAtual, colaboradores);
     const podeAprovarDoPerfil =
       cicloAtual.status === "ATIVO" &&
+      podeAprovarMetaNoCiclo(
+        usuario,
+        colaboradorAtual,
+        colaboradores,
+        cicloAtual
+      ) &&
       (usuario.funcao === "GERENTE"
         ? !meta.aprovacaoGerente
-        : colaboradorAtual.gestorDiretoMatricula === usuario.matricula &&
-          !meta.aprovacaoCoordenador);
+        : !meta.aprovacaoCoordenador);
 
     return (
       <article className="goals-manager-card" key={meta.id}>
@@ -220,7 +248,12 @@ function AcompanhamentoMetasPage() {
                 disabled={
                   Boolean(meta.aprovacaoCoordenador) ||
                   usuario.funcao !== "COORDENADOR" ||
-                  colaboradorAtual.gestorDiretoMatricula !== usuario.matricula ||
+                  !podeAprovarMetaNoCiclo(
+                    usuario,
+                    colaboradorAtual,
+                    colaboradores,
+                    cicloAtual
+                  ) ||
                   cicloAtual.status !== "ATIVO"
                 }
                 onChange={() => aprovar(meta)}
@@ -324,6 +357,11 @@ function AcompanhamentoMetasPage() {
             {cicloAtual.ano} • Ciclo {cicloAtual.ciclo} ·{" "}
             {formatarPeriodoCiclo(cicloAtual.dataInicio, cicloAtual.dataFim)}
           </p>
+          {colaboradorEfetivo.gestorDiretoMatricula && (
+            <small className="goals-manager-effective-context">
+              Estrutura considerada conforme a vigência registrada no ciclo.
+            </small>
+          )}
         </div>
 
         <span

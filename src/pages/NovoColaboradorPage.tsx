@@ -10,7 +10,17 @@ import {
   getColaboradores,
   saveColaborador,
 } from "../services/colaboradorStorage";
+import { registrarMovimentacaoOrganizacional } from "../services/historicoOrganizacionalStorage";
 import "../styles/colaborador-form.css";
+import "../styles/historico-organizacional.css";
+
+function hojeLocal() {
+  const agora = new Date();
+  const offset = agora.getTimezoneOffset();
+  return new Date(agora.getTime() - offset * 60000)
+    .toISOString()
+    .slice(0, 10);
+}
 
 function NovoColaboradorPage() {
   const navigate = useNavigate();
@@ -24,12 +34,11 @@ function NovoColaboradorPage() {
   const [funcao, setFuncao] = useState<FuncaoColaborador>("ANALISTA");
   const [senioridade, setSenioridade] =
     useState<SenioridadeColaborador>("JUNIOR");
-  const [
-    avaliadoresColegiadoMatriculas,
-    setAvaliadoresColegiadoMatriculas,
-  ] = useState<number[]>([]);
+  const [avaliadoresColegiadoMatriculas, setAvaliadoresColegiadoMatriculas] =
+    useState<number[]>([]);
   const [gestorDiretoMatricula, setGestorDiretoMatricula] = useState("");
   const [status, setStatus] = useState<StatusColaborador>("ATIVO");
+  const [dataAdmissao, setDataAdmissao] = useState(hojeLocal());
   const [erro, setErro] = useState("");
 
   const gestoresDisponiveis = colaboradoresExistentes
@@ -55,7 +64,7 @@ function NovoColaboradorPage() {
   function toggleAvaliador(matriculaAvaliador: number) {
     setAvaliadoresColegiadoMatriculas((atuais) =>
       atuais.includes(matriculaAvaliador)
-        ? atuais.filter((matriculaAtual) => matriculaAtual !== matriculaAvaliador)
+        ? atuais.filter((item) => item !== matriculaAvaliador)
         : [...atuais, matriculaAvaliador]
     );
   }
@@ -68,7 +77,8 @@ function NovoColaboradorPage() {
       !nome.trim() ||
       !email.trim() ||
       !cargo.trim() ||
-      !area.trim()
+      !area.trim() ||
+      !dataAdmissao
     ) {
       setErro("Preencha todos os campos obrigatórios.");
       return;
@@ -101,10 +111,22 @@ function NovoColaboradorPage() {
       gestorDiretoMatricula: gestorDireto?.matricula,
       respondePara: gestorDireto?.nome ?? "",
       status,
+      dataAdmissao,
+      dataInicioLicenca: status === "LICENCA" ? dataAdmissao : undefined,
+      dataDesligamento: status === "DESLIGADO" ? dataAdmissao : undefined,
     };
 
     try {
       saveColaborador(novoColaborador);
+
+      registrarMovimentacaoOrganizacional({
+        atual: novoColaborador,
+        colaboradores: colaboradoresExistentes,
+        dataVigencia: dataAdmissao,
+        escopo: "CICLO_ATUAL_E_POSTERIORES",
+        motivo: "Admissão / inclusão do colaborador no Virtus",
+      });
+
       navigate("/");
     } catch (error) {
       setErro(
@@ -137,73 +159,49 @@ function NovoColaboradorPage() {
 
       <section className="collaborator-form-card">
         <div className="collaborator-form-card__heading">
-          <span className="collaborator-form-card__icon" aria-hidden="true">
-            01
-          </span>
+          <span className="collaborator-form-card__icon" aria-hidden="true">01</span>
           <div>
             <h2>Dados do colaborador</h2>
-            <p>Informações básicas usadas em toda a experiência do Virtus.</p>
+            <p>Informações básicas e início do vínculo profissional.</p>
           </div>
         </div>
 
         <div className="collaborator-form-grid">
           <label className="collaborator-field">
             <span>Matrícula *</span>
-            <input
-              type="number"
-              value={matricula}
-              onChange={(event) => setMatricula(event.target.value)}
-              placeholder="Ex.: 123456"
-            />
+            <input type="number" value={matricula} onChange={(e) => setMatricula(e.target.value)} placeholder="Ex.: 123456" />
+          </label>
+
+          <label className="collaborator-field">
+            <span>Data de admissão *</span>
+            <input type="date" value={dataAdmissao} onChange={(e) => setDataAdmissao(e.target.value)} />
           </label>
 
           <label className="collaborator-field collaborator-field--wide">
             <span>Nome *</span>
-            <input
-              type="text"
-              value={nome}
-              onChange={(event) => setNome(event.target.value)}
-              placeholder="Nome completo"
-            />
+            <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome completo" />
           </label>
 
           <label className="collaborator-field collaborator-field--wide">
             <span>E-mail *</span>
-            <input
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="nome@empresa.com.br"
-            />
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nome@empresa.com.br" />
           </label>
 
           <label className="collaborator-field">
             <span>Cargo *</span>
-            <input
-              type="text"
-              value={cargo}
-              onChange={(event) => setCargo(event.target.value)}
-              placeholder="Ex.: Analista de Operações"
-            />
+            <input type="text" value={cargo} onChange={(e) => setCargo(e.target.value)} placeholder="Ex.: Analista de Operações" />
           </label>
 
           <label className="collaborator-field">
             <span>Área *</span>
-            <input
-              type="text"
-              value={area}
-              onChange={(event) => setArea(event.target.value)}
-              placeholder="Ex.: Operações Digitais"
-            />
+            <input type="text" value={area} onChange={(e) => setArea(e.target.value)} placeholder="Ex.: Operações Digitais" />
           </label>
         </div>
       </section>
 
       <section className="collaborator-form-card">
         <div className="collaborator-form-card__heading">
-          <span className="collaborator-form-card__icon" aria-hidden="true">
-            02
-          </span>
+          <span className="collaborator-form-card__icon" aria-hidden="true">02</span>
           <div>
             <h2>Estrutura organizacional</h2>
             <p>Defina função, senioridade e gestor direto do colaborador.</p>
@@ -213,12 +211,7 @@ function NovoColaboradorPage() {
         <div className="collaborator-form-grid">
           <label className="collaborator-field">
             <span>Função *</span>
-            <select
-              value={funcao}
-              onChange={(event) =>
-                setFuncao(event.target.value as FuncaoColaborador)
-              }
-            >
+            <select value={funcao} onChange={(e) => setFuncao(e.target.value as FuncaoColaborador)}>
               <option value="ANALISTA">Analista</option>
               <option value="COORDENADOR">Coordenador</option>
               <option value="CONSULTOR">Consultor</option>
@@ -229,14 +222,7 @@ function NovoColaboradorPage() {
           {funcao === "ANALISTA" && (
             <label className="collaborator-field">
               <span>Senioridade *</span>
-              <select
-                value={senioridade}
-                onChange={(event) =>
-                  setSenioridade(
-                    event.target.value as SenioridadeColaborador
-                  )
-                }
-              >
+              <select value={senioridade} onChange={(e) => setSenioridade(e.target.value as SenioridadeColaborador)}>
                 <option value="JUNIOR">Júnior</option>
                 <option value="PLENO">Pleno</option>
                 <option value="SENIOR">Sênior</option>
@@ -246,12 +232,7 @@ function NovoColaboradorPage() {
 
           <label className="collaborator-field">
             <span>Gestor direto</span>
-            <select
-              value={gestorDiretoMatricula}
-              onChange={(event) =>
-                setGestorDiretoMatricula(event.target.value)
-              }
-            >
+            <select value={gestorDiretoMatricula} onChange={(e) => setGestorDiretoMatricula(e.target.value)}>
               <option value="">Sem gestor direto</option>
               {gestoresDisponiveis.map((gestor) => (
                 <option key={gestor.matricula} value={gestor.matricula}>
@@ -263,12 +244,7 @@ function NovoColaboradorPage() {
 
           <label className="collaborator-field">
             <span>Status *</span>
-            <select
-              value={status}
-              onChange={(event) =>
-                setStatus(event.target.value as StatusColaborador)
-              }
-            >
+            <select value={status} onChange={(e) => setStatus(e.target.value as StatusColaborador)}>
               <option value="ATIVO">Ativo</option>
               <option value="LICENCA">Em licença</option>
               <option value="DESLIGADO">Desligado</option>
@@ -280,13 +256,12 @@ function NovoColaboradorPage() {
       {funcao === "ANALISTA" && (
         <section className="collaborator-form-card">
           <div className="collaborator-form-card__heading">
-            <span className="collaborator-form-card__icon" aria-hidden="true">
-              03
-            </span>
+            <span className="collaborator-form-card__icon" aria-hidden="true">03</span>
             <div>
               <h2>Avaliadores do colegiado</h2>
               <p>
-                Selecione os gestores que participarão da avaliação colegiada.
+                Selecione quantos gestores forem necessários. A composição será
+                preservada no histórico de cada vigência.
               </p>
             </div>
           </div>
@@ -304,9 +279,7 @@ function NovoColaboradorPage() {
                 return (
                   <label
                     key={avaliador.matricula}
-                    className={`collaborator-reviewer ${
-                      selecionado ? "is-selected" : ""
-                    }`}
+                    className={`collaborator-reviewer ${selecionado ? "is-selected" : ""}`}
                   >
                     <input
                       type="checkbox"
@@ -325,9 +298,7 @@ function NovoColaboradorPage() {
                     <span className="collaborator-reviewer__copy">
                       <strong>{avaliador.nome}</strong>
                       <small>
-                        {avaliador.funcao === "GERENTE"
-                          ? "Gerente"
-                          : "Coordenador"}
+                        {avaliador.funcao === "GERENTE" ? "Gerente" : "Coordenador"}
                       </small>
                     </span>
                   </label>
