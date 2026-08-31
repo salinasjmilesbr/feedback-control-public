@@ -1177,3 +1177,232 @@ button:not(:disabled) {
   opacity: 1;
 }
 /* FIM VIRTUS FORM AUDIT — etapa 11 */
+
+/* VIRTUS ACTION AUDIT — etapa 12 */
+:root {
+  --virtus-action-height: 40px;
+  --virtus-action-height-sm: 34px;
+  --virtus-action-radius: 9px;
+  --virtus-action-padding-x: 15px;
+  --virtus-action-padding-x-sm: 11px;
+
+  --virtus-action-font-size: var(--virtus-font-label);
+  --virtus-action-font-size-sm: 12px;
+
+  --virtus-action-secondary-border:
+    color-mix(in srgb, var(--brand-primary) 38%, var(--virtus-card-border));
+  --virtus-action-secondary-bg: #fff;
+  --virtus-action-secondary-text: var(--brand-primary);
+
+  --virtus-action-danger-text: #a3262d;
+  --virtus-action-danger-border: #dfb4b8;
+  --virtus-action-danger-bg: #fff8f8;
+
+  --virtus-action-success-text: #107c41;
+  --virtus-action-success-border: #9bc6aa;
+  --virtus-action-success-bg: #f3faf5;
+}
+
+/* ---------------------------------------------------------
+   1. BOTÕES DE AÇÃO PADRÃO
+   --------------------------------------------------------- */
+
+.virtus-btn,
+.brand-button,
+.cycle-btn,
+.collaborator-form-btn,
+.goal-action-btn,
+.new-evaluation-nav-actions button {
+  min-height: var(--virtus-action-height) !important;
+  padding-left: var(--virtus-action-padding-x) !important;
+  padding-right: var(--virtus-action-padding-x) !important;
+  border-radius: var(--virtus-action-radius) !important;
+  box-sizing: border-box;
+  font-family: var(--sans) !important;
+  font-size: var(--virtus-action-font-size) !important;
+  line-height: 1.2 !important;
+  font-weight: 760 !important;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+/* ---------------------------------------------------------
+   2. PRIMÁRIOS
+   --------------------------------------------------------- */
+
+.virtus-btn--primary,
+.brand-button--primary,
+.cycle-btn--primary,
+.collaborator-form-btn--primary,
+.goal-action-btn--primary {
+  border: 1px solid var(--brand-primary) !important;
+  background: var(--brand-primary) !important;
+  color: #fff !important;
+}
+
+.virtus-btn--primary:hover:not(:disabled),
+.brand-button--primary:hover:not(:disabled),
+.cycle-btn--primary:hover:not(:disabled),
+.collaborator-form-btn--primary:hover:not(:disabled),
+.goal-action-btn--primary:hover:not(:disabled) {
+  background:
+    color-mix(in srgb, var(--brand-primary) 88%, black) !important;
+  border-color:
+    color-mix(in srgb, var(--brand-primary) 88%, black) !important;
+  color: #fff !important;
+}
+
+/* ---------------------------------------------------------
+   3. SECUNDÁRIOS
+   --------------------------------------------------------- */
+
+.virtus-btn--secondary,
+.brand-button--secondary,
+.cycle-btn--secondary,
+.collaborator-form-btn--secondary,
+.new-evaluation-nav-actions button {
+  border: 1px solid var(--virtus-action-secondary-border) !important;
+  background: var(--virtus-action-secondary-bg) !important;
+  color: var(--virtus-action-secondary-text) !important;
+}
+
+.virtus-btn--secondary:hover:not(:disabled),
+.brand-button--secondary:hover:not(:disabled),
+.cycle-btn--secondary:hover:not(:disabled),
+.collaborator-form-btn--secondary:hover:not(:disabled),
+.new-evaluation-nav-actions button:hover:not(:disabled) {
+  border-color: var(--brand-primary) !important;
+  background:
+    color-mix(in srgb, var(--brand-primary) 5%, white) !important;
+  color: var(--brand-primary) !important;
+}
+
+/* ---------------------------------------------------------
+   4. AÇÕES CONTEXTUAIS / PEQUENAS
+   --------------------------------------------------------- */
+
+.cycle-btn--small,
+.goal-action-btn {
+  min-height: var(--virtus-action-height-sm) !important;
+  padding-left: var(--virtus-action-padding-x-sm) !important;
+  padding-right: var(--virtus-action-padding-x-sm) !important;
+  font-size: var(--virtus-action-font-size-sm) !important;
+}
+
+/* Goal action padrão continua sendo ação neutra contextual. */
+.goal-action-btn:not(.goal-action-btn--primary):not(.goal-action-btn--success):not(.goal-action-btn--danger) {
+  border: 1px solid var(--virtus-surface-border) !important;
+  background: #fff !important;
+  color: var(--brand-text) !important;
+}
+
+.goal-action-btn:not(.goal-action-btn--primary):not(.goal-action-btn--success):not(.goal-action-btn--danger):hover:not(:disabled) {
+  border-color: var(--brand-primary) !important;
+  background:
+    color-mix(in srgb, var(--brand-primary) 4%, white) !important;
+  color: var(--brand-primary) !important;
+}
+
+/* ---------------------------------------------------------
+   5. AÇÕES SEMÂNTICAS
+   --------------------------------------------------------- */
+
+.goal-action-btn--success {
+  border: 1px solid var(--virtus-action-success-border) !important;
+  background: var(--virtus-action-success-bg) !important;
+  color: var(--virtus-action-success-text) !important;
+}
+
+.goal-action-btn--danger,
+.admin-evaluation-delete {
+  border-color: var(--virtus-action-danger-border) !important;
+  background: var(--virtus-action-danger-bg) !important;
+  color: var(--virtus-action-danger-text) !important;
+}
+
+.goal-action-btn--danger:hover:not(:disabled),
+.admin-evaluation-delete:hover:not(:disabled) {
+  border-color:
+    color-mix(in srgb, var(--virtus-action-danger-text) 48%, white) !important;
+  background: #fff2f3 !important;
+  color: var(--virtus-action-danger-text) !important;
+}
+
+/* ---------------------------------------------------------
+   6. FOCO
+   --------------------------------------------------------- */
+
+.virtus-btn:focus-visible,
+.brand-button:focus-visible,
+.cycle-btn:focus-visible,
+.collaborator-form-btn:focus-visible,
+.goal-action-btn:focus-visible,
+.new-evaluation-nav-actions button:focus-visible,
+.cycle-link-button:focus-visible,
+.cycle-back-link:focus-visible,
+.collaborator-form-back:focus-visible,
+.goals-add-btn:focus-visible {
+  outline: none !important;
+  box-shadow: var(--virtus-control-focus-ring) !important;
+}
+
+/* ---------------------------------------------------------
+   7. DISABLED
+   --------------------------------------------------------- */
+
+.virtus-btn:disabled,
+.brand-button:disabled,
+.cycle-btn:disabled,
+.collaborator-form-btn:disabled,
+.goal-action-btn:disabled,
+.new-evaluation-nav-actions button:disabled {
+  border-color: var(--virtus-surface-border-soft) !important;
+  background: var(--virtus-control-disabled-bg) !important;
+  color: var(--virtus-control-disabled-text) !important;
+  box-shadow: none !important;
+  cursor: not-allowed !important;
+  opacity: 1 !important;
+}
+
+/* ---------------------------------------------------------
+   8. LINKS DE AÇÃO / VOLTAR
+   --------------------------------------------------------- */
+
+.cycle-link-button,
+.cycle-back-link,
+.collaborator-form-back,
+.goals-add-btn {
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--brand-primary) !important;
+  font-family: var(--sans) !important;
+  font-size: var(--virtus-font-label) !important;
+  line-height: 1.35 !important;
+  font-weight: 750 !important;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.cycle-link-button:hover:not(:disabled),
+.cycle-back-link:hover:not(:disabled),
+.collaborator-form-back:hover:not(:disabled),
+.goals-add-btn:hover:not(:disabled) {
+  color:
+    color-mix(in srgb, var(--brand-primary) 82%, black) !important;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.cycle-link-button--danger {
+  color: var(--virtus-action-danger-text) !important;
+}
+
+.cycle-link-button--danger:hover:not(:disabled) {
+  color:
+    color-mix(in srgb, var(--virtus-action-danger-text) 86%, black) !important;
+}
+/* FIM VIRTUS ACTION AUDIT — etapa 12 */

@@ -1287,3 +1287,82 @@ textarea:focus-visible {
   }
 }
 /* FIM VIRTUS FORM AUDIT — etapa 11 — adaptações */
+
+/* VIRTUS ACTION AUDIT — etapa 12 — adaptações */
+/* Botões do ciclo já possuem variantes próprias.
+   A fundação assume geometria e estados; regras locais preservam layout. */
+.cycle-btn--panel {
+  min-width: 150px;
+}
+
+/* Ações de formulário mantêm espaçamento atual. */
+.collaborator-form-actions,
+.goals-editor__actions,
+.new-evaluation-nav-actions,
+.admin-evaluation-actions {
+  gap: 10px !important;
+}
+
+/* Botão secundário da avaliação é navegação entre critérios,
+   não CTA principal. */
+.new-evaluation-nav-actions button {
+  box-shadow: none !important;
+}
+
+/* Links de navegação não recebem caixa permanente. */
+.cycle-link-button,
+.cycle-back-link,
+.collaborator-form-back,
+.goals-add-btn {
+  box-shadow: none;
+}
+
+/* Focus ring em links-botão precisa de área mínima visível. */
+.cycle-link-button:focus-visible,
+.cycle-back-link:focus-visible,
+.collaborator-form-back:focus-visible,
+.goals-add-btn:focus-visible {
+  border-radius: 5px !important;
+}
+
+/* Evita micro-movimento de botões em telas touch. */
+@media (hover: hover) {
+  .virtus-btn:hover:not(:disabled),
+  .brand-button:hover:not(:disabled),
+  .cycle-btn:hover:not(:disabled),
+  .collaborator-form-btn:hover:not(:disabled),
+  .goal-action-btn:hover:not(:disabled),
+  .new-evaluation-nav-actions button:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+}
+
+@media (max-width: 600px) {
+  .virtus-btn,
+  .brand-button,
+  .cycle-btn:not(.cycle-btn--small),
+  .collaborator-form-btn,
+  .new-evaluation-nav-actions button {
+    min-height: 44px !important;
+  }
+
+  .new-evaluation-nav-actions {
+    flex-wrap: wrap;
+  }
+
+  .new-evaluation-nav-actions button {
+    flex: 1 1 150px;
+  }
+}
+/* FIM VIRTUS ACTION AUDIT — etapa 12 — adaptações */
+
+/* VIRTUS ETAPA 12 — ajuste 1: eixo estável entre rotas */
+/*
+  Reserva o gutter da scrollbar dos dois lados.
+  Assim, páginas curtas e longas preservam exatamente o mesmo eixo
+  físico para header, navegação e conteúdo centralizado.
+*/
+html {
+  scrollbar-gutter: stable both-edges;
+}
+/* FIM VIRTUS ETAPA 12 — ajuste 1: eixo estável entre rotas */
