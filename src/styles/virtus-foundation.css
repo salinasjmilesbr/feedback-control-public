@@ -695,3 +695,175 @@ button:not(:disabled) {
   margin-bottom: 14px !important;
 }
 /* FIM VIRTUS INFORMATION AUDIT — etapa 8 */
+
+/* VIRTUS KPI AUDIT — etapa 9 */
+:root {
+  --virtus-kpi-min-height: 88px;
+  --virtus-kpi-padding-y: 15px;
+  --virtus-kpi-padding-x: 17px;
+  --virtus-kpi-radius: 12px;
+  --virtus-kpi-border: var(--virtus-card-border, #e3dee7);
+  --virtus-kpi-shadow: 0 3px 12px rgba(35, 27, 43, .04);
+
+  --virtus-kpi-label-size: var(--virtus-font-label);
+  --virtus-kpi-value-size: 25px;
+  --virtus-kpi-helper-size: var(--virtus-font-aux);
+
+  --virtus-summary-radius: 10px;
+  --virtus-summary-border: #e7e3eb;
+}
+
+/* ---------------------------------------------------------
+   1. KPI PRINCIPAL — GEOMETRIA COMPARTILHADA
+   --------------------------------------------------------- */
+
+.collaborator-kpi,
+.goals-kpis article,
+.goals-manager-summary article,
+.cycle-kpi {
+  min-height: var(--virtus-kpi-min-height) !important;
+  padding: var(--virtus-kpi-padding-y) var(--virtus-kpi-padding-x) !important;
+  border: 1px solid var(--virtus-kpi-border) !important;
+  border-radius: var(--virtus-kpi-radius) !important;
+  background: #fff !important;
+  box-shadow: var(--virtus-kpi-shadow) !important;
+  box-sizing: border-box;
+}
+
+/* Labels */
+.collaborator-kpi small,
+.goals-kpis span,
+.goals-manager-summary span,
+.cycle-kpi span {
+  color: var(--brand-text-muted) !important;
+  font-family: var(--sans) !important;
+  font-size: var(--virtus-kpi-label-size) !important;
+  line-height: 1.35 !important;
+  font-weight: 700 !important;
+}
+
+/* Valores */
+.collaborator-kpi strong,
+.goals-kpis strong,
+.goals-manager-summary strong,
+.cycle-kpi strong {
+  font-family: var(--sans) !important;
+  font-size: var(--virtus-kpi-value-size) !important;
+  line-height: 1 !important;
+  font-weight: 790 !important;
+}
+
+/* Valores comuns usam a cor de marca.
+   KPIs de nota continuam respeitando --score-color. */
+.collaborator-kpi:not(.score-semantic) strong,
+.goals-kpis strong,
+.goals-manager-summary strong,
+.cycle-kpi strong {
+  color: var(--brand-primary) !important;
+}
+
+.collaborator-kpi.score-semantic strong.is-score {
+  color: var(--score-color) !important;
+}
+
+/* Texto auxiliar */
+.collaborator-kpi > div > span,
+.goals-kpis strong small {
+  font-size: var(--virtus-kpi-helper-size) !important;
+  line-height: 1.35 !important;
+}
+
+/* ---------------------------------------------------------
+   2. KPI INTERATIVO — OBSERVAÇÕES
+   Mesma presença visual, preservando semântica e ação.
+   --------------------------------------------------------- */
+
+.collaborator-observation-kpi {
+  min-height: var(--virtus-kpi-min-height) !important;
+  padding: var(--virtus-kpi-padding-y) var(--virtus-kpi-padding-x) !important;
+  border: 1px solid var(--virtus-kpi-border) !important;
+  border-radius: var(--virtus-kpi-radius) !important;
+  background: #fff !important;
+  box-shadow: var(--virtus-kpi-shadow) !important;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.collaborator-observation-kpi:hover {
+  border-color:
+    color-mix(in srgb, var(--brand-primary) 28%, var(--virtus-kpi-border)) !important;
+  box-shadow: 0 5px 14px rgba(35, 27, 43, .06) !important;
+  transform: translateY(-1px);
+}
+
+.collaborator-observation-kpi__copy small {
+  color: var(--brand-text-muted) !important;
+  font-size: var(--virtus-kpi-label-size) !important;
+  line-height: 1.35 !important;
+  font-weight: 700 !important;
+}
+
+.collaborator-observation-kpi__copy strong {
+  margin-top: 4px !important;
+  font-size: var(--virtus-kpi-value-size) !important;
+  line-height: 1 !important;
+  font-weight: 790 !important;
+}
+
+.collaborator-observation-kpi__copy em {
+  margin-top: 5px !important;
+  font-size: var(--virtus-kpi-helper-size) !important;
+}
+
+/* ---------------------------------------------------------
+   3. RESUMOS COMPACTOS
+   Não são promovidos a KPI principal.
+   --------------------------------------------------------- */
+
+.cycle-summary > div {
+  min-width: 88px;
+  padding: 10px 13px !important;
+  border: 1px solid var(--virtus-summary-border) !important;
+  border-radius: var(--virtus-summary-radius) !important;
+  background: #fff !important;
+  box-shadow: 0 2px 7px rgba(35, 27, 43, .025);
+}
+
+.cycle-summary strong {
+  color: var(--brand-primary) !important;
+  font-size: 21px !important;
+  line-height: 1 !important;
+  font-weight: 790 !important;
+}
+
+.cycle-summary span {
+  margin-top: 5px !important;
+  color: var(--brand-text-muted) !important;
+  font-size: var(--virtus-font-aux) !important;
+  line-height: 1.25 !important;
+  font-weight: 700 !important;
+}
+
+/* ---------------------------------------------------------
+   4. CONTADORES DE SEÇÃO
+   Contador é indicador auxiliar, não KPI.
+   --------------------------------------------------------- */
+
+.goals-manager-section__header > strong,
+.goals-count {
+  display: inline-grid !important;
+  place-items: center !important;
+  min-width: 30px !important;
+  min-height: 30px !important;
+  padding: 0 8px !important;
+  border-radius: 999px !important;
+  background: color-mix(in srgb, var(--brand-primary) 9%, white) !important;
+  color: var(--brand-primary) !important;
+  font-size: var(--virtus-font-label) !important;
+  line-height: 1 !important;
+  font-weight: 800 !important;
+  box-sizing: border-box;
+}
+/* FIM VIRTUS KPI AUDIT — etapa 9 */

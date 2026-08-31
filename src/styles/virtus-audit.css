@@ -1134,3 +1134,43 @@ textarea:focus-visible {
 }
 
 /* FIM VIRTUS ETAPA 08 — ajuste 1: Minhas Avaliações */
+
+/* VIRTUS KPI AUDIT — etapa 9 — adaptações */
+/* A régua de notas é soberana para KPIs semânticos. */
+.collaborator-kpi.score-semantic .collaborator-kpi__score-label {
+  color: var(--score-color) !important;
+  font-weight: 760 !important;
+}
+
+/* Evita que o small interno de percentuais herde tamanho de valor. */
+.goals-kpis strong small {
+  color: var(--brand-text-muted) !important;
+  font-weight: 700 !important;
+}
+
+/* Responsividade coerente sem mudar a estrutura já existente. */
+@media (max-width: 600px) {
+  .collaborator-kpi,
+  .goals-kpis article,
+  .goals-manager-summary article,
+  .cycle-kpi,
+  .collaborator-observation-kpi {
+    min-height: 82px !important;
+  }
+
+  .cycle-summary > div {
+    min-width: 0;
+  }
+}
+/* FIM VIRTUS KPI AUDIT — etapa 9 — adaptações */
+
+/* VIRTUS ETAPA 09 — ajuste 2: motivo não aplicável */
+/* O status geral possui padding horizontal próprio.
+   O texto auxiliar acompanha o mesmo eixo visual do conteúdo do badge. */
+.cycle-mobile-field[data-label="Status geral"] > .cycle-muted {
+  display: block;
+  margin-top: 5px !important;
+  padding-left: 7px;
+  line-height: 1.35 !important;
+}
+/* FIM VIRTUS ETAPA 09 — ajuste 2: motivo não aplicável */

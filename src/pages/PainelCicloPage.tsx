@@ -277,7 +277,16 @@ function PainelCicloPage() {
                     </span>
                     {linha.motivoNaoAplicavel && (
                       <small className="cycle-muted">
-                        {linha.motivoNaoAplicavel}
+                        {(() => {
+                          const motivo = linha.motivoNaoAplicavel.replace(
+                            /^Não aplicável\s*[—–-]\s*/i,
+                            ""
+                          );
+
+                          return motivo
+                            ? motivo.charAt(0).toUpperCase() + motivo.slice(1)
+                            : motivo;
+                        })()}
                       </small>
                     )}
                     {linha.feedback?.encerradaComPendencias && (
