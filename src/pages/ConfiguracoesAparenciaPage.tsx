@@ -3,12 +3,18 @@ import { useBranding } from "../contexts/BrandingContext";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import type { BrandingConfig } from "../types/Branding";
 import type { EscalaAvaliacao } from "../types/EscalaAvaliacao";
+import type { ExpectativasCargo } from "../types/ExpectativaCargo";
 import {
   getEscalaAvaliacao,
   getFaixaTexto,
   restaurarEscalaAvaliacao,
   salvarEscalaAvaliacao,
 } from "../services/escalaAvaliacaoStorage";
+import {
+  getExpectativasCargo,
+  restaurarExpectativasCargo,
+  salvarExpectativasCargo,
+} from "../services/expectativaCargoStorage";
 
 function ConfiguracoesAparenciaPage() {
   const { usuarioAtual } = useUsuarioAtual();
@@ -19,6 +25,56 @@ function ConfiguracoesAparenciaPage() {
     getEscalaAvaliacao()
   );
   const [mensagemEscala, setMensagemEscala] = useState("");
+  const [expectativasCargo, setExpectativasCargo] =
+    useState<ExpectativasCargo>(getExpectativasCargo());
+  const [mensagemExpectativas, setMensagemExpectativas] = useState("");
+
+  function salvarExpectativas() {
+    try {
+      salvarExpectativasCargo(expectativasCargo);
+      setExpectativasCargo(getExpectativasCargo());
+      setMensagemExpectativas(
+        "Expectativas por cargo salvas com sucesso."
+      );
+    } catch (error) {
+      setMensagemExpectativas(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível salvar as expectativas por cargo."
+      );
+    }
+  }
+
+  function restaurarExpectativas() {
+    const confirmar = window.confirm(
+      "Restaurar as expectativas por cargo padrão?"
+    );
+    if (!confirmar) return;
+
+    setExpectativasCargo(restaurarExpectativasCargo());
+    setMensagemExpectativas(
+      "Expectativas por cargo restauradas."
+    );
+  }
+
+  function atualizarExpectativa(
+    cargo: ExpectativasCargo[number]["cargo"],
+    campo:
+      | "autonomia"
+      | "tarefas"
+      | "responsabilidades"
+      | "foco",
+    valor: string
+  ) {
+    setExpectativasCargo((atual) =>
+      atual.map((item) =>
+        item.cargo === cargo
+          ? { ...item, [campo]: valor }
+          : item
+      )
+    );
+    setMensagemExpectativas("");
+  }
 
   function salvarEscala() {
     try {
@@ -289,8 +345,7 @@ function ConfiguracoesAparenciaPage() {
       <section className="score-scale-settings">
         <div className="score-scale-settings__header">
           <div>
-            <span>Modelo de avaliação</span>
-            <h2>Régua de notas</h2>
+<h2>Régua de notas</h2>
             <p>
               Define a faixa, o significado e a referência visual usados em
               todo o Virtus. A classificação de médias decimais respeita os
@@ -415,6 +470,115 @@ function ConfiguracoesAparenciaPage() {
             onClick={salvarEscala}
           >
             Salvar régua de notas
+          </button>
+        </div>
+      </section>
+
+      <section className="score-scale-settings role-expectations-settings">
+        <div className="score-scale-settings__header">
+          <div>
+<h2>Expectativas por cargo</h2>
+            <p>
+              Define o referencial de autonomia, tarefas, responsabilidades e
+              foco esperado para cada nível profissional. Esses textos serão
+              usados como contexto nas avaliações.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            className="brand-button brand-button--secondary"
+            onClick={restaurarExpectativas}
+          >
+            Restaurar expectativas padrão
+          </button>
+        </div>
+
+        <div className="role-expectations-settings__list">
+          {expectativasCargo.map((item) => (
+            <article
+              className="role-expectations-settings__card"
+              key={item.cargo}
+            >
+              <div className="role-expectations-settings__title">
+                <span>Referencial do cargo</span>
+                <h3>{item.nome}</h3>
+              </div>
+
+              <div className="role-expectations-settings__grid">
+                <label>
+                  <span>Autonomia</span>
+                  <textarea
+                    value={item.autonomia}
+                    onChange={(event) =>
+                      atualizarExpectativa(
+                        item.cargo,
+                        "autonomia",
+                        event.target.value
+                      )
+                    }
+                  />
+                </label>
+
+                <label>
+                  <span>Tarefas</span>
+                  <textarea
+                    value={item.tarefas}
+                    onChange={(event) =>
+                      atualizarExpectativa(
+                        item.cargo,
+                        "tarefas",
+                        event.target.value
+                      )
+                    }
+                  />
+                </label>
+
+                <label>
+                  <span>Responsabilidades</span>
+                  <textarea
+                    value={item.responsabilidades}
+                    onChange={(event) =>
+                      atualizarExpectativa(
+                        item.cargo,
+                        "responsabilidades",
+                        event.target.value
+                      )
+                    }
+                  />
+                </label>
+
+                <label>
+                  <span>Foco</span>
+                  <textarea
+                    value={item.foco}
+                    onChange={(event) =>
+                      atualizarExpectativa(
+                        item.cargo,
+                        "foco",
+                        event.target.value
+                      )
+                    }
+                  />
+                </label>
+              </div>
+            </article>
+          ))}
+        </div>
+
+        {mensagemExpectativas && (
+          <div className="branding-message">
+            {mensagemExpectativas}
+          </div>
+        )}
+
+        <div className="role-expectations-settings__actions">
+          <button
+            type="button"
+            className="brand-button brand-button--primary"
+            onClick={salvarExpectativas}
+          >
+            Salvar expectativas por cargo
           </button>
         </div>
       </section>

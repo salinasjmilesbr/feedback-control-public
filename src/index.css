@@ -2295,3 +2295,531 @@ body {
     width: 100%;
   }
 }
+
+
+/* VIRTUS EXPECTATIVAS POR CARGO */
+.role-expectations-settings {
+  margin-top: 24px;
+  padding: 24px;
+  border: 1px solid var(--brand-border);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(35, 27, 43, 0.045);
+}
+
+.role-expectations-settings__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+
+.role-expectations-settings__header > div > span,
+.role-expectations-settings__title > span {
+  color: var(--brand-primary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.role-expectations-settings__header h2 {
+  margin: 4px 0 6px;
+  font-size: 20px;
+}
+
+.role-expectations-settings__header p {
+  max-width: 780px;
+  margin: 0;
+  color: var(--brand-text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.role-expectations-settings__list {
+  display: grid;
+  gap: 14px;
+}
+
+.role-expectations-settings__card {
+  padding: 18px;
+  border: 1px solid #e8e3eb;
+  border-radius: 12px;
+  background: #fbfafc;
+}
+
+.role-expectations-settings__title h3 {
+  margin: 4px 0 14px;
+  font-size: 17px;
+}
+
+.role-expectations-settings__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.role-expectations-settings__grid label {
+  display: grid;
+  gap: 6px;
+}
+
+.role-expectations-settings__grid label > span {
+  color: #403849;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.role-expectations-settings__grid textarea {
+  min-height: 88px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--brand-text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.role-expectations-settings__grid textarea:focus {
+  outline: 2px solid color-mix(in srgb, var(--brand-primary) 22%, transparent);
+  border-color: var(--brand-primary);
+}
+
+.role-expectations-settings__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+@media (max-width: 760px) {
+  .role-expectations-settings__header {
+    flex-direction: column;
+  }
+
+  .role-expectations-settings__grid {
+    grid-template-columns: 1fr;
+  }
+}
+/* FIM VIRTUS EXPECTATIVAS POR CARGO */
+
+
+/* VIRTUS EXPECTATIVAS POR CARGO — AJUSTE VISUAL */
+.role-expectations-settings {
+  padding: 28px 30px;
+}
+
+.role-expectations-settings__header {
+  margin-bottom: 22px;
+}
+
+.role-expectations-settings__header > div > span,
+.role-expectations-settings__title > span {
+  font-size: 11px;
+}
+
+.role-expectations-settings__header h2 {
+  margin: 5px 0 7px;
+  font-size: 21px;
+  line-height: 1.2;
+}
+
+.role-expectations-settings__header p {
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.role-expectations-settings__list {
+  gap: 16px;
+}
+
+.role-expectations-settings__card {
+  padding: 20px 22px;
+}
+
+.role-expectations-settings__title h3 {
+  margin: 5px 0 16px;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.role-expectations-settings__grid {
+  gap: 16px 18px;
+}
+
+.role-expectations-settings__grid label {
+  gap: 7px;
+}
+
+.role-expectations-settings__grid label > span {
+  font-size: 13px;
+  font-weight: 720;
+}
+
+.role-expectations-settings__grid textarea {
+  min-height: 96px;
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.role-expectations-settings__actions {
+  margin-top: 20px;
+}
+
+@media (max-width: 760px) {
+  .role-expectations-settings {
+    padding: 22px 18px;
+  }
+
+  .role-expectations-settings__grid textarea {
+    min-height: 110px;
+  }
+}
+/* FIM VIRTUS EXPECTATIVAS POR CARGO — AJUSTE VISUAL */
+
+
+/* VIRTUS EXPECTATIVAS POR CARGO — PADRÃO RÉGUA DE NOTAS */
+/*
+ * A seção passa a herdar a mesma escala visual usada pela Régua de Notas:
+ * títulos, textos auxiliares, labels, inputs e densidade dos cards.
+ */
+.role-expectations-settings {
+  margin-top: 24px;
+  padding: 24px;
+}
+
+.role-expectations-settings__header {
+  margin-bottom: 18px;
+}
+
+.role-expectations-settings__header > div > span {
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+}
+
+.role-expectations-settings__header h2 {
+  margin: 0;
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: inherit;
+}
+
+.role-expectations-settings__header p {
+  margin-top: 6px;
+  max-width: none;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.role-expectations-settings__list {
+  gap: 12px;
+}
+
+.role-expectations-settings__card {
+  padding: 16px;
+}
+
+.role-expectations-settings__title > span {
+  font-size: inherit;
+  letter-spacing: inherit;
+}
+
+.role-expectations-settings__title h3 {
+  margin: 4px 0 14px;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.role-expectations-settings__grid {
+  gap: 12px 14px;
+}
+
+.role-expectations-settings__grid label {
+  gap: 6px;
+}
+
+.role-expectations-settings__grid label > span {
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.role-expectations-settings__grid textarea {
+  min-height: 82px;
+  padding: 9px 10px;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.role-expectations-settings__actions {
+  margin-top: 16px;
+}
+
+/* Usa explicitamente a tipografia dos controles da Régua de Notas. */
+.role-expectations-settings__header,
+.role-expectations-settings__title,
+.role-expectations-settings__grid {
+  font-size: 12px;
+}
+
+.role-expectations-settings__header h2 {
+  font-size: 18px;
+  font-weight: 720;
+}
+
+.role-expectations-settings__header > div > span,
+.role-expectations-settings__title > span {
+  color: var(--brand-primary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.role-expectations-settings__header p {
+  color: var(--brand-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.role-expectations-settings__title h3 {
+  color: var(--brand-text);
+  font-size: 14px;
+  font-weight: 720;
+}
+
+.role-expectations-settings__grid label > span {
+  color: var(--brand-text);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.role-expectations-settings__grid textarea {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+@media (max-width: 760px) {
+  .role-expectations-settings {
+    padding: 20px 16px;
+  }
+
+  .role-expectations-settings__grid textarea {
+    min-height: 96px;
+  }
+}
+/* FIM VIRTUS EXPECTATIVAS POR CARGO — PADRÃO RÉGUA DE NOTAS */
+
+
+/* VIRTUS EXPECTATIVAS POR CARGO — ESPELHO RÉGUA */
+/*
+ * Esta seção espelha a escala visual da Régua de Notas.
+ * Mantemos somente o grid 2x2 próprio das expectativas.
+ */
+.role-expectations-settings__header {
+  gap: 24px;
+  margin-bottom: 5px;
+}
+
+.role-expectations-settings__header h2 {
+  font-size: 20px;
+  font-weight: 720;
+  line-height: 1.2;
+  letter-spacing: normal;
+  color: var(--brand-text);
+  margin-top: 4px;
+  margin-bottom: 6px;
+}
+
+.role-expectations-settings__header p {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #655e70;
+  max-width: 820px;
+}
+
+.role-expectations-settings__list {
+  gap: 12px;
+}
+
+.role-expectations-settings__card {
+  padding: 10px 11px;
+  border: 1px solid #ebe7ee;
+  border-radius: 10px;
+  background: #fcfbfd;
+}
+
+.role-expectations-settings__title > span {
+  color: var(--brand-primary);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.role-expectations-settings__title h3 {
+  margin: 5px 0 16px;
+  font-size: 16px;
+  line-height: 1.3;
+  font-weight: 720;
+  color: var(--brand-text);
+}
+
+.role-expectations-settings__grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 18px;
+}
+
+.role-expectations-settings__grid label {
+  display: grid;
+  gap: 7px;
+}
+
+.role-expectations-settings__grid label > span {
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.35;
+  color: #4d4658;
+}
+
+.role-expectations-settings__grid textarea {
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 3px;
+  border: 1px solid #d9d5df;
+  border-radius: 8px;
+  background: #fff;
+  color: #26212c;
+  width: 100%;
+  min-height: 92px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.role-expectations-settings__actions {
+  margin-top: 18px;
+}
+
+@media (max-width: 760px) {
+  .role-expectations-settings__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .role-expectations-settings__grid textarea {
+    min-height: 104px;
+  }
+}
+/* FIM VIRTUS EXPECTATIVAS POR CARGO — ESPELHO RÉGUA */
+
+
+/* VIRTUS EXPECTATIVAS POR CARGO — AJUSTE ESTRUTURAL FINAL */
+/*
+ * A seção de Expectativas agora usa o mesmo container e o mesmo header
+ * da Régua de Notas no JSX.
+ *
+ * As regras abaixo cuidam somente do conteúdo interno específico dos cargos.
+ * Também neutralizam os ajustes acumulados dos patches visuais anteriores.
+ */
+
+.score-scale-settings.role-expectations-settings {
+  margin-top: 24px;
+}
+
+/* O cabeçalho agora é 100% o mesmo da Régua de Notas.
+   Não definir tipografia própria para ele aqui. */
+
+.role-expectations-settings__list {
+  display: grid;
+  gap: 16px;
+}
+
+.role-expectations-settings__card {
+  padding: 18px 20px !important;
+  border: 1px solid #e8e3eb !important;
+  border-radius: 10px !important;
+  background: #fbfafc !important;
+  box-shadow: none !important;
+}
+
+.role-expectations-settings__title {
+  margin-bottom: 14px;
+}
+
+.role-expectations-settings__title > span {
+  display: block;
+  margin: 0 0 4px;
+  color: var(--brand-primary);
+  font-size: 11px !important;
+  line-height: 1.25 !important;
+  font-weight: 800 !important;
+  letter-spacing: .07em !important;
+  text-transform: uppercase;
+}
+
+.role-expectations-settings__title h3 {
+  margin: 0 !important;
+  color: var(--brand-text);
+  font-size: 15px !important;
+  line-height: 1.3 !important;
+  font-weight: 720 !important;
+}
+
+.role-expectations-settings__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 14px 16px !important;
+}
+
+.role-expectations-settings__grid label {
+  display: grid;
+  gap: 6px !important;
+}
+
+.role-expectations-settings__grid label > span {
+  color: var(--brand-text);
+  font-size: 12px !important;
+  line-height: 1.35 !important;
+  font-weight: 700 !important;
+}
+
+.role-expectations-settings__grid textarea {
+  width: 100%;
+  min-height: 86px !important;
+  box-sizing: border-box;
+  padding: 10px 12px !important;
+  border: 1px solid var(--brand-border) !important;
+  border-radius: 8px !important;
+  background: #fff !important;
+  color: var(--brand-text) !important;
+  font: inherit !important;
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+  resize: vertical;
+}
+
+.role-expectations-settings__grid textarea:focus {
+  outline: 2px solid color-mix(in srgb, var(--brand-primary) 22%, transparent);
+  border-color: var(--brand-primary) !important;
+}
+
+.role-expectations-settings__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px !important;
+}
+
+@media (max-width: 760px) {
+  .role-expectations-settings__grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .role-expectations-settings__grid textarea {
+    min-height: 100px !important;
+  }
+}
+/* FIM VIRTUS EXPECTATIVAS POR CARGO — AJUSTE ESTRUTURAL FINAL */
