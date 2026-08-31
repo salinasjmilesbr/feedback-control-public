@@ -1065,3 +1065,72 @@ textarea:focus-visible {
 
 /* VIRTUS AUDIT CLEANUP — etapa 3 concluída
    Regras comprovadamente redundantes removidas. */
+
+/* VIRTUS INFORMATION AUDIT — etapa 8 — adaptações */
+.virtus-collaborators-grid .status-pill {
+  min-height: var(--virtus-status-height) !important;
+  padding: 3px var(--virtus-status-padding-x) !important;
+  font-size: var(--virtus-status-font-size) !important;
+}
+
+.evaluation-partial-badge {
+  margin-top: 6px !important;
+}
+
+@media (max-width: 620px) {
+  .cycle-card__title-row .cycle-status,
+  .goal-card__top .goal-status,
+  .evaluation-goal-card__header .evaluation-goal-status {
+    white-space: normal;
+    text-align: center;
+  }
+}
+/* FIM VIRTUS INFORMATION AUDIT — etapa 8 — adaptações */
+
+/* VIRTUS ETAPA 08 — ajuste 1: Minhas Avaliações */
+
+/* O status do CollaboratorIdentity usa classe própria e não .status-pill.
+   Alinha sua geometria ao padrão semântico definido na Etapa 08. */
+.evaluation-profile-card--identity .collaborator-identity__status {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: fit-content;
+  min-height: var(--virtus-status-height) !important;
+  padding: 3px var(--virtus-status-padding-x) !important;
+  border-radius: var(--virtus-status-radius) !important;
+  box-sizing: border-box;
+  font-family: var(--sans) !important;
+  font-size: var(--virtus-status-font-size) !important;
+  line-height: 1.2 !important;
+  font-weight: 780 !important;
+  white-space: nowrap;
+}
+
+.evaluation-profile-card--identity .collaborator-identity__status.is-active {
+  border: 1px solid var(--virtus-success-border) !important;
+  background: var(--virtus-success-bg) !important;
+  color: var(--virtus-success-text) !important;
+}
+
+/* Avaliação concluída é semanticamente um estado de sucesso. */
+.evaluation-history-card__status {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: fit-content;
+  min-height: var(--virtus-status-height) !important;
+  padding: 3px var(--virtus-status-padding-x) !important;
+  border: 1px solid var(--virtus-success-border) !important;
+  border-radius: var(--virtus-status-radius) !important;
+  background: var(--virtus-success-bg) !important;
+  color: var(--virtus-success-text) !important;
+  box-sizing: border-box;
+  font-family: var(--sans) !important;
+  font-size: var(--virtus-status-font-size) !important;
+  line-height: 1.2 !important;
+  font-weight: 780 !important;
+  white-space: nowrap;
+}
+
+/* FIM VIRTUS ETAPA 08 — ajuste 1: Minhas Avaliações */

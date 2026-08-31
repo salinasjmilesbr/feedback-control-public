@@ -477,3 +477,221 @@ button:not(:disabled) {
   }
 }
 /* FIM VIRTUS ETAPA 7 — ajuste 4 */
+
+/* VIRTUS INFORMATION AUDIT — etapa 8 */
+:root {
+  --virtus-status-height: 26px;
+  --virtus-status-radius: 999px;
+  --virtus-status-padding-x: 9px;
+  --virtus-status-font-size: var(--virtus-font-aux);
+  --virtus-success-bg: #effaf2;
+  --virtus-success-border: #b9e7c8;
+  --virtus-success-text: #18733a;
+  --virtus-warning-bg: #fff8e7;
+  --virtus-warning-border: #efd999;
+  --virtus-warning-text: #806000;
+  --virtus-danger-bg: #fff1f2;
+  --virtus-danger-border: #efc2c5;
+  --virtus-danger-text: #a3262d;
+  --virtus-neutral-bg: #f6f5f7;
+  --virtus-neutral-border: #dedbe2;
+  --virtus-neutral-text: #625b6d;
+  --virtus-empty-padding: 28px;
+  --virtus-empty-radius: 12px;
+  --virtus-empty-border: #ddd7e2;
+  --virtus-empty-bg: #fff;
+}
+
+.status-pill,
+.cycle-status,
+.goal-status,
+.evaluation-goal-status,
+.evaluation-partial-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: fit-content;
+  min-height: var(--virtus-status-height) !important;
+  padding: 3px var(--virtus-status-padding-x) !important;
+  border-radius: var(--virtus-status-radius) !important;
+  box-sizing: border-box;
+  font-family: var(--sans) !important;
+  font-size: var(--virtus-status-font-size) !important;
+  line-height: 1.2 !important;
+  font-weight: 780 !important;
+  white-space: nowrap;
+}
+
+.status-pill.is-active,
+.cycle-status.is-active,
+.goal-status.is-success,
+.evaluation-goal-status.is-success {
+  border: 1px solid var(--virtus-success-border) !important;
+  background: var(--virtus-success-bg) !important;
+  color: var(--virtus-success-text) !important;
+}
+
+.status-pill.is-leave,
+.cycle-status.is-planned,
+.goal-status.is-progress,
+.evaluation-goal-status.is-warning,
+.evaluation-partial-badge {
+  border: 1px solid var(--virtus-warning-border) !important;
+  background: var(--virtus-warning-bg) !important;
+  color: var(--virtus-warning-text) !important;
+}
+
+.status-pill.is-inactive,
+.cycle-status.is-warning,
+.goal-status.is-danger,
+.evaluation-goal-status.is-danger {
+  border: 1px solid var(--virtus-danger-border) !important;
+  background: var(--virtus-danger-bg) !important;
+  color: var(--virtus-danger-text) !important;
+}
+
+.cycle-status.is-closed {
+  border: 1px solid var(--virtus-neutral-border) !important;
+  background: var(--virtus-neutral-bg) !important;
+  color: var(--virtus-neutral-text) !important;
+}
+
+.cycle-empty,
+.evaluation-empty,
+.goals-empty {
+  padding: var(--virtus-empty-padding) !important;
+  border: 1px dashed var(--virtus-empty-border) !important;
+  border-radius: var(--virtus-empty-radius) !important;
+  background: var(--virtus-empty-bg) !important;
+  box-shadow: none !important;
+  text-align: center;
+}
+
+.cycle-empty h1,
+.cycle-empty h2,
+.cycle-empty h3,
+.evaluation-empty h1,
+.evaluation-empty h2,
+.evaluation-empty h3,
+.goals-empty h1,
+.goals-empty h2,
+.goals-empty h3 {
+  margin-top: 0 !important;
+  margin-bottom: 8px !important;
+}
+
+.cycle-empty p,
+.evaluation-empty p,
+.goals-empty p {
+  max-width: 640px;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  color: var(--brand-text-muted) !important;
+  font-size: var(--virtus-font-body) !important;
+  line-height: 1.5 !important;
+}
+
+.goals-group__empty {
+  padding: 16px 18px !important;
+  border: 1px dashed #e2dce5 !important;
+  border-radius: 10px !important;
+  background: #faf9fb !important;
+  color: var(--brand-text-muted) !important;
+  font-size: var(--virtus-font-body) !important;
+  line-height: 1.45 !important;
+}
+
+.cycle-table-card {
+  border-color: var(--virtus-card-border) !important;
+  border-radius: var(--virtus-card-radius) !important;
+  box-shadow: var(--virtus-card-shadow) !important;
+}
+
+.cycle-table-heading {
+  padding: 18px 20px 16px !important;
+  border-bottom: 1px solid #eeeaf0;
+}
+
+.cycle-table__row {
+  min-height: 68px !important;
+  padding-top: 11px !important;
+  padding-bottom: 11px !important;
+  border-top: 1px solid #efecf1 !important;
+}
+
+.cycle-table__row--header {
+  min-height: 42px !important;
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+  background: #faf9fb !important;
+  color: #6a6370 !important;
+  font-size: var(--virtus-font-aux) !important;
+  line-height: 1.25 !important;
+  letter-spacing: .035em !important;
+  font-weight: 800 !important;
+}
+
+.cycle-table__row:not(.cycle-table__row--header):hover {
+  background: #fcfbfd;
+}
+
+.cycle-person strong {
+  color: var(--brand-text) !important;
+  line-height: 1.35 !important;
+}
+
+.cycle-person span,
+.cycle-muted,
+.cycle-danger-text {
+  line-height: 1.4 !important;
+}
+
+.cycle-progress,
+.cycle-general-status {
+  min-height: 24px;
+  padding: 3px 7px;
+  line-height: 1.2 !important;
+}
+
+.cycle-progress.is-complete,
+.cycle-general-status.is-complete {
+  background: var(--virtus-success-bg);
+  color: var(--virtus-success-text) !important;
+}
+
+.cycle-progress.is-progress,
+.cycle-general-status.is-progress,
+.cycle-general-status.is-feedback {
+  background: var(--virtus-warning-bg);
+  color: var(--virtus-warning-text) !important;
+}
+
+.cycle-progress.is-pending {
+  background: var(--virtus-danger-bg);
+  color: var(--virtus-danger-text) !important;
+}
+
+.cycle-progress.is-na,
+.cycle-progress.is-not-started,
+.cycle-general-status.is-not-started {
+  background: var(--virtus-neutral-bg);
+  color: var(--virtus-neutral-text) !important;
+}
+
+.evaluation-history-grid,
+.goals-list {
+  gap: 14px !important;
+}
+
+.evaluation-history-card {
+  padding: 18px 20px !important;
+}
+
+.cycle-list {
+  margin-top: 26px !important;
+}
+
+.cycle-card {
+  margin-bottom: 14px !important;
+}
+/* FIM VIRTUS INFORMATION AUDIT — etapa 8 */
