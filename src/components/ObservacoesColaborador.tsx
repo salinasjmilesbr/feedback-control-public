@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Colaborador } from "../types/Colaborador";
 import type {
   Observacao,
@@ -20,6 +20,7 @@ import {
 
 type Props = {
   colaborador: Colaborador;
+  abrirNovaObservacaoToken?: number;
 };
 
 const labelsTipo: Record<TipoObservacao, string> = {
@@ -53,7 +54,10 @@ function formatarData(data: string) {
   });
 }
 
-function ObservacoesColaborador({ colaborador }: Props) {
+function ObservacoesColaborador({
+  colaborador,
+  abrirNovaObservacaoToken,
+}: Props) {
   const { usuarioAtual } = useUsuarioAtual();
   const cicloAtivo = getCicloAtivo();
   const ciclosDisponiveis = getCiclosAvaliacao();
@@ -75,6 +79,19 @@ function ObservacoesColaborador({ colaborador }: Props) {
     null
   );
   const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    if (!abrirNovaObservacaoToken) return;
+
+    setEditandoId(null);
+    setTipo("NEUTRA");
+    setTexto("");
+    setComunicado(false);
+    setAno(cicloAtivo?.ano ?? new Date().getFullYear());
+    setCiclo(cicloAtivo?.ciclo ?? 1);
+    setErro("");
+    setFormAberto(true);
+  }, [abrirNovaObservacaoToken, cicloAtivo?.ano, cicloAtivo?.ciclo]);
 
   void versao;
 
@@ -165,54 +182,18 @@ function ObservacoesColaborador({ colaborador }: Props) {
   }
 
   return (
-    <div
-      style={{
-        marginTop: "30px",
-        border: "1px solid #ddd",
-        borderRadius: "10px",
-        padding: "20px",
-        backgroundColor: "#fff",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: "16px",
-          flexWrap: "wrap",
-        }}
-      >
+    <div className="observation-panel">
+      <div className="observation-panel__header">
         <div>
-          <h3 style={{ margin: 0 }}>Observações</h3>
-          <p
-            style={{
-              margin: "6px 0 0 0",
-              color: "#666",
-              fontSize: "14px",
-            }}
-          >
+          <h3 className="observation-panel__title">Observações</h3>
+          <p className="observation-panel__description">
             Registros positivos, neutros ou negativos do colaborador.
           </p>
         </div>
 
         {podeGerenciar && (
-          <div
-            style={{
-              display: "flex",
-              gap: "10px",
-              flexWrap: "wrap",
-            }}
-          >
-            <label
-              style={{
-                display: "flex",
-                gap: "6px",
-                alignItems: "center",
-                fontSize: "13px",
-                color: "#555",
-              }}
-            >
+          <div className="observation-panel__actions">
+            <label className="observation-toggle">
               <input
                 type="checkbox"
                 checked={mostrarExcluidas}
@@ -239,15 +220,7 @@ function ObservacoesColaborador({ colaborador }: Props) {
                   setFormAberto(true);
                 }
               }}
-              style={{
-                padding: "10px 16px",
-                borderRadius: "8px",
-                border: "none",
-                backgroundColor: "#660099",
-                color: "#fff",
-                cursor: "pointer",
-                fontWeight: "bold",
-              }}
+              className="virtus-btn virtus-btn--primary"
             >
               + Nova observação
             </button>
@@ -256,21 +229,8 @@ function ObservacoesColaborador({ colaborador }: Props) {
       </div>
 
       {formAberto && podeGerenciar && (
-        <div
-          style={{
-            marginTop: "18px",
-            padding: "16px",
-            borderRadius: "10px",
-            border: "1px solid #ddd",
-            backgroundColor: "#FAFAFA",
-          }}
-        >
-          <div
-            style={{
-              display: "grid",
-              gap: "12px",
-            }}
-          >
+        <div className="observation-form">
+          <div className="observation-form__grid">
             <label>
               <strong>Tipo</strong>
               <select
@@ -278,14 +238,7 @@ function ObservacoesColaborador({ colaborador }: Props) {
                 onChange={(event) =>
                   setTipo(event.target.value as TipoObservacao)
                 }
-                style={{
-                  width: "100%",
-                  marginTop: "6px",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid #ccc",
-                  boxSizing: "border-box",
-                }}
+                className="observation-control"
               >
                 <option value="POSITIVA">Positiva</option>
                 <option value="NEUTRA">Neutra</option>
@@ -304,14 +257,7 @@ function ObservacoesColaborador({ colaborador }: Props) {
                   setAno(Number(anoSelecionado));
                   setCiclo(Number(cicloSelecionado) as 1 | 2 | 3);
                 }}
-                style={{
-                  width: "100%",
-                  marginTop: "6px",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid #ccc",
-                  boxSizing: "border-box",
-                }}
+                className="observation-control"
               >
                 {ciclosDisponiveis.map((item) => (
                   <option
@@ -334,25 +280,11 @@ function ObservacoesColaborador({ colaborador }: Props) {
               <textarea
                 value={texto}
                 onChange={(event) => setTexto(event.target.value)}
-                style={{
-                  width: "100%",
-                  minHeight: "110px",
-                  marginTop: "6px",
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid #ccc",
-                  boxSizing: "border-box",
-                }}
+                className="observation-control observation-control--textarea"
               />
             </label>
 
-            <label
-              style={{
-                display: "flex",
-                gap: "8px",
-                alignItems: "center",
-              }}
-            >
+            <label className="observation-checkbox">
               <input
                 type="checkbox"
                 checked={comunicado}
@@ -364,26 +296,14 @@ function ObservacoesColaborador({ colaborador }: Props) {
             </label>
 
             {erro && (
-              <div style={{ color: "#A4262C" }}>{erro}</div>
+              <div className="observation-form__error">{erro}</div>
             )}
 
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                gap: "10px",
-              }}
-            >
+            <div className="observation-form__actions">
               <button
                 type="button"
                 onClick={limparFormulario}
-                style={{
-                  padding: "9px 14px",
-                  borderRadius: "8px",
-                  border: "1px solid #999",
-                  backgroundColor: "#fff",
-                  cursor: "pointer",
-                }}
+                className="virtus-btn virtus-btn--outline"
               >
                 Cancelar
               </button>
@@ -391,15 +311,7 @@ function ObservacoesColaborador({ colaborador }: Props) {
               <button
                 type="button"
                 onClick={salvar}
-                style={{
-                  padding: "9px 14px",
-                  borderRadius: "8px",
-                  border: "none",
-                  backgroundColor: "#660099",
-                  color: "#fff",
-                  cursor: "pointer",
-                  fontWeight: "bold",
-                }}
+                className="virtus-btn virtus-btn--primary"
               >
                 {editandoId ? "Salvar alterações" : "Salvar observação"}
               </button>
@@ -408,17 +320,9 @@ function ObservacoesColaborador({ colaborador }: Props) {
         </div>
       )}
 
-      <div
-        style={{
-          display: "grid",
-          gap: "12px",
-          marginTop: "18px",
-        }}
-      >
+      <div className="observation-list">
         {observacoes.length === 0 ? (
-          <div style={{ color: "#666" }}>
-            Nenhuma observação registrada.
-          </div>
+          <div className="observation-empty">Nenhuma observação registrada.</div>
         ) : (
           observacoes.map((observacao) => (
             <div
@@ -554,23 +458,11 @@ function ObservacoesColaborador({ colaborador }: Props) {
                 )}
               </div>
 
-              <div
-                style={{
-                  marginTop: "12px",
-                  whiteSpace: "pre-wrap",
-                  color: "#333",
-                }}
-              >
+<div className="observation-card__text">
                 {observacao.texto}
               </div>
 
-              <div
-                style={{
-                  marginTop: "10px",
-                  color: "#666",
-                  fontSize: "12px",
-                }}
-              >
+<div className="observation-card__meta">
                 Registrada por <strong>{observacao.autorNome}</strong>{" "}
                 em {formatarData(observacao.dataCriacao)}
                 {observacao.dataUltimaAtualizacao !==
@@ -592,16 +484,7 @@ function ObservacoesColaborador({ colaborador }: Props) {
                     atual === observacao.id ? null : observacao.id
                   )
                 }
-                style={{
-                  marginTop: "10px",
-                  border: "none",
-                  padding: 0,
-                  backgroundColor: "transparent",
-                  color: "#660099",
-                  cursor: "pointer",
-                  fontWeight: "bold",
-                  fontSize: "12px",
-                }}
+                className="observation-history-toggle"
               >
                 {historicoAberto === observacao.id
                   ? "Ocultar histórico"
@@ -609,15 +492,7 @@ function ObservacoesColaborador({ colaborador }: Props) {
               </button>
 
               {historicoAberto === observacao.id && (
-                <div
-                  style={{
-                    marginTop: "10px",
-                    paddingTop: "10px",
-                    borderTop: "1px solid #eee",
-                    display: "grid",
-                    gap: "8px",
-                  }}
-                >
+<div className="observation-history">
                   {[...observacao.historico]
                     .reverse()
                     .map((evento) => (

@@ -2,6 +2,7 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
 import CollaboratorIdentity from "../components/CollaboratorIdentity";
 import CriterionIcon from "../components/CriterionIcon";
+import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 
 import ObservacoesColaborador from "../components/ObservacoesColaborador";
 import { getColaboradorByMatricula, getColaboradores } from "../services/colaboradorStorage";
@@ -302,11 +303,13 @@ function mudancasDaMovimentacao(movimento: MovimentacaoOrganizacional) {
 function ColaboradorDetalhePage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { usuarioAtual } = useUsuarioAtual();
 
   useLayoutEffect(() => {
     window.scrollTo(0, 0);
   }, [id]);
   const [mostrarObservacoes, setMostrarObservacoes] = useState(false);
+  const [novaObservacaoToken, setNovaObservacaoToken] = useState(0);
   const [ordenacao, setOrdenacao] = useState<"RECENTES" | "ANTIGAS">("RECENTES");
   const [avaliacoesAbertas, setAvaliacoesAbertas] = useState<Set<string>>(
     () => new Set()
@@ -391,6 +394,17 @@ function ColaboradorDetalhePage() {
       : avaliacoesAbertas.has(feedbackId);
   }
 
+  function abrirNovaObservacao() {
+    setMostrarObservacoes(true);
+    setNovaObservacaoToken((valor) => valor + 1);
+
+    window.setTimeout(() => {
+      document
+        .getElementById("observacoes-detalhe")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+  }
+
   function alternarAvaliacao(feedbackId: string) {
     setAvaliacoesAbertas((atual) => {
       const proximo = new Set(atual);
@@ -456,6 +470,18 @@ function ColaboradorDetalhePage() {
             <IconEdit />
             Editar cadastro
           </Link>
+
+          {(usuarioAtual?.funcao === "GERENTE" ||
+            usuarioAtual?.funcao === "COORDENADOR") && (
+            <button
+              type="button"
+              className="virtus-btn virtus-btn--outline collaborator-link-button"
+              onClick={abrirNovaObservacao}
+            >
+              <IconPlus />
+              Nova observação
+            </button>
+          )}
 
           <Link
             to={`/colaborador/${colaborador.matricula}/novo-feedback`}
@@ -583,7 +609,7 @@ function ColaboradorDetalhePage() {
         </div>
 
         {mostrarObservacoes && (
-          <div className="collaborator-observations-detail">
+          <div className="collaborator-observations-detail" id="observacoes-detalhe">
             <div className="collaborator-observations-detail__top">
               <strong>Todas as observações</strong>
               <button
@@ -594,7 +620,10 @@ function ColaboradorDetalhePage() {
                 Fechar
               </button>
             </div>
-            <ObservacoesColaborador colaborador={colaborador} />
+            <ObservacoesColaborador
+              colaborador={colaborador}
+              abrirNovaObservacaoToken={novaObservacaoToken}
+            />
           </div>
         )}
       </section>

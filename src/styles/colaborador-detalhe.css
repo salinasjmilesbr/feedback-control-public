@@ -891,3 +891,17 @@
     white-space: normal;
   }
 }
+
+
+/* VIRTUS — acesso rápido a observações */
+.collaborator-profile-actions {
+  flex-wrap: wrap;
+}
+
+.collaborator-profile-actions .collaborator-link-button {
+  white-space: nowrap;
+}
+
+#observacoes-detalhe {
+  scroll-margin-top: 22px;
+}
