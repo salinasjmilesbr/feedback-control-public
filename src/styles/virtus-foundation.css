@@ -1002,3 +1002,178 @@ button:not(:disabled) {
    - KPIs: já tratados na Etapa 09
    --------------------------------------------------------- */
 /* FIM VIRTUS SURFACE AUDIT — etapa 10 */
+
+/* VIRTUS FORM AUDIT — etapa 11 */
+:root {
+  --virtus-control-height: 42px;
+  --virtus-control-radius: 9px;
+  --virtus-control-padding-x: 11px;
+  --virtus-control-border: var(--brand-border);
+  --virtus-control-bg: #fff;
+  --virtus-control-text: var(--brand-text);
+  --virtus-control-placeholder: #8a838d;
+
+  --virtus-control-focus-border: var(--brand-primary);
+  --virtus-control-focus-ring:
+    0 0 0 3px color-mix(in srgb, var(--brand-primary) 11%, transparent);
+
+  --virtus-control-disabled-bg: #f6f5f7;
+  --virtus-control-disabled-text: #8a838d;
+
+  --virtus-field-label-size: var(--virtus-font-label);
+  --virtus-field-helper-size: var(--virtus-font-aux);
+}
+
+/* ---------------------------------------------------------
+   1. CAMPOS DE TEXTO / SELECTS
+   --------------------------------------------------------- */
+
+.collaborator-field input,
+.collaborator-field select,
+.goals-field input:not([type="range"]):not([type="radio"]):not([type="checkbox"]),
+.goals-field select,
+.goals-progress-number input,
+.new-evaluation-comment textarea {
+  min-height: var(--virtus-control-height) !important;
+  box-sizing: border-box;
+  border: 1px solid var(--virtus-control-border) !important;
+  border-radius: var(--virtus-control-radius) !important;
+  background: var(--virtus-control-bg) !important;
+  color: var(--virtus-control-text) !important;
+  font-family: var(--sans) !important;
+  font-size: 13px !important;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    background-color 150ms ease;
+}
+
+.collaborator-field input,
+.collaborator-field select,
+.goals-field input:not([type="range"]):not([type="radio"]):not([type="checkbox"]),
+.goals-field select,
+.goals-progress-number input {
+  padding-left: var(--virtus-control-padding-x) !important;
+  padding-right: var(--virtus-control-padding-x) !important;
+}
+
+/* ---------------------------------------------------------
+   2. TEXTAREAS
+   --------------------------------------------------------- */
+
+.goals-field textarea,
+.new-evaluation-comment textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px var(--virtus-control-padding-x) !important;
+  border: 1px solid var(--virtus-control-border) !important;
+  border-radius: var(--virtus-control-radius) !important;
+  background: var(--virtus-control-bg) !important;
+  color: var(--virtus-control-text) !important;
+  font-family: var(--sans) !important;
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    background-color 150ms ease;
+}
+
+/* ---------------------------------------------------------
+   3. FOCO
+   --------------------------------------------------------- */
+
+.collaborator-field input:focus-visible,
+.collaborator-field select:focus-visible,
+.goals-field input:focus-visible,
+.goals-field select:focus-visible,
+.goals-field textarea:focus-visible,
+.goals-progress-number input:focus-visible,
+.new-evaluation-comment textarea:focus-visible {
+  outline: none !important;
+  border-color: var(--virtus-control-focus-border) !important;
+  box-shadow: var(--virtus-control-focus-ring) !important;
+}
+
+/* ---------------------------------------------------------
+   4. LABELS E HELPERS
+   --------------------------------------------------------- */
+
+.collaborator-field > span,
+.goals-field > span,
+.goals-field__row > span,
+.goals-radio-group legend,
+.new-evaluation-comment label {
+  color: var(--brand-text) !important;
+  font-family: var(--sans) !important;
+  font-size: var(--virtus-field-label-size) !important;
+  line-height: 1.35 !important;
+  font-weight: 760 !important;
+}
+
+.collaborator-field > small {
+  color: var(--brand-text-muted) !important;
+  font-size: var(--virtus-field-helper-size) !important;
+  line-height: 1.4 !important;
+}
+
+/* ---------------------------------------------------------
+   5. DISABLED / READONLY
+   --------------------------------------------------------- */
+
+.collaborator-field input:disabled,
+.collaborator-field select:disabled,
+.goals-field input:disabled,
+.goals-field select:disabled,
+.goals-field textarea:disabled,
+.goals-progress-number input:disabled,
+.new-evaluation-comment textarea:disabled {
+  border-color: var(--virtus-surface-border-soft) !important;
+  background: var(--virtus-control-disabled-bg) !important;
+  color: var(--virtus-control-disabled-text) !important;
+  box-shadow: none !important;
+  cursor: not-allowed !important;
+  opacity: 1 !important;
+}
+
+/* ---------------------------------------------------------
+   6. RADIOS / CHECKBOXES NATIVOS
+   --------------------------------------------------------- */
+
+.collaborator-reviewer input,
+.goals-manager-approvals input,
+.goals-radio-group input {
+  accent-color: var(--brand-primary) !important;
+}
+
+/* ---------------------------------------------------------
+   7. CONTROLES CUSTOMIZADOS
+   Radios visualmente representados pelo elemento irmão.
+   --------------------------------------------------------- */
+
+.new-evaluation-note-option input:focus-visible + span,
+.new-evaluation-status-options input:focus-visible + span {
+  outline: none !important;
+  border-color: var(--brand-primary) !important;
+  box-shadow: var(--virtus-control-focus-ring) !important;
+}
+
+.new-evaluation-note-option input:disabled + span,
+.new-evaluation-status-options input:disabled + span {
+  opacity: .46 !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+}
+
+/* ---------------------------------------------------------
+   8. PLACEHOLDERS
+   --------------------------------------------------------- */
+
+.collaborator-field input::placeholder,
+.goals-field input::placeholder,
+.goals-field textarea::placeholder,
+.new-evaluation-comment textarea::placeholder {
+  color: var(--virtus-control-placeholder) !important;
+  opacity: 1;
+}
+/* FIM VIRTUS FORM AUDIT — etapa 11 */

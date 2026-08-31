@@ -1229,3 +1229,61 @@ textarea:focus-visible {
   }
 }
 /* FIM VIRTUS SURFACE AUDIT — etapa 10 — adaptações */
+
+/* VIRTUS FORM AUDIT — etapa 11 — adaptações */
+/* Cadastro de colaborador:
+   troca :focus antigo por foco visível consistente. */
+.collaborator-field input:focus,
+.collaborator-field select:focus {
+  border-color: var(--virtus-control-border);
+  box-shadow: none;
+}
+
+.collaborator-field input:focus-visible,
+.collaborator-field select:focus-visible {
+  border-color: var(--virtus-control-focus-border) !important;
+  box-shadow: var(--virtus-control-focus-ring) !important;
+}
+
+/* Minhas Metas:
+   mantém range fora da geometria dos campos convencionais. */
+.goals-field input[type="range"] {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Radios tradicionais: área clicável mantém o layout existente,
+   mas recebe foco de teclado no container visual. */
+.collaborator-reviewer:has(input:focus-visible),
+.goals-manager-approvals label:has(input:focus-visible) {
+  border-color: var(--brand-primary) !important;
+  box-shadow: var(--virtus-control-focus-ring) !important;
+}
+
+/* Opções numéricas da avaliação:
+   mesma geometria de foco e seleção, sem alterar cores semânticas. */
+.new-evaluation-note-option span {
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    background-color 150ms ease;
+}
+
+/* Evita hover artificial em elementos desabilitados. */
+.collaborator-reviewer:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: .62;
+}
+
+@media (max-width: 600px) {
+  .collaborator-field input,
+  .collaborator-field select,
+  .goals-field input:not([type="range"]):not([type="radio"]):not([type="checkbox"]),
+  .goals-field select,
+  .goals-progress-number input {
+    min-height: 44px !important;
+  }
+}
+/* FIM VIRTUS FORM AUDIT — etapa 11 — adaptações */
