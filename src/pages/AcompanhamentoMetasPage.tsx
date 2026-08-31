@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
+import CollaboratorIdentity from "../components/CollaboratorIdentity";
 import {
   formatarPeriodoCiclo,
   getCiclosAvaliacao,
@@ -343,34 +344,44 @@ function AcompanhamentoMetasPage() {
 
   return (
     <main className="virtus-page goals-manager-page">
-      <section className="cycle-page-header goals-manager-page__header">
-        <div>
-          <button
-            className="cycle-back-link"
-            onClick={() => navigate(`/ciclos/${cicloAtual.id}`)}
-          >
-            ← Voltar ao acompanhamento do ciclo
-          </button>
-          <span className="cycle-eyebrow">Acompanhamento de metas</span>
-          <h1>{colaboradorAtual.nome}</h1>
+      <section className="virtus-page-header goals-manager-page__header goals-manager-page__header--standard">
+        <div className="virtus-page-header__copy">
+          <h1>Acompanhamento de Metas</h1>
           <p>
             {cicloAtual.ano} • Ciclo {cicloAtual.ciclo} ·{" "}
             {formatarPeriodoCiclo(cicloAtual.dataInicio, cicloAtual.dataFim)}
           </p>
-          {colaboradorEfetivo.gestorDiretoMatricula && (
-            <small className="goals-manager-effective-context">
-              Estrutura considerada conforme a vigência registrada no ciclo.
-            </small>
-          )}
         </div>
 
-        <span
-          className={`cycle-status ${
-            cicloAtual.status === "ATIVO" ? "is-active" : "is-closed"
-          }`}
-        >
-          {cicloAtual.status === "ATIVO" ? "Ciclo ativo" : "Ciclo encerrado"}
-        </span>
+        <div className="virtus-page-actions goals-manager-page__actions">
+          <span
+            className={`cycle-status ${
+              cicloAtual.status === "ATIVO" ? "is-active" : "is-closed"
+            }`}
+          >
+            {cicloAtual.status === "ATIVO" ? "Ciclo ativo" : "Ciclo encerrado"}
+          </span>
+
+          <button
+            type="button"
+            className="virtus-btn virtus-btn--outline"
+            onClick={() => navigate(`/ciclos/${cicloAtual.id}`)}
+          >
+            ← Voltar ao ciclo
+          </button>
+        </div>
+      </section>
+
+      <section className="goals-manager-identity">
+        <CollaboratorIdentity
+          colaborador={colaboradorEfetivo}
+          variant="standard"
+        />
+        {colaboradorEfetivo.gestorDiretoMatricula && (
+          <p className="goals-manager-effective-context goals-manager-effective-context--identity">
+            Estrutura considerada conforme a vigência registrada no ciclo.
+          </p>
+        )}
       </section>
 
       <section className="goals-manager-summary">

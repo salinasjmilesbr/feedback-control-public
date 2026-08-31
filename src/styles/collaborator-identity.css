@@ -1,0 +1,492 @@
+.collaborator-identity{min-width:0;display:flex;align-items:center;gap:14px;color:var(--brand-text)}
+.collaborator-identity__avatar{display:grid;place-items:center;flex:0 0 auto;background:color-mix(in srgb,var(--brand-primary) 12%,#fff);color:var(--brand-primary);font-weight:850;line-height:1}
+.collaborator-identity__body{min-width:0}.collaborator-identity__title{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.collaborator-identity__title>strong{overflow:hidden;color:var(--brand-text);text-overflow:ellipsis;font-weight:780}
+.collaborator-identity__role{margin-top:4px;color:var(--brand-primary);font-weight:780}
+.collaborator-identity__details{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;margin-top:6px}
+.collaborator-identity__position{color:#4e4757;font-weight:650}.collaborator-identity__area{color:var(--brand-text-muted)}
+.collaborator-identity__area::before{content:"•";margin-right:12px;color:#b0aab5}
+.collaborator-identity__admin{display:flex;align-items:center;gap:8px 16px;flex-wrap:wrap;margin-top:7px;color:var(--brand-text-muted)}
+.collaborator-identity__admin strong{color:var(--brand-text)}
+.collaborator-identity__status{display:inline-flex;align-items:center;justify-content:center;min-height:25px;padding:0 9px;border:1px solid;border-radius:999px;font-weight:800;white-space:nowrap}
+.collaborator-identity__status.is-active{border-color:#b7e3c4;background:#e7f6ec;color:#107c41}
+.collaborator-identity__status.is-leave{border-color:#f0d77a;background:#fff4ce;color:#806000}
+.collaborator-identity__status.is-inactive{border-color:#dedbe2;background:#f4f1f5;color:#655d69}
+.collaborator-identity--compact{gap:10px}.collaborator-identity--compact .collaborator-identity__avatar{width:36px;height:36px;border-radius:50%;font-size:12px}
+.collaborator-identity--compact .collaborator-identity__title>strong{font-size:14px}.collaborator-identity--compact .collaborator-identity__role{margin-top:2px;font-size:12px}
+.collaborator-identity--standard .collaborator-identity__avatar{width:48px;height:48px;border-radius:12px;font-size:15px}
+.collaborator-identity--standard .collaborator-identity__title>strong{font-size:18px;line-height:1.2}.collaborator-identity--standard .collaborator-identity__role{font-size:14px}
+.collaborator-identity--standard .collaborator-identity__details{font-size:13px;line-height:1.4}.collaborator-identity--standard .collaborator-identity__status{font-size:12px}
+.collaborator-identity--profile{gap:18px}.collaborator-identity--profile .collaborator-identity__avatar{width:70px;height:70px;border-radius:50%;font-size:24px}
+.collaborator-identity--profile .collaborator-identity__title>strong{font-size:24px;line-height:1.15}.collaborator-identity--profile .collaborator-identity__role{font-size:15px}
+.collaborator-identity--profile .collaborator-identity__details{font-size:14px}.collaborator-identity--profile .collaborator-identity__admin{font-size:13px}
+.new-evaluation-person>.collaborator-identity{min-width:0}
+.evaluation-profile-card.evaluation-profile-card--identity{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px;align-items:center;padding:20px 22px}
+.evaluation-profile-card--identity .evaluation-profile-card__summary{min-width:150px;padding-left:22px;border-left:1px solid #ece8ef}
+.admin-evaluation-profile.admin-evaluation-profile--identity{align-items:center;padding:20px 22px}
+.admin-evaluation-profile__context{flex:0 0 auto;display:grid;justify-items:end;gap:7px;color:var(--brand-text-muted);font-size:13px;text-align:right}
+.admin-evaluation-profile__context>small{font-size:13px}
+@media(max-width:760px){.collaborator-identity__area::before{display:none}.collaborator-identity__details{display:grid;gap:3px}.evaluation-profile-card.evaluation-profile-card--identity{grid-template-columns:1fr}.evaluation-profile-card--identity .evaluation-profile-card__summary{min-width:0;padding:14px 0 0;border-top:1px solid #ece8ef;border-left:0;text-align:left}.admin-evaluation-profile.admin-evaluation-profile--identity{align-items:flex-start}.admin-evaluation-profile__context{justify-items:start;text-align:left}}
+
+/* =========================================================
+   IDENTIDADE DO COLABORADOR — ETAPA 2
+   Avatar redondo + metadados com ícones.
+   ========================================================= */
+
+.collaborator-identity__avatar,
+.collaborator-identity--standard .collaborator-identity__avatar,
+.collaborator-identity--profile .collaborator-identity__avatar {
+  border-radius: 50% !important;
+}
+
+.collaborator-identity__details,
+.collaborator-identity__admin {
+  gap: 7px 16px !important;
+}
+
+.collaborator-identity__detail {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--brand-text-muted);
+}
+
+.collaborator-identity__detail-icon {
+  width: 17px;
+  height: 17px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 17px;
+  color: #726b79;
+}
+
+.collaborator-identity__detail-icon svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.collaborator-identity__position,
+.collaborator-identity__area {
+  color: inherit !important;
+  font-weight: inherit !important;
+}
+
+.collaborator-identity__area::before {
+  display: none !important;
+}
+
+.collaborator-profile-card.collaborator-profile-card--identity {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 22px 24px;
+}
+
+.collaborator-profile-card--identity .collaborator-identity {
+  flex: 1 1 auto;
+}
+
+.collaborator-profile-card--identity .collaborator-profile-actions {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 900px) {
+  .collaborator-profile-card.collaborator-profile-card--identity {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+/* =========================================================
+   IDENTIDADE DO COLABORADOR — ajuste avatar e ícones
+   ========================================================= */
+
+/* Standard passa a usar o mesmo avatar da variante profile/histórico. */
+.collaborator-identity--standard {
+  gap: 18px;
+}
+
+.collaborator-identity--standard .collaborator-identity__avatar {
+  width: 70px !important;
+  height: 70px !important;
+  border-radius: 50% !important;
+  font-size: 24px !important;
+}
+
+/* Garante que ícone e respectivo texto sejam uma unidade horizontal. */
+.collaborator-identity__details {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px 20px !important;
+  flex-wrap: wrap !important;
+}
+
+.collaborator-identity__detail {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.collaborator-identity__detail-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 0 0 17px !important;
+  width: 17px !important;
+  height: 17px !important;
+  line-height: 1 !important;
+}
+
+.collaborator-identity__detail-icon svg {
+  display: block;
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* Remove qualquer comportamento antigo que separava área do seu ícone. */
+.collaborator-identity__area::before {
+  display: none !important;
+  content: none !important;
+}
+
+@media (max-width: 760px) {
+  .collaborator-identity--standard .collaborator-identity__avatar {
+    width: 58px !important;
+    height: 58px !important;
+    font-size: 20px !important;
+  }
+
+  .collaborator-identity__details {
+    align-items: flex-start !important;
+    flex-direction: column !important;
+    gap: 5px !important;
+  }
+}
+
+/* =========================================================
+   IDENTIDADE DO COLABORADOR — ETAPA 3
+   Listagens e telas administrativas.
+   ========================================================= */
+
+.collaborator-card.collaborator-card--identity {
+  display: grid;
+  gap: 18px;
+  padding: 20px 22px !important;
+}
+
+.collaborator-card--identity .collaborator-identity {
+  align-items: flex-start;
+}
+
+.collaborator-card__footer--identity {
+  justify-content: flex-end !important;
+  padding-top: 14px;
+  border-top: 1px solid #ece8ef;
+}
+
+.goals-manager-identity,
+.collaborator-form-identity-card {
+  padding: 20px 22px;
+  border: 1px solid var(--virtus-card-border, #e3dee7);
+  border-radius: var(--virtus-card-radius, 14px);
+  background: #fff;
+  box-shadow: var(--virtus-card-shadow, 0 4px 14px rgba(35, 27, 43, .045));
+}
+
+.collaborator-form-identity-card {
+  padding: 22px 24px;
+}
+
+@media (max-width: 760px) {
+  .collaborator-card.collaborator-card--identity,
+  .goals-manager-identity,
+  .collaborator-form-identity-card {
+    padding: 18px !important;
+  }
+}
+
+/* =========================================================
+   AJUSTE VISUAL — COLABORADORES + ACOMPANHAMENTO DE METAS
+   ========================================================= */
+
+/* Colaboradores: mantém 3 colunas, mas elimina a altura ociosa dos cards. */
+.collaborators-v2 .collaborator-card.collaborator-card--identity {
+  min-height: 0 !important;
+  height: auto !important;
+  align-self: start;
+  gap: 14px !important;
+  padding: 18px 20px !important;
+}
+
+.collaborators-v2 .collaborator-card--identity .collaborator-identity--standard {
+  gap: 14px;
+}
+
+.collaborators-v2 .collaborator-card--identity .collaborator-identity--standard .collaborator-identity__avatar {
+  width: 58px !important;
+  height: 58px !important;
+  font-size: 20px !important;
+}
+
+.collaborators-v2 .collaborator-card--identity .collaborator-identity__details {
+  gap: 5px 16px !important;
+}
+
+.collaborators-v2 .collaborator-card__footer--identity {
+  margin-top: 2px;
+  padding-top: 12px;
+}
+
+/* Acompanhamento de metas: aproxima a tela do design system usado nas demais páginas. */
+.goals-manager-page {
+  --goals-surface: #fff;
+  --goals-border: #e6e1e9;
+  --goals-soft: #faf9fb;
+}
+
+.goals-manager-page__header {
+  margin-bottom: 18px;
+}
+
+.goals-manager-page__header h1 {
+  margin: 4px 0 0;
+}
+
+.goals-manager-identity {
+  margin-bottom: 16px;
+  padding: 20px 22px !important;
+  border-color: var(--goals-border) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 3px 12px rgba(35, 27, 43, .045) !important;
+}
+
+.goals-manager-summary {
+  gap: 12px !important;
+  margin-bottom: 20px !important;
+}
+
+.goals-manager-summary article {
+  min-height: 84px;
+  padding: 15px 16px !important;
+  border-color: var(--goals-border) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 2px 8px rgba(35, 27, 43, .025);
+}
+
+.goals-manager-summary span {
+  font-size: 13px !important;
+  line-height: 1.35;
+}
+
+.goals-manager-summary strong {
+  margin-top: 7px !important;
+  font-size: 24px !important;
+  line-height: 1;
+}
+
+.goals-manager-sections {
+  gap: 18px !important;
+}
+
+.goals-manager-section {
+  padding: 20px !important;
+  border-color: var(--goals-border) !important;
+  border-radius: 14px !important;
+  background: var(--goals-surface) !important;
+  box-shadow: 0 3px 12px rgba(35, 27, 43, .035);
+}
+
+.goals-manager-section__header {
+  padding-bottom: 15px;
+  border-bottom: 1px solid #eeeaf0;
+}
+
+.goals-manager-section__header h2 {
+  margin-top: 4px !important;
+  font-size: 19px !important;
+}
+
+.goals-manager-section__header p {
+  margin-top: 6px !important;
+  font-size: 13px !important;
+  line-height: 1.45;
+}
+
+.goals-manager-section__header > strong {
+  min-width: 30px !important;
+  height: 30px !important;
+}
+
+.goals-manager-list {
+  gap: 12px !important;
+  margin-top: 16px !important;
+}
+
+.goals-manager-card {
+  padding: 18px 20px !important;
+  border-color: var(--goals-border) !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+}
+
+.goals-manager-card__top {
+  grid-template-columns: 30px minmax(0, 1fr) auto !important;
+  gap: 11px !important;
+  align-items: center !important;
+}
+
+.goals-manager-card__number {
+  width: 28px !important;
+  height: 28px !important;
+  font-size: 12px !important;
+}
+
+.goals-manager-card__top h3 {
+  margin-top: 2px !important;
+  font-size: 15px !important;
+  line-height: 1.4;
+}
+
+.goals-manager-approval-status {
+  padding: 5px 9px !important;
+  font-size: 12px !important;
+}
+
+.goals-manager-facts {
+  grid-template-columns: 1.25fr 1fr .6fr !important;
+  gap: 10px !important;
+  margin-top: 14px !important;
+}
+
+.goals-manager-facts > div,
+.goals-manager-result {
+  padding: 10px 12px !important;
+  border-color: #eeeaf0 !important;
+  border-radius: 8px !important;
+  background: var(--goals-soft) !important;
+}
+
+.goals-manager-facts span,
+.goals-manager-result span,
+.goals-manager-final span {
+  font-size: 12px !important;
+}
+
+.goals-manager-facts strong,
+.goals-manager-result strong,
+.goals-manager-final strong {
+  font-size: 13px !important;
+}
+
+.goals-manager-result small,
+.goals-manager-approvals small {
+  font-size: 12px !important;
+}
+
+.goals-manager-progress {
+  height: 5px !important;
+  margin-top: 9px !important;
+}
+
+.goals-manager-result {
+  margin-top: 10px !important;
+}
+
+.goals-manager-final {
+  margin-top: 10px !important;
+  padding: 10px 12px !important;
+  border-radius: 8px !important;
+}
+
+.goals-manager-approvals {
+  gap: 10px !important;
+  margin-top: 12px !important;
+}
+
+.goals-manager-approvals label {
+  align-items: center !important;
+  padding: 10px 12px !important;
+  border-radius: 8px !important;
+}
+
+.goals-manager-approvals strong {
+  font-size: 12px !important;
+}
+
+@media (max-width: 900px) {
+  .collaborators-v2 .collaborator-card--identity .collaborator-identity--standard .collaborator-identity__avatar {
+    width: 58px !important;
+    height: 58px !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .goals-manager-section {
+    padding: 16px !important;
+  }
+
+  .goals-manager-card {
+    padding: 16px !important;
+  }
+
+  .goals-manager-card__top {
+    grid-template-columns: 30px minmax(0, 1fr) !important;
+  }
+}
+
+/* =========================================================
+   ACOMPANHAMENTO DE METAS — CABEÇALHO PADRÃO
+   ========================================================= */
+
+.goals-manager-page__header--standard {
+  align-items: center !important;
+  margin-bottom: 16px !important;
+}
+
+.goals-manager-page__header--standard h1 {
+  margin: 0 !important;
+}
+
+.goals-manager-page__header--standard p {
+  margin: 6px 0 0 !important;
+}
+
+.goals-manager-page__actions {
+  align-items: center;
+  gap: 10px;
+}
+
+.goals-manager-page__actions .cycle-status {
+  flex: 0 0 auto;
+}
+
+.goals-manager-effective-context--identity {
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid #eeeaf0;
+  color: var(--brand-text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+@media (max-width: 760px) {
+  .goals-manager-page__header--standard {
+    align-items: flex-start !important;
+  }
+
+  .goals-manager-page__actions {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+}
+

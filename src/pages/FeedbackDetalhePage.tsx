@@ -1,5 +1,6 @@
 ﻿import { type CSSProperties, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import CollaboratorIdentity from "../components/CollaboratorIdentity";
 import { getColaboradorByMatricula } from "../services/colaboradorStorage";
 import {
   formatarNota,
@@ -76,9 +77,6 @@ function FeedbackDetalhePage() {
     return getItemEscalaPorNota(valor, escala).significado;
   }
 
-  function iniciais(nome: string) {
-    return nome.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
-  }
 
   function formatarData(data?: string) {
     if (!data) return "—";
@@ -142,25 +140,12 @@ function FeedbackDetalhePage() {
         </section>
       )}
 
-      <section className="admin-evaluation-profile">
-        <div className="admin-evaluation-profile__identity">
-          <div className="admin-evaluation-profile__avatar">{iniciais(colaborador.nome)}</div>
-          <div>
-            <div className="admin-evaluation-profile__title">
-              <h2>{colaborador.nome}</h2>
-              <span className={`admin-evaluation-person-status is-${colaborador.status.toLowerCase()}`}>
-                {colaborador.status === "ATIVO" ? "Ativo" : colaborador.status === "LICENCA" ? "Em licença" : "Desligado"}
-              </span>
-            </div>
-            <p>{colaborador.cargo}</p>
-            <div className="admin-evaluation-profile__meta">
-              <span>{colaborador.area}</span>
-              <span>Matrícula {colaborador.matricula}</span>
-              <span>Avaliação em {formatarData(feedback.data)}</span>
-            </div>
-          </div>
+      <section className="admin-evaluation-profile admin-evaluation-profile--identity">
+        <CollaboratorIdentity colaborador={colaborador} variant="standard" />
+        <div className="admin-evaluation-profile__context">
+          <span className={`admin-evaluation-status is-${feedback.status.toLowerCase()}`}>{statusLabel()}</span>
+          <small>Avaliação em {formatarData(feedback.data)}</small>
         </div>
-        <span className={`admin-evaluation-status is-${feedback.status.toLowerCase()}`}>{statusLabel()}</span>
       </section>
 
       <section className="evaluation-score-card" id="resumo">

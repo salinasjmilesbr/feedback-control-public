@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
+import CollaboratorIdentity from "../components/CollaboratorIdentity";
 import { getFeedbacksByColaborador } from "../services/feedbackStorage";
 import {
   formatarNota,
@@ -79,37 +80,11 @@ function MinhaAvaliacaoPage() {
         </div>
       </section>
 
-      <section className="evaluation-profile-card">
-        <div className="evaluation-profile-card__avatar" aria-hidden="true">
-          {usuarioAtual.nome
-            .split(" ")
-            .filter(Boolean)
-            .slice(0, 2)
-            .map((parte) => parte[0])
-            .join("")
-            .toUpperCase()}
-        </div>
-
-        <div>
-          <strong>{usuarioAtual.nome}</strong>
-          <span>
-            {usuarioAtual.funcao === "COORDENADOR"
-              ? "Coordenador"
-              : usuarioAtual.funcao === "CONSULTOR"
-              ? "Consultor"
-              : usuarioAtual.funcao === "ANALISTA"
-              ? "Analista"
-              : "Gerente"}
-          </span>
-        </div>
-
+      <section className="evaluation-profile-card evaluation-profile-card--identity">
+        <CollaboratorIdentity colaborador={usuarioAtual} variant="standard" />
         <div className="evaluation-profile-card__summary">
           <strong>{avaliacoesConcluidas.length}</strong>
-          <span>
-            {avaliacoesConcluidas.length === 1
-              ? "avaliação concluída"
-              : "avaliações concluídas"}
-          </span>
+          <span>{avaliacoesConcluidas.length === 1 ? "avaliação concluída" : "avaliações concluídas"}</span>
         </div>
       </section>
 

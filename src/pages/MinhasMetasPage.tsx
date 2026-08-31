@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
+import CollaboratorIdentity from "../components/CollaboratorIdentity";
 import { getCicloAtivo } from "../services/cicloAvaliacaoStorage";
 import {
   atualizarAcompanhamentoMeta,
@@ -591,6 +592,13 @@ function MinhasMetasPage() {
         <button type="button" className="cycle-btn cycle-btn--secondary" onClick={() => navigate(-1)}>
           ← Voltar
         </button>
+      </section>
+
+      <section className="goals-identity-card">
+        <CollaboratorIdentity
+          colaborador={usuario}
+          variant="standard"
+        />
       </section>
 
       <section className="goals-cycle-card">

@@ -2,6 +2,7 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { getColaboradorByMatricula, getColaboradores } from "../services/colaboradorStorage";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
+import CollaboratorIdentity from "../components/CollaboratorIdentity";
 import { obterPermissoesAvaliacao } from "../services/permissaoAvaliacao";
 import { calcularProgressoAvaliacao } from "../services/progressoAvaliacao";
 import {
@@ -303,30 +304,6 @@ function EditarFeedbackPage() {
         colaboradores
       )
     : colaborador;
-
-  const funcaoLabel =
-    colaboradorEfetivo.funcao === "GERENTE"
-      ? "Gerente"
-      : colaboradorEfetivo.funcao === "COORDENADOR"
-      ? "Coordenador"
-      : colaboradorEfetivo.funcao === "CONSULTOR"
-      ? "Consultor"
-      : "Analista";
-
-  const senioridadeLabel =
-    colaboradorEfetivo.senioridade === "JUNIOR"
-      ? "Júnior"
-      : colaboradorEfetivo.senioridade === "PLENO"
-      ? "Pleno"
-      : colaboradorEfetivo.senioridade === "SENIOR"
-      ? "Sênior"
-      : undefined;
-
-  const gestorDireto = colaboradorEfetivo.gestorDiretoMatricula
-    ? colaboradores.find(
-        (item) => item.matricula === colaboradorEfetivo.gestorDiretoMatricula
-      )
-    : undefined;
 
   const anoAvaliacao = feedbackAtual.ano;
   const cicloAvaliacao = feedbackAtual.ciclo;
@@ -903,83 +880,13 @@ function EditarFeedbackPage() {
       </section>
 
       <section className="new-evaluation-person">
-        <div className="new-evaluation-person__name">
-          <div className="new-evaluation-person__avatar" aria-hidden="true">
-            {colaborador.nome
-              .split(" ")
-              .filter(Boolean)
-              .slice(0, 2)
-              .map((parte) => parte[0])
-              .join("")
-              .toUpperCase()}
-          </div>
-          <div className="new-evaluation-person__identity">
-            <div className="new-evaluation-person__title">
-              <h2>{colaborador.nome}</h2>
-              <span
-                className={`new-evaluation-person__status ${
-                  colaborador.status === "ATIVO"
-                    ? "is-active"
-                    : colaborador.status === "LICENCA"
-                    ? "is-leave"
-                    : "is-inactive"
-                }`}
-              >
-                {colaborador.status === "ATIVO"
-                  ? "Ativo"
-                  : colaborador.status === "LICENCA"
-                  ? "Em licença"
-                  : "Desligado"}
-              </span>
-            </div>
-
-            <div className="new-evaluation-person__role">
-              {funcaoLabel}
-              {senioridadeLabel ? ` • ${senioridadeLabel}` : ""}
-            </div>
-
-            <div className="new-evaluation-person__meta">
-              <span>
-                <span className="new-evaluation-person__inline-icon">
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M4 21V5h11v16M15 10h5v11M8 9h3M8 13h3M8 17h3" />
-                  </svg>
-                </span>
-                {colaborador.area}
-              </span>
-
-              <span>Matrícula {colaborador.matricula}</span>
-            </div>
-
-            {gestorDireto && (
-              <div className="new-evaluation-person__manager">
-                <span className="new-evaluation-person__inline-icon">
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <circle cx="9" cy="8" r="3" />
-                    <path d="M3.5 19c.6-3.4 2.5-5.2 5.5-5.2 2 0 3.5.8 4.4 2.3" />
-                    <path d="M16 14h5M18.5 11.5v5" />
-                  </svg>
-                </span>
-                <span>
-                  Gestor: <strong>{gestorDireto.nome}</strong>
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
+        <CollaboratorIdentity colaborador={colaboradorEfetivo} variant="standard" />
 
         <div className="new-evaluation-cycle">
           <span>Ciclo da avaliação</span>
-          <strong>
-            {anoAvaliacao} • Ciclo {cicloAvaliacao}
-          </strong>
+          <strong>{anoAvaliacao} • Ciclo {cicloAvaliacao}</strong>
           <small>
-            {cicloDaAvaliacao
-              ? formatarPeriodoCiclo(
-                  cicloDaAvaliacao.dataInicio,
-                  cicloDaAvaliacao.dataFim
-                )
-              : "Período do ciclo não disponível"}
+            {cicloDaAvaliacao ? formatarPeriodoCiclo(cicloDaAvaliacao.dataInicio, cicloDaAvaliacao.dataFim) : "Período não disponível"}
           </small>
         </div>
       </section>
@@ -1231,7 +1138,7 @@ function EditarFeedbackPage() {
                 }}
               >
                 <div style={{ display: "grid", gap: "18px" }}>
-                  {criterio.subcriterios.map((subcriterio) => (
+                  {criterio.subcriterios.map((subcriterio, subcriterioIndex) => (
                     <div
                       key={subcriterio}
                       className="new-evaluation-subcriterion"
@@ -1251,8 +1158,11 @@ function EditarFeedbackPage() {
                           marginBottom: "14px",
                         }}
                       >
-                        <div style={{ fontWeight: "bold", color: "#333" }}>
-                          {subcriterio}
+                        <div className="new-evaluation-subcriterion__heading">
+                          <span className="new-evaluation-subcriterion__index">
+                            {subcriterioIndex + 1}
+                          </span>
+                          <strong>{subcriterio}</strong>
                         </div>
                         {calcularMediaSubcriterio(criterio.id, subcriterio) > 0 ? (
                           <div
@@ -1697,6 +1607,7 @@ function EditarFeedbackPage() {
 }
 
 export default EditarFeedbackPage;
+
 
 
 

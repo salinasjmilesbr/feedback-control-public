@@ -1,5 +1,6 @@
 ﻿import { useLayoutEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import CollaboratorIdentity from "../components/CollaboratorIdentity";
 
 import ObservacoesColaborador from "../components/ObservacoesColaborador";
 import { getColaboradorByMatricula, getColaboradores } from "../services/colaboradorStorage";
@@ -95,24 +96,6 @@ function IconCalendar() {
     <Icon>
       <rect x="3" y="5" width="18" height="16" rx="2" />
       <path d="M8 3v4M16 3v4M3 10h18" />
-    </Icon>
-  );
-}
-
-function IconBuilding() {
-  return (
-    <Icon>
-      <path d="M4 21V5h11v16M15 10h5v11M8 9h3M8 13h3M8 17h3" />
-    </Icon>
-  );
-}
-
-function IconManager() {
-  return (
-    <Icon>
-      <circle cx="9" cy="8" r="3" />
-      <path d="M3.5 19c.6-3.4 2.5-5.2 5.5-5.2 2 0 3.5.8 4.4 2.3" />
-      <path d="M16 14h5M18.5 11.5v5" />
     </Icon>
   );
 }
@@ -291,16 +274,6 @@ function calcularPreenchimentoFeedback(feedback: Feedback) {
   };
 }
 
-function iniciais(nome: string) {
-  return nome
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((parte) => parte[0])
-    .join("")
-    .toUpperCase();
-}
-
 function labelStatusFeedback(status: Feedback["status"]) {
   if (status === "CONCLUIDA") return "Concluída";
   if (status === "PRONTA_PARA_FEEDBACK") return "Pronta para feedback";
@@ -440,24 +413,6 @@ function ColaboradorDetalhePage() {
       )
     : undefined;
 
-  const funcaoLabel =
-    colaborador.funcao === "GERENTE"
-      ? "Gerente"
-      : colaborador.funcao === "COORDENADOR"
-      ? "Coordenador"
-      : colaborador.funcao === "CONSULTOR"
-      ? "Consultor"
-      : "Analista";
-
-  const senioridadeLabel =
-    colaborador.senioridade === "JUNIOR"
-      ? "Júnior"
-      : colaborador.senioridade === "PLENO"
-      ? "Pleno"
-      : colaborador.senioridade === "SENIOR"
-      ? "Sênior"
-      : undefined;
-
   const historicoOrganizacional = getHistoricoOrganizacional(
     colaborador.matricula
   );
@@ -558,59 +513,12 @@ function ColaboradorDetalhePage() {
         ← Voltar para colaboradores
       </button>
 
-      <section className="collaborator-profile-card">
-        <div className="collaborator-profile-card__identity">
-          <div className="collaborator-profile-avatar" aria-hidden="true">
-            {iniciais(colaborador.nome)}
-          </div>
-
-          <div className="collaborator-profile-copy">
-            <div className="collaborator-profile-title">
-              <h1>{colaborador.nome}</h1>
-              <span
-                className={`collaborator-status ${
-                  colaborador.status === "ATIVO"
-                    ? "is-active"
-                    : colaborador.status === "LICENCA"
-                    ? "is-leave"
-                    : "is-inactive"
-                }`}
-              >
-                {colaborador.status === "ATIVO"
-                  ? "Ativo"
-                  : colaborador.status === "LICENCA"
-                  ? "Em licença"
-                  : "Desligado"}
-              </span>
-            </div>
-
-            <div className="collaborator-profile-role">
-              {funcaoLabel}
-              {senioridadeLabel ? ` • ${senioridadeLabel}` : ""}
-            </div>
-
-            <div className="collaborator-profile-data">
-              <span>
-                <span className="collaborator-inline-icon">
-                  <IconBuilding />
-                </span>
-                {colaborador.area}
-              </span>
-              <span>Matrícula {colaborador.matricula}</span>
-            </div>
-
-            {gestorDireto && (
-              <div className="collaborator-profile-manager">
-                <span className="collaborator-inline-icon">
-                  <IconManager />
-                </span>
-                <span>
-                  Gestor: <strong>{gestorDireto.nome}</strong>
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
+      <section className="collaborator-profile-card collaborator-profile-card--identity">
+        <CollaboratorIdentity
+          colaborador={colaborador}
+          variant="profile"
+          gestorNome={gestorDireto?.nome}
+        />
 
         <div className="virtus-page-actions collaborator-profile-actions">
           <Link

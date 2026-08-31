@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import CollaboratorIdentity from "../components/CollaboratorIdentity";
 import type {
   Colaborador,
   FuncaoColaborador,
@@ -218,22 +219,14 @@ function EditarColaboradorPage() {
             vigência definida.
           </p>
         </div>
+      </section>
 
-        <div className="collaborator-form-profile">
-          <span className="collaborator-form-profile__avatar">
-            {colaboradorAtual.nome
-              .split(" ")
-              .filter(Boolean)
-              .slice(0, 2)
-              .map((parte) => parte[0])
-              .join("")
-              .toUpperCase()}
-          </span>
-          <div>
-            <strong>{colaboradorAtual.nome}</strong>
-            <small>Matrícula {colaboradorAtual.matricula}</small>
-          </div>
-        </div>
+      <section className="collaborator-form-identity-card">
+        <CollaboratorIdentity
+          colaborador={colaboradorAtual}
+          variant="profile"
+          gestorNome={colaboradorAtual.respondePara || undefined}
+        />
       </section>
 
       <section className="collaborator-form-card">
