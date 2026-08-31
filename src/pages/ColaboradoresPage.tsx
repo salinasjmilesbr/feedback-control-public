@@ -315,9 +315,6 @@ function ColaboradoresPage() {
             <section className="virtus-collaborator-group">
               <div className="virtus-collaborator-group__heading">
                 <div>
-                  <span className="virtus-collaborator-group__eyebrow">
-                    Responsabilidade direta
-                  </span>
                   <h2>Minha equipe direta</h2>
                   <p>Colaboradores que respondem diretamente para você.</p>
                 </div>
@@ -345,9 +342,6 @@ function ColaboradoresPage() {
             <section className="virtus-collaborator-group">
               <div className="virtus-collaborator-group__heading">
                 <div>
-                  <span className="virtus-collaborator-group__eyebrow">
-                    Participação adicional
-                  </span>
                   <h2>Avaliações como colegiado</h2>
                   <p>
                     Colaboradores de outras equipes em que você participa como

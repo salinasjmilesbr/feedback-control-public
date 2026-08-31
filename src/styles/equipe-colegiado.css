@@ -92,3 +92,7 @@
     gap: 8px;
   }
 }
+
+.collaborators-v2 .virtus-filter-card + .virtus-collaborator-groups {
+  margin-top: 24px;
+}

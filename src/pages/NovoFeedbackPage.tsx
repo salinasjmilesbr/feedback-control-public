@@ -1,5 +1,6 @@
-﻿import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+﻿import { useEffect, useState, type CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import CriterionIcon from "../components/CriterionIcon";
 import { getColaboradorByMatricula, getColaboradores } from "../services/colaboradorStorage";
 import { saveFeedback, getFeedbacksByColaborador,} from "../services/feedbackStorage";
 import type { Feedback } from "../types/Feedback";
@@ -100,49 +101,10 @@ const criterios = [
 ];
 
 
-function EvaluationIcon({ children }: { children: ReactNode }) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      {children}
-    </svg>
-  );
-}
+const criterioIcons = Array.from({ length: 8 }, (_, index) => (
+  <CriterionIcon index={index} key={index} />
+));
 
-const criterioIcons: ReactNode[] = [
-  <EvaluationIcon>
-    <path d="m12 3 1.45 4.55L18 9l-4.55 1.45L12 15l-1.45-4.55L6 9l4.55-1.45L12 3Z" />
-    <path d="m18 15 .85 2.15L21 18l-2.15.85L18 21l-.85-2.15L15 18l2.15-.85L18 15Z" />
-  </EvaluationIcon>,
-  <EvaluationIcon>
-    <circle cx="9" cy="8" r="3" />
-    <path d="M3.5 19c.6-3.4 2.5-5.2 5.5-5.2s4.9 1.8 5.5 5.2" />
-    <circle cx="17" cy="9" r="2.2" />
-    <path d="M15.7 14.2c2.9-.4 4.6 1 5 3.8" />
-  </EvaluationIcon>,
-  <EvaluationIcon>
-    <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
-  </EvaluationIcon>,
-  <EvaluationIcon>
-    <path d="M4 5.5h16v11H9l-5 4v-15Z" />
-    <path d="M8 10h8M8 13h5" />
-  </EvaluationIcon>,
-  <EvaluationIcon>
-    <circle cx="12" cy="12" r="8" />
-    <circle cx="12" cy="12" r="4" />
-    <circle cx="12" cy="12" r="1" />
-  </EvaluationIcon>,
-  <EvaluationIcon>
-    <path d="M5 4.5h9.5A2.5 2.5 0 0 1 17 7v13H7.5A2.5 2.5 0 0 1 5 17.5v-13Z" />
-    <path d="M17 7h2a2 2 0 0 1 2 2v11h-4M8 8h6M8 12h6" />
-  </EvaluationIcon>,
-  <EvaluationIcon>
-    <path d="M12 3 20 6v5c0 5.2-2.8 8.5-8 10-5.2-1.5-8-4.8-8-10V6l8-3Z" />
-    <path d="m8.5 12 2.2 2.2 4.8-5" />
-  </EvaluationIcon>,
-  <EvaluationIcon>
-    <path d="m13 2-7 11h6l-1 9 7-12h-6l1-8Z" />
-  </EvaluationIcon>,
-];
 type PapelAvaliador = "gerente" | "coordenador" | "colegiado";
 
 type NotasPorAvaliador = {

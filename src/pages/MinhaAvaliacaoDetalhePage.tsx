@@ -1,5 +1,6 @@
-﻿import { useState, type CSSProperties, type ReactNode } from "react";
+﻿import { useState, type CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import CriterionIcon from "../components/CriterionIcon";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import { getFeedbacksByColaborador } from "../services/feedbackStorage";
 import { exportarAvaliacaoPdf } from "../services/exportarAvaliacaoPdf";
@@ -17,6 +18,10 @@ import {
 } from "../services/escalaAvaliacaoStorage";
 import "../styles/avaliacoes.css";
 
+const criterioIcons = Array.from({ length: 8 }, (_, index) => (
+  <CriterionIcon index={index} key={index} />
+));
+
 function IconSpark() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -25,81 +30,6 @@ function IconSpark() {
     </svg>
   );
 }
-
-function IconPeople() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="9" cy="8" r="3" />
-      <path d="M3.5 19c.6-3.4 2.5-5.2 5.5-5.2s4.9 1.8 5.5 5.2" />
-      <circle cx="17" cy="9" r="2.2" />
-      <path d="M15.7 14.2c2.9-.4 4.6 1 5 3.8" />
-    </svg>
-  );
-}
-
-function IconChart() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
-    </svg>
-  );
-}
-
-function IconChat() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4 5.5h16v11H9l-5 4v-15Z" />
-      <path d="M8 10h8M8 13h5" />
-    </svg>
-  );
-}
-
-function IconTarget() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="12" r="8" />
-      <circle cx="12" cy="12" r="4" />
-      <circle cx="12" cy="12" r="1" />
-    </svg>
-  );
-}
-
-function IconBook() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M5 4.5h9.5A2.5 2.5 0 0 1 17 7v13H7.5A2.5 2.5 0 0 1 5 17.5v-13Z" />
-      <path d="M17 7h2a2 2 0 0 1 2 2v11h-4M8 8h6M8 12h6" />
-    </svg>
-  );
-}
-
-function IconShield() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 3 20 6v5c0 5.2-2.8 8.5-8 10-5.2-1.5-8-4.8-8-10V6l8-3Z" />
-      <path d="m8.5 12 2.2 2.2 4.8-5" />
-    </svg>
-  );
-}
-
-function IconBolt() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="m13 2-7 11h6l-1 9 7-12h-6l1-8Z" />
-    </svg>
-  );
-}
-
-const criterioIcons: ReactNode[] = [
-  <IconSpark />,
-  <IconPeople />,
-  <IconChart />,
-  <IconChat />,
-  <IconTarget />,
-  <IconBook />,
-  <IconShield />,
-  <IconBolt />,
-];
 
 function MinhaAvaliacaoDetalhePage() {
   const navigate = useNavigate();
