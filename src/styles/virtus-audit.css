@@ -1174,3 +1174,58 @@ textarea:focus-visible {
   line-height: 1.35 !important;
 }
 /* FIM VIRTUS ETAPA 09 — ajuste 2: motivo não aplicável */
+
+/* VIRTUS SURFACE AUDIT — etapa 10 — adaptações */
+/* Minhas Metas: reduz competição visual entre seção e card interno. */
+.goals-group {
+  box-shadow: var(--virtus-surface-shadow) !important;
+}
+
+.goal-card {
+  box-shadow: var(--virtus-surface-shadow-flat) !important;
+}
+
+/* Acompanhamento de Metas: seção pai e card filho com níveis claros. */
+.goals-manager-section {
+  background: var(--virtus-surface-bg) !important;
+}
+
+.goals-manager-card {
+  border-radius: var(--virtus-surface-radius) !important;
+  box-shadow: var(--virtus-surface-shadow-flat) !important;
+}
+
+/* Detalhe de Avaliação: os painéis finais devem parecer conteúdo interno,
+   não um segundo card principal concorrente. */
+.admin-evaluation-final__grid > div {
+  min-height: 130px;
+}
+
+/* Criação/Edição de avaliação:
+   mantém os critérios expansíveis fora da uniformização de superfícies. */
+.new-evaluation-criterion {
+  box-shadow: none !important;
+}
+
+.new-evaluation-criterion.is-open {
+  box-shadow: 0 6px 18px rgba(44, 31, 52, .055) !important;
+}
+
+/* Responsividade: preserva densidade em telas menores. */
+@media (max-width: 600px) {
+  .goals-cycle-card,
+  .goals-group,
+  .goals-editor,
+  .goals-manager-section,
+  .goals-manager-card,
+  .admin-evaluation-profile,
+  .admin-evaluation-final,
+  .new-evaluation-person,
+  .new-evaluation-progress-card,
+  .new-evaluation-role-card,
+  .collaborator-profile-card,
+  .collaborator-observations-detail {
+    border-radius: var(--virtus-surface-radius) !important;
+  }
+}
+/* FIM VIRTUS SURFACE AUDIT — etapa 10 — adaptações */

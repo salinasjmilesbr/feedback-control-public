@@ -867,3 +867,138 @@ button:not(:disabled) {
   box-sizing: border-box;
 }
 /* FIM VIRTUS KPI AUDIT — etapa 9 */
+
+/* VIRTUS SURFACE AUDIT — etapa 10 */
+:root {
+  --virtus-surface-bg: #fff;
+  --virtus-surface-soft-bg: #faf9fb;
+  --virtus-surface-border: var(--virtus-card-border, #e3dee7);
+  --virtus-surface-border-soft: #ece7ee;
+
+  --virtus-surface-radius: 12px;
+  --virtus-surface-radius-lg: 14px;
+  --virtus-surface-radius-sm: 9px;
+
+  --virtus-surface-shadow:
+    0 3px 12px rgba(35, 27, 43, .04);
+  --virtus-surface-shadow-flat:
+    0 1px 3px rgba(35, 27, 43, .025);
+
+  --virtus-surface-padding: 18px 20px;
+  --virtus-surface-padding-compact: 11px 12px;
+}
+
+/* ---------------------------------------------------------
+   1. SUPERFÍCIES PRIMÁRIAS
+   Cards/seções que organizam conteúdo de página.
+   --------------------------------------------------------- */
+
+.goals-cycle-card,
+.goals-group,
+.goals-editor,
+.goals-manager-section,
+.goals-manager-card,
+.admin-evaluation-profile,
+.admin-evaluation-final,
+.new-evaluation-person,
+.new-evaluation-progress-card,
+.new-evaluation-role-card,
+.collaborator-profile-card,
+.collaborator-observations-detail {
+  border: 1px solid var(--virtus-surface-border) !important;
+  border-radius: var(--virtus-surface-radius-lg) !important;
+  background: var(--virtus-surface-bg) !important;
+  box-shadow: var(--virtus-surface-shadow) !important;
+}
+
+/* Cards internos devem ser visualmente mais baixos que a superfície pai. */
+.goal-card,
+.evaluation-history-card,
+.collaborator-evaluation-card {
+  border: 1px solid var(--virtus-surface-border) !important;
+  border-radius: var(--virtus-surface-radius) !important;
+  background: var(--virtus-surface-bg) !important;
+  box-shadow: var(--virtus-surface-shadow-flat) !important;
+}
+
+/* ---------------------------------------------------------
+   2. BLOCOS INTERNOS / FACTS
+   Informações agrupadas dentro de cards.
+   --------------------------------------------------------- */
+
+.goal-card__facts > div,
+.goals-manager-facts > div,
+.goals-manager-result,
+.admin-evaluation-final__grid > div {
+  border: 1px solid var(--virtus-surface-border-soft) !important;
+  border-radius: var(--virtus-surface-radius-sm) !important;
+  background: var(--virtus-surface-soft-bg) !important;
+  box-shadow: none !important;
+}
+
+/* ---------------------------------------------------------
+   3. RESULTADOS SEMÂNTICOS
+   Geometria comum, cores continuam sendo funcionais.
+   --------------------------------------------------------- */
+
+.goal-final-result,
+.goals-manager-final {
+  border-radius: var(--virtus-surface-radius-sm) !important;
+  padding: var(--virtus-surface-padding-compact) !important;
+}
+
+.goal-final-result.is-success,
+.goals-manager-final.is-success {
+  border: 1px solid var(--virtus-success-border) !important;
+  background: var(--virtus-success-bg) !important;
+  color: var(--virtus-success-text) !important;
+}
+
+.goal-final-result.is-danger,
+.goals-manager-final.is-danger {
+  border: 1px solid var(--virtus-danger-border) !important;
+  background: var(--virtus-danger-bg) !important;
+  color: var(--virtus-danger-text) !important;
+}
+
+/* ---------------------------------------------------------
+   4. HIERARQUIA DE TÍTULOS INTERNOS
+   Sem alterar títulos de página.
+   --------------------------------------------------------- */
+
+.goals-group__header h2,
+.goals-editor__header h2,
+.goals-manager-section__header h2,
+.admin-evaluation-final h2,
+.collaborator-section-heading h2 {
+  color: var(--brand-text) !important;
+  font-family: var(--sans) !important;
+  line-height: 1.2 !important;
+  font-weight: 760 !important;
+}
+
+.goals-group__header p,
+.goals-editor__header p,
+.goals-manager-section__header p,
+.admin-evaluation-final p {
+  color: var(--brand-text-muted) !important;
+}
+
+/* ---------------------------------------------------------
+   5. SEPARADORES INTERNOS
+   --------------------------------------------------------- */
+
+.goals-manager-section__header,
+.collaborator-observations-detail__top,
+.admin-evaluation-collegiate-votes {
+  border-color: var(--virtus-surface-border-soft) !important;
+}
+
+/* ---------------------------------------------------------
+   6. CASOS EXCLUÍDOS DELIBERADAMENTE
+   - observation-card: mantém borda lateral e gradientes semânticos
+   - new-evaluation-criterion: mantém comportamento expansível
+   - status/badges: já tratados na Etapa 08
+   - KPIs: já tratados na Etapa 09
+   --------------------------------------------------------- */
+/* FIM VIRTUS SURFACE AUDIT — etapa 10 */
