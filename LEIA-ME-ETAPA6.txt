@@ -1,0 +1,57 @@
+VIVO VIRTUS — AUDITORIA VISUAL — ETAPA 6
+SHELL GLOBAL + EIXO HORIZONTAL
+
+Esta é a primeira etapa após o checkpoint estrutural.
+
+ALTERAÇÕES
+
+1. Remove o CSS starter do Vite que ainda permanecia no topo de index.css:
+   - #root com 1126px;
+   - text-align center;
+   - h1 genérico de 56px;
+   - dark mode automático;
+   - variáveis antigas sem relação com o Virtus.
+
+2. Mantém somente o reset mínimo e as famílias tipográficas.
+
+3. Fixa color-scheme em light.
+   O Virtus possui identidade visual própria e não implementa tema escuro.
+   Isso impede mudanças inesperadas em selects/inputs conforme o Windows.
+
+4. Torna explícito o layout interno do header no design system:
+   - mesmo container horizontal do menu e conteúdo;
+   - brand à esquerda;
+   - usuário à direita;
+   - comportamento mobile consolidado.
+
+RESULTADO ESPERADO
+
+Desktop:
+- nenhuma mudança grande de aparência;
+- header/menu/conteúdo devem manter o mesmo eixo horizontal;
+- controles nativos ficam consistentemente claros.
+
+Mobile:
+- header empilha brand e usuário de forma previsível.
+
+TESTE PRINCIPAL
+
+- Início / Colaboradores
+- Ciclos
+- Configurações
+- Nova Avaliação
+- Detalhes da Avaliação
+- Minhas Metas
+- Acompanhamento de Metas
+- largura reduzida da janela
+
+APLICAÇÃO
+
+.\aplicar-etapa6.ps1
+
+Depois:
+
+npm run build
+
+Nesta etapa pode haver pequenas diferenças intencionais no shell.
+Não faça commit até validarmos visualmente.
