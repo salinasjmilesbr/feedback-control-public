@@ -1,5 +1,6 @@
 import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
+import { funcaoUsaEstruturaAvaliacaoAnalista } from "../types/Colaborador";
 import type { Feedback } from "../types/Feedback";
 import { criteriosAvaliacao } from "../data/modeloAvaliacao";
 import { getColaboradores } from "./colaboradorStorage";
@@ -244,7 +245,8 @@ function calcularProgressoPapeis(
       )
     : undefined;
   const precisaCoordenador =
-    colaborador.funcao === "ANALISTA" && gestorDireto?.funcao === "COORDENADOR";
+    funcaoUsaEstruturaAvaliacaoAnalista(colaborador.funcao) &&
+    gestorDireto?.funcao === "COORDENADOR";
 
   const coordenadorNotas = precisaCoordenador
     ? subcriterios.filter((subcriterio) => subcriterio.notaCoordenador > 0).length
@@ -262,22 +264,30 @@ function calcularProgressoPapeis(
 
   let votosRecebidos = 0;
   let votosEsperados = 0;
-  if (colaborador.funcao === "ANALISTA") {
+  if (funcaoUsaEstruturaAvaliacaoAnalista(colaborador.funcao)) {
     const atuais = new Set(colaborador.avaliadoresColegiadoMatriculas ?? []);
-    subcriterios.forEach((subcriterio) => {
-      const historicos = new Set(
-        (subcriterio.votosColegiado ?? [])
-          .filter((voto) => voto.nota > 0)
-          .map((voto) => voto.avaliadorMatricula)
-      );
-      const uniao = new Set([...atuais, ...historicos]);
-      votosEsperados += uniao.size;
-      votosRecebidos += Array.from(uniao).filter((matricula) =>
-        (subcriterio.votosColegiado ?? []).some(
-          (voto) => voto.avaliadorMatricula === matricula && voto.nota > 0
-        )
-      ).length;
-    });
+
+    if (subcriterios.length === 0) {
+      // Quando a avaliação ainda não foi criada, ainda assim existe uma
+      // expectativa de votos do colegiado baseada na estrutura vigente
+      // do colaborador e na quantidade padrão de subcritérios do modelo.
+      votosEsperados = atuais.size * totalSubcriterios;
+    } else {
+      subcriterios.forEach((subcriterio) => {
+        const historicos = new Set(
+          (subcriterio.votosColegiado ?? [])
+            .filter((voto) => voto.nota > 0)
+            .map((voto) => voto.avaliadorMatricula)
+        );
+        const uniao = new Set([...atuais, ...historicos]);
+        votosEsperados += uniao.size;
+        votosRecebidos += Array.from(uniao).filter((matricula) =>
+          (subcriterio.votosColegiado ?? []).some(
+            (voto) => voto.avaliadorMatricula === matricula && voto.nota > 0
+          )
+        ).length;
+      });
+    }
   }
 
   const colegiado = criarProgressoPapel(
@@ -400,7 +410,7 @@ function notasEsperadasDoSubcriterio(
     { papel: "Gerente", preenchida: subcriterio.notaGerente > 0 },
   ];
 
-  if (colaborador.funcao === "ANALISTA") {
+  if (funcaoUsaEstruturaAvaliacaoAnalista(colaborador.funcao)) {
     const gestorDiretoMatricula = colaborador.gestorDiretoMatricula;
     resultado.push({
       papel: "Coordenador",
@@ -528,7 +538,7 @@ function recalcularAvaliacaoParcial(
     (criterio) => {
       const subcriterios = criterio.subcriterios.map((subcriterio) => {
         const notas = [subcriterio.notaGerente];
-        if (colaborador.funcao === "ANALISTA") {
+        if (funcaoUsaEstruturaAvaliacaoAnalista(colaborador.funcao)) {
           notas.push(subcriterio.notaCoordenador, subcriterio.notaColegiado);
         }
         return { ...subcriterio, notaFinal: mediaNotasValidas(notas) };

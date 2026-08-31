@@ -173,14 +173,12 @@ function PainelCicloPage() {
   function renderTabelaGrupo(
     linhasGrupo: typeof linhas,
     titulo: string,
-    descricao: string,
-    eyebrow: string
+    descricao: string
   ) {
     return (
       <section className="cycle-table-card cycle-team-group">
         <div className="cycle-table-heading">
           <div>
-            <span className="cycle-eyebrow">{eyebrow}</span>
             <h2>{titulo}</h2>
             <p className="cycle-team-group__description">{descricao}</p>
           </div>
@@ -225,6 +223,8 @@ function PainelCicloPage() {
                           ? "Coordenador"
                           : linha.colaborador.funcao === "CONSULTOR"
                           ? "Consultor"
+                          : linha.colaborador.funcao === "ESTAGIARIO"
+                          ? "Estagiário"
                           : "Analista"}
                       </span>
                     </div>
@@ -278,10 +278,9 @@ function PainelCicloPage() {
                     {linha.motivoNaoAplicavel && (
                       <small className="cycle-muted">
                         {(() => {
-                          const motivo = linha.motivoNaoAplicavel.replace(
-                            /^Não aplicável\s*[—–-]\s*/i,
-                            ""
-                          );
+                          const motivo = linha.motivoNaoAplicavel
+                            .replace(/^Não aplicável\s*[—–-]\s*/i, "")
+                            .replace(/^Suspensa\s*[—–-]\s*/i, "");
 
                           return motivo
                             ? motivo.charAt(0).toUpperCase() + motivo.slice(1)
@@ -387,22 +386,19 @@ function PainelCicloPage() {
           {renderTabelaGrupo(
             linhasEquipeDireta,
             "Minha equipe direta",
-            "Colaboradores que respondem diretamente para você neste ciclo.",
-            "Responsabilidade direta"
+            "Colaboradores que respondem diretamente para você neste ciclo."
           )}
           {renderTabelaGrupo(
             linhasColegiado,
             "Avaliações como colegiado",
-            "Colaboradores de outras equipes em que você participa como avaliador do colegiado. Metas não ficam disponíveis por vínculo de colegiado.",
-            "Participação adicional"
+            "Colaboradores de outras equipes em que você participa como avaliador do colegiado. Metas não ficam disponíveis por vínculo de colegiado."
           )}
         </div>
       ) : (
         renderTabelaGrupo(
           linhas,
           "Equipe no ciclo",
-          "Acompanhamento das avaliações elegíveis na estrutura.",
-          "Acompanhamento"
+          "Acompanhamento das avaliações elegíveis na estrutura."
         )
       )}
     </main>
