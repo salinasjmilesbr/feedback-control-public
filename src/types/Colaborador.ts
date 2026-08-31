@@ -7,7 +7,8 @@ export type FuncaoColaborador =
   | "GERENTE"
   | "COORDENADOR"
   | "CONSULTOR"
-  | "ANALISTA";
+  | "ANALISTA"
+  | "ESTAGIARIO";
 
 export type SenioridadeColaborador =
   | "JUNIOR"
@@ -36,4 +37,16 @@ export interface Colaborador {
   dataInicioLicenca?: string;
   dataFimLicenca?: string;
   dataDesligamento?: string;
+}
+
+
+/**
+ * Funções avaliadas pela estrutura com gerente, coordenador direto e colegiado.
+ * Estagiário segue o mesmo fluxo operacional de avaliação do Analista,
+ * mas sem senioridade.
+ */
+export function funcaoUsaEstruturaAvaliacaoAnalista(
+  funcao: FuncaoColaborador | undefined
+): boolean {
+  return funcao === "ANALISTA" || funcao === "ESTAGIARIO";
 }

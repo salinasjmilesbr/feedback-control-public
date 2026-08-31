@@ -64,6 +64,7 @@ function labelFuncao(colaborador: Colaborador) {
   if (colaborador.funcao === "GERENTE") return "Gerente";
   if (colaborador.funcao === "COORDENADOR") return "Coordenador";
   if (colaborador.funcao === "CONSULTOR") return "Consultor";
+  if (colaborador.funcao === "ESTAGIARIO") return "Estagiário";
   return "Analista";
 }
 

@@ -1,5 +1,6 @@
 import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
+import { funcaoUsaEstruturaAvaliacaoAnalista } from "../types/Colaborador";
 import { getCicloAtivo } from "./cicloAvaliacaoStorage";
 import { getColaboradorEfetivoNoCiclo } from "./historicoOrganizacionalStorage";
 
@@ -87,12 +88,12 @@ export function obterPermissoesAvaliacao(
     gerenteResponsavel?.matricula === usuarioAtual.matricula;
 
   const podeAvaliarComoCoordenador =
-    colaboradorEfetivo.funcao === "ANALISTA" &&
+    funcaoUsaEstruturaAvaliacaoAnalista(colaboradorEfetivo.funcao) &&
     usuarioAtual.funcao === "COORDENADOR" &&
     colaboradorEfetivo.gestorDiretoMatricula === usuarioAtual.matricula;
 
   const podeAvaliarComoColegiado =
-    colaboradorEfetivo.funcao === "ANALISTA" &&
+    funcaoUsaEstruturaAvaliacaoAnalista(colaboradorEfetivo.funcao) &&
     (colaboradorEfetivo.avaliadoresColegiadoMatriculas?.includes(
       usuarioAtual.matricula
     ) ?? false);

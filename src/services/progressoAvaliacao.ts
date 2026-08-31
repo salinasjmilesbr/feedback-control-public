@@ -1,4 +1,5 @@
 import type { Colaborador } from "../types/Colaborador";
+import { funcaoUsaEstruturaAvaliacaoAnalista } from "../types/Colaborador";
 
 type CriterioBase = {
   id: string;
@@ -88,15 +89,16 @@ export function calcularProgressoAvaliacao(
     colaborador,
     colaboradores
   );
+  const usaEstruturaAnalista =
+    funcaoUsaEstruturaAvaliacaoAnalista(colaborador.funcao);
   const coordenadorNecessario =
-    colaborador.funcao === "ANALISTA" &&
+    usaEstruturaAnalista &&
     gestorDireto?.funcao === "COORDENADOR";
-  const avaliadoresColegiado =
-    colaborador.funcao === "ANALISTA"
-      ? colaborador.avaliadoresColegiadoMatriculas ?? []
-      : [];
+  const avaliadoresColegiado = usaEstruturaAnalista
+    ? colaborador.avaliadoresColegiadoMatriculas ?? []
+    : [];
   const colegiadoNecessario =
-    colaborador.funcao === "ANALISTA" &&
+    usaEstruturaAnalista &&
     avaliadoresColegiado.length > 0;
 
   let gerentePreenchidos = 0;

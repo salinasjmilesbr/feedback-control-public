@@ -6,6 +6,7 @@ import type {
   SenioridadeColaborador,
   StatusColaborador,
 } from "../types/Colaborador";
+import { funcaoUsaEstruturaAvaliacaoAnalista } from "../types/Colaborador";
 import {
   getColaboradores,
   saveColaborador,
@@ -45,7 +46,7 @@ function NovoColaboradorPage() {
     .filter(
       (colaborador) =>
         colaborador.status === "ATIVO" &&
-        (funcao === "ANALISTA"
+        (funcaoUsaEstruturaAvaliacaoAnalista(funcao)
           ? colaborador.funcao === "GERENTE" ||
             colaborador.funcao === "COORDENADOR"
           : colaborador.funcao === "GERENTE")
@@ -107,7 +108,9 @@ function NovoColaboradorPage() {
       funcao,
       senioridade: funcao === "ANALISTA" ? senioridade : undefined,
       avaliadoresColegiadoMatriculas:
-        funcao === "ANALISTA" ? avaliadoresColegiadoMatriculas : [],
+        funcaoUsaEstruturaAvaliacaoAnalista(funcao)
+          ? avaliadoresColegiadoMatriculas
+          : [],
       gestorDiretoMatricula: gestorDireto?.matricula,
       respondePara: gestorDireto?.nome ?? "",
       status,
@@ -212,6 +215,7 @@ function NovoColaboradorPage() {
           <label className="collaborator-field">
             <span>Função *</span>
             <select value={funcao} onChange={(e) => setFuncao(e.target.value as FuncaoColaborador)}>
+              <option value="ESTAGIARIO">Estagiário</option>
               <option value="ANALISTA">Analista</option>
               <option value="COORDENADOR">Coordenador</option>
               <option value="CONSULTOR">Consultor</option>
@@ -253,7 +257,7 @@ function NovoColaboradorPage() {
         </div>
       </section>
 
-      {funcao === "ANALISTA" && (
+      {funcaoUsaEstruturaAvaliacaoAnalista(funcao) && (
         <section className="collaborator-form-card">
           <div className="collaborator-form-card__heading">
             <span className="collaborator-form-card__icon" aria-hidden="true">03</span>

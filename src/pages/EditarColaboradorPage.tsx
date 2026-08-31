@@ -7,6 +7,7 @@ import type {
   SenioridadeColaborador,
   StatusColaborador,
 } from "../types/Colaborador";
+import { funcaoUsaEstruturaAvaliacaoAnalista } from "../types/Colaborador";
 import type { EscopoMovimentacaoOrganizacional } from "../types/HistoricoOrganizacional";
 import {
   getColaboradorByMatricula,
@@ -94,7 +95,7 @@ function EditarColaboradorPage() {
       (item) =>
         item.matricula !== colaboradorAtual.matricula &&
         item.status === "ATIVO" &&
-        (funcao === "ANALISTA"
+        (funcaoUsaEstruturaAvaliacaoAnalista(funcao)
           ? item.funcao === "GERENTE" || item.funcao === "COORDENADOR"
           : item.funcao === "GERENTE")
     )
@@ -151,7 +152,9 @@ function EditarColaboradorPage() {
       gestorDiretoMatricula: gestorDireto?.matricula,
       respondePara: gestorDireto?.nome ?? "",
       avaliadoresColegiadoMatriculas:
-        funcao === "ANALISTA" ? avaliadoresColegiadoMatriculas : [],
+        funcaoUsaEstruturaAvaliacaoAnalista(funcao)
+          ? avaliadoresColegiadoMatriculas
+          : [],
       status,
       dataAdmissao: dataAdmissao || colaboradorAtual.dataAdmissao,
       dataInicioLicenca: mudouParaLicenca
@@ -293,6 +296,7 @@ function EditarColaboradorPage() {
           <label className="collaborator-field">
             <span>Função *</span>
             <select value={funcao} onChange={(e) => setFuncao(e.target.value as FuncaoColaborador)}>
+              <option value="ESTAGIARIO">Estagiário</option>
               <option value="ANALISTA">Analista</option>
               <option value="COORDENADOR">Coordenador</option>
               <option value="CONSULTOR">Consultor</option>
@@ -334,7 +338,7 @@ function EditarColaboradorPage() {
         </div>
       </section>
 
-      {funcao === "ANALISTA" && (
+      {funcaoUsaEstruturaAvaliacaoAnalista(funcao) && (
         <section className="collaborator-form-card">
           <div className="collaborator-form-card__heading">
             <span className="collaborator-form-card__icon" aria-hidden="true">03</span>
