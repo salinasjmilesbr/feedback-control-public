@@ -6,6 +6,7 @@ import { saveFeedback, getFeedbacksByColaborador,} from "../services/feedbackSto
 import type { Feedback } from "../types/Feedback";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import CollaboratorIdentity from "../components/CollaboratorIdentity";
+import RoleExpectationsCard from "../components/RoleExpectationsCard";
 import { obterPermissoesAvaliacao } from "../services/permissaoAvaliacao";
 import { calcularProgressoAvaliacao } from "../services/progressoAvaliacao";
 import {
@@ -766,6 +767,11 @@ if (feedbackExistente) {
           </small>
         </div>
       </section>
+
+      <RoleExpectationsCard
+        expectativa={expectativaCargoAtual}
+        mensagemAusente="Não há expectativas configuradas para esta função."
+      />
 
       <section className="new-evaluation-overview">
         <article className="new-evaluation-progress-card">

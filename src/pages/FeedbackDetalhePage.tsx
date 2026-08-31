@@ -2,6 +2,7 @@
 import { useNavigate, useParams } from "react-router-dom";
 import CriterionIcon from "../components/CriterionIcon";
 import CollaboratorIdentity from "../components/CollaboratorIdentity";
+import RoleExpectationsCard from "../components/RoleExpectationsCard";
 import { getColaboradorByMatricula } from "../services/colaboradorStorage";
 import {
   formatarNota,
@@ -138,6 +139,10 @@ function FeedbackDetalhePage() {
           <small>Avaliação em {formatarData(feedback.data)}</small>
         </div>
       </section>
+
+      <RoleExpectationsCard
+        expectativa={feedback.expectativaCargoSnapshot}
+      />
 
       <section className="evaluation-score-card" id="resumo">
         <div className="evaluation-score-primary score-semantic evaluation-score-primary--semantic" style={estiloNota(feedback.notaMedia)}>

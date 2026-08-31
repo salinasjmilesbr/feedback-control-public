@@ -4,6 +4,7 @@ import CriterionIcon from "../components/CriterionIcon";
 import { getColaboradorByMatricula, getColaboradores } from "../services/colaboradorStorage";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import CollaboratorIdentity from "../components/CollaboratorIdentity";
+import RoleExpectationsCard from "../components/RoleExpectationsCard";
 import { obterPermissoesAvaliacao } from "../services/permissaoAvaliacao";
 import { calcularProgressoAvaliacao } from "../services/progressoAvaliacao";
 import {
@@ -853,6 +854,10 @@ function EditarFeedbackPage() {
           </small>
         </div>
       </section>
+
+      <RoleExpectationsCard
+        expectativa={feedback.expectativaCargoSnapshot}
+      />
 
       <section className="new-evaluation-overview">
         <article className="new-evaluation-progress-card">

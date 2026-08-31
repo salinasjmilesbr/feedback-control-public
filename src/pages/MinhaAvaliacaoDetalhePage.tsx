@@ -1,6 +1,7 @@
 ﻿import { useState, type CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import CriterionIcon from "../components/CriterionIcon";
+import RoleExpectationsCard from "../components/RoleExpectationsCard";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import { getFeedbacksByColaborador } from "../services/feedbackStorage";
 import { exportarAvaliacaoPdf } from "../services/exportarAvaliacaoPdf";
@@ -244,6 +245,10 @@ function MinhaAvaliacaoDetalhePage() {
           )}
         </section>
       )}
+
+      <RoleExpectationsCard
+        expectativa={feedback.expectativaCargoSnapshot}
+      />
 
       <section className="evaluation-score-card" id="resumo">
         <div
