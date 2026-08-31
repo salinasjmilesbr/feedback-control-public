@@ -1456,3 +1456,18 @@ html {
   contexto da avaliação, votos do colegiado e fechamento.
 */
 /* FIM VIRTUS ETAPA 13 — ajuste 6: criterios compartilhados */
+
+/* VIRTUS AJUSTE FINAL — ritmo do header de Minhas Metas */
+/*
+  Minhas Metas usa .goals-page como grid com gap de 18px.
+  O cabeçalho também herdava margin-bottom global de 24px,
+  somando os dois espaços.
+
+  Mantemos o gap estrutural da página e reduzimos somente a margem
+  do cabeçalho para 6px, resultando em ~24px totais — equivalente
+  ao ritmo visual de Minhas Avaliações.
+*/
+.goals-page > .goals-page-header {
+  margin-bottom: 6px !important;
+}
+/* FIM VIRTUS AJUSTE FINAL — ritmo do header de Minhas Metas */
