@@ -1,3 +1,15 @@
+import type { CargoExpectativa } from "./ExpectativaCargo";
+
+export interface ExpectativaCargoSnapshot {
+  cargo: CargoExpectativa;
+  nome: string;
+  autonomia: string;
+  tarefas: string;
+  responsabilidades: string;
+  foco: string;
+  capturadoEm: string;
+}
+
 export interface FeedbackCompetencia {
   competenciaId: string;
   competenciaNome: string;
@@ -64,6 +76,12 @@ export interface Feedback {
   ciclo: 1 | 2 | 3;
 
   competencias: FeedbackCompetencia[];
+
+  /**
+   * Expectativas vigentes para o cargo no momento em que a avaliação
+   * foi criada. Opcional para preservar avaliações históricas antigas.
+   */
+  expectativaCargoSnapshot?: ExpectativaCargoSnapshot;
 
   notaMedia: number;
 

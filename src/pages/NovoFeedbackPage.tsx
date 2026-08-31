@@ -22,6 +22,7 @@ import {
   metaEstaAprovada,
 } from "../services/metaStorage";
 import { getColaboradorEfetivoNoCiclo } from "../services/historicoOrganizacionalStorage";
+import { getExpectativaDoColaborador } from "../services/expectativaCargoStorage";
 import "../styles/nova-avaliacao.css";
 
 const criterios = [
@@ -203,6 +204,9 @@ function NovoFeedbackPage() {
     cicloAtivo,
     colaboradores
   );
+
+  const expectativaCargoAtual =
+    getExpectativaDoColaborador(colaboradorEfetivo);
 
   const anoAvaliacao = cicloAtivo.ano;
   const cicloAvaliacao = cicloAtivo.ciclo;
@@ -645,6 +649,17 @@ function NovoFeedbackPage() {
       ciclo: cicloAvaliacao,
       status,
       notaMedia,
+      expectativaCargoSnapshot: expectativaCargoAtual
+        ? {
+            cargo: expectativaCargoAtual.cargo,
+            nome: expectativaCargoAtual.nome,
+            autonomia: expectativaCargoAtual.autonomia,
+            tarefas: expectativaCargoAtual.tarefas,
+            responsabilidades: expectativaCargoAtual.responsabilidades,
+            foco: expectativaCargoAtual.foco,
+            capturadoEm: agora,
+          }
+        : undefined,
       competencias: criterios.map((criterio) => {
         const avaliacao = avaliacoes[criterio.id];
 

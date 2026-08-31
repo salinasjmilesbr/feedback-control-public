@@ -1,3 +1,4 @@
+import type { Colaborador } from "../types/Colaborador";
 import type {
   CargoExpectativa,
   ExpectativaCargo,
@@ -168,4 +169,48 @@ export function getExpectativaCargo(
     getExpectativasCargo().find((item) => item.cargo === cargo) ??
     expectativasCargoPadrao.find((item) => item.cargo === cargo)!
   );
+}
+
+
+/**
+ * Converte a função/senioridade estruturada do colaborador para a
+ * categoria usada pela configuração de expectativas.
+ */
+export function resolverCargoExpectativa(
+  colaborador: Colaborador
+): CargoExpectativa | undefined {
+  if (colaborador.funcao === "ESTAGIARIO") {
+    return "ESTAGIARIO";
+  }
+
+  if (colaborador.funcao === "COORDENADOR") {
+    return "COORDENADOR";
+  }
+
+  if (colaborador.funcao === "CONSULTOR") {
+    return "CONSULTOR";
+  }
+
+  if (colaborador.funcao === "ANALISTA") {
+    if (colaborador.senioridade === "JUNIOR") {
+      return "ANALISTA_JUNIOR";
+    }
+
+    if (colaborador.senioridade === "PLENO") {
+      return "ANALISTA_PLENO";
+    }
+
+    if (colaborador.senioridade === "SENIOR") {
+      return "ANALISTA_SENIOR";
+    }
+  }
+
+  return undefined;
+}
+
+export function getExpectativaDoColaborador(
+  colaborador: Colaborador
+): ExpectativaCargo | undefined {
+  const cargo = resolverCargoExpectativa(colaborador);
+  return cargo ? getExpectativaCargo(cargo) : undefined;
 }
