@@ -453,3 +453,253 @@
     column-gap: 8px;
   }
 }
+
+/* =========================================================
+   VIRTUS GOALS MANAGER — camada visual consolidada
+   Regras da página Acompanhamento de Metas.
+   Movidas de collaborator-identity.css para o stylesheet correto.
+   ========================================================= */
+
+/* Acompanhamento de metas: aproxima a tela do design system usado nas demais páginas. */
+.goals-manager-page {
+  --goals-surface: #fff;
+  --goals-border: #e6e1e9;
+  --goals-soft: #faf9fb;
+}
+
+.goals-manager-page__header {
+  margin-bottom: 18px;
+}
+
+.goals-manager-page__header h1 {
+  margin: 4px 0 0;
+}
+
+.goals-manager-identity {
+  margin-bottom: 16px;
+  padding: 20px 22px !important;
+  border-color: var(--goals-border) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 3px 12px rgba(35, 27, 43, .045) !important;
+}
+
+.goals-manager-summary {
+  gap: 12px !important;
+  margin-bottom: 20px !important;
+}
+
+.goals-manager-summary article {
+  min-height: 84px;
+  padding: 15px 16px !important;
+  border-color: var(--goals-border) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 2px 8px rgba(35, 27, 43, .025);
+}
+
+.goals-manager-summary span {
+  font-size: 13px !important;
+  line-height: 1.35;
+}
+
+.goals-manager-summary strong {
+  margin-top: 7px !important;
+  font-size: 24px !important;
+  line-height: 1;
+}
+
+.goals-manager-sections {
+  gap: 18px !important;
+}
+
+.goals-manager-section {
+  padding: 20px !important;
+  border-color: var(--goals-border) !important;
+  border-radius: 14px !important;
+  background: var(--goals-surface) !important;
+  box-shadow: 0 3px 12px rgba(35, 27, 43, .035);
+}
+
+.goals-manager-section__header {
+  padding-bottom: 15px;
+  border-bottom: 1px solid #eeeaf0;
+}
+
+.goals-manager-section__header h2 {
+  margin-top: 4px !important;
+  font-size: 19px !important;
+}
+
+.goals-manager-section__header p {
+  margin-top: 6px !important;
+  font-size: 13px !important;
+  line-height: 1.45;
+}
+
+.goals-manager-section__header > strong {
+  min-width: 30px !important;
+  height: 30px !important;
+}
+
+.goals-manager-list {
+  gap: 12px !important;
+  margin-top: 16px !important;
+}
+
+.goals-manager-card {
+  padding: 18px 20px !important;
+  border-color: var(--goals-border) !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+}
+
+.goals-manager-card__top {
+  grid-template-columns: 30px minmax(0, 1fr) auto !important;
+  gap: 11px !important;
+  align-items: center !important;
+}
+
+.goals-manager-card__number {
+  width: 28px !important;
+  height: 28px !important;
+  font-size: 12px !important;
+}
+
+.goals-manager-card__top h3 {
+  margin-top: 2px !important;
+  font-size: 15px !important;
+  line-height: 1.4;
+}
+
+.goals-manager-approval-status {
+  padding: 5px 9px !important;
+  font-size: 12px !important;
+}
+
+.goals-manager-facts {
+  grid-template-columns: 1.25fr 1fr .6fr !important;
+  gap: 10px !important;
+  margin-top: 14px !important;
+}
+
+.goals-manager-facts > div,
+.goals-manager-result {
+  padding: 10px 12px !important;
+  border-color: #eeeaf0 !important;
+  border-radius: 8px !important;
+  background: var(--goals-soft) !important;
+}
+
+.goals-manager-facts span,
+.goals-manager-result span,
+.goals-manager-final span {
+  font-size: 12px !important;
+}
+
+.goals-manager-facts strong,
+.goals-manager-result strong,
+.goals-manager-final strong {
+  font-size: 13px !important;
+}
+
+.goals-manager-result small,
+.goals-manager-approvals small {
+  font-size: 12px !important;
+}
+
+.goals-manager-progress {
+  height: 5px !important;
+  margin-top: 9px !important;
+}
+
+.goals-manager-result {
+  margin-top: 10px !important;
+}
+
+.goals-manager-final {
+  margin-top: 10px !important;
+  padding: 10px 12px !important;
+  border-radius: 8px !important;
+}
+
+.goals-manager-approvals {
+  gap: 10px !important;
+  margin-top: 12px !important;
+}
+
+.goals-manager-approvals label {
+  align-items: center !important;
+  padding: 10px 12px !important;
+  border-radius: 8px !important;
+}
+
+.goals-manager-approvals strong {
+  font-size: 12px !important;
+}
+
+@media (max-width: 900px) {
+  .collaborators-v2 .collaborator-card--identity .collaborator-identity--standard .collaborator-identity__avatar {
+    width: 58px !important;
+    height: 58px !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .goals-manager-section {
+    padding: 16px !important;
+  }
+
+  .goals-manager-card {
+    padding: 16px !important;
+  }
+
+  .goals-manager-card__top {
+    grid-template-columns: 30px minmax(0, 1fr) !important;
+  }
+}
+
+/* =========================================================
+   ACOMPANHAMENTO DE METAS — CABEÇALHO PADRÃO
+   ========================================================= */
+
+.goals-manager-page__header--standard {
+  align-items: center !important;
+  margin-bottom: 16px !important;
+}
+
+.goals-manager-page__header--standard h1 {
+  margin: 0 !important;
+}
+
+.goals-manager-page__header--standard p {
+  margin: 6px 0 0 !important;
+}
+
+.goals-manager-page__actions {
+  align-items: center;
+  gap: 10px;
+}
+
+.goals-manager-page__actions .cycle-status {
+  flex: 0 0 auto;
+}
+
+.goals-manager-effective-context--identity {
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid #eeeaf0;
+  color: var(--brand-text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+@media (max-width: 760px) {
+  .goals-manager-page__header--standard {
+    align-items: flex-start !important;
+  }
+
+  .goals-manager-page__actions {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+}

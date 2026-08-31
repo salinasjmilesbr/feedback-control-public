@@ -1,0 +1,218 @@
+/* =========================================================
+   VIVO VIRTUS — FOUNDATION VISUAL
+   Tokens + layout global + tipografia base + sistema de cards.
+   Extraído da camada de auditoria sem alteração das regras.
+   ========================================================= */
+
+/* =========================================================
+   VIRTUS FINAL AUDIT — foundation v2
+   Substitui a auditoria anterior.
+   Objetivos: grid único, tipografia confortável, cards coerentes.
+   ========================================================= */
+
+:root {
+  --virtus-container: 1440px;
+  --virtus-gutter: 32px;
+
+  --virtus-font-aux: 13px;
+  --virtus-font-label: 14px;
+  --virtus-font-body: 15px;
+  --virtus-font-body-strong: 15px;
+  --virtus-font-nav: 14px;
+
+  --virtus-card-radius: 14px;
+  --virtus-card-border: #e3dee7;
+  --virtus-card-shadow: 0 4px 14px rgba(35, 27, 43, .045);
+  --virtus-card-padding: 20px;
+  --virtus-card-padding-lg: 24px;
+
+  --brand-text: #29242f;
+  --brand-text-muted: #5f5869;
+}
+
+/* =========================================================
+   1. GRID E EIXO HORIZONTAL ÚNICO
+   ========================================================= */
+
+.app-header {
+  width: 100%;
+  padding: 0 !important;
+}
+
+.app-header__inner,
+.app-nav__inner,
+.virtus-page,
+.page-shell,
+.app-footer__inner {
+  width: min(
+    var(--virtus-container),
+    calc(100% - (var(--virtus-gutter) * 2))
+  ) !important;
+  max-width: none !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  box-sizing: border-box;
+}
+
+.app-header__inner {
+  min-height: 82px;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.app-nav__inner {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.app-main {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+
+.virtus-page,
+.page-shell {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* Configurações também usa o mesmo eixo, sem largura especial */
+.branding-page,
+.branding-page.virtus-page,
+.score-scale-settings {
+  max-width: none !important;
+}
+
+.branding-page.virtus-page {
+  width: min(
+    var(--virtus-container),
+    calc(100% - (var(--virtus-gutter) * 2))
+  ) !important;
+}
+
+/* =========================================================
+   2. TIPOGRAFIA GLOBAL DE LEITURA
+   ========================================================= */
+
+body {
+  color: var(--brand-text);
+}
+
+.virtus-page-header__copy h1,
+.page-heading h1,
+.branding-page .branding-page__header h1 {
+  font-size: 34px !important;
+  line-height: 1.12 !important;
+  letter-spacing: -.55px !important;
+  font-weight: 760 !important;
+}
+
+.virtus-page-header__copy p,
+.page-heading p,
+.branding-page .branding-page__header p {
+  font-size: var(--virtus-font-body) !important;
+  line-height: 1.55 !important;
+  color: var(--brand-text-muted) !important;
+}
+
+.app-nav a {
+  font-size: var(--virtus-font-nav) !important;
+}
+
+.app-header__subtitle,
+.app-header__user-control label,
+.app-role-badge,
+.app-footer__inner {
+  font-size: var(--virtus-font-aux) !important;
+}
+
+.app-header__user select,
+.virtus-field input,
+.virtus-field select,
+.search-field input,
+.filter-field select {
+  font-size: var(--virtus-font-body) !important;
+}
+
+.virtus-field,
+.filter-field,
+.virtus-btn,
+.brand-button {
+  font-size: var(--virtus-font-label) !important;
+}
+
+/* =========================================================
+   3. SISTEMA ÚNICO DE CARDS
+   ========================================================= */
+
+.collaborator-card,
+.collaborator-profile-card,
+.collaborator-kpi,
+.collaborator-observation-kpi,
+.collaborator-evaluation-card,
+.collaborator-history-empty,
+.evaluation-profile-card,
+.evaluation-score-card,
+.evaluation-content-card,
+.evaluation-criterion-card,
+.evaluation-history-card,
+.admin-evaluation-profile,
+.admin-evaluation-final,
+.goals-cycle-card,
+.goals-group,
+.goals-editor,
+.goals-empty,
+.goal-card,
+.new-evaluation-person,
+.new-evaluation-progress-card,
+.new-evaluation-role-card,
+.new-evaluation-status-card,
+.new-evaluation-criterion,
+.branding-card,
+.score-scale-settings {
+  border: 1px solid var(--virtus-card-border) !important;
+  border-radius: var(--virtus-card-radius) !important;
+  background: #fff !important;
+  box-shadow: var(--virtus-card-shadow) !important;
+}
+
+/* Cards principais */
+.collaborator-profile-card,
+.evaluation-profile-card,
+.evaluation-score-card,
+.evaluation-content-card,
+.admin-evaluation-profile,
+.admin-evaluation-final,
+.goals-cycle-card,
+.goals-group,
+.goals-editor,
+.branding-card,
+.score-scale-settings {
+  padding: var(--virtus-card-padding-lg) !important;
+}
+
+/* Cards secundários */
+.collaborator-kpi,
+.collaborator-observation-kpi,
+.goal-card,
+.new-evaluation-person,
+.new-evaluation-progress-card,
+.new-evaluation-role-card,
+.new-evaluation-status-card {
+  padding: var(--virtus-card-padding) !important;
+}
+
+/* Blocos internos: mais leves que os cards de seção */
+.new-evaluation-subcriterion,
+.evaluation-raters > div,
+.evaluation-feedback-box,
+.evaluation-goal-card,
+.admin-evaluation-final__grid > div,
+.goal-card__facts div,
+.goal-inline-editor {
+  border: 1px solid #ece8ef !important;
+  border-radius: 10px !important;
+  background: #faf9fb !important;
+  box-shadow: none !important;
+}
