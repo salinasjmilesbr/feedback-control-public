@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { useEffect } from "react";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import UsuarioAtualBar from "../components/UsuarioAtualBar";
 import NavegacaoPrincipal from "../components/NavegacaoPrincipal";
 import AppFooter from "../components/AppFooter";
@@ -19,9 +20,24 @@ import FeedbackDetalhePage from "../pages/FeedbackDetalhePage";
 import EditarFeedbackPage from "../pages/EditarFeedbackPage";
 import ConfiguracoesAparenciaPage from "../pages/ConfiguracoesAparenciaPage";
 
+function ScrollToTop() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: "auto",
+    });
+  }, [pathname]);
+
+  return null;
+}
+
 function AppRoutes() {
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <UsuarioAtualBar />
       <NavegacaoPrincipal />
       <main className="app-main">

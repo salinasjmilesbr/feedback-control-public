@@ -1,5 +1,4 @@
 ﻿import { useState, type ChangeEvent } from "react";
-import { useNavigate } from "react-router-dom";
 import { useBranding } from "../contexts/BrandingContext";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import type { BrandingConfig } from "../types/Branding";
@@ -12,7 +11,6 @@ import {
 } from "../services/escalaAvaliacaoStorage";
 
 function ConfiguracoesAparenciaPage() {
-  const navigate = useNavigate();
   const { usuarioAtual } = useUsuarioAtual();
   const { branding, atualizarBranding, restaurarPadrao } = useBranding();
   const [form, setForm] = useState<BrandingConfig>(branding);
@@ -150,22 +148,14 @@ function ConfiguracoesAparenciaPage() {
 
   return (
     <div className="branding-page virtus-page">
-      <div className="branding-page__header">
-        <div>
-          <h1 style={{ margin: 0 }}>Identidade visual</h1>
-          <p style={{ margin: "6px 0 0 0", color: "#666" }}>
+      <section className="virtus-page-header">
+        <div className="virtus-page-header__copy">
+          <h1>Identidade visual</h1>
+          <p>
             Configure a marca exibida no sistema sem alterar regras ou conteúdo.
           </p>
         </div>
-
-        <button
-          type="button"
-          className="brand-button brand-button--secondary"
-          onClick={() => navigate(-1)}
-        >
-          ← Voltar
-        </button>
-      </div>
+      </section>
 
       <div className="branding-grid">
         <section className="branding-card">

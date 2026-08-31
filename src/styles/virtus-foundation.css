@@ -255,3 +255,225 @@ body {
     flex-wrap: wrap;
   }
 }
+
+
+/* =========================================================
+   VIRTUS CONTROLS AUDIT — etapa 7
+   Componentes globais + estados visuais.
+   Consolida diferenças acidentais sem alterar a semântica.
+   ========================================================= */
+
+:root {
+  --virtus-control-height: 42px;
+  --virtus-control-height-compact: 36px;
+  --virtus-control-radius: 9px;
+  --virtus-control-padding-x: 14px;
+  --virtus-control-border: #d9d5df;
+  --virtus-control-transition: 160ms ease;
+  --virtus-control-focus:
+    0 0 0 3px color-mix(in srgb, var(--brand-primary) 14%, transparent);
+}
+
+/* ---------------------------------------------------------
+   1. BOTÕES — BASE COMPARTILHADA
+   --------------------------------------------------------- */
+
+.brand-button,
+.cycle-btn,
+.evaluation-btn,
+.goal-action-btn,
+.goals-add-btn,
+.filter-clear {
+  min-height: var(--virtus-control-height) !important;
+  padding-left: var(--virtus-control-padding-x) !important;
+  padding-right: var(--virtus-control-padding-x) !important;
+  border-radius: var(--virtus-control-radius) !important;
+  box-sizing: border-box;
+  font-family: var(--sans) !important;
+  font-size: var(--virtus-font-label) !important;
+  line-height: 1.2 !important;
+  font-weight: 750 !important;
+  cursor: pointer;
+  transition:
+    background-color var(--virtus-control-transition),
+    border-color var(--virtus-control-transition),
+    color var(--virtus-control-transition),
+    box-shadow var(--virtus-control-transition),
+    opacity var(--virtus-control-transition);
+}
+
+/* Ações compactas */
+.cycle-btn--small,
+.cycle-row-actions .cycle-btn,
+.new-evaluation-nav-actions button {
+  min-height: var(--virtus-control-height-compact) !important;
+}
+
+/* Primários */
+.brand-button--primary,
+.cycle-btn--primary {
+  border-color: var(--brand-primary) !important;
+  background: var(--brand-primary) !important;
+  color: #fff !important;
+}
+
+.brand-button--primary:hover:not(:disabled),
+.cycle-btn--primary:hover:not(:disabled) {
+  background:
+    color-mix(in srgb, var(--brand-primary) 90%, #000) !important;
+  border-color:
+    color-mix(in srgb, var(--brand-primary) 90%, #000) !important;
+}
+
+/* Secundários / ações de contorno */
+.brand-button--secondary,
+.cycle-btn--secondary,
+.filter-clear {
+  border-color:
+    color-mix(in srgb, var(--brand-primary) 42%, #fff) !important;
+  background: #fff !important;
+  color: var(--brand-primary) !important;
+}
+
+.brand-button--secondary:hover:not(:disabled),
+.cycle-btn--secondary:hover:not(:disabled),
+.filter-clear:hover:not(:disabled) {
+  background:
+    color-mix(in srgb, var(--brand-primary) 6%, #fff) !important;
+  border-color:
+    color-mix(in srgb, var(--brand-primary) 58%, #fff) !important;
+}
+
+/* ---------------------------------------------------------
+   2. CAMPOS — BASE COMPARTILHADA
+   --------------------------------------------------------- */
+
+.app-header__user select,
+.branding-field > input:not([type="file"]),
+.branding-color-field input:not([type="color"]),
+.score-scale-settings__row input:not([type="color"]),
+.search-field input,
+.filter-field select,
+.cycle-field input,
+.cycle-field select,
+.cycle-inline-form input,
+.cycle-inline-form select,
+.virtus-field input,
+.virtus-field select,
+.goals-field input,
+.goals-field select {
+  min-height: var(--virtus-control-height) !important;
+  border: 1px solid var(--virtus-control-border) !important;
+  border-radius: var(--virtus-control-radius) !important;
+  background: #fff !important;
+  color: var(--brand-text) !important;
+  box-sizing: border-box;
+  font-family: var(--sans) !important;
+  font-size: var(--virtus-font-body) !important;
+  line-height: 1.35;
+  transition:
+    border-color var(--virtus-control-transition),
+    box-shadow var(--virtus-control-transition),
+    background-color var(--virtus-control-transition);
+}
+
+/* Textareas seguem a mesma linguagem, sem impor altura fixa. */
+.score-scale-settings__row textarea,
+.virtus-field textarea,
+.goals-field textarea,
+.new-evaluation-comment textarea {
+  border: 1px solid var(--virtus-control-border) !important;
+  border-radius: var(--virtus-control-radius) !important;
+  background: #fff !important;
+  color: var(--brand-text) !important;
+  box-sizing: border-box;
+  font-family: var(--sans) !important;
+  font-size: var(--virtus-font-body) !important;
+  line-height: 1.5;
+  transition:
+    border-color var(--virtus-control-transition),
+    box-shadow var(--virtus-control-transition),
+    background-color var(--virtus-control-transition);
+}
+
+/* ---------------------------------------------------------
+   3. FOCO — UM ÚNICO COMPORTAMENTO
+   --------------------------------------------------------- */
+
+.app-header__user select:focus,
+.branding-field > input:not([type="file"]):focus,
+.branding-color-field input:not([type="color"]):focus,
+.score-scale-settings__row input:not([type="color"]):focus,
+.score-scale-settings__row textarea:focus,
+.search-field input:focus,
+.filter-field select:focus,
+.cycle-field input:focus,
+.cycle-field select:focus,
+.cycle-inline-form input:focus,
+.cycle-inline-form select:focus,
+.virtus-field input:focus,
+.virtus-field select:focus,
+.virtus-field textarea:focus,
+.goals-field input:focus,
+.goals-field select:focus,
+.goals-field textarea:focus,
+.new-evaluation-comment textarea:focus {
+  border-color: var(--brand-primary) !important;
+  box-shadow: var(--virtus-control-focus) !important;
+  outline: none;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid
+    color-mix(in srgb, var(--brand-primary) 25%, transparent) !important;
+  outline-offset: 2px !important;
+}
+
+/* ---------------------------------------------------------
+   4. DISABLED — ESTADO GLOBAL
+   --------------------------------------------------------- */
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  opacity: .48 !important;
+  cursor: not-allowed !important;
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled {
+  background: #f5f3f6 !important;
+  color: var(--brand-text-muted) !important;
+}
+
+/* ---------------------------------------------------------
+   5. GARANTIAS DE INTERAÇÃO
+   --------------------------------------------------------- */
+
+button:not(:disabled) {
+  transform: none;
+}
+
+.brand-link-button,
+.cycle-back-link,
+.collaborator-detail-back,
+.evaluation-back-link,
+.new-evaluation-page .new-evaluation-header__back {
+  min-height: auto !important;
+}
+
+/* VIRTUS ETAPA 7 — ajuste 4: ritmo vertical global */
+@media (min-width: 721px) {
+  .virtus-page,
+  .page-shell,
+  .branding-page.virtus-page {
+    padding-top: 28px !important;
+  }
+}
+/* FIM VIRTUS ETAPA 7 — ajuste 4 */
