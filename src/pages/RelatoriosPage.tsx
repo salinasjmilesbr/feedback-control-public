@@ -1,0 +1,323 @@
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
+import {
+  formatarPeriodoCiclo,
+  getCiclosAvaliacao,
+} from "../services/cicloAvaliacaoStorage";
+import {
+  formatarNota,
+  getItemEscalaPorNota,
+} from "../services/escalaAvaliacaoStorage";
+import { getRelatorioVisaoGeral } from "../services/relatorioService";
+import type { SituacaoAvaliacaoCiclo } from "../services/cicloEquipeService";
+import "../styles/relatorios.css";
+
+const statusLabels: Record<SituacaoAvaliacaoCiclo, string> = {
+  NAO_INICIADA: "Não iniciada",
+  EM_ANDAMENTO: "Em andamento",
+  PRONTA_PARA_FEEDBACK: "Pronta para Feedback",
+  CONCLUIDA: "Concluída",
+  SUSPENSA: "Suspensa",
+  NAO_APLICAVEL: "Não aplicável",
+};
+
+function labelFuncao(
+  funcao: "GERENTE" | "COORDENADOR" | "CONSULTOR" | "ANALISTA" | "ESTAGIARIO" | undefined,
+  senioridade: "JUNIOR" | "PLENO" | "SENIOR" | undefined
+) {
+  if (funcao === "ESTAGIARIO") return "Estagiário";
+  if (funcao === "COORDENADOR") return "Coordenador";
+  if (funcao === "CONSULTOR") return "Consultor";
+  if (funcao === "ANALISTA") {
+    if (senioridade === "JUNIOR") return "Analista Júnior";
+    if (senioridade === "PLENO") return "Analista Pleno";
+    if (senioridade === "SENIOR") return "Analista Sênior";
+    return "Analista";
+  }
+  return "Colaborador";
+}
+
+function RelatoriosPage() {
+  const navigate = useNavigate();
+  const { usuarioAtual } = useUsuarioAtual();
+
+  const ciclosDisponiveis = useMemo(
+    () =>
+      getCiclosAvaliacao().filter(
+        (ciclo) => ciclo.status === "ATIVO" || ciclo.status === "ENCERRADO"
+      ),
+    []
+  );
+
+  const [cicloId, setCicloId] = useState(
+    ciclosDisponiveis.find((ciclo) => ciclo.status === "ATIVO")?.id ??
+      ciclosDisponiveis[0]?.id ??
+      ""
+  );
+
+  if (
+    !usuarioAtual ||
+    (usuarioAtual.funcao !== "GERENTE" &&
+      usuarioAtual.funcao !== "COORDENADOR")
+  ) {
+    return (
+      <main className="virtus-page reports-page">
+        <section className="reports-empty">
+          <h1>Acesso restrito</h1>
+          <p>Relatórios estão disponíveis para gerentes e coordenadores.</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (!ciclosDisponiveis.length) {
+    return (
+      <main className="virtus-page reports-page">
+        <section className="reports-page-header">
+          <div>
+            <h1>Relatórios</h1>
+            <p>Visão consolidada de desempenho e evolução da equipe.</p>
+          </div>
+        </section>
+        <section className="reports-empty">
+          <h2>Nenhum ciclo disponível</h2>
+          <p>Ative ou encerre um ciclo para habilitar a visão de relatórios.</p>
+        </section>
+      </main>
+    );
+  }
+
+  const ciclo =
+    ciclosDisponiveis.find((item) => item.id === cicloId) ??
+    ciclosDisponiveis[0];
+
+  const relatorio = getRelatorioVisaoGeral(ciclo, usuarioAtual);
+  const faixaMedia =
+    relatorio.mediaEquipe > 0
+      ? getItemEscalaPorNota(relatorio.mediaEquipe)
+      : undefined;
+
+  return (
+    <main className="virtus-page reports-page">
+      <section className="reports-page-header">
+        <div>
+          <h1>Relatórios</h1>
+          <p>
+            Visão consolidada de desempenho da{" "}
+            {usuarioAtual.funcao === "COORDENADOR"
+              ? "sua equipe direta"
+              : "equipe"}.
+          </p>
+        </div>
+
+        <label className="reports-cycle-filter">
+          <span>Ciclo</span>
+          <select value={ciclo.id} onChange={(e) => setCicloId(e.target.value)}>
+            {ciclosDisponiveis.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.ano} • Ciclo {item.ciclo}
+                {item.status === "ATIVO" ? " — Ativo" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+      </section>
+
+      <section className="reports-cycle-context">
+        <div>
+          <strong>
+            {ciclo.ano} • Ciclo {ciclo.ciclo}
+          </strong>
+          <span>{formatarPeriodoCiclo(ciclo.dataInicio, ciclo.dataFim)}</span>
+        </div>
+        <span
+          className={`reports-cycle-status ${
+            ciclo.status === "ATIVO" ? "is-active" : "is-closed"
+          }`}
+        >
+          {ciclo.status === "ATIVO" ? "Ativo" : "Encerrado"}
+        </span>
+      </section>
+
+      <section className="reports-kpis" aria-label="Indicadores gerais">
+        <article className="reports-kpi reports-kpi--featured">
+          <span>Média da equipe</span>
+          <strong>{relatorio.mediaEquipe > 0 ? formatarNota(relatorio.mediaEquipe) : "—"}</strong>
+          <small>{faixaMedia?.significado ?? "Sem nota consolidada"}</small>
+        </article>
+        <article className="reports-kpi">
+          <span>Colaboradores</span>
+          <strong>{relatorio.totalElegiveis}</strong>
+          <small>no escopo do relatório</small>
+        </article>
+        <article className="reports-kpi">
+          <span>Com nota consolidada</span>
+          <strong>{relatorio.avaliacoesComNota}</strong>
+          <small>prontas ou concluídas</small>
+        </article>
+        <article className="reports-kpi">
+          <span>Concluídas</span>
+          <strong>{relatorio.concluidas}</strong>
+          <small>{relatorio.prontasParaFeedback} prontas para feedback</small>
+        </article>
+        <article className="reports-kpi">
+          <span>Em andamento</span>
+          <strong>{relatorio.emAndamento}</strong>
+          <small>{relatorio.naoIniciadas} não iniciadas</small>
+        </article>
+      </section>
+
+      <div className="reports-grid">
+        <section className="reports-card">
+          <div className="reports-card__heading">
+            <div>
+              <h2>Distribuição das notas</h2>
+              <p>Faixas definidas na Régua de Notas.</p>
+            </div>
+          </div>
+
+          <div className="reports-distribution">
+            {relatorio.distribuicao.map((faixa) => (
+              <div className="reports-distribution__row" key={faixa.nota}>
+                <div className="reports-distribution__label">
+                  <span
+                    className="reports-score-dot"
+                    style={{ background: faixa.corFundo, color: faixa.cor }}
+                  >
+                    {faixa.nota}
+                  </span>
+                  <div>
+                    <strong>{faixa.significado}</strong>
+                    <small>{faixa.quantidade} colaborador{faixa.quantidade === 1 ? "" : "es"}</small>
+                  </div>
+                </div>
+                <div className="reports-bar">
+                  <span style={{ width: `${faixa.percentual}%` }} />
+                </div>
+                <strong className="reports-distribution__percent">
+                  {faixa.percentual.toFixed(0)}%
+                </strong>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="reports-card">
+          <div className="reports-card__heading">
+            <div>
+              <h2>Média por critério</h2>
+              <p>Os 8 critérios oficiais da avaliação.</p>
+            </div>
+          </div>
+
+          <div className="reports-criteria">
+            {relatorio.criterios.map((criterio) => (
+              <div className="reports-criterion" key={criterio.criterioId}>
+                <div>
+                  <strong>{criterio.criterioNome}</strong>
+                  <small>
+                    {criterio.quantidadeAvaliacoes} avaliação
+                    {criterio.quantidadeAvaliacoes === 1 ? "" : "ões"}
+                  </small>
+                </div>
+                <span className="reports-criterion__score">
+                  {criterio.media > 0 ? formatarNota(criterio.media) : "—"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      <section className="reports-card reports-team-card">
+        <div className="reports-card__heading reports-team-heading">
+          <div>
+            <h2>Desempenho da equipe</h2>
+            <p>
+              Notas aparecem somente quando a avaliação está pronta para feedback
+              ou concluída.
+            </p>
+          </div>
+          <span>{relatorio.colaboradores.length} colaboradores</span>
+        </div>
+
+        <div className="reports-table-wrap">
+          <div className="reports-table">
+            <div className="reports-table__row reports-table__row--header">
+              <div>Colaborador</div>
+              <div>Status</div>
+              <div>Nota</div>
+              <div>Faixa</div>
+              <div>Ações</div>
+            </div>
+
+            {relatorio.colaboradores.map((colaborador) => (
+              <div className="reports-table__row" key={colaborador.matricula}>
+                <div className="reports-person">
+                  <div className="reports-avatar">
+                    {colaborador.nome
+                      .split(" ")
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .map((parte) => parte[0])
+                      .join("")
+                      .toUpperCase()}
+                  </div>
+                  <div>
+                    <strong>{colaborador.nome}</strong>
+                    <span>{labelFuncao(colaborador.funcao, colaborador.senioridade)}</span>
+                  </div>
+                </div>
+
+                <div data-label="Status">
+                  <span className={`reports-status is-${colaborador.situacao.toLowerCase().replaceAll("_", "-")}`}>
+                    {statusLabels[colaborador.situacao]}
+                  </span>
+                </div>
+
+                <div data-label="Nota">
+                  <strong className="reports-table-score">
+                    {colaborador.possuiNotaConsolidada
+                      ? formatarNota(colaborador.notaMedia)
+                      : "—"}
+                  </strong>
+                </div>
+
+                <div data-label="Faixa">
+                  {colaborador.faixa ? (
+                    <span
+                      className="reports-range"
+                      style={{
+                        color: colaborador.faixa.cor,
+                        background: colaborador.faixa.corFundo,
+                      }}
+                    >
+                      {colaborador.faixa.significado}
+                    </span>
+                  ) : (
+                    <span className="reports-muted">—</span>
+                  )}
+                </div>
+
+                <div className="reports-actions">
+                  <button
+                    type="button"
+                    className="virtus-btn virtus-btn--outline virtus-btn--small"
+                    onClick={() =>
+                      navigate(`/colaborador/${colaborador.matricula}`)
+                    }
+                  >
+                    Abrir colaborador
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+export default RelatoriosPage;

@@ -1,0 +1,192 @@
+import type { CicloAvaliacao } from "../types/CicloAvaliacao";
+import type { Colaborador } from "../types/Colaborador";
+import type { ItemEscalaAvaliacao } from "../types/EscalaAvaliacao";
+import { criteriosAvaliacao } from "../data/modeloAvaliacao";
+import { getPainelCiclo, type SituacaoAvaliacaoCiclo } from "./cicloEquipeService";
+import { getEscalaAvaliacao, getItemEscalaPorNota } from "./escalaAvaliacaoStorage";
+
+export interface RelatorioFaixaNota {
+  nota: number;
+  significado: string;
+  quantidade: number;
+  percentual: number;
+  cor: string;
+  corFundo: string;
+}
+
+export interface RelatorioCriterio {
+  criterioId: string;
+  criterioNome: string;
+  media: number;
+  quantidadeAvaliacoes: number;
+}
+
+export interface RelatorioColaborador {
+  matricula: number;
+  nome: string;
+  funcao: Colaborador["funcao"];
+  senioridade: Colaborador["senioridade"];
+  situacao: SituacaoAvaliacaoCiclo;
+  notaMedia: number;
+  possuiNotaConsolidada: boolean;
+  faixa?: ItemEscalaAvaliacao;
+}
+
+export interface RelatorioVisaoGeral {
+  totalElegiveis: number;
+  concluidas: number;
+  prontasParaFeedback: number;
+  emAndamento: number;
+  naoIniciadas: number;
+  suspensasOuNaoAplicaveis: number;
+  avaliacoesComNota: number;
+  mediaEquipe: number;
+  distribuicao: RelatorioFaixaNota[];
+  criterios: RelatorioCriterio[];
+  colaboradores: RelatorioColaborador[];
+}
+
+function media(valores: number[]): number {
+  const validos = valores.filter((valor) => Number.isFinite(valor) && valor > 0);
+  if (!validos.length) return 0;
+  return validos.reduce((soma, valor) => soma + valor, 0) / validos.length;
+}
+
+function possuiNotaConsolidada(
+  situacao: SituacaoAvaliacaoCiclo,
+  notaMedia: number
+): boolean {
+  return (
+    notaMedia > 0 &&
+    (situacao === "PRONTA_PARA_FEEDBACK" || situacao === "CONCLUIDA")
+  );
+}
+
+/**
+ * Relatórios do coordenador consideram somente sua equipe direta.
+ * Participações como colegiado pertencem ao painel operacional, mas não entram
+ * na consolidação de desempenho da equipe do coordenador.
+ */
+function linhasDoEscopo(
+  ciclo: CicloAvaliacao,
+  usuario: Colaborador
+) {
+  const linhas = getPainelCiclo(ciclo, usuario);
+
+  if (usuario.funcao === "COORDENADOR") {
+    return linhas.filter(
+      (linha) =>
+        linha.colaborador.gestorDiretoMatricula === usuario.matricula
+    );
+  }
+
+  return linhas;
+}
+
+export function getRelatorioVisaoGeral(
+  ciclo: CicloAvaliacao,
+  usuario: Colaborador
+): RelatorioVisaoGeral {
+  const linhas = linhasDoEscopo(ciclo, usuario);
+  const escala = getEscalaAvaliacao();
+
+  const colaboradores: RelatorioColaborador[] = linhas
+    .map((linha) => {
+      const notaMedia = linha.feedback?.notaMedia ?? 0;
+      const consolidada = possuiNotaConsolidada(linha.situacao, notaMedia);
+
+      return {
+        matricula: linha.colaborador.matricula,
+        nome: linha.colaborador.nome,
+        funcao: linha.colaborador.funcao,
+        senioridade: linha.colaborador.senioridade,
+        situacao: linha.situacao,
+        notaMedia,
+        possuiNotaConsolidada: consolidada,
+        faixa: consolidada
+          ? getItemEscalaPorNota(notaMedia, escala)
+          : undefined,
+      };
+    })
+    .sort((a, b) => {
+      const ordemFuncao = (item: RelatorioColaborador): number => {
+        if (item.funcao === "COORDENADOR") return 1;
+        if (item.funcao === "CONSULTOR") return 2;
+        if (item.funcao === "ANALISTA" && item.senioridade === "SENIOR") return 3;
+        if (item.funcao === "ANALISTA" && item.senioridade === "PLENO") return 4;
+        if (item.funcao === "ANALISTA" && item.senioridade === "JUNIOR") return 5;
+        if (item.funcao === "ANALISTA") return 6;
+        if (item.funcao === "ESTAGIARIO") return 7;
+        return 8;
+      };
+
+      const diferencaFuncao = ordemFuncao(a) - ordemFuncao(b);
+      if (diferencaFuncao !== 0) return diferencaFuncao;
+
+      return a.nome.localeCompare(b.nome, "pt-BR");
+    });
+
+  const linhasComNota = linhas.filter((linha) =>
+    possuiNotaConsolidada(linha.situacao, linha.feedback?.notaMedia ?? 0)
+  );
+
+  const mediaEquipe = media(
+    linhasComNota.map((linha) => linha.feedback?.notaMedia ?? 0)
+  );
+
+  const distribuicao = [...escala]
+    .sort((a, b) => b.nota - a.nota)
+    .map((item) => {
+      const quantidade = linhasComNota.filter(
+        (linha) =>
+          getItemEscalaPorNota(linha.feedback?.notaMedia ?? 0, escala).nota ===
+          item.nota
+      ).length;
+
+      return {
+        nota: item.nota,
+        significado: item.significado,
+        quantidade,
+        percentual: linhasComNota.length
+          ? (quantidade / linhasComNota.length) * 100
+          : 0,
+        cor: item.cor,
+        corFundo: item.corFundo,
+      };
+    });
+
+  const criterios = criteriosAvaliacao.map((criterioModelo) => {
+    const notas = linhasComNota
+      .map((linha) =>
+        linha.feedback?.criteriosDetalhados?.find(
+          (criterio) => criterio.criterioId === criterioModelo.id
+        )?.nota ?? 0
+      )
+      .filter((nota) => nota > 0);
+
+    return {
+      criterioId: criterioModelo.id,
+      criterioNome: criterioModelo.nome,
+      media: media(notas),
+      quantidadeAvaliacoes: notas.length,
+    };
+  });
+
+  const contar = (situacao: SituacaoAvaliacaoCiclo) =>
+    linhas.filter((linha) => linha.situacao === situacao).length;
+
+  return {
+    totalElegiveis: linhas.length,
+    concluidas: contar("CONCLUIDA"),
+    prontasParaFeedback: contar("PRONTA_PARA_FEEDBACK"),
+    emAndamento: contar("EM_ANDAMENTO"),
+    naoIniciadas: contar("NAO_INICIADA"),
+    suspensasOuNaoAplicaveis:
+      contar("SUSPENSA") + contar("NAO_APLICAVEL"),
+    avaliacoesComNota: linhasComNota.length,
+    mediaEquipe,
+    distribuicao,
+    criterios,
+    colaboradores,
+  };
+}

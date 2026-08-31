@@ -65,6 +65,8 @@ function UsuarioAtualBar() {
                   ? "Coordenador"
                   : usuario.funcao === "CONSULTOR"
                   ? "Consultor"
+                  : usuario.funcao === "ESTAGIARIO"
+                  ? "Estagiário"
                   : "Analista"}
               </option>
             ))}

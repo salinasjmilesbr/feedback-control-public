@@ -21,6 +21,14 @@ function IconCalendar() {
   );
 }
 
+function IconChart() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
+    </svg>
+  );
+}
+
 function IconSettings() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -107,6 +115,12 @@ function NavegacaoPrincipal() {
         {avaliado && (
           <NavItem to="/minhas-metas" icon={<IconTarget />}>
             Minhas metas
+          </NavItem>
+        )}
+
+        {(gerente || coordenador) && (
+          <NavItem to="/relatorios" icon={<IconChart />}>
+            Relatórios
           </NavItem>
         )}
 

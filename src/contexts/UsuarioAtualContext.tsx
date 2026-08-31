@@ -44,18 +44,35 @@ export function UsuarioAtualProvider({ children }: { children: ReactNode }) {
       getColaboradores()
         .filter((usuario) => usuario.status === "ATIVO")
         .sort((a, b) => {
-          const ordemFuncao = {
-            GERENTE: 0,
-            COORDENADOR: 1,
-            CONSULTOR: 1,
-            ANALISTA: 2,
-            ESTAGIARIO: 2,
-          } as const;
+          const ordemFuncao = (usuario: Colaborador): number => {
+            if (usuario.funcao === "GERENTE") return 0;
+            if (usuario.funcao === "COORDENADOR") return 1;
+            if (usuario.funcao === "CONSULTOR") return 2;
+            if (
+              usuario.funcao === "ANALISTA" &&
+              usuario.senioridade === "SENIOR"
+            ) {
+              return 3;
+            }
+            if (
+              usuario.funcao === "ANALISTA" &&
+              usuario.senioridade === "PLENO"
+            ) {
+              return 4;
+            }
+            if (
+              usuario.funcao === "ANALISTA" &&
+              usuario.senioridade === "JUNIOR"
+            ) {
+              return 5;
+            }
+            if (usuario.funcao === "ANALISTA") return 6;
+            if (usuario.funcao === "ESTAGIARIO") return 7;
+            return 8;
+          };
 
-          const ordemA =
-            a.funcao ? ordemFuncao[a.funcao] : 3;
-          const ordemB =
-            b.funcao ? ordemFuncao[b.funcao] : 3;
+          const ordemA = ordemFuncao(a);
+          const ordemB = ordemFuncao(b);
 
           if (ordemA !== ordemB) return ordemA - ordemB;
 

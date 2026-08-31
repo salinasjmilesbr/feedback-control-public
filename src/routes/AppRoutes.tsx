@@ -19,6 +19,7 @@ import NovoFeedbackPage from "../pages/NovoFeedbackPage";
 import FeedbackDetalhePage from "../pages/FeedbackDetalhePage";
 import EditarFeedbackPage from "../pages/EditarFeedbackPage";
 import ConfiguracoesAparenciaPage from "../pages/ConfiguracoesAparenciaPage";
+import RelatoriosPage from "../pages/RelatoriosPage";
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -72,6 +73,8 @@ function AppRoutes() {
           />
 
           <Route path="/minhas-metas" element={<MinhasMetasPage />} />
+
+          <Route path="/relatorios" element={<RelatoriosPage />} />
 
           <Route
             path="/configuracoes/aparencia"
