@@ -1406,3 +1406,59 @@ button:not(:disabled) {
     color-mix(in srgb, var(--virtus-action-danger-text) 86%, black) !important;
 }
 /* FIM VIRTUS ACTION AUDIT — etapa 12 */
+
+/* VIRTUS RESPONSIVE AUDIT — etapa 13 */
+:root {
+  --virtus-gutter-desktop: 32px;
+  --virtus-gutter-tablet: 20px;
+  --virtus-gutter-mobile: 14px;
+
+  --virtus-card-padding-tablet: 20px;
+  --virtus-card-padding-mobile: 16px;
+
+  --virtus-section-gap-desktop: 28px;
+  --virtus-section-gap-mobile: 22px;
+}
+
+@media (max-width: 900px) {
+  :root {
+    --virtus-gutter: var(--virtus-gutter-tablet);
+  }
+
+  .app-header__inner,
+  .app-nav__inner,
+  .virtus-page,
+  .page-shell,
+  .app-footer__inner,
+  .branding-page.virtus-page {
+    width: min(
+      var(--virtus-container),
+      calc(100% - (var(--virtus-gutter) * 2))
+    ) !important;
+  }
+}
+
+@media (max-width: 620px) {
+  :root {
+    --virtus-gutter: var(--virtus-gutter-mobile);
+  }
+
+  .app-header__inner,
+  .app-nav__inner,
+  .virtus-page,
+  .page-shell,
+  .app-footer__inner,
+  .branding-page.virtus-page {
+    width: min(
+      var(--virtus-container),
+      calc(100% - (var(--virtus-gutter) * 2))
+    ) !important;
+  }
+
+  .virtus-page,
+  .page-shell,
+  .branding-page.virtus-page {
+    padding-top: 20px !important;
+  }
+}
+/* FIM VIRTUS RESPONSIVE AUDIT — etapa 13 */

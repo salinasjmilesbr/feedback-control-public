@@ -835,134 +835,9 @@ textarea:focus-visible {
 
 /* ---------------------------------------------------------
    5. DETALHES — CRITÉRIOS
-   Cabeçalho e corpo passam a seguir a densidade da Nova Avaliação.
+   Geometria compartilhada com Minha Avaliação.
+   Sem overrides exclusivos do admin.
    --------------------------------------------------------- */
-.admin-evaluation-detail .evaluation-criteria-list {
-  gap: 18px !important;
-}
-
-.admin-evaluation-detail .evaluation-criterion-card {
-  overflow: hidden;
-  border-color: var(--virtus-card-border) !important;
-  border-radius: var(--virtus-card-radius) !important;
-  box-shadow: var(--virtus-card-shadow) !important;
-}
-
-.admin-evaluation-detail .evaluation-criterion-card__header {
-  min-height: 92px;
-  padding: 18px 20px 18px 22px !important;
-  background: color-mix(in srgb, var(--brand-primary) 3%, #fff);
-}
-
-.admin-evaluation-detail .evaluation-criterion-heading {
-  gap: 13px !important;
-}
-
-.admin-evaluation-detail .evaluation-criterion-icon {
-  width: 38px !important;
-  height: 38px !important;
-  flex-basis: 38px !important;
-  border-radius: 10px !important;
-}
-
-.admin-evaluation-detail .evaluation-criterion-kicker {
-  font-size: 12px !important;
-  letter-spacing: .045em;
-}
-
-.admin-evaluation-detail .evaluation-criterion-heading h3 {
-  margin-top: 4px !important;
-  font-size: 18px !important;
-  line-height: 1.25 !important;
-}
-
-.admin-evaluation-detail .evaluation-criterion-count {
-  margin-top: 4px !important;
-  font-size: var(--virtus-font-aux) !important;
-}
-
-.admin-evaluation-detail .evaluation-criterion-score--featured {
-  min-width: 112px !important;
-  padding: 10px 12px !important;
-  border-radius: 11px !important;
-}
-
-.admin-evaluation-detail .evaluation-criterion-score--featured span,
-.admin-evaluation-detail .evaluation-criterion-score--featured small {
-  font-size: 12px !important;
-}
-
-.admin-evaluation-detail .evaluation-criterion-score--featured strong {
-  font-size: 24px !important;
-}
-
-.admin-evaluation-detail .evaluation-subcriteria-matrix__header {
-  padding: 11px 18px !important;
-  font-size: 12px !important;
-}
-
-.admin-evaluation-detail .evaluation-subcriteria-matrix__row {
-  min-height: 84px;
-  padding: 14px 18px !important;
-  gap: 16px !important;
-}
-
-.admin-evaluation-detail .evaluation-subcriterion-name {
-  gap: 10px !important;
-}
-
-.admin-evaluation-detail .evaluation-subcriterion-index {
-  width: 25px !important;
-  height: 25px !important;
-  flex-basis: 25px !important;
-  border-radius: 7px !important;
-  font-size: 12px !important;
-}
-
-.admin-evaluation-detail .evaluation-subcriterion-name strong {
-  font-size: var(--virtus-font-body) !important;
-  line-height: 1.4 !important;
-}
-
-.admin-evaluation-detail .evaluation-rater-group {
-  gap: 10px !important;
-}
-
-.admin-evaluation-detail .evaluation-rater-group > div {
-  min-height: 58px;
-  padding: 10px 12px !important;
-  border: 1px solid #ece8ef !important;
-  border-radius: 10px !important;
-  background: #faf9fb !important;
-}
-
-.admin-evaluation-detail .evaluation-rater-group > div > span {
-  font-size: 12px !important;
-}
-
-.admin-evaluation-detail .evaluation-rater-group > div > strong {
-  margin-top: 5px;
-  font-size: var(--virtus-font-body) !important;
-}
-
-.admin-evaluation-detail .evaluation-subcriterion-average {
-  min-width: 104px !important;
-  padding: 10px 12px !important;
-  border-radius: 10px !important;
-}
-
-.admin-evaluation-detail .evaluation-subcriterion-average small,
-.admin-evaluation-detail .evaluation-subcriterion-average span {
-  font-size: 12px !important;
-}
-
-.admin-evaluation-detail .evaluation-subcriterion-average strong {
-  font-size: 20px !important;
-}
-
-.admin-evaluation-collegiate-votes small {
-  font-size: 12px !important;
-}
 
 /* ---------------------------------------------------------
    6. DETALHES — OBSERVAÇÕES E FECHAMENTO
@@ -1024,17 +899,6 @@ textarea:focus-visible {
 
   .collaborator-form-profile {
     width: 100%;
-  }
-}
-
-@media (max-width: 760px) {
-  .admin-evaluation-detail .evaluation-criterion-card__header {
-    align-items: flex-start;
-    gap: 14px;
-  }
-
-  .admin-evaluation-detail .evaluation-subcriteria-matrix__row {
-    padding: 14px !important;
   }
 }
 
@@ -1366,3 +1230,229 @@ html {
   scrollbar-gutter: stable both-edges;
 }
 /* FIM VIRTUS ETAPA 12 — ajuste 1: eixo estável entre rotas */
+
+/* VIRTUS RESPONSIVE AUDIT — etapa 13 — adaptações */
+@media (max-width: 900px) and (min-width: 621px) {
+  .virtus-page-header,
+  .page-heading,
+  .cycle-page-header,
+  .evaluation-page-header,
+  .evaluation-detail-header,
+  .new-evaluation-page .new-evaluation-header,
+  .branding-page .branding-page__header {
+    gap: 18px !important;
+  }
+
+  .collaborator-kpis,
+  .goals-kpis,
+  .goals-manager-summary,
+  .cycle-kpis {
+    gap: 10px !important;
+  }
+
+  .evaluation-history-card,
+  .goal-card,
+  .goals-manager-card,
+  .collaborator-evaluation-card {
+    padding-left: var(--virtus-card-padding-tablet) !important;
+    padding-right: var(--virtus-card-padding-tablet) !important;
+  }
+}
+
+@media (max-width: 620px) {
+  .virtus-page-header,
+  .page-heading,
+  .cycle-page-header,
+  .evaluation-page-header,
+  .evaluation-detail-header,
+  .new-evaluation-page .new-evaluation-header,
+  .branding-page .branding-page__header,
+  .collaborator-form-header {
+    align-items: stretch !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    margin-bottom: 20px !important;
+  }
+
+  .virtus-page-header__copy h1,
+  .page-heading h1,
+  .cycle-page-header h1,
+  .evaluation-page-header h1,
+  .evaluation-detail-header h1,
+  .new-evaluation-page .new-evaluation-header h1,
+  .branding-page .branding-page__header h1,
+  .collaborator-form-header h1 {
+    font-size: 28px !important;
+    line-height: 1.15 !important;
+    letter-spacing: -.35px !important;
+  }
+
+  .virtus-page-header__copy p,
+  .page-heading p,
+  .cycle-page-header p,
+  .evaluation-page-header p,
+  .evaluation-detail-header p,
+  .new-evaluation-page .new-evaluation-header p,
+  .branding-page .branding-page__header p,
+  .collaborator-form-header p {
+    max-width: none !important;
+    font-size: 14px !important;
+    line-height: 1.5 !important;
+  }
+
+  .evaluation-page-actions,
+  .admin-evaluation-actions,
+  .collaborator-form-actions,
+  .goals-editor__actions {
+    width: 100%;
+  }
+
+  .collaborator-profile-card,
+  .evaluation-profile-card,
+  .evaluation-score-card,
+  .evaluation-content-card,
+  .admin-evaluation-profile,
+  .admin-evaluation-final,
+  .goals-cycle-card,
+  .goals-group,
+  .goals-editor,
+  .goals-manager-section,
+  .branding-card,
+  .score-scale-settings,
+  .collaborator-form-card,
+  .goal-card,
+  .goals-manager-card,
+  .evaluation-history-card,
+  .collaborator-evaluation-card,
+  .new-evaluation-person,
+  .new-evaluation-progress-card,
+  .new-evaluation-role-card,
+  .new-evaluation-status-card {
+    padding-left: var(--virtus-card-padding-mobile) !important;
+    padding-right: var(--virtus-card-padding-mobile) !important;
+  }
+
+  .collaborator-section,
+  .evaluation-criteria,
+  .evaluation-history {
+    margin-top: var(--virtus-section-gap-mobile) !important;
+  }
+
+  .evaluation-section-heading,
+  .collaborator-section-heading,
+  .cycle-section-heading,
+  .cycle-list-heading,
+  .cycle-table-heading,
+  .goals-group__header,
+  .goals-editor__header,
+  .goals-manager-section__header,
+  .score-scale-settings__header {
+    align-items: flex-start !important;
+    flex-wrap: wrap !important;
+    gap: 10px 14px !important;
+  }
+
+  .evaluation-section-heading h2,
+  .collaborator-section-heading h2,
+  .cycle-section-heading h2,
+  .cycle-list-heading h2,
+  .cycle-table-heading h2,
+  .goals-group__header h2,
+  .goals-editor__header h2,
+  .goals-manager-section__header h2,
+  .score-scale-settings__header h2,
+  .branding-card h2 {
+    font-size: 18px !important;
+    line-height: 1.3 !important;
+  }
+
+  .evaluation-profile-card,
+  .evaluation-history-card,
+  .admin-evaluation-profile {
+    align-items: flex-start !important;
+  }
+
+  .evaluation-profile-card__summary {
+    text-align: left !important;
+  }
+
+  .evaluation-history-card {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 14px !important;
+  }
+
+  .evaluation-history-card .evaluation-btn {
+    width: 100%;
+  }
+
+  .admin-evaluation-profile {
+    flex-direction: column !important;
+  }
+
+  .evaluation-page-actions .evaluation-btn,
+  .collaborator-form-actions .collaborator-form-btn,
+  .goals-editor__actions .cycle-btn {
+    width: 100% !important;
+  }
+
+  .evaluation-page-actions,
+  .collaborator-form-actions,
+  .goals-editor__actions {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .cycle-row-actions .cycle-btn--small,
+  .goal-card__actions .goal-action-btn {
+    width: auto !important;
+  }
+
+  .goals-kpis,
+  .goals-manager-summary,
+  .cycle-kpis,
+  .goal-card__facts,
+  .goals-manager-facts,
+  .admin-evaluation-final__grid,
+  .collaborator-form-grid,
+  .collaborator-reviewers,
+  .new-evaluation-comments,
+  .new-evaluation-raters {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 430px) {
+  .app-header__inner {
+    gap: 10px !important;
+  }
+
+  .app-header__user {
+    gap: 8px !important;
+  }
+
+  .evaluation-history-card__score,
+  .goal-card__top,
+  .goals-manager-card__top {
+    min-width: 0;
+  }
+
+  .cycle-row-actions,
+  .goal-card__actions {
+    gap: 8px !important;
+  }
+}
+/* FIM VIRTUS RESPONSIVE AUDIT — etapa 13 — adaptações */
+
+/* VIRTUS ETAPA 13 — ajuste 6: criterios compartilhados */
+/*
+  FeedbackDetalhePage e MinhaAvaliacaoDetalhePage usam o mesmo JSX
+  para a matriz de critérios.
+
+  A geometria agora vem exclusivamente das classes compartilhadas
+  .evaluation-* em avaliacoes.css.
+
+  Mantemos no admin apenas regras realmente exclusivas, como perfil,
+  contexto da avaliação, votos do colegiado e fechamento.
+*/
+/* FIM VIRTUS ETAPA 13 — ajuste 6: criterios compartilhados */
