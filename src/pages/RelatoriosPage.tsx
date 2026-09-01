@@ -19,6 +19,7 @@ import {
   getRelatorioDetalheCriterio,
   getRelatorioEvolucaoIndividual,
   getRelatorioHistoricoCiclos,
+  getRelatorioHistoricoCriterio,
   getRelatorioVisaoGeral,
   type FiltroCargoRelatorio,
   type FiltrosRelatorio,
@@ -204,6 +205,16 @@ function RelatoriosPage() {
         criterioAbertoId,
         ciclo,
         cicloAnterior,
+        usuarioAtual,
+        filtros
+      )
+    : undefined;
+
+  const historicoCriterioAberto = criterioAbertoId
+    ? getRelatorioHistoricoCriterio(
+        criterioAbertoId,
+        ciclosDisponiveis,
+        ciclo,
         usuarioAtual,
         filtros
       )
@@ -561,10 +572,13 @@ function RelatoriosPage() {
 
                   {aberto &&
                     detalheCriterioAberto?.criterioId ===
+                      criterio.criterioId &&
+                    historicoCriterioAberto?.criterioId ===
                       criterio.criterioId && (
                       <RelatorioCriterioDetalhe
                         detalhe={detalheCriterioAberto}
                         criterioIndex={criterioIndex}
+                        historico={historicoCriterioAberto}
                       />
                     )}
                 </div>

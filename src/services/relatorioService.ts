@@ -639,3 +639,87 @@ export function getRelatorioHistoricoCiclos(
     pontos,
   };
 }
+
+
+export interface RelatorioHistoricoCriterioPonto {
+  cicloId: string;
+  ano: number;
+  ciclo: number;
+  media: number | null;
+  variacao: number | null;
+  quantidadeAvaliacoes: number;
+}
+
+export interface RelatorioHistoricoCriterio {
+  criterioId: string;
+  criterioNome: string;
+  pontos: RelatorioHistoricoCriterioPonto[];
+}
+
+export function getRelatorioHistoricoCriterio(
+  criterioId: string,
+  ciclos: CicloAvaliacao[],
+  cicloReferencia: CicloAvaliacao,
+  usuario: Colaborador,
+  filtros?: FiltrosRelatorio
+): RelatorioHistoricoCriterio {
+  const criterioModelo = criteriosAvaliacao.find(
+    (criterio) => criterio.id === criterioId
+  );
+
+  const ordenados = [...ciclos].sort(
+    (a, b) => a.ano - b.ano || a.ciclo - b.ciclo
+  );
+
+  const indiceReferencia = ordenados.findIndex(
+    (item) => item.id === cicloReferencia.id
+  );
+
+  const ateReferencia =
+    indiceReferencia >= 0
+      ? ordenados.slice(0, indiceReferencia + 1)
+      : ordenados;
+
+  let mediaAnterior: number | null = null;
+
+  const pontos = ateReferencia.map(
+    (cicloItem): RelatorioHistoricoCriterioPonto => {
+      const relatorio = getRelatorioVisaoGeral(
+        cicloItem,
+        usuario,
+        filtros
+      );
+
+      const criterio = relatorio.criterios.find(
+        (item) => item.criterioId === criterioId
+      );
+
+      const mediaAtual =
+        criterio && criterio.media > 0 ? criterio.media : null;
+
+      const variacao =
+        mediaAtual !== null && mediaAnterior !== null
+          ? mediaAtual - mediaAnterior
+          : null;
+
+      if (mediaAtual !== null) {
+        mediaAnterior = mediaAtual;
+      }
+
+      return {
+        cicloId: cicloItem.id,
+        ano: cicloItem.ano,
+        ciclo: cicloItem.ciclo,
+        media: mediaAtual,
+        variacao,
+        quantidadeAvaliacoes: criterio?.quantidadeAvaliacoes ?? 0,
+      };
+    }
+  );
+
+  return {
+    criterioId,
+    criterioNome: criterioModelo?.nome ?? criterioId,
+    pontos,
+  };
+}
