@@ -12,6 +12,7 @@ import {
 } from "../services/escalaAvaliacaoStorage";
 import {
   getRelatorioComparacaoCiclos,
+  getRelatorioEvolucaoIndividual,
   getRelatorioVisaoGeral,
 } from "../services/relatorioService";
 import type { SituacaoAvaliacaoCiclo } from "../services/cicloEquipeService";
@@ -111,6 +112,15 @@ function RelatoriosPage() {
     ciclo,
     cicloAnterior,
     usuarioAtual
+  );
+
+  const evolucaoIndividual = getRelatorioEvolucaoIndividual(
+    ciclo,
+    cicloAnterior,
+    usuarioAtual
+  );
+  const evolucaoPorMatricula = new Map(
+    evolucaoIndividual.map((item) => [item.matricula, item])
   );
 
   const faixaMedia =
@@ -354,7 +364,7 @@ function RelatoriosPage() {
             <h2>Desempenho da equipe</h2>
             <p>
               Notas aparecem somente quando a avaliação está pronta para feedback
-              ou concluída.
+              ou concluída. Evolução compara com o ciclo anterior disponível.
             </p>
           </div>
           <span>{relatorio.colaboradores.length} colaboradores</span>
@@ -366,6 +376,7 @@ function RelatoriosPage() {
               <div>Colaborador</div>
               <div>Status</div>
               <div>Nota</div>
+              <div>Evolução</div>
               <div>Faixa</div>
               <div>Ações</div>
             </div>
@@ -400,6 +411,45 @@ function RelatoriosPage() {
                       ? formatarNota(colaborador.notaMedia)
                       : "—"}
                   </strong>
+                </div>
+
+                <div data-label="Evolução">
+                  {(() => {
+                    const evolucao = evolucaoPorMatricula.get(
+                      colaborador.matricula
+                    );
+
+                    if (!evolucao) {
+                      return <span className="reports-muted">—</span>;
+                    }
+
+                    const classe =
+                      evolucao.tendencia === "MELHOROU"
+                        ? "is-positive"
+                        : evolucao.tendencia === "PIOROU"
+                        ? "is-negative"
+                        : "is-neutral";
+
+                    const seta =
+                      evolucao.tendencia === "MELHOROU"
+                        ? "↑"
+                        : evolucao.tendencia === "PIOROU"
+                        ? "↓"
+                        : "→";
+
+                    return (
+                      <span
+                        className={`reports-individual-evolution ${classe}`}
+                        title={`Ciclo anterior: ${formatarNota(
+                          evolucao.notaAnterior
+                        )} • Atual: ${formatarNota(evolucao.notaAtual)}`}
+                      >
+                        {seta}{" "}
+                        {evolucao.variacao > 0 ? "+" : ""}
+                        {formatarNota(evolucao.variacao)}
+                      </span>
+                    );
+                  })()}
                 </div>
 
                 <div data-label="Faixa">

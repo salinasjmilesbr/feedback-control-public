@@ -293,3 +293,59 @@ export function getRelatorioComparacaoCiclos(
     }),
   };
 }
+
+
+export type TendenciaEvolucaoIndividual =
+  | "MELHOROU"
+  | "MANTEVE"
+  | "PIOROU";
+
+export interface RelatorioEvolucaoIndividual {
+  matricula: number;
+  notaAtual: number;
+  notaAnterior: number;
+  variacao: number;
+  tendencia: TendenciaEvolucaoIndividual;
+}
+
+export function getRelatorioEvolucaoIndividual(
+  cicloAtual: CicloAvaliacao,
+  cicloAnterior: CicloAvaliacao | undefined,
+  usuario: Colaborador
+): RelatorioEvolucaoIndividual[] {
+  if (!cicloAnterior) return [];
+
+  const atual = getRelatorioVisaoGeral(cicloAtual, usuario);
+  const anterior = getRelatorioVisaoGeral(cicloAnterior, usuario);
+
+  const anterioresPorMatricula = new Map(
+    anterior.colaboradores
+      .filter((item) => item.possuiNotaConsolidada)
+      .map((item) => [item.matricula, item])
+  );
+
+  return atual.colaboradores
+    .filter((item) => item.possuiNotaConsolidada)
+    .flatMap((item) => {
+      const itemAnterior = anterioresPorMatricula.get(item.matricula);
+      if (!itemAnterior) return [];
+
+      const variacao = item.notaMedia - itemAnterior.notaMedia;
+      const tendencia: TendenciaEvolucaoIndividual =
+        variacao > 0.05
+          ? "MELHOROU"
+          : variacao < -0.05
+          ? "PIOROU"
+          : "MANTEVE";
+
+      return [
+        {
+          matricula: item.matricula,
+          notaAtual: item.notaMedia,
+          notaAnterior: itemAnterior.notaMedia,
+          variacao,
+          tendencia,
+        },
+      ];
+    });
+}
