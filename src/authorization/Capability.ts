@@ -1,4 +1,6 @@
 export type Capability =
+  | "collaborator.create"
+  | "collaborator.edit"
   | "collaborator.list"
   | "cycle.coordinator.list"
   | "cycle.management.view"
