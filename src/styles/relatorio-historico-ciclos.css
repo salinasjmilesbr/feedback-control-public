@@ -1,0 +1,162 @@
+/* Relatórios — histórico de múltiplos ciclos */
+
+.history-cycles-card__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.history-cycles-card__heading > span {
+  color: #746d7e;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.history-cycles-chart-wrap {
+  padding: 16px 20px 4px;
+}
+
+.history-cycles-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 210px;
+}
+
+.history-cycles-chart__grid {
+  stroke: #eeeaf1;
+  stroke-width: 1;
+}
+
+.history-cycles-chart__axis,
+.history-cycles-chart__label {
+  fill: #746d7e;
+  font-size: 10px;
+}
+
+.history-cycles-chart__line {
+  stroke: #660099;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.history-cycles-chart__point {
+  fill: #fff;
+  stroke: #660099;
+  stroke-width: 3;
+}
+
+.history-cycles-chart__value {
+  fill: #17131d;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.history-cycles-table {
+  padding: 0 20px 18px;
+}
+
+.history-cycles-table__header,
+.history-cycles-table__row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 90px 110px 100px;
+  gap: 14px;
+  align-items: center;
+}
+
+.history-cycles-table__header {
+  min-height: 36px;
+  color: #746d7e;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.history-cycles-table__row {
+  min-height: 52px;
+  border-top: 1px solid #eeeaf1;
+  font-size: 12px;
+}
+
+.history-cycles-table__row > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.history-cycles-table__row small {
+  color: #746d7e;
+  font-size: 10px;
+}
+
+.history-cycles-card .is-positive {
+  color: #107c41;
+}
+
+.history-cycles-card .is-negative {
+  color: #b42318;
+}
+
+.history-cycles-card .is-neutral {
+  color: #655d70;
+}
+
+.history-cycles-empty {
+  padding: 22px 20px;
+  color: #746d7e;
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .history-cycles-card__heading {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .history-cycles-chart-wrap {
+    padding: 12px 10px 0;
+  }
+
+  .history-cycles-chart {
+    min-height: 190px;
+  }
+
+  .history-cycles-table {
+    display: grid;
+    gap: 10px;
+    padding: 12px 14px 14px;
+  }
+
+  .history-cycles-table__header {
+    display: none;
+  }
+
+  .history-cycles-table__row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 9px 14px;
+    min-height: 0;
+    padding: 12px;
+    border: 1px solid #e8e3ec;
+    border-radius: 10px;
+    background: #fff;
+  }
+
+  .history-cycles-table__row > div:first-child {
+    grid-column: 1 / -1;
+    padding-bottom: 7px;
+    border-bottom: 1px solid #eeeaf1;
+  }
+
+  .history-cycles-table__row > div[data-label] {
+    display: grid;
+    gap: 2px;
+  }
+
+  .history-cycles-table__row > div[data-label]::before {
+    content: attr(data-label);
+    color: #746d7e;
+    font-size: 9px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+}

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import CriterionIcon from "../components/CriterionIcon";
 import RelatorioCriterioDetalhe from "../components/RelatorioCriterioDetalhe";
+import RelatorioHistoricoCiclos from "../components/RelatorioHistoricoCiclos";
 import {
   formatarPeriodoCiclo,
   getCiclosAvaliacao,
@@ -17,6 +18,7 @@ import {
   getRelatorioComparacaoCiclos,
   getRelatorioDetalheCriterio,
   getRelatorioEvolucaoIndividual,
+  getRelatorioHistoricoCiclos,
   getRelatorioVisaoGeral,
   type FiltroCargoRelatorio,
   type FiltrosRelatorio,
@@ -183,6 +185,13 @@ function RelatoriosPage() {
   );
   const evolucaoPorMatricula = new Map(
     evolucaoIndividual.map((item) => [item.matricula, item])
+  );
+
+  const historicoCiclos = getRelatorioHistoricoCiclos(
+    ciclosDisponiveis,
+    ciclo,
+    usuarioAtual,
+    filtros
   );
 
   const faixaMedia =
@@ -689,8 +698,11 @@ function RelatoriosPage() {
               </div>
             ))}
           </div>
-        </div>
+    
+    </div>
       </section>
+      <RelatorioHistoricoCiclos historico={historicoCiclos} />
+
     </main>
   );
 }

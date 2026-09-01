@@ -564,3 +564,78 @@ export function getRelatorioDetalheCriterio(
     colaboradores,
   };
 }
+
+
+export interface RelatorioHistoricoCicloPonto {
+  cicloId: string;
+  ano: number;
+  ciclo: number;
+  status: CicloAvaliacao["status"];
+  media: number | null;
+  variacao: number | null;
+  quantidadeAvaliacoes: number;
+}
+
+export interface RelatorioHistoricoCiclos {
+  possuiHistorico: boolean;
+  pontos: RelatorioHistoricoCicloPonto[];
+}
+
+export function getRelatorioHistoricoCiclos(
+  ciclos: CicloAvaliacao[],
+  cicloReferencia: CicloAvaliacao,
+  usuario: Colaborador,
+  filtros?: FiltrosRelatorio
+): RelatorioHistoricoCiclos {
+  const ordenados = [...ciclos].sort(
+    (a, b) => a.ano - b.ano || a.ciclo - b.ciclo
+  );
+
+  const indiceReferencia = ordenados.findIndex(
+    (item) => item.id === cicloReferencia.id
+  );
+
+  const ateReferencia =
+    indiceReferencia >= 0
+      ? ordenados.slice(0, indiceReferencia + 1)
+      : ordenados;
+
+  let mediaAnterior: number | null = null;
+
+  const pontos = ateReferencia.map(
+    (cicloItem): RelatorioHistoricoCicloPonto => {
+      const relatorio = getRelatorioVisaoGeral(
+        cicloItem,
+        usuario,
+        filtros
+      );
+
+      const mediaAtual =
+        relatorio.mediaEquipe > 0 ? relatorio.mediaEquipe : null;
+
+      const variacao =
+        mediaAtual !== null && mediaAnterior !== null
+          ? mediaAtual - mediaAnterior
+          : null;
+
+      if (mediaAtual !== null) {
+        mediaAnterior = mediaAtual;
+      }
+
+      return {
+        cicloId: cicloItem.id,
+        ano: cicloItem.ano,
+        ciclo: cicloItem.ciclo,
+        status: cicloItem.status,
+        media: mediaAtual,
+        variacao,
+        quantidadeAvaliacoes: relatorio.avaliacoesComNota,
+      };
+    }
+  );
+
+  return {
+    possuiHistorico: pontos.filter((ponto) => ponto.media !== null).length >= 2,
+    pontos,
+  };
+}
