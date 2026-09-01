@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { can } from "../authorization/authorizationPolicy";
 import type { Colaborador } from "../types/Colaborador";
 import type {
   Observacao,
@@ -100,9 +101,41 @@ function ObservacoesColaborador({
     mostrarExcluidas
   );
 
-  const podeGerenciar =
-    usuarioAtual?.funcao === "GERENTE" ||
-    usuarioAtual?.funcao === "COORDENADOR";
+  const authorizationContext = usuarioAtual
+    ? {
+        actor: {
+          matricula: usuarioAtual.matricula,
+          funcao: usuarioAtual.funcao,
+          status: usuarioAtual.status,
+        },
+      }
+    : undefined;
+  const podeCriarObservacao = authorizationContext
+    ? can(authorizationContext, "observation.create", {
+        kind: "observation",
+        collaborator: colaborador,
+      })
+    : false;
+
+  function podeEditarObservacao(observacao?: Observacao) {
+    return authorizationContext
+      ? can(authorizationContext, "observation.edit", {
+          kind: "observation",
+          collaborator: colaborador,
+          observation: observacao,
+        })
+      : false;
+  }
+
+  function podeExcluirObservacao(observacao: Observacao) {
+    return authorizationContext
+      ? can(authorizationContext, "observation.delete", {
+          kind: "observation",
+          collaborator: colaborador,
+          observation: observacao,
+        })
+      : false;
+  }
 
   function limparFormulario() {
     setEditandoId(null);
@@ -127,7 +160,13 @@ function ObservacoesColaborador({
   }
 
   function salvar() {
-    if (!usuarioAtual || !podeGerenciar) return;
+    const observacaoEmEdicao = editandoId
+      ? observacoes.find((observacao) => observacao.id === editandoId)
+      : undefined;
+    const podeSalvar = editandoId
+      ? podeEditarObservacao(observacaoEmEdicao)
+      : podeCriarObservacao;
+    if (!usuarioAtual || !podeSalvar) return;
 
     if (!texto.trim()) {
       setErro("Digite o texto da observação.");
@@ -169,7 +208,7 @@ function ObservacoesColaborador({
   }
 
   function excluir(observacao: Observacao) {
-    if (!usuarioAtual || !podeGerenciar) return;
+    if (!usuarioAtual || !podeExcluirObservacao(observacao)) return;
 
     const confirmar = window.confirm(
       "Deseja realmente excluir esta observação? Ela permanecerá no histórico."
@@ -191,7 +230,7 @@ function ObservacoesColaborador({
           </p>
         </div>
 
-        {podeGerenciar && (
+        {podeCriarObservacao && (
           <div className="observation-panel__actions">
             <label className="observation-toggle">
               <input
@@ -228,7 +267,12 @@ function ObservacoesColaborador({
         )}
       </div>
 
-      {formAberto && podeGerenciar && (
+      {formAberto &&
+        (editandoId
+          ? podeEditarObservacao(
+              observacoes.find((observacao) => observacao.id === editandoId)
+            )
+          : podeCriarObservacao) && (
         <div className="observation-form">
           <div className="observation-form__grid">
             <label>
@@ -420,14 +464,16 @@ function ObservacoesColaborador({
                   )}
                 </div>
 
-                {!observacao.excluida && podeGerenciar && (
+                {!observacao.excluida &&
+                  (podeEditarObservacao(observacao) ||
+                    podeExcluirObservacao(observacao)) && (
                   <div
                     style={{
                       display: "flex",
                       gap: "8px",
                     }}
                   >
-                    <button
+                    {podeEditarObservacao(observacao) && <button
                       type="button"
                       onClick={() => iniciarEdicao(observacao)}
                       style={{
@@ -439,9 +485,9 @@ function ObservacoesColaborador({
                       }}
                     >
                       Editar
-                    </button>
+                    </button>}
 
-                    <button
+                    {podeExcluirObservacao(observacao) && <button
                       type="button"
                       onClick={() => excluir(observacao)}
                       style={{
@@ -453,7 +499,7 @@ function ObservacoesColaborador({
                       }}
                     >
                       Excluir
-                    </button>
+                    </button>}
                   </div>
                 )}
               </div>

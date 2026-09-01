@@ -1,5 +1,6 @@
 ﻿import { useLayoutEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { can } from "../authorization/authorizationPolicy";
 import CollaboratorIdentity from "../components/CollaboratorIdentity";
 import CriterionIcon from "../components/CriterionIcon";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
@@ -338,6 +339,19 @@ function ColaboradorDetalhePage() {
   }
 
   const todosColaboradores = getColaboradores();
+  const podeCriarObservacao = usuarioAtual
+    ? can(
+        {
+          actor: {
+            matricula: usuarioAtual.matricula,
+            funcao: usuarioAtual.funcao,
+            status: usuarioAtual.status,
+          },
+        },
+        "observation.create",
+        { kind: "observation", collaborator: colaborador }
+      )
+    : false;
   const gestorDireto = colaborador.gestorDiretoMatricula
     ? todosColaboradores.find(
         (item) => item.matricula === colaborador.gestorDiretoMatricula
@@ -471,8 +485,7 @@ function ColaboradorDetalhePage() {
             Editar cadastro
           </Link>
 
-          {(usuarioAtual?.funcao === "GERENTE" ||
-            usuarioAtual?.funcao === "COORDENADOR") && (
+          {podeCriarObservacao && (
             <button
               type="button"
               className="virtus-btn virtus-btn--outline collaborator-link-button"

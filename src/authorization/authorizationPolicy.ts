@@ -70,6 +70,17 @@ function decidir(
     );
   }
 
+  if (
+    capability === "observation.create" ||
+    capability === "observation.edit" ||
+    capability === "observation.delete"
+  ) {
+    return (
+      resource.kind === "observation" &&
+      (actor.funcao === "GERENTE" || actor.funcao === "COORDENADOR")
+    );
+  }
+
   if (resource.kind === "evaluation") {
     const actor = resolverAtor(context, resource.collaborators);
     if (!actor) return false;

@@ -6,10 +6,15 @@ import { getColaboradoresVisiveis } from "../services/visibilidadeColaboradores"
 import { instalarLocalStorageEmMemoria } from "../test/localStorageMock";
 import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
+import type { Observacao } from "../types/Observacao";
 import type { AuthorizationContext } from "./AuthorizationContext";
 import { AuthorizationError } from "./authorizationError";
 import { authorize, can, scopeCollaborators } from "./authorizationPolicy";
-import type { EvaluationResource, GoalResource } from "./ResourceContext";
+import type {
+  EvaluationResource,
+  GoalResource,
+  ObservationResource,
+} from "./ResourceContext";
 
 function pessoa(
   matricula: number,
@@ -86,6 +91,24 @@ describe("authorizationPolicy", () => {
     collaborators,
     cycle: ciclo,
   };
+  const observacaoDeOutroAutor: Observacao = {
+    id: "observacao-outro-autor",
+    colaboradorMatricula: direto.matricula,
+    tipo: "NEUTRA",
+    texto: "Observação criada por outro usuário",
+    comunicado: false,
+    autorMatricula: outroCoordenador.matricula,
+    autorNome: outroCoordenador.nome,
+    dataCriacao: "2026-01-01T00:00:00.000Z",
+    dataUltimaAtualizacao: "2026-01-01T00:00:00.000Z",
+    excluida: false,
+    historico: [],
+  };
+  const observationResource: ObservationResource = {
+    kind: "observation",
+    collaborator: direto,
+    observation: observacaoDeOutroAutor,
+  };
 
   it.each([
     ["GERENTE", gerente, true],
@@ -103,6 +126,54 @@ describe("authorizationPolicy", () => {
       ).toBe(esperado);
     }
   );
+
+  it.each([
+    ["observation.create", "GERENTE", gerente, true],
+    ["observation.create", "COORDENADOR", coordenador, true],
+    ["observation.create", "ANALISTA", direto, false],
+    ["observation.create", "CONSULTOR", pessoa(25, "CONSULTOR"), false],
+    ["observation.create", "ESTAGIARIO", pessoa(26, "ESTAGIARIO"), false],
+    ["observation.create", "SEM_FUNCAO", pessoa(27, undefined), false],
+    ["observation.edit", "GERENTE", gerente, true],
+    ["observation.edit", "COORDENADOR", coordenador, true],
+    ["observation.edit", "ANALISTA", direto, false],
+    ["observation.edit", "CONSULTOR", pessoa(28, "CONSULTOR"), false],
+    ["observation.edit", "ESTAGIARIO", pessoa(29, "ESTAGIARIO"), false],
+    ["observation.edit", "SEM_FUNCAO", pessoa(30, undefined), false],
+    ["observation.delete", "GERENTE", gerente, true],
+    ["observation.delete", "COORDENADOR", coordenador, true],
+    ["observation.delete", "ANALISTA", direto, false],
+    ["observation.delete", "CONSULTOR", pessoa(31, "CONSULTOR"), false],
+    ["observation.delete", "ESTAGIARIO", pessoa(32, "ESTAGIARIO"), false],
+    ["observation.delete", "SEM_FUNCAO", pessoa(33, undefined), false],
+  ] as const)(
+    "caracteriza %s para %s",
+    (capability, _perfil, actor, esperado) => {
+      expect(can(contexto(actor), capability, observationResource)).toBe(
+        esperado
+      );
+    }
+  );
+
+  it.each([
+    ["observation.edit", "GERENTE", gerente],
+    ["observation.edit", "COORDENADOR", coordenador],
+    ["observation.delete", "GERENTE", gerente],
+    ["observation.delete", "COORDENADOR", coordenador],
+  ] as const)(
+    "%s permite %s sobre observação de outro autor",
+    (capability, _perfil, actor) => {
+      expect(can(contexto(actor), capability, observationResource)).toBe(true);
+    }
+  );
+
+  it.each([
+    "observation.create",
+    "observation.edit",
+    "observation.delete",
+  ] as const)("nega %s para resource kind incorreto", (capability) => {
+    expect(can(contexto(gerente), capability, { kind: "global" })).toBe(false);
+  });
 
   it.each([
     ["COORDENADOR", coordenador, true],

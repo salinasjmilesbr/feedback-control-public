@@ -8,5 +8,8 @@ export type Capability =
   | "evaluation.edit.board"
   | "goal.approve.manager"
   | "goal.approve.coordinator"
+  | "observation.create"
+  | "observation.edit"
+  | "observation.delete"
   | "report.view"
   | "settings.manage";

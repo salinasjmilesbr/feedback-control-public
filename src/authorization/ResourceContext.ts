@@ -1,5 +1,6 @@
 import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
+import type { Observacao } from "../types/Observacao";
 
 export type GlobalResource = Readonly<{
   kind: "global";
@@ -24,11 +25,18 @@ export type GoalResource = Readonly<{
   cycle: CicloAvaliacao;
 }>;
 
+export type ObservationResource = Readonly<{
+  kind: "observation";
+  collaborator: Colaborador;
+  observation?: Observacao;
+}>;
+
 export type AuthorizationResource =
   | GlobalResource
   | CollaboratorListResource
   | EvaluationResource
-  | GoalResource;
+  | GoalResource
+  | ObservationResource;
 
 export type CollaboratorScopePurpose = "OPERATIONAL_TEAM" | "REPORT";
 
