@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import CriterionIcon from "../components/CriterionIcon";
+import RelatorioCriterioDetalhe from "../components/RelatorioCriterioDetalhe";
 import {
   formatarPeriodoCiclo,
   getCiclosAvaliacao,
@@ -14,6 +15,7 @@ import {
 } from "../services/escalaAvaliacaoStorage";
 import {
   getRelatorioComparacaoCiclos,
+  getRelatorioDetalheCriterio,
   getRelatorioEvolucaoIndividual,
   getRelatorioVisaoGeral,
   type FiltroCargoRelatorio,
@@ -69,6 +71,7 @@ function RelatoriosPage() {
   const [cargoFiltro, setCargoFiltro] = useState("");
   const [situacaoFiltro, setSituacaoFiltro] = useState("");
   const [faixaFiltro, setFaixaFiltro] = useState("");
+  const [criterioAbertoId, setCriterioAbertoId] = useState<string | null>(null);
 
   if (
     !usuarioAtual ||
@@ -186,6 +189,16 @@ function RelatoriosPage() {
     relatorio.mediaEquipe > 0
       ? getItemEscalaPorNota(relatorio.mediaEquipe)
       : undefined;
+
+  const detalheCriterioAberto = criterioAbertoId
+    ? getRelatorioDetalheCriterio(
+        criterioAbertoId,
+        ciclo,
+        cicloAnterior,
+        usuarioAtual,
+        filtros
+      )
+    : undefined;
 
   return (
     <main className="virtus-page reports-page">
@@ -492,25 +505,62 @@ function RelatoriosPage() {
           </div>
 
           <div className="reports-criteria">
-            {relatorio.criterios.map((criterio, criterioIndex) => (
-              <div className="reports-criterion" key={criterio.criterioId}>
-                <div className="reports-criterion__identity">
-                  <span className="reports-criterion__icon">
-                    <CriterionIcon index={criterioIndex} />
-                  </span>
-                  <div>
-                    <strong>{criterio.criterioNome}</strong>
-                    <small>
-                      {criterio.quantidadeAvaliacoes} avaliação
-                      {criterio.quantidadeAvaliacoes === 1 ? "" : "ões"}
-                    </small>
-                  </div>
+            {relatorio.criterios.map((criterio, criterioIndex) => {
+              const aberto = criterioAbertoId === criterio.criterioId;
+
+              return (
+                <div
+                  className={`reports-criterion-group${aberto ? " is-open" : ""}`}
+                  key={criterio.criterioId}
+                >
+                  <button
+                    type="button"
+                    className="reports-criterion reports-criterion--interactive"
+                    aria-expanded={aberto}
+                    onClick={() =>
+                      setCriterioAbertoId((atual) =>
+                        atual === criterio.criterioId
+                          ? null
+                          : criterio.criterioId
+                      )
+                    }
+                  >
+                    <div className="reports-criterion__identity">
+                      <span className="reports-criterion__icon">
+                        <CriterionIcon index={criterioIndex} />
+                      </span>
+                      <div>
+                        <strong>{criterio.criterioNome}</strong>
+                        <small>
+                          {criterio.quantidadeAvaliacoes} avaliação
+                          {criterio.quantidadeAvaliacoes === 1 ? "" : "ões"}
+                        </small>
+                      </div>
+                    </div>
+
+                    <div className="reports-criterion__action">
+                      <span className="reports-criterion__score">
+                        {criterio.media > 0
+                          ? formatarNota(criterio.media)
+                          : "—"}
+                      </span>
+                      <span className="reports-criterion__chevron">
+                        {aberto ? "−" : "+"}
+                      </span>
+                    </div>
+                  </button>
+
+                  {aberto &&
+                    detalheCriterioAberto?.criterioId ===
+                      criterio.criterioId && (
+                      <RelatorioCriterioDetalhe
+                        detalhe={detalheCriterioAberto}
+                        criterioIndex={criterioIndex}
+                      />
+                    )}
                 </div>
-                <span className="reports-criterion__score">
-                  {criterio.media > 0 ? formatarNota(criterio.media) : "—"}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       </div>

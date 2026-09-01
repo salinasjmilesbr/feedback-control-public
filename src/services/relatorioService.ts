@@ -433,3 +433,134 @@ export function getRelatorioEvolucaoIndividual(
       ];
     });
 }
+
+
+export interface RelatorioDetalheCriterioColaborador {
+  matricula: number;
+  nome: string;
+  funcao: Colaborador["funcao"];
+  senioridade: Colaborador["senioridade"];
+  notaAtual: number;
+  notaAnterior?: number;
+  variacao?: number;
+}
+
+export interface RelatorioDetalheCriterio {
+  criterioId: string;
+  criterioNome: string;
+  mediaAtual: number;
+  mediaAnterior?: number;
+  variacaoMedia?: number;
+  quantidadeAvaliacoes: number;
+  colaboradores: RelatorioDetalheCriterioColaborador[];
+}
+
+export function getRelatorioDetalheCriterio(
+  criterioId: string,
+  cicloAtual: CicloAvaliacao,
+  cicloAnterior: CicloAvaliacao | undefined,
+  usuario: Colaborador,
+  filtros?: FiltrosRelatorio
+): RelatorioDetalheCriterio | undefined {
+  const criterioModelo = criteriosAvaliacao.find(
+    (criterio) => criterio.id === criterioId
+  );
+
+  if (!criterioModelo) return undefined;
+
+  const escala = getEscalaAvaliacao();
+
+  const linhasAtuais = aplicarFiltrosRelatorio(
+    linhasDoEscopo(cicloAtual, usuario),
+    filtros,
+    escala
+  ).filter((linha) =>
+    possuiNotaConsolidada(linha.situacao, linha.feedback?.notaMedia ?? 0)
+  );
+
+  const linhasAnteriores = cicloAnterior
+    ? aplicarFiltrosRelatorio(
+        linhasDoEscopo(cicloAnterior, usuario),
+        filtros,
+        escala
+      ).filter((linha) =>
+        possuiNotaConsolidada(linha.situacao, linha.feedback?.notaMedia ?? 0)
+      )
+    : [];
+
+  const notaCriterio = (
+    linha: (typeof linhasAtuais)[number]
+  ): number =>
+    linha.feedback?.criteriosDetalhados?.find(
+      (criterio) => criterio.criterioId === criterioId
+    )?.nota ?? 0;
+
+  const notasAnterioresPorMatricula = new Map(
+    linhasAnteriores
+      .map((linha) => [linha.colaborador.matricula, notaCriterio(linha)] as const)
+      .filter(([, nota]) => nota > 0)
+  );
+
+  const colaboradores: RelatorioDetalheCriterioColaborador[] =
+    linhasAtuais
+      .flatMap((linha): RelatorioDetalheCriterioColaborador[] => {
+        const notaAtual = notaCriterio(linha);
+        if (notaAtual <= 0) return [];
+
+        const notaAnterior = notasAnterioresPorMatricula.get(
+          linha.colaborador.matricula
+        );
+
+        const item: RelatorioDetalheCriterioColaborador = {
+          matricula: linha.colaborador.matricula,
+          nome: linha.colaborador.nome,
+          funcao: linha.colaborador.funcao,
+          senioridade: linha.colaborador.senioridade,
+          notaAtual,
+        };
+
+        if (notaAnterior !== undefined) {
+          item.notaAnterior = notaAnterior;
+          item.variacao = notaAtual - notaAnterior;
+        }
+
+        return [item];
+      })
+      .sort((a, b) => {
+        const ordem = (item: RelatorioDetalheCriterioColaborador) => {
+          if (item.funcao === "COORDENADOR") return 1;
+          if (item.funcao === "CONSULTOR") return 2;
+          if (item.funcao === "ANALISTA" && item.senioridade === "SENIOR") return 3;
+          if (item.funcao === "ANALISTA" && item.senioridade === "PLENO") return 4;
+          if (item.funcao === "ANALISTA" && item.senioridade === "JUNIOR") return 5;
+          if (item.funcao === "ESTAGIARIO") return 6;
+          return 7;
+        };
+
+        const diferenca = ordem(a) - ordem(b);
+        return diferenca !== 0
+          ? diferenca
+          : a.nome.localeCompare(b.nome, "pt-BR");
+      });
+
+  const notasAtuais = colaboradores.map((item) => item.notaAtual);
+  const notasAnteriores = colaboradores
+    .map((item) => item.notaAnterior)
+    .filter((nota): nota is number => nota !== undefined && nota > 0);
+
+  const mediaAtual = media(notasAtuais);
+  const mediaAnterior = notasAnteriores.length
+    ? media(notasAnteriores)
+    : undefined;
+
+  return {
+    criterioId,
+    criterioNome: criterioModelo.nome,
+    mediaAtual,
+    mediaAnterior,
+    variacaoMedia:
+      mediaAnterior !== undefined ? mediaAtual - mediaAnterior : undefined,
+    quantidadeAvaliacoes: colaboradores.length,
+    colaboradores,
+  };
+}

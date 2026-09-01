@@ -242,9 +242,17 @@
   border-bottom: 0;
 }
 
-.reports-criterion > div {
+.reports-criterion > .reports-criterion__identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.reports-criterion__identity > div {
   display: grid;
   gap: 2px;
+  min-width: 0;
 }
 
 .reports-criterion strong {
@@ -1261,4 +1269,99 @@
   .reports-filters__grid {
     grid-template-columns: 1fr;
   }
+}
+
+
+/* VIRTUS — Relatórios / Parte 3B: gatilho do drill-down */
+.reports-criterion-group {
+  border-top: 1px solid #eeeaf1;
+}
+
+.reports-criterion-group:first-child {
+  border-top: 0;
+}
+
+.reports-criterion-group .reports-criterion {
+  border-top: 0;
+}
+
+.reports-criterion--interactive {
+  width: 100%;
+  border: 0;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.reports-criterion--interactive:hover {
+  background: #fcf9fd;
+}
+
+.reports-criterion--interactive:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 3px solid rgba(102, 0, 153, 0.15);
+  outline-offset: -3px;
+}
+
+.reports-criterion__action {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.reports-criterion__chevron {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: #f5f1f7;
+  color: #660099;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.reports-criterion-group.is-open > .reports-criterion--interactive {
+  background: #fcf9fd;
+}
+
+
+/* VIRTUS — Relatórios / Parte 3B: contrato estrutural da linha */
+.reports-criterion--interactive {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.reports-criterion--interactive .reports-criterion__score {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 720px) {
+  .reports-criterion--interactive {
+    display: flex;
+    align-items: center;
+  }
+
+  .reports-criterion__action {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+  }
+}
+
+
+/* VIRTUS — Relatórios / Parte 3B: centralização óptica do acionador */
+.reports-criterion__chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  padding: 0 0 1px;
 }
