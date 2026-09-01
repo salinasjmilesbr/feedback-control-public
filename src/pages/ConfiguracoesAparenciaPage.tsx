@@ -1,5 +1,6 @@
 ﻿import { useState, type ChangeEvent } from "react";
 import { useBranding } from "../contexts/BrandingContext";
+import { can } from "../authorization/authorizationPolicy";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import type { BrandingConfig } from "../types/Branding";
 import type { EscalaAvaliacao } from "../types/EscalaAvaliacao";
@@ -28,6 +29,19 @@ function ConfiguracoesAparenciaPage() {
   const [expectativasCargo, setExpectativasCargo] =
     useState<ExpectativasCargo>(getExpectativasCargo());
   const [mensagemExpectativas, setMensagemExpectativas] = useState("");
+  const podeGerenciarConfiguracoes = usuarioAtual
+    ? can(
+        {
+          actor: {
+            matricula: usuarioAtual.matricula,
+            funcao: usuarioAtual.funcao,
+            status: usuarioAtual.status,
+          },
+        },
+        "settings.manage",
+        { kind: "global" }
+      )
+    : false;
 
   function salvarExpectativas() {
     try {
@@ -138,7 +152,7 @@ function ConfiguracoesAparenciaPage() {
     setMensagemEscala("");
   }
 
-  if (!usuarioAtual || usuarioAtual.funcao !== "GERENTE") {
+  if (!usuarioAtual || !podeGerenciarConfiguracoes) {
     return (
       <div style={{ padding: "30px" }}>
         <h1>Acesso restrito</h1>

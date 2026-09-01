@@ -59,6 +59,10 @@ function decidir(
     return resource.kind === "global" && actor.funcao === "COORDENADOR";
   }
 
+  if (capability === "settings.manage") {
+    return resource.kind === "global" && actor.funcao === "GERENTE";
+  }
+
   if (resource.kind === "evaluation") {
     const actor = resolverAtor(context, resource.collaborators);
     if (!actor) return false;

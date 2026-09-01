@@ -78,7 +78,6 @@ function NavegacaoPrincipal() {
   const { usuarioAtual } = useUsuarioAtual();
   if (!usuarioAtual) return null;
 
-  const gerente = usuarioAtual.funcao === "GERENTE";
   const coordenador = usuarioAtual.funcao === "COORDENADOR";
   const avaliado =
     coordenador ||
@@ -115,6 +114,17 @@ function NavegacaoPrincipal() {
       },
     },
     "cycle.coordinator.list",
+    { kind: "global" }
+  );
+  const podeGerenciarConfiguracoes = can(
+    {
+      actor: {
+        matricula: usuarioAtual.matricula,
+        funcao: usuarioAtual.funcao,
+        status: usuarioAtual.status,
+      },
+    },
+    "settings.manage",
     { kind: "global" }
   );
 
@@ -158,7 +168,7 @@ function NavegacaoPrincipal() {
           </NavItem>
         )}
 
-        {gerente && (
+        {podeGerenciarConfiguracoes && (
           <NavItem
             to="/configuracoes/aparencia"
             icon={<IconSettings />}

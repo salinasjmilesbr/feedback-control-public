@@ -7,4 +7,5 @@ export type Capability =
   | "evaluation.edit.board"
   | "goal.approve.manager"
   | "goal.approve.coordinator"
-  | "report.view";
+  | "report.view"
+  | "settings.manage";
