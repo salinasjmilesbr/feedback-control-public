@@ -190,3 +190,106 @@ export function getRelatorioVisaoGeral(
     colaboradores,
   };
 }
+
+
+export interface RelatorioComparacaoCriterio {
+  criterioId: string;
+  criterioNome: string;
+  atual: number;
+  anterior: number;
+  variacao?: number;
+}
+
+export interface RelatorioComparacaoCiclos {
+  possuiComparacao: boolean;
+  mediaAtual: number;
+  mediaAnterior: number;
+  variacaoMedia?: number;
+  melhoraram: number;
+  mantiveram: number;
+  pioraram: number;
+  comparaveis: number;
+  criterios: RelatorioComparacaoCriterio[];
+}
+
+export function getRelatorioComparacaoCiclos(
+  cicloAtual: CicloAvaliacao,
+  cicloAnterior: CicloAvaliacao | undefined,
+  usuario: Colaborador
+): RelatorioComparacaoCiclos {
+  const atual = getRelatorioVisaoGeral(cicloAtual, usuario);
+
+  if (!cicloAnterior) {
+    return {
+      possuiComparacao: false,
+      mediaAtual: atual.mediaEquipe,
+      mediaAnterior: 0,
+      melhoraram: 0,
+      mantiveram: 0,
+      pioraram: 0,
+      comparaveis: 0,
+      criterios: atual.criterios.map((criterio) => ({
+        criterioId: criterio.criterioId,
+        criterioNome: criterio.criterioNome,
+        atual: criterio.media,
+        anterior: 0,
+      })),
+    };
+  }
+
+  const anterior = getRelatorioVisaoGeral(cicloAnterior, usuario);
+  const anterioresPorMatricula = new Map(
+    anterior.colaboradores
+      .filter((item) => item.possuiNotaConsolidada)
+      .map((item) => [item.matricula, item])
+  );
+
+  let melhoraram = 0;
+  let mantiveram = 0;
+  let pioraram = 0;
+
+  atual.colaboradores
+    .filter((item) => item.possuiNotaConsolidada)
+    .forEach((item) => {
+      const itemAnterior = anterioresPorMatricula.get(item.matricula);
+      if (!itemAnterior) return;
+
+      const variacao = item.notaMedia - itemAnterior.notaMedia;
+      if (variacao > 0.05) melhoraram += 1;
+      else if (variacao < -0.05) pioraram += 1;
+      else mantiveram += 1;
+    });
+
+  const criteriosAnteriores = new Map(
+    anterior.criterios.map((criterio) => [criterio.criterioId, criterio])
+  );
+
+  return {
+    possuiComparacao: true,
+    mediaAtual: atual.mediaEquipe,
+    mediaAnterior: anterior.mediaEquipe,
+    variacaoMedia:
+      atual.mediaEquipe > 0 && anterior.mediaEquipe > 0
+        ? atual.mediaEquipe - anterior.mediaEquipe
+        : undefined,
+    melhoraram,
+    mantiveram,
+    pioraram,
+    comparaveis: melhoraram + mantiveram + pioraram,
+    criterios: atual.criterios.map((criterio) => {
+      const criterioAnterior = criteriosAnteriores.get(criterio.criterioId);
+      const valorAnterior = criterioAnterior?.media ?? 0;
+
+      return {
+        criterioId: criterio.criterioId,
+        criterioNome: criterio.criterioNome,
+        atual: criterio.media,
+        anterior: valorAnterior,
+        variacao:
+          criterio.media > 0 && valorAnterior > 0
+            ? criterio.media - valorAnterior
+            : undefined,
+      };
+    }),
+  };
+}

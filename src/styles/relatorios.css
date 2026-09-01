@@ -537,3 +537,460 @@
     align-items: flex-start;
   }
 }
+
+
+/* VIRTUS — Relatórios / Parte 2A: evolução entre ciclos */
+.reports-evolution-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-bottom: 1px solid #eeeaf1;
+}
+
+.reports-evolution-summary > div {
+  min-height: 76px;
+  padding: 12px 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  border-right: 1px solid #eeeaf1;
+}
+
+.reports-evolution-summary > div:last-child {
+  border-right: 0;
+}
+
+.reports-evolution-people {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 9px 18px;
+  border-bottom: 1px solid #eeeaf1;
+  font-size: 12px;
+}
+
+.reports-evolution-people > strong {
+  color: #17131d;
+}
+
+.reports-evolution-people > span {
+  font-weight: 700;
+}
+
+.reports-evolution-summary span,
+.reports-evolution-summary small {
+  color: #746d7e;
+  font-size: 12px;
+}
+
+.reports-evolution-summary strong {
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+.reports-evolution-summary small {
+  line-height: 1.4;
+}
+
+.reports-evolution-criteria {
+  padding: 4px 18px 12px;
+}
+
+.reports-evolution-criteria__header,
+.reports-evolution-criteria__row {
+  display: grid;
+  grid-template-columns: minmax(300px, 1fr) 82px 82px 86px;
+  align-items: center;
+  gap: 10px;
+}
+
+.reports-evolution-criteria__header {
+  min-height: 38px;
+  color: #746d7e;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.reports-evolution-criteria__row {
+  min-height: 44px;
+  border-top: 1px solid #f0edf2;
+  font-size: 13px;
+}
+
+.reports-evolution-criteria__row > span {
+  font-weight: 600;
+  color: #655d70;
+}
+
+.reports-evolution-criteria__row > span:last-child {
+  font-weight: 800;
+}
+
+.reports-evolution-criteria__row .is-positive,
+.reports-evolution-summary .is-positive,
+.reports-evolution-people .is-positive {
+  color: #107c41;
+}
+
+.reports-evolution-criteria__row .is-negative,
+.reports-evolution-summary .is-negative,
+.reports-evolution-people .is-negative {
+  color: #b42318;
+}
+
+.reports-evolution-criteria__row .is-neutral,
+.reports-evolution-summary .is-neutral,
+.reports-evolution-people .is-neutral {
+  color: #655d70;
+}
+
+.reports-evolution-empty {
+  padding: 24px 20px;
+  color: #6d6577;
+}
+
+@media (max-width: 720px) {
+  .reports-evolution-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .reports-evolution-summary > div {
+    min-height: 78px;
+    border-right: 0;
+    border-bottom: 1px solid #eeeaf1;
+  }
+
+  .reports-evolution-summary > div:last-child {
+    border-bottom: 0;
+  }
+
+  .reports-evolution-people {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 14px;
+  }
+
+  .reports-evolution-criteria {
+    padding: 8px 14px 16px;
+  }
+
+  .reports-evolution-criteria__header,
+  .reports-evolution-criteria__row {
+    grid-template-columns: minmax(130px, 1fr) 58px 58px 64px;
+    gap: 8px;
+  }
+
+  .reports-evolution-criteria__header {
+    font-size: 9px;
+  }
+
+  .reports-evolution-criteria__row {
+    font-size: 11px;
+  }
+}
+
+
+.reports-evolution-criterion-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.reports-evolution-criterion-name strong {
+  min-width: 0;
+}
+
+.reports-evolution-criterion-icon {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #f4eaf8;
+  color: #660099;
+}
+
+.reports-evolution-criterion-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+
+@media (max-width: 720px) {
+  .reports-evolution-criterion-icon {
+    width: 24px;
+    height: 24px;
+    flex-basis: 24px;
+    border-radius: 7px;
+  }
+
+  .reports-evolution-criterion-icon svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .reports-evolution-criterion-name {
+    gap: 7px;
+  }
+}
+
+
+/* VIRTUS — Relatórios / Parte 2A: arquitetura desktop em duas colunas */
+.reports-evolution-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 30%) minmax(0, 1fr);
+  min-height: 0;
+}
+
+.reports-evolution-overview {
+  display: grid;
+  align-content: start;
+  border-right: 1px solid #eeeaf1;
+  background: #fcfbfd;
+}
+
+.reports-evolution-metric {
+  display: grid;
+  gap: 3px;
+  padding: 15px 18px;
+  border-bottom: 1px solid #eeeaf1;
+}
+
+.reports-evolution-metric > span {
+  color: #746d7e;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.reports-evolution-metric > strong {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.reports-evolution-metric--highlight {
+  background: rgba(102, 0, 153, 0.035);
+}
+
+.reports-evolution-overview .reports-evolution-people {
+  display: grid;
+  align-items: start;
+  gap: 8px;
+  padding: 15px 18px 18px;
+  border-bottom: 0;
+  font-size: 13px;
+}
+
+.reports-evolution-overview .reports-evolution-people > strong {
+  margin-bottom: 3px;
+  font-size: 14px;
+}
+
+.reports-evolution-layout .reports-evolution-criteria {
+  padding: 8px 18px 12px;
+}
+
+.reports-evolution-layout .reports-evolution-criteria__header,
+.reports-evolution-layout .reports-evolution-criteria__row {
+  grid-template-columns: minmax(250px, 1fr) 72px 72px 82px;
+  gap: 8px;
+}
+
+.reports-evolution-layout .reports-evolution-criteria__header {
+  min-height: 34px;
+}
+
+.reports-evolution-layout .reports-evolution-criteria__row {
+  min-height: 46px;
+}
+
+.reports-evolution-current {
+  color: #17131d !important;
+  font-weight: 800 !important;
+}
+
+@media (max-width: 900px) {
+  .reports-evolution-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .reports-evolution-overview {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border-right: 0;
+    border-bottom: 1px solid #eeeaf1;
+    background: #fff;
+  }
+
+  .reports-evolution-metric {
+    border-right: 1px solid #eeeaf1;
+  }
+
+  .reports-evolution-metric:nth-child(3) {
+    border-right: 0;
+  }
+
+  .reports-evolution-overview .reports-evolution-people {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    border-top: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .reports-evolution-overview {
+    grid-template-columns: 1fr;
+  }
+
+  .reports-evolution-metric {
+    min-height: 74px;
+    border-right: 0;
+  }
+
+  .reports-evolution-overview .reports-evolution-people {
+    display: grid;
+    gap: 6px;
+  }
+
+  .reports-evolution-layout .reports-evolution-criteria__header,
+  .reports-evolution-layout .reports-evolution-criteria__row {
+    grid-template-columns: minmax(130px, 1fr) 58px 58px 64px;
+    gap: 8px;
+  }
+}
+
+
+.reports-criterion__identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.reports-criterion__identity > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.reports-criterion__icon {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #f4eaf8;
+  color: #660099;
+}
+
+.reports-criterion__icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+
+@media (max-width: 720px) {
+  .reports-criterion__icon {
+    width: 24px;
+    height: 24px;
+    flex-basis: 24px;
+    border-radius: 7px;
+  }
+
+  .reports-criterion__icon svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .reports-criterion__identity {
+    gap: 8px;
+  }
+
+  .reports-evolution-overview .reports-evolution-people {
+    font-size: 12px;
+  }
+
+  .reports-evolution-overview .reports-evolution-people > strong {
+    font-size: 13px;
+  }
+}
+
+
+/* VIRTUS — fix alinhamento dos ícones em Média por critério */
+.reports-criterion {
+  display: flex;
+  align-items: center;
+}
+
+.reports-criterion__identity {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.reports-criterion__identity > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.reports-criterion__icon {
+  align-self: center;
+}
+
+@media (max-width: 720px) {
+  .reports-criterion__identity {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .reports-criterion__identity > div {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+
+/* VIRTUS — fix V2: vence a regra genérica .reports-criterion > div */
+.reports-criterion > .reports-criterion__identity {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.reports-criterion > .reports-criterion__identity > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.reports-criterion > .reports-criterion__identity .reports-criterion__icon {
+  align-self: center;
+  flex: 0 0 28px;
+}
+
+@media (max-width: 720px) {
+  .reports-criterion > .reports-criterion__identity {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .reports-criterion > .reports-criterion__identity .reports-criterion__icon {
+    flex-basis: 24px;
+  }
+}

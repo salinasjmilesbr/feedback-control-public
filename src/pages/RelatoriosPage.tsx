@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
+import CriterionIcon from "../components/CriterionIcon";
 import {
   formatarPeriodoCiclo,
   getCiclosAvaliacao,
@@ -9,7 +10,10 @@ import {
   formatarNota,
   getItemEscalaPorNota,
 } from "../services/escalaAvaliacaoStorage";
-import { getRelatorioVisaoGeral } from "../services/relatorioService";
+import {
+  getRelatorioComparacaoCiclos,
+  getRelatorioVisaoGeral,
+} from "../services/relatorioService";
 import type { SituacaoAvaliacaoCiclo } from "../services/cicloEquipeService";
 import "../styles/relatorios.css";
 
@@ -93,6 +97,22 @@ function RelatoriosPage() {
     ciclosDisponiveis[0];
 
   const relatorio = getRelatorioVisaoGeral(ciclo, usuarioAtual);
+
+  const ciclosOrdenados = [...ciclosDisponiveis].sort(
+    (a, b) => a.ano - b.ano || a.ciclo - b.ciclo
+  );
+  const indiceOrdenado = ciclosOrdenados.findIndex(
+    (item) => item.id === ciclo.id
+  );
+  const cicloAnterior =
+    indiceOrdenado > 0 ? ciclosOrdenados[indiceOrdenado - 1] : undefined;
+
+  const comparacao = getRelatorioComparacaoCiclos(
+    ciclo,
+    cicloAnterior,
+    usuarioAtual
+  );
+
   const faixaMedia =
     relatorio.mediaEquipe > 0
       ? getItemEscalaPorNota(relatorio.mediaEquipe)
@@ -168,6 +188,99 @@ function RelatoriosPage() {
         </article>
       </section>
 
+      <section className="reports-card reports-evolution-card">
+        <div className="reports-card__heading reports-evolution-heading">
+          <div>
+            <h2>Evolução entre ciclos</h2>
+            <p>
+              {cicloAnterior
+                ? `Comparação com ${cicloAnterior.ano} • Ciclo ${cicloAnterior.ciclo}.`
+                : "Não existe ciclo anterior disponível para comparação."}
+            </p>
+          </div>
+        </div>
+
+        {comparacao.possuiComparacao ? (
+          <div className="reports-evolution-layout">
+            <aside className="reports-evolution-overview">
+              <div className="reports-evolution-metric">
+                <span>Média atual</span>
+                <strong>{comparacao.mediaAtual > 0 ? formatarNota(comparacao.mediaAtual) : "—"}</strong>
+              </div>
+
+              <div className="reports-evolution-metric">
+                <span>Média anterior</span>
+                <strong>{comparacao.mediaAnterior > 0 ? formatarNota(comparacao.mediaAnterior) : "—"}</strong>
+              </div>
+
+              <div className="reports-evolution-metric reports-evolution-metric--highlight">
+                <span>Evolução</span>
+                <strong className={
+                  comparacao.variacaoMedia === undefined
+                    ? ""
+                    : comparacao.variacaoMedia > 0.05
+                    ? "is-positive"
+                    : comparacao.variacaoMedia < -0.05
+                    ? "is-negative"
+                    : "is-neutral"
+                }>
+                  {comparacao.variacaoMedia === undefined
+                    ? "—"
+                    : `${comparacao.variacaoMedia > 0 ? "+" : ""}${formatarNota(comparacao.variacaoMedia)}`}
+                </strong>
+              </div>
+
+              <div className="reports-evolution-people">
+                <strong>{comparacao.comparaveis} colaboradores comparáveis</strong>
+                <span className="is-positive">↑ {comparacao.melhoraram} melhoraram</span>
+                <span className="is-neutral">→ {comparacao.mantiveram} mantiveram</span>
+                <span className="is-negative">↓ {comparacao.pioraram} pioraram</span>
+              </div>
+            </aside>
+
+            <div className="reports-evolution-criteria">
+              <div className="reports-evolution-criteria__header">
+                <span>Critério</span>
+                <span>Anterior</span>
+                <span>Atual</span>
+                <span>Evolução</span>
+              </div>
+              {comparacao.criterios.map((criterio, criterioIndex) => (
+                <div className="reports-evolution-criteria__row" key={criterio.criterioId}>
+                  <div className="reports-evolution-criterion-name">
+                    <span className="reports-evolution-criterion-icon">
+                      <CriterionIcon index={criterioIndex} />
+                    </span>
+                    <strong>{criterio.criterioNome}</strong>
+                  </div>
+                  <span>{criterio.anterior > 0 ? formatarNota(criterio.anterior) : "—"}</span>
+                  <span className="reports-evolution-current">
+                    {criterio.atual > 0 ? formatarNota(criterio.atual) : "—"}
+                  </span>
+                  <span className={
+                    criterio.variacao === undefined
+                      ? ""
+                      : criterio.variacao > 0.05
+                      ? "is-positive"
+                      : criterio.variacao < -0.05
+                      ? "is-negative"
+                      : "is-neutral"
+                  }>
+                    {criterio.variacao === undefined
+                      ? "—"
+                      : `${criterio.variacao > 0 ? "+" : ""}${formatarNota(criterio.variacao)}`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="reports-evolution-empty">
+            Selecione um ciclo que possua um ciclo anterior para visualizar a evolução.
+          </div>
+        )}
+      </section>
+
       <div className="reports-grid">
         <section className="reports-card">
           <div className="reports-card__heading">
@@ -212,14 +325,19 @@ function RelatoriosPage() {
           </div>
 
           <div className="reports-criteria">
-            {relatorio.criterios.map((criterio) => (
+            {relatorio.criterios.map((criterio, criterioIndex) => (
               <div className="reports-criterion" key={criterio.criterioId}>
-                <div>
-                  <strong>{criterio.criterioNome}</strong>
-                  <small>
-                    {criterio.quantidadeAvaliacoes} avaliação
-                    {criterio.quantidadeAvaliacoes === 1 ? "" : "ões"}
-                  </small>
+                <div className="reports-criterion__identity">
+                  <span className="reports-criterion__icon">
+                    <CriterionIcon index={criterioIndex} />
+                  </span>
+                  <div>
+                    <strong>{criterio.criterioNome}</strong>
+                    <small>
+                      {criterio.quantidadeAvaliacoes} avaliação
+                      {criterio.quantidadeAvaliacoes === 1 ? "" : "ões"}
+                    </small>
+                  </div>
                 </div>
                 <span className="reports-criterion__score">
                   {criterio.media > 0 ? formatarNota(criterio.media) : "—"}
