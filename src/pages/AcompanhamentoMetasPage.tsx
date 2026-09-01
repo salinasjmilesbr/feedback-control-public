@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { can } from "../authorization/authorizationPolicy";
+import type { AuthorizationContext } from "../authorization/AuthorizationContext";
+import type { GoalResource } from "../authorization/ResourceContext";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import CollaboratorIdentity from "../components/CollaboratorIdentity";
 import {
@@ -15,7 +18,6 @@ import {
   getMetasDoColaboradorNoCiclo,
   metaEstaAprovada,
   metaExigeAprovacaoCoordenador,
-  podeAprovarMetaNoCiclo,
 } from "../services/metaStorage";
 import { getColaboradorEfetivoNoCiclo } from "../services/historicoOrganizacionalStorage";
 import type { Meta } from "../types/Meta";
@@ -79,12 +81,31 @@ function AcompanhamentoMetasPage() {
     cicloAtual,
     colaboradores
   );
-  const podeAcessar = podeAprovarMetaNoCiclo(
-    usuario,
-    colaboradorAtual,
-    colaboradores,
-    cicloAtual
+  const authorizationContext: AuthorizationContext = {
+    actor: {
+      matricula: usuario.matricula,
+      funcao: usuario.funcao,
+      status: usuario.status,
+    },
+  };
+  const goalResource: GoalResource = {
+    kind: "goal",
+    owner: colaboradorAtual,
+    collaborators: colaboradores,
+    cycle: cicloAtual,
+  };
+  const podeAprovarComoGerente = can(
+    authorizationContext,
+    "goal.approve.manager",
+    goalResource
   );
+  const podeAprovarComoCoordenador = can(
+    authorizationContext,
+    "goal.approve.coordinator",
+    goalResource
+  );
+  const podeAcessar =
+    podeAprovarComoGerente || podeAprovarComoCoordenador;
 
   if (!podeAcessar) {
     return (
@@ -124,18 +145,11 @@ function AcompanhamentoMetasPage() {
     : 0;
 
   const pendentesDoPerfil = metas.filter((meta) => {
-    if (
-      !podeAprovarMetaNoCiclo(
-        usuario,
-        colaboradorAtual,
-        colaboradores,
-        cicloAtual
-      )
-    ) {
+    if (!podeAcessar) {
       return false;
     }
 
-    return usuario.funcao === "GERENTE"
+    return podeAprovarComoGerente
       ? !meta.aprovacaoGerente
       : !meta.aprovacaoCoordenador;
   }).length;
@@ -164,15 +178,8 @@ function AcompanhamentoMetasPage() {
     const aprovada = metaEstaAprovada(meta, colaboradorAtual, colaboradores);
     const podeAprovarDoPerfil =
       cicloAtual.status === "ATIVO" &&
-      podeAprovarMetaNoCiclo(
-        usuario,
-        colaboradorAtual,
-        colaboradores,
-        cicloAtual
-      ) &&
-      (usuario.funcao === "GERENTE"
-        ? !meta.aprovacaoGerente
-        : !meta.aprovacaoCoordenador);
+      ((podeAprovarComoGerente && !meta.aprovacaoGerente) ||
+        (podeAprovarComoCoordenador && !meta.aprovacaoCoordenador));
 
     return (
       <article className="goals-manager-card" key={meta.id}>
@@ -248,13 +255,7 @@ function AcompanhamentoMetasPage() {
                 checked={Boolean(meta.aprovacaoCoordenador)}
                 disabled={
                   Boolean(meta.aprovacaoCoordenador) ||
-                  usuario.funcao !== "COORDENADOR" ||
-                  !podeAprovarMetaNoCiclo(
-                    usuario,
-                    colaboradorAtual,
-                    colaboradores,
-                    cicloAtual
-                  ) ||
+                  !podeAprovarComoCoordenador ||
                   cicloAtual.status !== "ATIVO"
                 }
                 onChange={() => aprovar(meta)}
@@ -266,8 +267,7 @@ function AcompanhamentoMetasPage() {
                     ? `${meta.aprovacaoCoordenador.nome} · ${formatarDataHora(
                         meta.aprovacaoCoordenador.data
                       )}`
-                    : usuario.funcao === "COORDENADOR" &&
-                      podeAprovarDoPerfil
+                    : podeAprovarComoCoordenador && podeAprovarDoPerfil
                     ? "Marque para aprovar esta meta."
                     : "Aguardando aprovação."}
                 </small>
@@ -283,7 +283,7 @@ function AcompanhamentoMetasPage() {
               checked={Boolean(meta.aprovacaoGerente)}
               disabled={
                 Boolean(meta.aprovacaoGerente) ||
-                usuario.funcao !== "GERENTE" ||
+                !podeAprovarComoGerente ||
                 cicloAtual.status !== "ATIVO"
               }
               onChange={() => aprovar(meta)}
@@ -295,7 +295,7 @@ function AcompanhamentoMetasPage() {
                   ? `${meta.aprovacaoGerente.nome} · ${formatarDataHora(
                       meta.aprovacaoGerente.data
                     )}`
-                  : usuario.funcao === "GERENTE" && podeAprovarDoPerfil
+                  : podeAprovarComoGerente && podeAprovarDoPerfil
                   ? "Marque para aprovar esta meta."
                   : "Aguardando aprovação."}
               </small>

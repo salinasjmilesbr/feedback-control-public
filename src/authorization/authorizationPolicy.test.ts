@@ -459,6 +459,196 @@ describe("authorizationPolicy", () => {
     ).toBe(false);
   });
 
+  it("caracteriza os papéis de aprovação do gerente responsável", () => {
+    expect(
+      can(contexto(gerente), "goal.approve.manager", goalResource)
+    ).toBe(true);
+    expect(
+      can(contexto(gerente), "goal.approve.coordinator", goalResource)
+    ).toBe(false);
+  });
+
+  it("caracteriza os papéis de aprovação do coordenador direto", () => {
+    expect(
+      can(contexto(coordenador), "goal.approve.manager", goalResource)
+    ).toBe(false);
+    expect(
+      can(contexto(coordenador), "goal.approve.coordinator", goalResource)
+    ).toBe(true);
+  });
+
+  it("nega aprovação ao coordenador que participa somente do colegiado", () => {
+    const resource: GoalResource = {
+      ...goalResource,
+      owner: apenasColegiado,
+    };
+
+    expect(
+      can(contexto(coordenador), "goal.approve.manager", resource)
+    ).toBe(false);
+    expect(
+      can(contexto(coordenador), "goal.approve.coordinator", resource)
+    ).toBe(false);
+  });
+
+  it("nega aprovação ao gerente fora da cadeia", () => {
+    const gerenteExterno = pessoa(30, "GERENTE");
+    const resource: GoalResource = {
+      ...goalResource,
+      collaborators: [...collaborators, gerenteExterno],
+    };
+
+    expect(
+      can(contexto(gerenteExterno), "goal.approve.manager", resource)
+    ).toBe(false);
+    expect(
+      can(contexto(gerenteExterno), "goal.approve.coordinator", resource)
+    ).toBe(false);
+  });
+
+  it.each([
+    ["ANALISTA", pessoa(31, "ANALISTA")],
+    ["CONSULTOR", pessoa(32, "CONSULTOR")],
+    ["ESTAGIARIO", pessoa(33, "ESTAGIARIO")],
+  ] as const)("nega aprovação ao perfil %s", (_perfil, actor) => {
+    const resource: GoalResource = {
+      ...goalResource,
+      collaborators: [...collaborators, actor],
+    };
+
+    expect(can(contexto(actor), "goal.approve.manager", resource)).toBe(false);
+    expect(
+      can(contexto(actor), "goal.approve.coordinator", resource)
+    ).toBe(false);
+  });
+
+  it("nega aprovação quando a função está ausente", () => {
+    const actor = pessoa(34, undefined);
+    const resource: GoalResource = {
+      ...goalResource,
+      collaborators: [...collaborators, actor],
+    };
+
+    expect(can(contexto(actor), "goal.approve.manager", resource)).toBe(false);
+    expect(
+      can(contexto(actor), "goal.approve.coordinator", resource)
+    ).toBe(false);
+  });
+
+  it("nega as duas capabilities quando o ator não é resolvido", () => {
+    const actorAusente = pessoa(35, "GERENTE");
+
+    expect(
+      can(contexto(actorAusente), "goal.approve.manager", goalResource)
+    ).toBe(false);
+    expect(
+      can(contexto(actorAusente), "goal.approve.coordinator", goalResource)
+    ).toBe(false);
+  });
+
+  it("preserva o responsável histórico na aprovação de metas", () => {
+    const coordenadorAnterior = pessoa(50, "COORDENADOR", gerente.matricula);
+    const coordenadorAtual = pessoa(51, "COORDENADOR", gerente.matricula);
+    const owner = pessoa(52, "ANALISTA", coordenadorAtual.matricula);
+    const movimento: MovimentacaoOrganizacional = {
+      id: "movimento-meta-policy-historico",
+      colaboradorMatricula: owner.matricula,
+      colaboradorNome: owner.nome,
+      tipo: "ALTERACAO_ESTRUTURA",
+      dataVigencia: "2027-06-01",
+      dataRegistro: "2027-06-01T12:00:00.000Z",
+      escopo: "CICLO_ATUAL_E_POSTERIORES",
+      anterior: {
+        status: "ATIVO",
+        cargo: "Analista",
+        area: "Área de teste",
+        funcao: "ANALISTA",
+        gestorDiretoMatricula: coordenadorAnterior.matricula,
+        gestorDiretoNome: coordenadorAnterior.nome,
+        avaliadoresColegiadoMatriculas: [],
+        avaliadoresColegiadoNomes: [],
+      },
+      atual: {
+        status: "ATIVO",
+        cargo: "Analista",
+        area: "Área de teste",
+        funcao: "ANALISTA",
+        gestorDiretoMatricula: coordenadorAtual.matricula,
+        gestorDiretoNome: coordenadorAtual.nome,
+        avaliadoresColegiadoMatriculas: [],
+        avaliadoresColegiadoNomes: [],
+      },
+    };
+    localStorage.setItem(
+      "feedback-control-historico-organizacional",
+      JSON.stringify([movimento])
+    );
+    const equipe = [gerente, coordenadorAnterior, coordenadorAtual, owner];
+    const resource: GoalResource = {
+      kind: "goal",
+      owner,
+      collaborators: equipe,
+      cycle: ciclo,
+    };
+
+    expect(
+      can(
+        contexto(coordenadorAnterior),
+        "goal.approve.coordinator",
+        resource
+      )
+    ).toBe(true);
+    expect(
+      can(
+        contexto(coordenadorAtual),
+        "goal.approve.coordinator",
+        resource
+      )
+    ).toBe(false);
+  });
+
+  it.each([
+    ["GERENTE_RESPONSAVEL", gerente, true],
+    ["COORDENADOR_DIRETO", coordenador, true],
+    ["ATOR_EXTERNO", externo, false],
+  ] as const)(
+    "caracteriza o agregado OR de metas para %s",
+    (_perfil, actor, esperado) => {
+      const podeAprovar =
+        can(contexto(actor), "goal.approve.manager", goalResource) ||
+        can(contexto(actor), "goal.approve.coordinator", goalResource);
+
+      expect(podeAprovar).toBe(esperado);
+    }
+  );
+
+  it("nega as capabilities de meta para resource.kind incorreto", () => {
+    expect(
+      can(contexto(gerente), "goal.approve.manager", { kind: "global" })
+    ).toBe(false);
+    expect(
+      can(contexto(coordenador), "goal.approve.coordinator", {
+        kind: "global",
+      })
+    ).toBe(false);
+  });
+
+  it("mantém o estado do ciclo separado das capabilities de aprovação", () => {
+    const cicloEncerrado: CicloAvaliacao = {
+      ...ciclo,
+      status: "ENCERRADO",
+    };
+    const resource: GoalResource = {
+      ...goalResource,
+      cycle: cicloEncerrado,
+    };
+
+    expect(can(contexto(gerente), "goal.approve.manager", resource)).toBe(true);
+    expect(
+      can(contexto(coordenador), "goal.approve.coordinator", resource)
+    ).toBe(true);
+  });
+
   it("mantém OPERATIONAL_TEAM equivalente a getColaboradoresVisiveis", () => {
     expect(
       scopeCollaborators(
