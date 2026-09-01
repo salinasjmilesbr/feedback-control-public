@@ -1,5 +1,6 @@
 export type Capability =
   | "collaborator.list"
+  | "cycle.management.view"
   | "evaluation.edit.manager"
   | "evaluation.edit.coordinator"
   | "evaluation.edit.board"

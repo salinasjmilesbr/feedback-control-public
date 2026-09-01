@@ -51,6 +51,10 @@ function decidir(
     );
   }
 
+  if (capability === "cycle.management.view") {
+    return resource.kind === "global" && actor.funcao === "GERENTE";
+  }
+
   if (resource.kind === "evaluation") {
     const actor = resolverAtor(context, resource.collaborators);
     if (!actor) return false;

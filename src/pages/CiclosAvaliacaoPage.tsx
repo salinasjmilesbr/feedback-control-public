@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { can } from "../authorization/authorizationPolicy";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import {
   criarCiclo,
@@ -45,10 +46,23 @@ function CiclosAvaliacaoPage() {
   const [metasIndividuaisEdicao, setMetasIndividuaisEdicao] =
     useState<0 | 1 | 2 | 3>(0);
   const [erro, setErro] = useState("");
+  const podeGerenciarCiclos = usuarioAtual
+    ? can(
+        {
+          actor: {
+            matricula: usuarioAtual.matricula,
+            funcao: usuarioAtual.funcao,
+            status: usuarioAtual.status,
+          },
+        },
+        "cycle.management.view",
+        { kind: "global" }
+      )
+    : false;
 
   void versao;
 
-  if (!usuarioAtual || usuarioAtual.funcao !== "GERENTE") {
+  if (!usuarioAtual || !podeGerenciarCiclos) {
     return (
       <main className="virtus-page">
         <section className="cycle-empty">

@@ -95,6 +95,17 @@ function NavegacaoPrincipal() {
     "report.view",
     { kind: "global" }
   );
+  const podeGerenciarCiclos = can(
+    {
+      actor: {
+        matricula: usuarioAtual.matricula,
+        funcao: usuarioAtual.funcao,
+        status: usuarioAtual.status,
+      },
+    },
+    "cycle.management.view",
+    { kind: "global" }
+  );
 
   return (
     <nav className="app-nav" aria-label="Navegação principal">
@@ -103,7 +114,7 @@ function NavegacaoPrincipal() {
           Início
         </NavItem>
 
-        {gerente && (
+        {podeGerenciarCiclos && (
           <NavItem to="/ciclos" icon={<IconCalendar />}>
             Ciclos
           </NavItem>
