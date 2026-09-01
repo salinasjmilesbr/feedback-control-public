@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { can } from "../authorization/authorizationPolicy";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import CriterionIcon from "../components/CriterionIcon";
 import RelatorioCriterioDetalhe from "../components/RelatorioCriterioDetalhe";
@@ -75,12 +76,21 @@ function RelatoriosPage() {
   const [situacaoFiltro, setSituacaoFiltro] = useState("");
   const [faixaFiltro, setFaixaFiltro] = useState("");
   const [criterioAbertoId, setCriterioAbertoId] = useState<string | null>(null);
+  const podeVerRelatorios = usuarioAtual
+    ? can(
+        {
+          actor: {
+            matricula: usuarioAtual.matricula,
+            funcao: usuarioAtual.funcao,
+            status: usuarioAtual.status,
+          },
+        },
+        "report.view",
+        { kind: "global" }
+      )
+    : false;
 
-  if (
-    !usuarioAtual ||
-    (usuarioAtual.funcao !== "GERENTE" &&
-      usuarioAtual.funcao !== "COORDENADOR")
-  ) {
+  if (!usuarioAtual || !podeVerRelatorios) {
     return (
       <main className="virtus-page reports-page">
         <section className="reports-empty">

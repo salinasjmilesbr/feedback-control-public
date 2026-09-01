@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
+import { can } from "../authorization/authorizationPolicy";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 
 function IconHome() {
@@ -83,6 +84,17 @@ function NavegacaoPrincipal() {
     coordenador ||
     usuarioAtual.funcao === "ANALISTA" ||
     usuarioAtual.funcao === "CONSULTOR";
+  const podeVerRelatorios = can(
+    {
+      actor: {
+        matricula: usuarioAtual.matricula,
+        funcao: usuarioAtual.funcao,
+        status: usuarioAtual.status,
+      },
+    },
+    "report.view",
+    { kind: "global" }
+  );
 
   return (
     <nav className="app-nav" aria-label="Navegação principal">
@@ -118,7 +130,7 @@ function NavegacaoPrincipal() {
           </NavItem>
         )}
 
-        {(gerente || coordenador) && (
+        {podeVerRelatorios && (
           <NavItem to="/relatorios" icon={<IconChart />}>
             Relatórios
           </NavItem>

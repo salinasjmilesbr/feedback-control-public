@@ -108,6 +108,9 @@ describe("authorizationPolicy", () => {
     ["GERENTE", gerente, true],
     ["COORDENADOR", coordenador, true],
     ["ANALISTA", direto, false],
+    ["CONSULTOR", pessoa(10, "CONSULTOR"), false],
+    ["ESTAGIARIO", pessoa(11, "ESTAGIARIO"), false],
+    ["SEM_FUNCAO", pessoa(12, undefined), false],
   ] as const)("caracteriza report.view para %s", (_perfil, actor, esperado) => {
     expect(can(contexto(actor), "report.view", { kind: "global" })).toBe(esperado);
   });
