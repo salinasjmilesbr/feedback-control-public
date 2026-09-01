@@ -1,11 +1,13 @@
 ﻿import { useEffect, useState, type CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { can } from "../authorization/authorizationPolicy";
+import type { AuthorizationContext } from "../authorization/AuthorizationContext";
+import type { EvaluationResource } from "../authorization/ResourceContext";
 import CriterionIcon from "../components/CriterionIcon";
 import { getColaboradorByMatricula, getColaboradores } from "../services/colaboradorStorage";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import CollaboratorIdentity from "../components/CollaboratorIdentity";
 import RoleExpectationsCard from "../components/RoleExpectationsCard";
-import { obterPermissoesAvaliacao } from "../services/permissaoAvaliacao";
 import { calcularProgressoAvaliacao } from "../services/progressoAvaliacao";
 import {
   formatarNota,
@@ -291,17 +293,47 @@ function EditarFeedbackPage() {
     )
     .filter((item) => item !== undefined);
 
-  const permissoes = obterPermissoesAvaliacao(
-    usuarioAtual,
-    colaborador,
-    colaboradores,
-    cicloDaAvaliacao
-  );
+  const authorizationContext: AuthorizationContext | undefined = usuarioAtual
+    ? {
+        actor: {
+          matricula: usuarioAtual.matricula,
+          funcao: usuarioAtual.funcao,
+          status: usuarioAtual.status,
+        },
+      }
+    : undefined;
+  const evaluationResource: EvaluationResource = {
+    kind: "evaluation",
+    evaluatedCollaborator: colaborador,
+    collaborators: colaboradores,
+    cycle: cicloDaAvaliacao,
+  };
+  const podeAvaliarComoGerente = authorizationContext
+    ? can(authorizationContext, "evaluation.edit.manager", evaluationResource)
+    : false;
+  const podeAvaliarComoCoordenador = authorizationContext
+    ? can(
+        authorizationContext,
+        "evaluation.edit.coordinator",
+        evaluationResource
+      )
+    : false;
+  const podeAvaliarComoColegiado = authorizationContext
+    ? can(authorizationContext, "evaluation.edit.board", evaluationResource)
+    : false;
+  const podeAvaliar =
+    podeAvaliarComoGerente ||
+    podeAvaliarComoCoordenador ||
+    podeAvaliarComoColegiado;
+  const papeisPermitidos: string[] = [];
+  if (podeAvaliarComoGerente) papeisPermitidos.push("Gerente");
+  if (podeAvaliarComoCoordenador) papeisPermitidos.push("Coordenador direto");
+  if (podeAvaliarComoColegiado) papeisPermitidos.push("Colegiado");
 
   function podeEditarPapel(papel: PapelAvaliador) {
-    if (papel === "gerente") return permissoes.podeAvaliarComoGerente;
-    if (papel === "coordenador") return permissoes.podeAvaliarComoCoordenador;
-    return permissoes.podeAvaliarComoColegiado;
+    if (papel === "gerente") return podeAvaliarComoGerente;
+    if (papel === "coordenador") return podeAvaliarComoCoordenador;
+    return podeAvaliarComoColegiado;
   }
 
   function atualizarNota(
@@ -392,7 +424,7 @@ function EditarFeedbackPage() {
               avaliador.matricula
             ] ?? 0;
           const podeEditar =
-            permissoes.podeAvaliarComoColegiado &&
+            podeAvaliarComoColegiado &&
             usuarioAtual?.matricula === avaliador.matricula;
 
           return (
@@ -893,8 +925,8 @@ function EditarFeedbackPage() {
           </span>
           <h3>Permissões nesta avaliação</h3>
           <div className="new-evaluation-role-list">
-            {permissoes.papeisPermitidos.length > 0 ? (
-              permissoes.papeisPermitidos.map((papel) => (
+            {papeisPermitidos.length > 0 ? (
+              papeisPermitidos.map((papel) => (
                 <span key={papel}>{papel}</span>
               ))
             ) : (
@@ -1231,7 +1263,7 @@ function EditarFeedbackPage() {
                       </label>
                       <textarea
                         value={avaliacoes[criterio.id].observacaoGerente}
-                        disabled={!permissoes.podeAvaliarComoGerente}
+                        disabled={!podeAvaliarComoGerente}
                         onChange={(event) =>
                           atualizarObservacao(
                             criterio.id,
@@ -1259,7 +1291,7 @@ function EditarFeedbackPage() {
                       </label>
                       <textarea
                         value={avaliacoes[criterio.id].observacaoCoordenador}
-                        disabled={!permissoes.podeAvaliarComoCoordenador}
+                        disabled={!podeAvaliarComoCoordenador}
                         onChange={(event) =>
                           atualizarObservacao(
                             criterio.id,
@@ -1487,7 +1519,7 @@ function EditarFeedbackPage() {
                   </label>
                   <textarea
                     value={feedbackFinalGerente}
-                    disabled={!permissoes.podeAvaliarComoGerente}
+                    disabled={!podeAvaliarComoGerente}
                     onChange={(event) => setFeedbackFinalGerente(event.target.value)}
                     style={{
                       width: "100%",
@@ -1509,7 +1541,7 @@ function EditarFeedbackPage() {
                   </label>
                   <textarea
                     value={feedbackFinalCoordenador}
-                    disabled={!permissoes.podeAvaliarComoCoordenador}
+                    disabled={!podeAvaliarComoCoordenador}
                     onChange={(event) =>
                       setFeedbackFinalCoordenador(event.target.value)
                     }
@@ -1555,7 +1587,7 @@ function EditarFeedbackPage() {
         </button>
 <button
           onClick={handleSalvarAlteracoes}
-          disabled={!permissoes.podeAvaliar}
+          disabled={!podeAvaliar}
           style={{
             padding: "12px 24px",
             borderRadius: "10px",
