@@ -63,6 +63,13 @@ function decidir(
     return resource.kind === "global" && actor.funcao === "GERENTE";
   }
 
+  if (capability === "cycle.team.panel.view") {
+    return (
+      resource.kind === "global" &&
+      (actor.funcao === "GERENTE" || actor.funcao === "COORDENADOR")
+    );
+  }
+
   if (resource.kind === "evaluation") {
     const actor = resolverAtor(context, resource.collaborators);
     if (!actor) return false;

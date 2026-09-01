@@ -1,4 +1,5 @@
 import { useNavigate, useParams } from "react-router-dom";
+import { can } from "../authorization/authorizationPolicy";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import {
   getCiclosAvaliacao,
@@ -50,12 +51,21 @@ function PainelCicloPage() {
   const { cicloId } = useParams();
   const navigate = useNavigate();
   const { usuarioAtual } = useUsuarioAtual();
+  const podeAcessarPainelCiclo = usuarioAtual
+    ? can(
+        {
+          actor: {
+            matricula: usuarioAtual.matricula,
+            funcao: usuarioAtual.funcao,
+            status: usuarioAtual.status,
+          },
+        },
+        "cycle.team.panel.view",
+        { kind: "global" }
+      )
+    : false;
 
-  if (
-    !usuarioAtual ||
-    (usuarioAtual.funcao !== "GERENTE" &&
-      usuarioAtual.funcao !== "COORDENADOR")
-  ) {
+  if (!usuarioAtual || !podeAcessarPainelCiclo) {
     return (
       <main className="virtus-page">
         <section className="cycle-empty">

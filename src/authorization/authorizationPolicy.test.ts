@@ -161,6 +161,22 @@ describe("authorizationPolicy", () => {
   });
 
   it.each([
+    ["GERENTE", gerente, true],
+    ["COORDENADOR", coordenador, true],
+    ["ANALISTA", direto, false],
+    ["CONSULTOR", pessoa(22, "CONSULTOR"), false],
+    ["ESTAGIARIO", pessoa(23, "ESTAGIARIO"), false],
+    ["SEM_FUNCAO", pessoa(24, undefined), false],
+  ] as const)(
+    "caracteriza cycle.team.panel.view para %s",
+    (_perfil, actor, esperado) => {
+      expect(
+        can(contexto(actor), "cycle.team.panel.view", { kind: "global" })
+      ).toBe(esperado);
+    }
+  );
+
+  it.each([
     ["evaluation.edit.manager", gerente, "podeAvaliarComoGerente"],
     [
       "evaluation.edit.coordinator",
