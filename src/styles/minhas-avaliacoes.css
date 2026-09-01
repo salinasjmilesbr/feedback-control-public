@@ -1,0 +1,222 @@
+/* =========================================================
+   MINHAS AVALIAÇÕES — ownership de layout da página
+   O CollaboratorIdentity controla apenas o conteúdo de identidade.
+   Esta folha controla composição, histórico e responsividade da página.
+   ========================================================= */
+
+.my-evaluations-page {
+  min-width: 0;
+}
+
+/* Header */
+.my-evaluations-page .evaluation-page-header {
+  margin-bottom: 22px;
+}
+
+/* Perfil + KPI */
+.my-evaluations-profile {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(170px, auto);
+  gap: 24px;
+  align-items: center;
+  padding: 20px 22px;
+  border: 1px solid #e7e3eb;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(35, 27, 43, 0.05);
+}
+
+.my-evaluations-profile > .collaborator-identity {
+  min-width: 0;
+}
+
+.my-evaluations-summary {
+  min-width: 170px;
+  padding: 12px 14px;
+  border: 1px solid
+    color-mix(in srgb, var(--brand-primary) 16%, #e7e3eb);
+  border-radius: 10px;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--brand-primary) 8%, white),
+      #fff
+    );
+  text-align: right;
+}
+
+.my-evaluations-summary strong,
+.my-evaluations-summary span {
+  display: block;
+}
+
+.my-evaluations-summary strong {
+  color: var(--brand-primary);
+  font-size: 28px;
+  line-height: 1;
+  font-weight: 800;
+}
+
+.my-evaluations-summary span {
+  margin-top: 5px;
+  color: #544d5d;
+  font-size: var(--virtus-font-label);
+  font-weight: 650;
+}
+
+/* Histórico */
+.my-evaluations-history {
+  margin-top: 24px;
+}
+
+.my-evaluations-history-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  overflow: hidden;
+  padding: 18px 20px;
+  border: 1px solid #e7e3eb;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(35, 27, 43, 0.05);
+}
+
+.my-evaluations-history-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--score-color, var(--brand-primary));
+}
+
+.my-evaluations-history-card__main {
+  min-width: 0;
+}
+
+.my-evaluations-history-card__cycle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.my-evaluations-history-card__cycle .evaluation-cycle-label {
+  color: var(--brand-text);
+  font-size: var(--virtus-font-body);
+  font-weight: 760;
+}
+
+.my-evaluations-history-card__status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 25px;
+  padding: 3px 9px;
+  border: 1px solid #b7e7c4;
+  border-radius: 999px;
+  background: #effaf2;
+  color: #18733a;
+  font-size: var(--virtus-font-label);
+  font-weight: 760;
+}
+
+.my-evaluations-history-card__score {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.my-evaluations-history-card__score > strong {
+  color: var(--score-color, var(--brand-primary));
+  font-size: 31px;
+  line-height: 1;
+  font-weight: 800;
+}
+
+.my-evaluations-history-card__score > div {
+  min-width: 0;
+}
+
+.my-evaluations-history-card__score span,
+.my-evaluations-history-card__score small {
+  display: block;
+}
+
+.my-evaluations-history-card__score span {
+  color: var(--brand-text-muted);
+  font-size: var(--virtus-font-body);
+  font-weight: 650;
+}
+
+.my-evaluations-history-card__score small {
+  margin-top: 2px;
+  color: var(--score-color, var(--brand-primary));
+  font-size: var(--virtus-font-label);
+  font-weight: 760;
+}
+
+.my-evaluations-history-card > .evaluation-btn {
+  flex: 0 0 auto;
+}
+
+/* Tablet/mobile */
+@media (max-width: 800px) {
+  .my-evaluations-profile {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    padding: 16px;
+  }
+
+  .my-evaluations-summary {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    text-align: left;
+  }
+
+  .my-evaluations-history-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 16px 16px 16px 20px;
+  }
+
+  .my-evaluations-history-card__main {
+    width: 100%;
+  }
+
+  .my-evaluations-history-card__score {
+    align-items: center;
+  }
+
+  .my-evaluations-history-card > .evaluation-btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .my-evaluations-profile {
+    padding: 14px;
+  }
+
+  .my-evaluations-summary {
+    padding: 12px 14px;
+  }
+
+  .my-evaluations-history-card {
+    padding: 15px 14px 15px 18px;
+  }
+
+  .my-evaluations-history-card__cycle {
+    gap: 8px;
+  }
+
+  .my-evaluations-history-card__score > strong {
+    font-size: 30px;
+  }
+}

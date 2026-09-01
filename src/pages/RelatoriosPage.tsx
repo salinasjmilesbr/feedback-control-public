@@ -6,14 +6,18 @@ import {
   formatarPeriodoCiclo,
   getCiclosAvaliacao,
 } from "../services/cicloAvaliacaoStorage";
+import { getColaboradores } from "../services/colaboradorStorage";
 import {
   formatarNota,
+  getEscalaAvaliacao,
   getItemEscalaPorNota,
 } from "../services/escalaAvaliacaoStorage";
 import {
   getRelatorioComparacaoCiclos,
   getRelatorioEvolucaoIndividual,
   getRelatorioVisaoGeral,
+  type FiltroCargoRelatorio,
+  type FiltrosRelatorio,
 } from "../services/relatorioService";
 import type { SituacaoAvaliacaoCiclo } from "../services/cicloEquipeService";
 import "../styles/relatorios.css";
@@ -61,6 +65,11 @@ function RelatoriosPage() {
       ""
   );
 
+  const [coordenadorFiltro, setCoordenadorFiltro] = useState("");
+  const [cargoFiltro, setCargoFiltro] = useState("");
+  const [situacaoFiltro, setSituacaoFiltro] = useState("");
+  const [faixaFiltro, setFaixaFiltro] = useState("");
+
   if (
     !usuarioAtual ||
     (usuarioAtual.funcao !== "GERENTE" &&
@@ -97,7 +106,55 @@ function RelatoriosPage() {
     ciclosDisponiveis.find((item) => item.id === cicloId) ??
     ciclosDisponiveis[0];
 
-  const relatorio = getRelatorioVisaoGeral(ciclo, usuarioAtual);
+  const relatorioBase = getRelatorioVisaoGeral(ciclo, usuarioAtual);
+
+  const filtros: FiltrosRelatorio = {
+    coordenadorMatricula:
+      coordenadorFiltro !== "" ? Number(coordenadorFiltro) : undefined,
+    cargo:
+      cargoFiltro !== "" ? (cargoFiltro as FiltroCargoRelatorio) : undefined,
+    situacao:
+      situacaoFiltro !== ""
+        ? (situacaoFiltro as SituacaoAvaliacaoCiclo)
+        : undefined,
+    faixaNota: faixaFiltro !== "" ? Number(faixaFiltro) : undefined,
+  };
+
+  const relatorio = getRelatorioVisaoGeral(ciclo, usuarioAtual, filtros);
+
+  const colaboradoresCadastro = getColaboradores();
+  const coordenadoresDisponiveis = Array.from(
+    new Set(
+      relatorioBase.colaboradores
+        .map((item) => item.gestorDiretoMatricula)
+        .filter((matricula): matricula is number => matricula !== undefined)
+    )
+  )
+    .map((matricula) =>
+      colaboradoresCadastro.find((item) => item.matricula === matricula)
+    )
+    .filter(
+      (item): item is NonNullable<typeof item> => Boolean(item)
+    )
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+
+  const escalaRelatorio = [...getEscalaAvaliacao()].sort(
+    (a, b) => b.nota - a.nota
+  );
+
+  const filtrosAtivos = [
+    usuarioAtual.funcao === "GERENTE" ? coordenadorFiltro : "",
+    cargoFiltro,
+    situacaoFiltro,
+    faixaFiltro,
+  ].filter(Boolean).length;
+
+  function limparFiltros() {
+    setCoordenadorFiltro("");
+    setCargoFiltro("");
+    setSituacaoFiltro("");
+    setFaixaFiltro("");
+  }
 
   const ciclosOrdenados = [...ciclosDisponiveis].sort(
     (a, b) => a.ano - b.ano || a.ciclo - b.ciclo
@@ -111,13 +168,15 @@ function RelatoriosPage() {
   const comparacao = getRelatorioComparacaoCiclos(
     ciclo,
     cicloAnterior,
-    usuarioAtual
+    usuarioAtual,
+    filtros
   );
 
   const evolucaoIndividual = getRelatorioEvolucaoIndividual(
     ciclo,
     cicloAnterior,
-    usuarioAtual
+    usuarioAtual,
+    filtros
   );
   const evolucaoPorMatricula = new Map(
     evolucaoIndividual.map((item) => [item.matricula, item])
@@ -168,6 +227,104 @@ function RelatoriosPage() {
         >
           {ciclo.status === "ATIVO" ? "Ativo" : "Encerrado"}
         </span>
+      </section>
+
+      <section className="reports-filters" aria-label="Filtros do relatório">
+        <div className="reports-filters__heading">
+          <div>
+            <strong>Filtros</strong>
+            <span>
+              {filtrosAtivos > 0
+                ? `${filtrosAtivos} filtro${filtrosAtivos === 1 ? "" : "s"} ativo${filtrosAtivos === 1 ? "" : "s"}`
+                : "Visão completa do ciclo"}
+            </span>
+          </div>
+
+          {filtrosAtivos > 0 && (
+            <button
+              type="button"
+              className="reports-filters__clear"
+              onClick={limparFiltros}
+            >
+              Limpar filtros
+            </button>
+          )}
+        </div>
+
+        <div className="reports-filters__grid">
+          {usuarioAtual.funcao === "GERENTE" && (
+            <label className="reports-filter-control">
+              <span>Coordenação</span>
+              <select
+                value={coordenadorFiltro}
+                onChange={(event) =>
+                  setCoordenadorFiltro(event.target.value)
+                }
+              >
+                <option value="">Todas</option>
+                {coordenadoresDisponiveis.map((coordenador) => (
+                  <option
+                    key={coordenador.matricula}
+                    value={coordenador.matricula}
+                  >
+                    {coordenador.nome}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          <label className="reports-filter-control">
+            <span>Cargo / senioridade</span>
+            <select
+              value={cargoFiltro}
+              onChange={(event) => setCargoFiltro(event.target.value)}
+            >
+              <option value="">Todos</option>
+              {usuarioAtual.funcao === "GERENTE" && (
+                <>
+                  <option value="COORDENADOR">Coordenador</option>
+                  <option value="CONSULTOR">Consultor</option>
+                </>
+              )}
+              <option value="ANALISTA_SENIOR">Analista Sênior</option>
+              <option value="ANALISTA_PLENO">Analista Pleno</option>
+              <option value="ANALISTA_JUNIOR">Analista Júnior</option>
+              <option value="ESTAGIARIO">Estagiário</option>
+            </select>
+          </label>
+
+          <label className="reports-filter-control">
+            <span>Status</span>
+            <select
+              value={situacaoFiltro}
+              onChange={(event) => setSituacaoFiltro(event.target.value)}
+            >
+              <option value="">Todos</option>
+              <option value="NAO_INICIADA">Não iniciada</option>
+              <option value="EM_ANDAMENTO">Em andamento</option>
+              <option value="PRONTA_PARA_FEEDBACK">Pronta para Feedback</option>
+              <option value="CONCLUIDA">Concluída</option>
+              <option value="SUSPENSA">Suspensa</option>
+              <option value="NAO_APLICAVEL">Não aplicável</option>
+            </select>
+          </label>
+
+          <label className="reports-filter-control">
+            <span>Faixa de nota</span>
+            <select
+              value={faixaFiltro}
+              onChange={(event) => setFaixaFiltro(event.target.value)}
+            >
+              <option value="">Todas</option>
+              {escalaRelatorio.map((item) => (
+                <option key={item.nota} value={item.nota}>
+                  {item.nota} — {item.significado}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </section>
 
       <section className="reports-kpis" aria-label="Indicadores gerais">

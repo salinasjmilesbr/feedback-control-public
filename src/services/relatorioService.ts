@@ -26,10 +26,86 @@ export interface RelatorioColaborador {
   nome: string;
   funcao: Colaborador["funcao"];
   senioridade: Colaborador["senioridade"];
+  gestorDiretoMatricula?: number;
   situacao: SituacaoAvaliacaoCiclo;
   notaMedia: number;
   possuiNotaConsolidada: boolean;
   faixa?: ItemEscalaAvaliacao;
+}
+
+
+
+export type FiltroCargoRelatorio =
+  | "COORDENADOR"
+  | "CONSULTOR"
+  | "ANALISTA_SENIOR"
+  | "ANALISTA_PLENO"
+  | "ANALISTA_JUNIOR"
+  | "ESTAGIARIO";
+
+export interface FiltrosRelatorio {
+  coordenadorMatricula?: number;
+  cargo?: FiltroCargoRelatorio;
+  situacao?: SituacaoAvaliacaoCiclo;
+  faixaNota?: number;
+}
+
+function atendeFiltroCargo(
+  colaborador: Colaborador,
+  cargo: FiltroCargoRelatorio | undefined
+): boolean {
+  if (!cargo) return true;
+  if (cargo === "COORDENADOR") return colaborador.funcao === "COORDENADOR";
+  if (cargo === "CONSULTOR") return colaborador.funcao === "CONSULTOR";
+  if (cargo === "ESTAGIARIO") return colaborador.funcao === "ESTAGIARIO";
+  if (cargo === "ANALISTA_SENIOR") {
+    return colaborador.funcao === "ANALISTA" && colaborador.senioridade === "SENIOR";
+  }
+  if (cargo === "ANALISTA_PLENO") {
+    return colaborador.funcao === "ANALISTA" && colaborador.senioridade === "PLENO";
+  }
+  if (cargo === "ANALISTA_JUNIOR") {
+    return colaborador.funcao === "ANALISTA" && colaborador.senioridade === "JUNIOR";
+  }
+  return true;
+}
+
+function aplicarFiltrosRelatorio(
+  linhas: ReturnType<typeof getPainelCiclo>,
+  filtros: FiltrosRelatorio | undefined,
+  escala: ItemEscalaAvaliacao[]
+) {
+  if (!filtros) return linhas;
+
+  return linhas.filter((linha) => {
+    if (
+      filtros.coordenadorMatricula !== undefined &&
+      linha.colaborador.gestorDiretoMatricula !== filtros.coordenadorMatricula
+    ) {
+      return false;
+    }
+
+    if (!atendeFiltroCargo(linha.colaborador, filtros.cargo)) {
+      return false;
+    }
+
+    if (filtros.situacao && linha.situacao !== filtros.situacao) {
+      return false;
+    }
+
+    if (filtros.faixaNota !== undefined) {
+      const notaMedia = linha.feedback?.notaMedia ?? 0;
+      if (!possuiNotaConsolidada(linha.situacao, notaMedia)) {
+        return false;
+      }
+
+      if (getItemEscalaPorNota(notaMedia, escala).nota !== filtros.faixaNota) {
+        return false;
+      }
+    }
+
+    return true;
+  });
 }
 
 export interface RelatorioVisaoGeral {
@@ -85,10 +161,15 @@ function linhasDoEscopo(
 
 export function getRelatorioVisaoGeral(
   ciclo: CicloAvaliacao,
-  usuario: Colaborador
+  usuario: Colaborador,
+  filtros?: FiltrosRelatorio
 ): RelatorioVisaoGeral {
-  const linhas = linhasDoEscopo(ciclo, usuario);
   const escala = getEscalaAvaliacao();
+  const linhas = aplicarFiltrosRelatorio(
+    linhasDoEscopo(ciclo, usuario),
+    filtros,
+    escala
+  );
 
   const colaboradores: RelatorioColaborador[] = linhas
     .map((linha) => {
@@ -100,6 +181,7 @@ export function getRelatorioVisaoGeral(
         nome: linha.colaborador.nome,
         funcao: linha.colaborador.funcao,
         senioridade: linha.colaborador.senioridade,
+        gestorDiretoMatricula: linha.colaborador.gestorDiretoMatricula,
         situacao: linha.situacao,
         notaMedia,
         possuiNotaConsolidada: consolidada,
@@ -215,9 +297,10 @@ export interface RelatorioComparacaoCiclos {
 export function getRelatorioComparacaoCiclos(
   cicloAtual: CicloAvaliacao,
   cicloAnterior: CicloAvaliacao | undefined,
-  usuario: Colaborador
+  usuario: Colaborador,
+  filtros?: FiltrosRelatorio
 ): RelatorioComparacaoCiclos {
-  const atual = getRelatorioVisaoGeral(cicloAtual, usuario);
+  const atual = getRelatorioVisaoGeral(cicloAtual, usuario, filtros);
 
   if (!cicloAnterior) {
     return {
@@ -237,7 +320,7 @@ export function getRelatorioComparacaoCiclos(
     };
   }
 
-  const anterior = getRelatorioVisaoGeral(cicloAnterior, usuario);
+  const anterior = getRelatorioVisaoGeral(cicloAnterior, usuario, filtros);
   const anterioresPorMatricula = new Map(
     anterior.colaboradores
       .filter((item) => item.possuiNotaConsolidada)
@@ -311,12 +394,13 @@ export interface RelatorioEvolucaoIndividual {
 export function getRelatorioEvolucaoIndividual(
   cicloAtual: CicloAvaliacao,
   cicloAnterior: CicloAvaliacao | undefined,
-  usuario: Colaborador
+  usuario: Colaborador,
+  filtros?: FiltrosRelatorio
 ): RelatorioEvolucaoIndividual[] {
   if (!cicloAnterior) return [];
 
-  const atual = getRelatorioVisaoGeral(cicloAtual, usuario);
-  const anterior = getRelatorioVisaoGeral(cicloAnterior, usuario);
+  const atual = getRelatorioVisaoGeral(cicloAtual, usuario, filtros);
+  const anterior = getRelatorioVisaoGeral(cicloAnterior, usuario, filtros);
 
   const anterioresPorMatricula = new Map(
     anterior.colaboradores

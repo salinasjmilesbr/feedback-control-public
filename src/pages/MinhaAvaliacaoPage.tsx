@@ -9,6 +9,7 @@ import {
   getItemEscalaPorNota,
 } from "../services/escalaAvaliacaoStorage";
 import "../styles/avaliacoes.css";
+import "../styles/minhas-avaliacoes.css";
 
 function MinhaAvaliacaoPage() {
   const navigate = useNavigate();
@@ -47,7 +48,7 @@ function MinhaAvaliacaoPage() {
     .sort((a, b) => b.ano - a.ano || b.ciclo - a.ciclo);
 
   return (
-    <main className="virtus-page evaluation-page">
+    <main className="virtus-page evaluation-page my-evaluations-page">
       <section className="evaluation-page-header">
         <div>
           <h1>Minhas Avaliações</h1>
@@ -80,9 +81,9 @@ function MinhaAvaliacaoPage() {
         </div>
       </section>
 
-      <section className="evaluation-profile-card evaluation-profile-card--identity">
+      <section className="my-evaluations-profile">
         <CollaboratorIdentity colaborador={usuarioAtual} variant="standard" />
-        <div className="evaluation-profile-card__summary">
+        <div className="my-evaluations-summary">
           <strong>{avaliacoesConcluidas.length}</strong>
           <span>{avaliacoesConcluidas.length === 1 ? "avaliação concluída" : "avaliações concluídas"}</span>
         </div>
@@ -97,7 +98,7 @@ function MinhaAvaliacaoPage() {
           </p>
         </section>
       ) : (
-        <section className="evaluation-history">
+        <section className="evaluation-history my-evaluations-history">
           <div className="evaluation-section-heading">
             <div>
               <span className="evaluation-eyebrow">Histórico</span>
@@ -108,21 +109,21 @@ function MinhaAvaliacaoPage() {
           <div className="evaluation-history-grid">
             {avaliacoesConcluidas.map((feedback) => (
               <article
-                className="evaluation-history-card evaluation-history-card--semantic score-semantic"
+                className="my-evaluations-history-card score-semantic"
                 style={estiloNota(feedback.notaMedia)}
                 key={feedback.id}
               >
-                <div className="evaluation-history-card__main">
-                  <div className="evaluation-history-card__cycle">
+                <div className="my-evaluations-history-card__main">
+                  <div className="my-evaluations-history-card__cycle">
                     <span className="evaluation-cycle-label">
                       {feedback.ano} • Ciclo {feedback.ciclo}
                     </span>
-                    <span className="evaluation-history-card__status">
+                    <span className="my-evaluations-history-card__status">
                       Concluída
                     </span>
                   </div>
 
-                  <div className="evaluation-history-card__score">
+                  <div className="my-evaluations-history-card__score">
                     <strong>{formatarNota(feedback.notaMedia)}</strong>
                     <div>
                       <span>Nota final</span>
