@@ -143,12 +143,10 @@ function possuiNotaConsolidada(
  * Participações como colegiado pertencem ao painel operacional, mas não entram
  * na consolidação de desempenho da equipe do coordenador.
  */
-function linhasDoEscopo(
-  ciclo: CicloAvaliacao,
+export function aplicarEscopoRelatorio<T extends { colaborador: Colaborador }>(
+  linhas: T[],
   usuario: Colaborador
-) {
-  const linhas = getPainelCiclo(ciclo, usuario);
-
+): T[] {
   if (usuario.funcao === "COORDENADOR") {
     return linhas.filter(
       (linha) =>
@@ -157,6 +155,14 @@ function linhasDoEscopo(
   }
 
   return linhas;
+}
+
+function linhasDoEscopo(
+  ciclo: CicloAvaliacao,
+  usuario: Colaborador
+) {
+  const linhas = getPainelCiclo(ciclo, usuario);
+  return aplicarEscopoRelatorio(linhas, usuario);
 }
 
 export function getRelatorioVisaoGeral(
