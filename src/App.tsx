@@ -1,6 +1,6 @@
 import AppRoutes from "./routes/AppRoutes";
-import { UsuarioAtualProvider } from "./contexts/UsuarioAtualContext";
-import { BrandingProvider } from "./contexts/BrandingContext";
+import { UsuarioAtualProvider } from "./contexts/UsuarioAtualProvider";
+import { BrandingProvider } from "./contexts/BrandingProvider";
 
 function App() {
   return (

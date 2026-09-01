@@ -225,6 +225,33 @@ function EditarFeedbackPage() {
   const [criterioParaAlinhar, setCriterioParaAlinhar] = useState<string | null>(null);
   const [feedbackFinalAberto, setFeedbackFinalAberto] = useState(false);
 
+  useEffect(() => {
+    if (!criterioParaAlinhar) return;
+
+    const elemento = document.getElementById(
+      `criterio-toggle-${criterioParaAlinhar}`
+    );
+
+    if (!elemento) return;
+
+    const offsetTopo = 118;
+    const destino =
+      elemento.getBoundingClientRect().top +
+      window.scrollY -
+      offsetTopo;
+
+    window.scrollTo({
+      top: Math.max(0, destino),
+      behavior: "smooth",
+    });
+
+    const timeoutId = window.setTimeout(() => {
+      setCriterioParaAlinhar(null);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [criterioAberto, criterioParaAlinhar]);
+
   if (!colaborador) {
     return (
       <div style={{ padding: "30px" }}>
@@ -539,28 +566,6 @@ function EditarFeedbackPage() {
     );
   }
 
-  useEffect(() => {
-    if (!criterioParaAlinhar) return;
-
-    const elemento = document.getElementById(
-      `criterio-toggle-${criterioParaAlinhar}`
-    );
-
-    if (!elemento) return;
-
-    const offsetTopo = 118;
-    const destino =
-      elemento.getBoundingClientRect().top +
-      window.scrollY -
-      offsetTopo;
-
-    window.scrollTo({
-      top: Math.max(0, destino),
-      behavior: "smooth",
-    });
-
-    setCriterioParaAlinhar(null);
-  }, [criterioAberto, criterioParaAlinhar]);
   function abrirCriterioEAlinhar(criterioId: string) {
     setCriterioAberto(criterioId);
     setCriterioParaAlinhar(criterioId);

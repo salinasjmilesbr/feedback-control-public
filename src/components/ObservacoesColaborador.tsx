@@ -84,14 +84,18 @@ function ObservacoesColaborador({
   useEffect(() => {
     if (!abrirNovaObservacaoToken) return;
 
-    setEditandoId(null);
-    setTipo("NEUTRA");
-    setTexto("");
-    setComunicado(false);
-    setAno(cicloAtivo?.ano ?? new Date().getFullYear());
-    setCiclo(cicloAtivo?.ciclo ?? 1);
-    setErro("");
-    setFormAberto(true);
+    const timeoutId = window.setTimeout(() => {
+      setEditandoId(null);
+      setTipo("NEUTRA");
+      setTexto("");
+      setComunicado(false);
+      setAno(cicloAtivo?.ano ?? new Date().getFullYear());
+      setCiclo(cicloAtivo?.ciclo ?? 1);
+      setErro("");
+      setFormAberto(true);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [abrirNovaObservacaoToken, cicloAtivo?.ano, cicloAtivo?.ciclo]);
 
   void versao;

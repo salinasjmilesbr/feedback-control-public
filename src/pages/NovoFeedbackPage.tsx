@@ -167,6 +167,33 @@ function NovoFeedbackPage() {
   const [feedbackFinalAberto, setFeedbackFinalAberto] = useState(false);
   const cicloAtivo = getCicloAtivo();
   const escalaAvaliacao = getEscalaAvaliacao();
+
+  useEffect(() => {
+    if (!criterioParaAlinhar) return;
+
+    const elemento = document.getElementById(
+      `criterio-toggle-${criterioParaAlinhar}`
+    );
+
+    if (!elemento) return;
+
+    const offsetTopo = 118;
+    const destino =
+      elemento.getBoundingClientRect().top +
+      window.scrollY -
+      offsetTopo;
+
+    window.scrollTo({
+      top: Math.max(0, destino),
+      behavior: "smooth",
+    });
+
+    const timeoutId = window.setTimeout(() => {
+      setCriterioParaAlinhar(null);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [criterioAberto, criterioParaAlinhar]);
     
   if (!colaborador) {
     return (
@@ -476,28 +503,6 @@ function NovoFeedbackPage() {
     );
   }
 
-  useEffect(() => {
-    if (!criterioParaAlinhar) return;
-
-    const elemento = document.getElementById(
-      `criterio-toggle-${criterioParaAlinhar}`
-    );
-
-    if (!elemento) return;
-
-    const offsetTopo = 118;
-    const destino =
-      elemento.getBoundingClientRect().top +
-      window.scrollY -
-      offsetTopo;
-
-    window.scrollTo({
-      top: Math.max(0, destino),
-      behavior: "smooth",
-    });
-
-    setCriterioParaAlinhar(null);
-  }, [criterioAberto, criterioParaAlinhar]);
   function abrirCriterioEAlinhar(criterioId: string) {
     setCriterioAberto(criterioId);
     setCriterioParaAlinhar(criterioId);
