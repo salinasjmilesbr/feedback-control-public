@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { can } from "../authorization/authorizationPolicy";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import { formatarPeriodoCiclo, getCiclosAvaliacao } from "../services/cicloAvaliacaoStorage";
 import "../styles/ciclos.css";
@@ -7,8 +8,21 @@ import "../styles/painel-ciclos-coordenador.css";
 function PainelCiclosCoordenadorPage() {
   const navigate = useNavigate();
   const { usuarioAtual } = useUsuarioAtual();
+  const podeListarCiclos = usuarioAtual
+    ? can(
+        {
+          actor: {
+            matricula: usuarioAtual.matricula,
+            funcao: usuarioAtual.funcao,
+            status: usuarioAtual.status,
+          },
+        },
+        "cycle.coordinator.list",
+        { kind: "global" }
+      )
+    : false;
 
-  if (!usuarioAtual || usuarioAtual.funcao !== "COORDENADOR") {
+  if (!usuarioAtual || !podeListarCiclos) {
     return <main className="virtus-page"><section className="cycle-empty">
       <h1>Acesso restrito</h1><p>Esta visão está disponível apenas para coordenadores.</p>
       <button type="button" className="cycle-btn cycle-btn--secondary" onClick={() => navigate("/")}>Voltar ao início</button>

@@ -105,6 +105,22 @@ describe("authorizationPolicy", () => {
   );
 
   it.each([
+    ["COORDENADOR", coordenador, true],
+    ["GERENTE", gerente, false],
+    ["ANALISTA", direto, false],
+    ["CONSULTOR", pessoa(16, "CONSULTOR"), false],
+    ["ESTAGIARIO", pessoa(17, "ESTAGIARIO"), false],
+    ["SEM_FUNCAO", pessoa(18, undefined), false],
+  ] as const)(
+    "caracteriza cycle.coordinator.list para %s",
+    (_perfil, actor, esperado) => {
+      expect(
+        can(contexto(actor), "cycle.coordinator.list", { kind: "global" })
+      ).toBe(esperado);
+    }
+  );
+
+  it.each([
     ["GERENTE", gerente, true],
     ["COORDENADOR", coordenador, true],
     ["ANALISTA", direto, false],

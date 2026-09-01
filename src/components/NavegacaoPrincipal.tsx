@@ -106,6 +106,17 @@ function NavegacaoPrincipal() {
     "cycle.management.view",
     { kind: "global" }
   );
+  const podeListarCiclosComoCoordenador = can(
+    {
+      actor: {
+        matricula: usuarioAtual.matricula,
+        funcao: usuarioAtual.funcao,
+        status: usuarioAtual.status,
+      },
+    },
+    "cycle.coordinator.list",
+    { kind: "global" }
+  );
 
   return (
     <nav className="app-nav" aria-label="Navegação principal">
@@ -120,7 +131,7 @@ function NavegacaoPrincipal() {
           </NavItem>
         )}
 
-        {coordenador && (
+        {podeListarCiclosComoCoordenador && (
           <NavItem to="/painel-ciclos" icon={<IconCalendar />}>
             Ciclos
           </NavItem>
