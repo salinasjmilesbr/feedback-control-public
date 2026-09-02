@@ -271,6 +271,16 @@
   font-weight: 650;
 }
 
+.collaborator-form-warning {
+  padding: 12px 14px;
+  border: 1px solid #e7d8aa;
+  border-radius: 8px;
+  background: #fffaf0;
+  color: #6f5715;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .collaborator-form-empty-state {
   padding: 28px;
   border: 1px solid var(--brand-border);

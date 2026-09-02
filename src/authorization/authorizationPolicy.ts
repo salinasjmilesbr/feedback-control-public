@@ -78,8 +78,15 @@ function decidir(
     );
   }
 
+  if (capability === "observation.create") {
+    return (
+      resource.kind === "observation" &&
+      resource.collaborator.status !== "DESLIGADO" &&
+      (actor.funcao === "GERENTE" || actor.funcao === "COORDENADOR")
+    );
+  }
+
   if (
-    capability === "observation.create" ||
     capability === "observation.edit" ||
     capability === "observation.delete"
   ) {
@@ -98,6 +105,15 @@ function decidir(
       [...resource.collaborators],
       resource.cycle
     );
+
+    if (capability === "evaluation.create") {
+      return (
+        resource.evaluatedCollaborator.status === "ATIVO" &&
+        (permissoes.podeAvaliarComoGerente ||
+          permissoes.podeAvaliarComoCoordenador ||
+          permissoes.podeAvaliarComoColegiado)
+      );
+    }
 
     if (capability === "evaluation.edit.manager") {
       return permissoes.podeAvaliarComoGerente;

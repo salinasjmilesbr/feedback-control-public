@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState, type CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { can } from "../authorization/authorizationPolicy";
+import { authorize, can } from "../authorization/authorizationPolicy";
 import type { AuthorizationContext } from "../authorization/AuthorizationContext";
 import type { EvaluationResource } from "../authorization/ResourceContext";
 import CriterionIcon from "../components/CriterionIcon";
@@ -203,6 +203,47 @@ function NovoFeedbackPage() {
     );
   }
 
+  const authorizationContext: AuthorizationContext | undefined = usuarioAtual
+    ? {
+        actor: {
+          matricula: usuarioAtual.matricula,
+          funcao: usuarioAtual.funcao,
+          status: usuarioAtual.status,
+        },
+      }
+    : undefined;
+  const evaluationResource: EvaluationResource = {
+    kind: "evaluation",
+    evaluatedCollaborator: colaborador,
+    collaborators: colaboradores,
+    cycle: cicloAtivo,
+  };
+  const podeCriarAvaliacao = authorizationContext
+    ? can(authorizationContext, "evaluation.create", evaluationResource)
+    : false;
+
+  if (!authorizationContext || !podeCriarAvaliacao) {
+    return (
+      <main className="virtus-page new-evaluation-page">
+        <section className="new-evaluation-header">
+          <div>
+            <button
+              type="button"
+              className="new-evaluation-header__back"
+              onClick={() => navigate(-1)}
+            >
+              ← Voltar
+            </button>
+            <h1>Acesso restrito</h1>
+            <p>Não é possível criar uma nova avaliação para este colaborador.</p>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  const contextoAutorizado = authorizationContext;
+
   if (!cicloAtivo) {
     return (
       <div style={{ padding: "30px" }}>
@@ -258,21 +299,6 @@ function NovoFeedbackPage() {
     )
     .filter((item) => item !== undefined);
 
-  const authorizationContext: AuthorizationContext | undefined = usuarioAtual
-    ? {
-        actor: {
-          matricula: usuarioAtual.matricula,
-          funcao: usuarioAtual.funcao,
-          status: usuarioAtual.status,
-        },
-      }
-    : undefined;
-  const evaluationResource: EvaluationResource = {
-    kind: "evaluation",
-    evaluatedCollaborator: colaborador,
-    collaborators: colaboradores,
-    cycle: cicloAtivo,
-  };
   const podeAvaliarComoGerente = authorizationContext
     ? can(authorizationContext, "evaluation.edit.manager", evaluationResource)
     : false;
@@ -772,6 +798,11 @@ if (feedbackExistente) {
   return;
 }
 
+    authorize(
+      contextoAutorizado,
+      "evaluation.create",
+      evaluationResource
+    );
     saveFeedback(novoFeedback, usuarioAtual);
     alert("Avaliação salva com sucesso.");
     navigate(`/colaborador/${colaborador!.matricula}`);
