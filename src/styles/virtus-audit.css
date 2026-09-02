@@ -1471,3 +1471,79 @@ html {
   margin-bottom: 6px !important;
 }
 /* FIM VIRTUS AJUSTE FINAL — ritmo do header de Minhas Metas */
+
+/* VIRTUS SHELL RESPONSIVO — navegação e contornos em viewport estreita */
+@media (max-width: 900px) {
+  .app-header,
+  .app-nav,
+  .app-footer {
+    width: calc(100% - (var(--virtus-gutter) * 2));
+    margin-left: auto;
+    margin-right: auto;
+    box-sizing: border-box;
+    overflow: hidden;
+    border: 1px solid var(--brand-border);
+    border-radius: var(--virtus-card-radius);
+    background: var(--brand-surface);
+  }
+
+  .app-header {
+    margin-top: var(--virtus-gutter);
+  }
+
+  .app-header__inner,
+  .app-nav__inner,
+  .app-footer__inner {
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .app-header__inner {
+    padding: 12px 14px !important;
+  }
+
+  .app-nav {
+    top: var(--virtus-gutter);
+    margin-top: 10px;
+  }
+
+  .app-nav__inner {
+    min-height: 0;
+    padding: 5px !important;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    overflow-x: hidden;
+  }
+
+  .app-nav a,
+  .app-nav__inner > a:first-child {
+    min-height: 42px;
+    padding: 0 10px !important;
+    flex: 1 1 auto;
+    justify-content: center;
+    border-radius: 9px;
+  }
+
+  .app-nav a.active {
+    background: color-mix(in srgb, var(--brand-primary) 8%, transparent);
+  }
+
+  .app-nav a.active::after,
+  .app-nav__inner > a:first-child::after {
+    left: 10px !important;
+    right: 10px;
+    bottom: 2px;
+  }
+
+  .app-footer {
+    margin-top: 32px;
+    margin-bottom: var(--virtus-gutter);
+  }
+
+  .app-footer__inner {
+    padding: 14px !important;
+  }
+}
+/* FIM VIRTUS SHELL RESPONSIVO */
