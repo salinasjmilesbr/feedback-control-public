@@ -555,6 +555,13 @@ export function updateFeedback(
   usuarioAtual?: Colaborador
 ): void {
   const feedbacks = getFeedbacks();
+  const feedbackAtual = feedbacks.find(
+    (feedback) => feedback.id === updatedFeedback.id
+  );
+
+  if (usuarioAtual && feedbackAtual?.status === "CONCLUIDA") {
+    throw new Error("Avaliações concluídas não podem ser alteradas.");
+  }
 
   const updatedFeedbacks = feedbacks.map((feedback) => {
     if (feedback.id !== updatedFeedback.id) return feedback;

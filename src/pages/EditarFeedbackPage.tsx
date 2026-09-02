@@ -335,6 +335,7 @@ function EditarFeedbackPage() {
     evaluatedCollaborator: colaborador,
     collaborators: colaboradores,
     cycle: cicloDaAvaliacao,
+    evaluationStatus: feedbackAtual.status,
   };
   const podeAvaliarComoGerente = authorizationContext
     ? can(authorizationContext, "evaluation.edit.manager", evaluationResource)

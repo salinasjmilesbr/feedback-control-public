@@ -81,6 +81,7 @@ function FeedbackDetalhePage() {
     evaluatedCollaborator: colaborador,
     collaborators: colaboradores,
     cycle: cicloDaAvaliacao,
+    evaluationStatus: feedback.status,
   };
   const podeConsultarAvaliacao = authorizationContext
     ? can(
