@@ -35,6 +35,14 @@ function decidir(
 ): boolean {
   const { actor } = context;
 
+  if (capability === "collaborator.create") {
+    return resource.kind === "global" && actor.funcao === "GERENTE";
+  }
+
+  if (capability === "collaborator.edit") {
+    return resource.kind === "collaborator" && actor.funcao === "GERENTE";
+  }
+
   if (capability === "collaborator.list") {
     if (resource.kind !== "collaborator-list") return false;
     const actor = resolverAtor(context, resource.collaborators);

@@ -12,6 +12,7 @@ import type { AuthorizationContext } from "./AuthorizationContext";
 import { AuthorizationError } from "./authorizationError";
 import { authorize, can, scopeCollaborators } from "./authorizationPolicy";
 import type {
+  CollaboratorResource,
   EvaluationResource,
   GoalResource,
   ObservationResource,
@@ -92,6 +93,10 @@ describe("authorizationPolicy", () => {
     collaborators,
     cycle: ciclo,
   };
+  const collaboratorResource: CollaboratorResource = {
+    kind: "collaborator",
+    collaborator: direto,
+  };
   const observacaoDeOutroAutor: Observacao = {
     id: "observacao-outro-autor",
     colaboradorMatricula: direto.matricula,
@@ -110,6 +115,45 @@ describe("authorizationPolicy", () => {
     collaborator: direto,
     observation: observacaoDeOutroAutor,
   };
+
+  it.each([
+    ["GERENTE", gerente, true],
+    ["COORDENADOR", coordenador, false],
+    ["ANALISTA", direto, false],
+    ["CONSULTOR", pessoa(20, "CONSULTOR"), false],
+    ["ESTAGIARIO", pessoa(21, "ESTAGIARIO"), false],
+  ] as const)(
+    "caracteriza collaborator.create para %s",
+    (_perfil, actor, esperado) => {
+      expect(
+        can(contexto(actor), "collaborator.create", { kind: "global" })
+      ).toBe(esperado);
+    }
+  );
+
+  it.each([
+    ["GERENTE", gerente, true],
+    ["COORDENADOR", coordenador, false],
+    ["ANALISTA", direto, false],
+    ["CONSULTOR", pessoa(22, "CONSULTOR"), false],
+    ["ESTAGIARIO", pessoa(23, "ESTAGIARIO"), false],
+  ] as const)(
+    "caracteriza collaborator.edit para %s",
+    (_perfil, actor, esperado) => {
+      expect(
+        can(contexto(actor), "collaborator.edit", collaboratorResource)
+      ).toBe(esperado);
+    }
+  );
+
+  it("nega capabilities de gestão de colaboradores para recurso incompatível", () => {
+    expect(
+      can(contexto(gerente), "collaborator.create", collaboratorResource)
+    ).toBe(false);
+    expect(
+      can(contexto(gerente), "collaborator.edit", { kind: "global" })
+    ).toBe(false);
+  });
 
   it.each([
     ["GERENTE", gerente, true],

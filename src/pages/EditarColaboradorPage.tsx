@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { authorize, can } from "../authorization/authorizationPolicy";
+import type { AuthorizationContext } from "../authorization/AuthorizationContext";
 import CollaboratorIdentity from "../components/CollaboratorIdentity";
+import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import type {
   Colaborador,
   FuncaoColaborador,
@@ -33,6 +36,7 @@ function hojeLocal() {
 function EditarColaboradorPage() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { usuarioAtual } = useUsuarioAtual();
 
   const matricula = Number(id);
   const colaborador = Number.isFinite(matricula)
@@ -70,6 +74,16 @@ function EditarColaboradorPage() {
   const [motivo, setMotivo] = useState("");
   const [erro, setErro] = useState("");
 
+  const authorizationContext: AuthorizationContext | undefined = usuarioAtual
+    ? {
+        actor: {
+          matricula: usuarioAtual.matricula,
+          funcao: usuarioAtual.funcao,
+          status: usuarioAtual.status,
+        },
+      }
+    : undefined;
+
   if (!colaborador) {
     return (
       <main className="virtus-page collaborator-form-page">
@@ -89,6 +103,38 @@ function EditarColaboradorPage() {
   }
 
   const colaboradorAtual = colaborador;
+  const collaboratorResource = {
+    kind: "collaborator" as const,
+    collaborator: colaboradorAtual,
+  };
+  const podeEditarColaborador = authorizationContext
+    ? can(
+        authorizationContext,
+        "collaborator.edit",
+        collaboratorResource
+      )
+    : false;
+
+  if (!usuarioAtual || !authorizationContext || !podeEditarColaborador) {
+    return (
+      <main className="virtus-page collaborator-form-page">
+        <section className="collaborator-form-empty-state">
+          <h1>Acesso restrito</h1>
+          <p>A gestão de colaboradores está disponível apenas para gerentes.</p>
+          <button
+            type="button"
+            className="collaborator-form-btn collaborator-form-btn--secondary"
+            onClick={() => navigate(`/colaborador/${colaboradorAtual.matricula}`)}
+          >
+            Voltar ao colaborador
+          </button>
+        </section>
+      </main>
+    );
+  }
+
+  const contextoAutorizado = authorizationContext;
+  const autorAtual = usuarioAtual;
 
   const gestoresDisponiveis = colaboradoresExistentes
     .filter(
@@ -179,6 +225,11 @@ function EditarColaboradorPage() {
     }
 
     try {
+      authorize(
+        contextoAutorizado,
+        "collaborator.edit",
+        collaboratorResource
+      );
       updateColaborador(colaboradorAtualizado);
 
       if (mudouEstrutura) {
@@ -189,6 +240,8 @@ function EditarColaboradorPage() {
           dataVigencia,
           escopo,
           motivo,
+          autorMatricula: autorAtual.matricula,
+          autorNome: autorAtual.nome,
         });
       }
 

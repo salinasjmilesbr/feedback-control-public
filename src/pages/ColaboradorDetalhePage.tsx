@@ -339,15 +339,25 @@ function ColaboradorDetalhePage() {
   }
 
   const todosColaboradores = getColaboradores();
-  const podeCriarObservacao = usuarioAtual
-    ? can(
-        {
-          actor: {
-            matricula: usuarioAtual.matricula,
-            funcao: usuarioAtual.funcao,
-            status: usuarioAtual.status,
-          },
+  const authorizationContext = usuarioAtual
+    ? {
+        actor: {
+          matricula: usuarioAtual.matricula,
+          funcao: usuarioAtual.funcao,
+          status: usuarioAtual.status,
         },
+      }
+    : undefined;
+  const podeEditarColaborador = authorizationContext
+    ? can(
+        authorizationContext,
+        "collaborator.edit",
+        { kind: "collaborator", collaborator: colaborador }
+      )
+    : false;
+  const podeCriarObservacao = authorizationContext
+    ? can(
+        authorizationContext,
         "observation.create",
         { kind: "observation", collaborator: colaborador }
       )
@@ -477,13 +487,15 @@ function ColaboradorDetalhePage() {
         />
 
         <div className="virtus-page-actions collaborator-profile-actions">
-          <Link
-            to={`/colaborador/${colaborador.matricula}/editar`}
-            className="virtus-btn virtus-btn--outline collaborator-link-button"
-          >
-            <IconEdit />
-            Editar cadastro
-          </Link>
+          {podeEditarColaborador && (
+            <Link
+              to={`/colaborador/${colaborador.matricula}/editar`}
+              className="virtus-btn virtus-btn--outline collaborator-link-button"
+            >
+              <IconEdit />
+              Editar cadastro
+            </Link>
+          )}
 
           {podeCriarObservacao && (
             <button

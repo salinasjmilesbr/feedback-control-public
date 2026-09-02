@@ -1,5 +1,6 @@
 ﻿import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { can } from "../authorization/authorizationPolicy";
 import ColaboradorCard from "../components/ColaboradorCard";
 import { getColaboradores } from "../services/colaboradorStorage";
 import type { StatusColaborador } from "../types/Colaborador";
@@ -28,6 +29,18 @@ function ColaboradoresPage() {
   if (!usuarioAtual) {
     return <div className="virtus-page">Usuário atual não definido.</div>;
   }
+
+  const podeCriarColaborador = can(
+    {
+      actor: {
+        matricula: usuarioAtual.matricula,
+        funcao: usuarioAtual.funcao,
+        status: usuarioAtual.status,
+      },
+    },
+    "collaborator.create",
+    { kind: "global" }
+  );
 
   const colaboradoresVisiveis = getColaboradoresVisiveis(
     usuarioAtual,
@@ -181,13 +194,15 @@ function ColaboradoresPage() {
             </button>
           )}
 
-          <button
-            className="virtus-btn virtus-btn--primary"
-            onClick={() => navigate("/colaboradores/novo")}
-          >
-            <span className="virtus-btn__plus" aria-hidden="true">＋</span>
-            Novo colaborador
-          </button>
+          {podeCriarColaborador && (
+            <button
+              className="virtus-btn virtus-btn--primary"
+              onClick={() => navigate("/colaboradores/novo")}
+            >
+              <span className="virtus-btn__plus" aria-hidden="true">＋</span>
+              Novo colaborador
+            </button>
+          )}
         </div>
       </section>
 

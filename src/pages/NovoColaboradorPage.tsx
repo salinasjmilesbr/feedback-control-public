@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { authorize, can } from "../authorization/authorizationPolicy";
+import type { AuthorizationContext } from "../authorization/AuthorizationContext";
+import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import type {
   Colaborador,
   FuncaoColaborador,
@@ -25,6 +28,7 @@ function hojeLocal() {
 
 function NovoColaboradorPage() {
   const navigate = useNavigate();
+  const { usuarioAtual } = useUsuarioAtual();
   const colaboradoresExistentes = getColaboradores();
 
   const [matricula, setMatricula] = useState("");
@@ -41,6 +45,40 @@ function NovoColaboradorPage() {
   const [status, setStatus] = useState<StatusColaborador>("ATIVO");
   const [dataAdmissao, setDataAdmissao] = useState(hojeLocal());
   const [erro, setErro] = useState("");
+
+  const authorizationContext: AuthorizationContext | undefined = usuarioAtual
+    ? {
+        actor: {
+          matricula: usuarioAtual.matricula,
+          funcao: usuarioAtual.funcao,
+          status: usuarioAtual.status,
+        },
+      }
+    : undefined;
+  const podeCriarColaborador = authorizationContext
+    ? can(authorizationContext, "collaborator.create", { kind: "global" })
+    : false;
+
+  if (!usuarioAtual || !authorizationContext || !podeCriarColaborador) {
+    return (
+      <main className="virtus-page collaborator-form-page">
+        <section className="collaborator-form-empty-state">
+          <h1>Acesso restrito</h1>
+          <p>A gestão de colaboradores está disponível apenas para gerentes.</p>
+          <button
+            type="button"
+            className="collaborator-form-btn collaborator-form-btn--secondary"
+            onClick={() => navigate("/")}
+          >
+            Voltar aos colaboradores
+          </button>
+        </section>
+      </main>
+    );
+  }
+
+  const contextoAutorizado = authorizationContext;
+  const autorAtual = usuarioAtual;
 
   const gestoresDisponiveis = colaboradoresExistentes
     .filter(
@@ -120,6 +158,11 @@ function NovoColaboradorPage() {
     };
 
     try {
+      authorize(
+        contextoAutorizado,
+        "collaborator.create",
+        { kind: "global" }
+      );
       saveColaborador(novoColaborador);
 
       registrarMovimentacaoOrganizacional({
@@ -128,6 +171,8 @@ function NovoColaboradorPage() {
         dataVigencia: dataAdmissao,
         escopo: "CICLO_ATUAL_E_POSTERIORES",
         motivo: "Admissão / inclusão do colaborador no Virtus",
+        autorMatricula: autorAtual.matricula,
+        autorNome: autorAtual.nome,
       });
 
       navigate("/");
