@@ -1,6 +1,7 @@
 import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
 import type { Observacao } from "../types/Observacao";
+import type { StatusFeedback } from "../types/Feedback";
 
 export type GlobalResource = Readonly<{
   kind: "global";
@@ -21,6 +22,7 @@ export type EvaluationResource = Readonly<{
   evaluatedCollaborator: Colaborador;
   collaborators: readonly Colaborador[];
   cycle?: CicloAvaliacao;
+  evaluationStatus?: StatusFeedback;
 }>;
 
 export type GoalResource = Readonly<{

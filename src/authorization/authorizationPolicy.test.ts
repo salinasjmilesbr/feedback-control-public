@@ -443,6 +443,72 @@ describe("authorizationPolicy", () => {
   });
 
   it.each([
+    ["evaluation.edit.manager", gerente],
+    ["evaluation.edit.coordinator", coordenador],
+    ["evaluation.edit.board", outroCoordenador],
+  ] as const)(
+    "nega %s para avaliação concluída mesmo com responsabilidade",
+    (capability, actor) => {
+      const resource: EvaluationResource = {
+        ...evaluationResource,
+        evaluatedCollaborator: {
+          ...direto,
+          avaliadoresColegiadoMatriculas: [outroCoordenador.matricula],
+        },
+        evaluationStatus: "CONCLUIDA",
+      };
+
+      expect(can(contexto(actor), capability, resource)).toBe(false);
+    }
+  );
+
+  it.each(["RASCUNHO", "PRONTA_PARA_FEEDBACK"] as const)(
+    "preserva as permissões de edição para avaliação %s",
+    (evaluationStatus) => {
+      const resource: EvaluationResource = {
+        ...evaluationResource,
+        evaluatedCollaborator: {
+          ...direto,
+          avaliadoresColegiadoMatriculas: [outroCoordenador.matricula],
+        },
+        evaluationStatus,
+      };
+
+      expect(
+        can(contexto(gerente), "evaluation.edit.manager", resource)
+      ).toBe(true);
+      expect(
+        can(contexto(coordenador), "evaluation.edit.coordinator", resource)
+      ).toBe(true);
+      expect(
+        can(contexto(outroCoordenador), "evaluation.edit.board", resource)
+      ).toBe(true);
+    }
+  );
+
+  it.each([
+    ["GERENTE", gerente],
+    ["COORDENADOR", coordenador],
+    ["COLEGIADO", outroCoordenador],
+  ] as const)(
+    "preserva consulta administrativa de avaliação concluída para %s",
+    (_papel, actor) => {
+      const resource: EvaluationResource = {
+        ...evaluationResource,
+        evaluatedCollaborator: {
+          ...direto,
+          avaliadoresColegiadoMatriculas: [outroCoordenador.matricula],
+        },
+        evaluationStatus: "CONCLUIDA",
+      };
+
+      expect(
+        can(contexto(actor), "evaluation.view.admin", resource)
+      ).toBe(true);
+    }
+  );
+
+  it.each([
     ["GERENTE_RESPONSAVEL", gerente, true],
     ["COORDENADOR_DIRETO", coordenador, true],
     ["MEMBRO_COLEGIADO", outroCoordenador, true],
