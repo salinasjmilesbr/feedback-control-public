@@ -9,6 +9,7 @@ import {
   atualizarPeriodoCiclo,
   atualizarStatusCiclo,
   encerrarCiclo,
+  excluirCiclo,
   getCiclosAvaliacao,
 } from "./cicloAvaliacaoStorage";
 
@@ -150,4 +151,29 @@ describe("edição normal do período do ciclo", () => {
     ).toThrow("A data de início não pode ser posterior à data de fim.");
     expect(getCiclosAvaliacao()).toEqual([original]);
   });
+});
+
+describe("exclusão física do ciclo", () => {
+  beforeEach(() => instalarLocalStorageEmMemoria());
+
+  it("permite excluir ciclo planejado", () => {
+    persistir(ciclo("planejado", "PLANEJADO"));
+
+    excluirCiclo("planejado");
+
+    expect(localStorage.getItem(STORAGE_KEY)).toBe("[]");
+  });
+
+  it.each(["ATIVO", "ENCERRADO"] as const)(
+    "rejeita excluir ciclo %s sem modificá-lo",
+    (statusAtual) => {
+      const original = ciclo("alvo", statusAtual);
+      persistir(original);
+
+      expect(() => excluirCiclo("alvo")).toThrow(
+        "Somente ciclos planejados podem ser excluídos fisicamente."
+      );
+      expect(getCiclosAvaliacao()).toEqual([original]);
+    }
+  );
 });

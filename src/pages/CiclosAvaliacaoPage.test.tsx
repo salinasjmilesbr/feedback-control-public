@@ -9,6 +9,7 @@ import type {
 } from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
 import CiclosAvaliacaoPage from "./CiclosAvaliacaoPage";
+import { confirmarExclusaoCiclo } from "./confirmarExclusaoCiclo";
 
 const gerente: Colaborador = {
   matricula: 1,
@@ -57,6 +58,7 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     expect(html).not.toContain("Encerrar ciclo");
     expect(html).not.toContain("Editar status");
     expect(html).toContain("Editar período");
+    expect(html).toContain("Excluir ciclo");
   });
 
   it("mostra somente encerramento para ciclo ativo", () => {
@@ -66,6 +68,7 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     expect(html).not.toContain("Ativar ciclo");
     expect(html).not.toContain("Editar status");
     expect(html).not.toContain("Editar período");
+    expect(html).not.toContain("Excluir ciclo");
   });
 
   it("não mostra ação de transição para ciclo encerrado", () => {
@@ -76,5 +79,27 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     expect(html).not.toContain("Editar status");
     expect(html).toContain("Lifecycle encerrado");
     expect(html).not.toContain("Editar período");
+    expect(html).not.toContain("Excluir ciclo");
+  });
+
+  it("exige confirmação explícita antes da exclusão", () => {
+    const ciclo: CicloAvaliacao = {
+      id: "ciclo-confirmacao",
+      ano: 2026,
+      ciclo: 2,
+      status: "PLANEJADO",
+      dataCriacao: "2026-01-01T00:00:00.000Z",
+      dataUltimaAtualizacao: "2026-01-01T00:00:00.000Z",
+    };
+    let mensagem = "";
+
+    const confirmado = confirmarExclusaoCiclo(ciclo, (texto) => {
+      mensagem = texto;
+      return false;
+    });
+
+    expect(confirmado).toBe(false);
+    expect(mensagem).toContain("Excluir 2026 • Ciclo 2?");
+    expect(mensagem).toContain("Avaliações vazias");
   });
 });

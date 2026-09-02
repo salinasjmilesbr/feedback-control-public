@@ -4,6 +4,7 @@ import { funcaoUsaEstruturaAvaliacaoAnalista } from "../types/Colaborador";
 import type { Feedback } from "../types/Feedback";
 import { criteriosAvaliacao } from "../data/modeloAvaliacao";
 import { getColaboradores } from "./colaboradorStorage";
+import { getCiclosAvaliacao } from "./cicloAvaliacaoStorage";
 import {
   avaliacaoEstaVaziaParaCleanupInterno,
   existeAvaliacaoNaoCanceladaNoCiclo,
@@ -381,8 +382,20 @@ export function getPainelCiclo(
 export function excluirAvaliacoesVaziasDoCiclo(
   ciclo: CicloAvaliacao
 ): { excluidas: number; bloqueadas: number } {
+  const cicloPersistido = getCiclosAvaliacao().find(
+    (item) => item.id === ciclo.id
+  );
+  if (!cicloPersistido) throw new Error("Ciclo não encontrado.");
+  if (cicloPersistido.status !== "PLANEJADO") {
+    throw new Error(
+      "Somente ciclos planejados podem ser excluídos fisicamente."
+    );
+  }
+
   const feedbacksDoCiclo = getFeedbacks().filter(
-    (feedback) => feedback.ano === ciclo.ano && feedback.ciclo === ciclo.ciclo
+    (feedback) =>
+      feedback.ano === cicloPersistido.ano &&
+      feedback.ciclo === cicloPersistido.ciclo
   );
   const preenchidas = feedbacksDoCiclo.filter(
     (feedback) => !avaliacaoEstaVaziaParaCleanupInterno(feedback)

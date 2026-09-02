@@ -18,6 +18,7 @@ import {
   criarAvaliacoesDoCicloAtivado,
   excluirAvaliacoesVaziasDoCiclo,
 } from "../services/cicloEquipeService";
+import { confirmarExclusaoCiclo } from "./confirmarExclusaoCiclo";
 import "../styles/ciclos.css";
 
 function CiclosAvaliacaoPage() {
@@ -580,30 +581,29 @@ function CiclosAvaliacaoPage() {
                     )}
                   </div>
 
-                  <button
-                    className="cycle-link-button cycle-link-button--danger"
-                    onClick={() => {
-                      const confirmar = window.confirm(
-                        `Excluir ${item.ano} • Ciclo ${item.ciclo}?\n\nAvaliações vazias criadas automaticamente também serão excluídas. Avaliações que já possuam dados impedem a exclusão.`
-                      );
-                      if (!confirmar) return;
+                  {item.status === "PLANEJADO" && (
+                    <button
+                      className="cycle-link-button cycle-link-button--danger"
+                      onClick={() => {
+                        if (!confirmarExclusaoCiclo(item)) return;
 
-                      try {
-                        excluirAvaliacoesVaziasDoCiclo(item);
-                        excluirCiclo(item.id);
-                        setErro("");
-                        setVersao((valor) => valor + 1);
-                      } catch (error) {
-                        setErro(
-                          error instanceof Error
-                            ? error.message
-                            : "Não foi possível excluir o ciclo."
-                        );
-                      }
-                    }}
-                  >
-                    Excluir ciclo
-                  </button>
+                        try {
+                          excluirAvaliacoesVaziasDoCiclo(item);
+                          excluirCiclo(item.id);
+                          setErro("");
+                          setVersao((valor) => valor + 1);
+                        } catch (error) {
+                          setErro(
+                            error instanceof Error
+                              ? error.message
+                              : "Não foi possível excluir o ciclo."
+                          );
+                        }
+                      }}
+                    >
+                      Excluir ciclo
+                    </button>
+                  )}
                 </div>
               </article>
             );

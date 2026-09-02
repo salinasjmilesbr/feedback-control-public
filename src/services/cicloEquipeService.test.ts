@@ -7,6 +7,7 @@ import {
   analisarPendenciasDoCiclo,
   concluirAvaliacoesNoEncerramentoDoCiclo,
   criarAvaliacoesDoCicloAtivado,
+  excluirAvaliacoesVaziasDoCiclo,
   getPainelCiclo,
 } from "./cicloEquipeService";
 
@@ -135,5 +136,77 @@ describe("cicloEquipeService com avaliação cancelada", () => {
     expect(
       persistidas.filter((feedback) => feedback.colaboradorId === avaliado.matricula)
     ).toHaveLength(1);
+  });
+});
+
+describe("cleanup seguro na exclusão de ciclo", () => {
+  beforeEach(() => {
+    instalarLocalStorageEmMemoria();
+    localStorage.setItem(
+      "feedback-control-colaboradores",
+      JSON.stringify([gerente, avaliado])
+    );
+  });
+
+  it.each(["ATIVO", "ENCERRADO"] as const)(
+    "rejeita ciclo %s antes de remover avaliações relacionadas",
+    (status) => {
+      const cicloProtegido = { ...ciclo, status };
+      const feedbackRelacionado = { ...cancelada, status: "RASCUNHO" as const };
+      localStorage.setItem(
+        "feedback-control-ciclos",
+        JSON.stringify([cicloProtegido])
+      );
+      localStorage.setItem(
+        "feedback-control-feedbacks",
+        JSON.stringify([feedbackRelacionado])
+      );
+
+      expect(() => excluirAvaliacoesVaziasDoCiclo(cicloProtegido)).toThrow(
+        "Somente ciclos planejados podem ser excluídos fisicamente."
+      );
+      expect(
+        JSON.parse(localStorage.getItem("feedback-control-ciclos") ?? "[]")
+      ).toEqual([cicloProtegido]);
+      expect(
+        JSON.parse(localStorage.getItem("feedback-control-feedbacks") ?? "[]")
+      ).toEqual([feedbackRelacionado]);
+    }
+  );
+
+  it("rejeita ciclo planejado com avaliação preenchida e preserva tudo", () => {
+    const cicloPlanejado = { ...ciclo, status: "PLANEJADO" as const };
+    const preenchida = {
+      ...cancelada,
+      status: "RASCUNHO" as const,
+      feedbackFinalGerente: "Conteúdo operacional",
+    };
+    localStorage.setItem("feedback-control-ciclos", JSON.stringify([cicloPlanejado]));
+    localStorage.setItem("feedback-control-feedbacks", JSON.stringify([preenchida]));
+
+    expect(() => excluirAvaliacoesVaziasDoCiclo(cicloPlanejado)).toThrow(
+      "dados preenchidos"
+    );
+    expect(
+      JSON.parse(localStorage.getItem("feedback-control-ciclos") ?? "[]")
+    ).toEqual([cicloPlanejado]);
+    expect(
+      JSON.parse(localStorage.getItem("feedback-control-feedbacks") ?? "[]")
+    ).toEqual([preenchida]);
+  });
+
+  it("remove somente avaliação realmente vazia de ciclo planejado", () => {
+    const cicloPlanejado = { ...ciclo, status: "PLANEJADO" as const };
+    const vazia = { ...cancelada, status: "RASCUNHO" as const };
+    localStorage.setItem("feedback-control-ciclos", JSON.stringify([cicloPlanejado]));
+    localStorage.setItem("feedback-control-feedbacks", JSON.stringify([vazia]));
+
+    expect(excluirAvaliacoesVaziasDoCiclo(cicloPlanejado)).toEqual({
+      excluidas: 1,
+      bloqueadas: 0,
+    });
+    expect(
+      JSON.parse(localStorage.getItem("feedback-control-feedbacks") ?? "[]")
+    ).toEqual([]);
   });
 });
