@@ -202,6 +202,39 @@ describe("authorizationPolicy", () => {
   );
 
   it.each([
+    ["GERENTE_RESPONSAVEL", gerente, true],
+    ["COORDENADOR_DIRETO", coordenador, false],
+    ["COLEGIADO", outroCoordenador, false],
+    ["AVALIADO", direto, false],
+  ] as const)(
+    "autoriza evaluation.cancel.manager somente para %s",
+    (_papel, actor, esperado) => {
+      const resource: EvaluationResource = {
+        ...evaluationResource,
+        evaluatedCollaborator: {
+          ...direto,
+          avaliadoresColegiadoMatriculas: [outroCoordenador.matricula],
+        },
+      };
+
+      expect(
+        can(contexto(actor), "evaluation.cancel.manager", resource)
+      ).toBe(esperado);
+    }
+  );
+
+  it("mantém cancelada consultável e bloqueada para edição e novo cancelamento", () => {
+    const resource: EvaluationResource = {
+      ...evaluationResource,
+      evaluationStatus: "CANCELADA",
+    };
+
+    expect(can(contexto(gerente), "evaluation.view.admin", resource)).toBe(true);
+    expect(can(contexto(gerente), "evaluation.edit.manager", resource)).toBe(false);
+    expect(can(contexto(gerente), "evaluation.cancel.manager", resource)).toBe(false);
+  });
+
+  it.each([
     ["GERENTE", gerente, true],
     ["COORDENADOR", coordenador, false],
     ["ANALISTA", direto, false],

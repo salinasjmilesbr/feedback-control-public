@@ -5,7 +5,10 @@ import type { Feedback } from "../types/Feedback";
 import * as feedbackStorage from "./feedbackStorage";
 import {
   getFeedbacks,
+  getFeedbacksAdministrativosByColaborador,
+  getFeedbacksConcluidosByColaborador,
   removerAvaliacaoVaziaNoCleanupInterno,
+  saveFeedback,
   updateFeedback,
 } from "./feedbackStorage";
 
@@ -78,6 +81,79 @@ describe("feedbackStorage", () => {
 
   it("não expõe caminho genérico de exclusão física", () => {
     expect("deleteFeedback" in feedbackStorage).toBe(false);
+  });
+
+  it("oculta canceladas por padrão e inclui somente sob opção administrativa", () => {
+    const cancelada = { ...avaliacaoConcluida, status: "CANCELADA" as const };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([avaliacaoConcluida, cancelada]));
+
+    expect(
+      getFeedbacksAdministrativosByColaborador(avaliacaoConcluida.colaboradorId)
+    ).toEqual([avaliacaoConcluida]);
+    expect(
+      getFeedbacksAdministrativosByColaborador(
+        avaliacaoConcluida.colaboradorId,
+        true
+      )
+    ).toHaveLength(2);
+  });
+
+  it("mantém canceladas fora das avaliações concluídas do avaliado", () => {
+    const cancelada = { ...avaliacaoConcluida, status: "CANCELADA" as const };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([cancelada]));
+
+    expect(
+      getFeedbacksConcluidosByColaborador(cancelada.colaboradorId)
+    ).toEqual([]);
+  });
+
+  it("permite criar registro novo e vazio quando só existe avaliação cancelada", () => {
+    const cancelada: Feedback = {
+      ...avaliacaoVazia,
+      id: "avaliacao-cancelada-com-conteudo",
+      status: "CANCELADA",
+      notaMedia: 4,
+      competencias: avaliacaoVazia.competencias.map((competencia) => ({
+        ...competencia,
+        nota: 4,
+        comentario: "Conteúdo histórico preservado",
+      })),
+      feedbackFinalGerente: "Feedback histórico",
+      motivoCancelamento: "Criada indevidamente",
+      canceladoPorMatricula: gerente.matricula,
+      canceladoPorNome: gerente.nome,
+      dataCancelamento: "2026-02-01T10:00:00.000Z",
+    };
+    const nova: Feedback = {
+      ...avaliacaoVazia,
+      id: "avaliacao-nova",
+      competencias: avaliacaoVazia.competencias.map((competencia) => ({
+        ...competencia,
+        nota: 0,
+        comentario: "",
+      })),
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([cancelada]));
+
+    saveFeedback(nova);
+
+    const persistidas = getFeedbacks();
+    expect(persistidas).toHaveLength(2);
+    expect(persistidas[0]).toEqual(cancelada);
+    expect(persistidas[1].id).not.toBe(cancelada.id);
+    expect(persistidas[1]).toEqual(nova);
+    expect(persistidas[1]).not.toHaveProperty("motivoCancelamento");
+    expect(persistidas[1]).not.toHaveProperty("canceladoPorMatricula");
+    expect(persistidas[1]).not.toHaveProperty("dataCancelamento");
+  });
+
+  it("bloqueia uma segunda avaliação não cancelada no mesmo ciclo", () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([avaliacaoVazia]));
+
+    expect(() =>
+      saveFeedback({ ...avaliacaoVazia, id: "outra-avaliacao" })
+    ).toThrow("Já existe uma avaliação para 2026 - Ciclo 1.");
+    expect(getFeedbacks()).toEqual([avaliacaoVazia]);
   });
 
   it("remove avaliação realmente vazia somente pelo cleanup interno", () => {
@@ -166,8 +242,18 @@ describe("feedbackStorage", () => {
         { ...avaliacaoConcluida, notaMedia: 5 },
         gerente
       )
-    ).toThrow("Avaliações concluídas não podem ser alteradas.");
+    ).toThrow("Avaliações concluídas ou canceladas não podem ser alteradas.");
 
+    expect(getFeedbacks()[0].notaMedia).toBe(4);
+  });
+
+  it("rejeita mutação normal de usuário sobre avaliação cancelada", () => {
+    const cancelada = { ...avaliacaoConcluida, status: "CANCELADA" as const };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([cancelada]));
+
+    expect(() =>
+      updateFeedback({ ...cancelada, notaMedia: 5 }, gerente)
+    ).toThrow("Avaliações concluídas ou canceladas não podem ser alteradas.");
     expect(getFeedbacks()[0].notaMedia).toBe(4);
   });
 

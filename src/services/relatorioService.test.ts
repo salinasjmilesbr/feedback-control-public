@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
+import type { Feedback } from "../types/Feedback";
 import { instalarLocalStorageEmMemoria } from "../test/localStorageMock";
 import { getRelatorioVisaoGeral } from "./relatorioService";
 
@@ -69,5 +70,44 @@ describe("getRelatorioVisaoGeral", () => {
 
     expect(relatorio.colaboradores.map(({ matricula }) => matricula)).toEqual([10]);
     expect(relatorio.totalElegiveis).toBe(1);
+  });
+
+  it("oculta canceladas por padrão e inclui por filtro explícito", () => {
+    const gerente = pessoa(900001, "GERENTE");
+    const avaliado = pessoa(10, "CONSULTOR", gerente.matricula);
+    const cancelada: Feedback = {
+      id: "cancelada-relatorio",
+      colaboradorId: avaliado.matricula,
+      colaboradorNome: avaliado.nome,
+      status: "CANCELADA",
+      data: "2026-01-10T00:00:00.000Z",
+      ano: ciclo.ano,
+      ciclo: ciclo.ciclo,
+      notaMedia: 4,
+      competencias: [],
+    };
+    localStorage.setItem(
+      "feedback-control-colaboradores",
+      JSON.stringify([gerente, avaliado])
+    );
+    localStorage.setItem(
+      "feedback-control-feedbacks",
+      JSON.stringify([cancelada])
+    );
+
+    expect(
+      getRelatorioVisaoGeral(ciclo, gerente).colaboradores.some(
+        (item) => item.matricula === avaliado.matricula
+      )
+    ).toBe(false);
+
+    const incluindo = getRelatorioVisaoGeral(ciclo, gerente, {
+      incluirCanceladas: true,
+    });
+    expect(
+      incluindo.colaboradores.find(
+        (item) => item.matricula === avaliado.matricula
+      )?.situacao
+    ).toBe("CANCELADA");
   });
 });

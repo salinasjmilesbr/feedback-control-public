@@ -6,6 +6,7 @@ import { criteriosAvaliacao } from "../data/modeloAvaliacao";
 import { getColaboradores } from "./colaboradorStorage";
 import {
   avaliacaoEstaVaziaParaCleanupInterno,
+  existeAvaliacaoNaoCanceladaNoCiclo,
   getFeedbacks,
   removerAvaliacaoVaziaNoCleanupInterno,
   saveFeedback,
@@ -24,6 +25,7 @@ export type SituacaoAvaliacaoCiclo =
   | "EM_ANDAMENTO"
   | "PRONTA_PARA_FEEDBACK"
   | "CONCLUIDA"
+  | "CANCELADA"
   | "SUSPENSA"
   | "NAO_APLICAVEL";
 
@@ -120,11 +122,11 @@ export function criarAvaliacoesDoCicloAtivado(
   let existentes = 0;
 
   elegiveis.forEach((colaborador) => {
-    const jaExiste = feedbacks.some(
-      (feedback) =>
-        feedback.colaboradorId === colaborador.matricula &&
-        feedback.ano === ciclo.ano &&
-        feedback.ciclo === ciclo.ciclo
+    const jaExiste = existeAvaliacaoNaoCanceladaNoCiclo(
+      feedbacks,
+      colaborador.matricula,
+      ciclo.ano,
+      ciclo.ciclo
     );
 
     if (jaExiste) {
@@ -169,6 +171,7 @@ export function getSituacaoAvaliacaoCiclo(
   feedback?: Feedback
 ): SituacaoAvaliacaoCiclo {
   if (!feedback) return "NAO_INICIADA";
+  if (feedback.status === "CANCELADA") return "CANCELADA";
   if (feedback.status === "CONCLUIDA") return "CONCLUIDA";
   if (feedback.status === "PRONTA_PARA_FEEDBACK") {
     return "PRONTA_PARA_FEEDBACK";
@@ -302,7 +305,8 @@ function calcularProgressoPapeis(
 
 export function getPainelCiclo(
   ciclo: CicloAvaliacao,
-  usuario: Colaborador
+  usuario: Colaborador,
+  options: { incluirCanceladas?: boolean } = {}
 ): LinhaPainelCiclo[] {
   const colaboradoresBase = getColaboradores();
   const colaboradores = getColaboradoresEfetivosNoCiclo(
@@ -317,7 +321,7 @@ export function getPainelCiclo(
     .filter((colaborador) => colaborador.funcao !== "GERENTE")
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
-  return elegiveis.map((colaborador) => {
+  return elegiveis.flatMap((colaborador) => {
     const base =
       colaboradoresBase.find((item) => item.matricula === colaborador.matricula) ??
       colaborador;
@@ -329,6 +333,10 @@ export function getPainelCiclo(
         item.ciclo === ciclo.ciclo
     );
 
+    if (feedback?.status === "CANCELADA" && !options.incluirCanceladas) {
+      return [];
+    }
+
     const progressoPapeis = calcularProgressoPapeis(
       colaborador,
       feedback,
@@ -338,13 +346,14 @@ export function getPainelCiclo(
     );
 
     let situacao = getSituacaoAvaliacaoCiclo(feedback);
-    if (!aplicabilidade.aplicavel) {
+    if (!aplicabilidade.aplicavel && feedback?.status !== "CANCELADA") {
       situacao = aplicabilidade.motivo.startsWith("Suspensa")
         ? "SUSPENSA"
         : "NAO_APLICAVEL";
     }
 
     const possuiPendencias =
+      feedback?.status !== "CANCELADA" &&
       aplicabilidade.aplicavel &&
       ([
         progressoPapeis.gerente,
@@ -356,7 +365,7 @@ export function getPainelCiclo(
       ) ||
         feedback?.encerradaComPendencias === true);
 
-    return {
+    return [{
       colaborador,
       feedback,
       situacao,
@@ -365,7 +374,7 @@ export function getPainelCiclo(
       motivoNaoAplicavel: aplicabilidade.aplicavel
         ? undefined
         : aplicabilidade.motivo,
-    };
+    }];
   });
 }
 
@@ -457,6 +466,8 @@ export function analisarPendenciasDoCiclo(
   const pendencias = new Map<string, PendenciaAvaliacao>();
 
   feedbacks.forEach((feedback) => {
+    if (feedback.status === "CANCELADA") return;
+
     const colaborador = colaboradores.find(
       (item) => item.matricula === feedback.colaboradorId
     );
@@ -590,7 +601,10 @@ export function concluirAvaliacoesNoEncerramentoDoCiclo(
 
   getFeedbacks()
     .filter(
-      (feedback) => feedback.ano === ciclo.ano && feedback.ciclo === ciclo.ciclo
+      (feedback) =>
+        feedback.ano === ciclo.ano &&
+        feedback.ciclo === ciclo.ciclo &&
+        feedback.status !== "CANCELADA"
     )
     .forEach((feedback) => {
       const base = colaboradoresBase.find(

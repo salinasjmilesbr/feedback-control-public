@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { can } from "../authorization/authorizationPolicy";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
@@ -23,6 +24,7 @@ const labelsSituacao: Record<SituacaoAvaliacaoCiclo, string> = {
   EM_ANDAMENTO: "Em andamento",
   PRONTA_PARA_FEEDBACK: "Pronta para Feedback",
   CONCLUIDA: "Concluída",
+  CANCELADA: "Cancelada",
   SUSPENSA: "Suspensa",
   NAO_APLICAVEL: "Não aplicável",
 };
@@ -51,6 +53,7 @@ function PainelCicloPage() {
   const { cicloId } = useParams();
   const navigate = useNavigate();
   const { usuarioAtual } = useUsuarioAtual();
+  const [mostrarCanceladas, setMostrarCanceladas] = useState(false);
   const podeAcessarPainelCiclo = usuarioAtual
     ? can(
         {
@@ -90,7 +93,9 @@ function PainelCicloPage() {
 
   const usuario = usuarioAtual;
   const cicloAtual = ciclo;
-  const linhas = getPainelCiclo(cicloAtual, usuario);
+  const linhas = getPainelCiclo(cicloAtual, usuario, {
+    incluirCanceladas: mostrarCanceladas,
+  });
   const colaboradoresEfetivos = new Map(
     linhas.map((linha) => [linha.colaborador.matricula, linha.colaborador])
   );
@@ -121,6 +126,7 @@ function PainelCicloPage() {
       EM_ANDAMENTO: 0,
       PRONTA_PARA_FEEDBACK: 0,
       CONCLUIDA: 0,
+      CANCELADA: 0,
       SUSPENSA: 0,
       NAO_APLICAVEL: 0,
     } as Record<SituacaoAvaliacaoCiclo, number>
@@ -273,6 +279,8 @@ function PainelCicloPage() {
                       className={`cycle-general-status ${
                         linha.situacao === "CONCLUIDA"
                           ? "is-complete"
+                          : linha.situacao === "CANCELADA"
+                          ? "is-cancelled"
                           : linha.situacao === "PRONTA_PARA_FEEDBACK"
                           ? "is-feedback"
                           : linha.situacao === "EM_ANDAMENTO"
@@ -324,11 +332,15 @@ function PainelCicloPage() {
                         className="cycle-btn cycle-btn--small cycle-btn--secondary"
                         onClick={() =>
                           navigate(
-                            `/colaborador/${linha.colaborador.matricula}/feedback/${linha.feedback!.id}/editar`
+                            linha.feedback!.status === "CANCELADA"
+                              ? `/colaborador/${linha.colaborador.matricula}/feedback/${linha.feedback!.id}`
+                              : `/colaborador/${linha.colaborador.matricula}/feedback/${linha.feedback!.id}/editar`
                           )
                         }
                       >
-                        Abrir avaliação
+                        {linha.feedback.status === "CANCELADA"
+                          ? "Ver avaliação"
+                          : "Abrir avaliação"}
                       </button>
                     ) : (
                       <span className="cycle-muted">Avaliação não criada</span>
@@ -390,6 +402,15 @@ function PainelCicloPage() {
           </div>
         ))}
       </section>
+
+      <label className="cycle-show-cancelled">
+        <input
+          type="checkbox"
+          checked={mostrarCanceladas}
+          onChange={(event) => setMostrarCanceladas(event.target.checked)}
+        />
+        Mostrar canceladas
+      </label>
 
       {separarPorVinculo ? (
         <div className="cycle-team-groups">

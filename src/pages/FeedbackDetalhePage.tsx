@@ -1,5 +1,6 @@
 ﻿import { type CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useState } from "react";
 import type { AuthorizationContext } from "../authorization/AuthorizationContext";
 import type { EvaluationResource } from "../authorization/ResourceContext";
 import { can } from "../authorization/authorizationPolicy";
@@ -8,6 +9,7 @@ import CriterionIcon from "../components/CriterionIcon";
 import CollaboratorIdentity from "../components/CollaboratorIdentity";
 import RoleExpectationsCard from "../components/RoleExpectationsCard";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
+import { cancelarAvaliacao } from "../services/cancelamentoAvaliacaoService";
 import { getCiclosAvaliacao } from "../services/cicloAvaliacaoStorage";
 import {
   getColaboradorByMatricula,
@@ -30,6 +32,8 @@ function FeedbackDetalhePage() {
   const navigate = useNavigate();
   const { id, feedbackId } = useParams();
   const { usuarioAtual } = useUsuarioAtual();
+  const [versao, setVersao] = useState(0);
+  void versao;
   const matricula = Number(id);
   const colaborador = Number.isFinite(matricula)
     ? getColaboradorByMatricula(matricula)
@@ -87,6 +91,13 @@ function FeedbackDetalhePage() {
         evaluationResource
       )
     : false;
+  const podeCancelarAvaliacao = authorizationContext
+    ? can(
+        authorizationContext,
+        "evaluation.cancel.manager",
+        evaluationResource
+      )
+    : false;
 
   if (!podeConsultarAvaliacao) {
     return (
@@ -118,9 +129,28 @@ function FeedbackDetalhePage() {
   }
 
   function statusLabel() {
+    if (feedback!.status === "CANCELADA") return "Cancelada";
     if (feedback!.status === "CONCLUIDA") return "Concluída";
     if (feedback!.status === "PRONTA_PARA_FEEDBACK") return "Pronta para Feedback";
     return "Rascunho";
+  }
+
+  function handleCancelarAvaliacao() {
+    if (!usuarioAtual) return;
+    const motivo = window.prompt("Informe o motivo do cancelamento:");
+    if (motivo === null) return;
+
+    try {
+      cancelarAvaliacao(feedback!.id, motivo, usuarioAtual);
+      setVersao((atual) => atual + 1);
+      alert("Avaliação cancelada com sucesso.");
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível cancelar a avaliação."
+      );
+    }
   }
 
   const feedbackFinalGerente = feedback.feedbackFinalGerente ?? "";
@@ -139,15 +169,39 @@ function FeedbackDetalhePage() {
         </div>
 
         <div className="evaluation-detail-actions admin-evaluation-actions">
-          <button
-            type="button"
-            className="evaluation-btn evaluation-btn--primary"
-            onClick={() => navigate(`/colaborador/${colaborador.matricula}/feedback/${feedback.id}/editar`)}
-          >
-            Editar avaliação
-          </button>
+          {podeCancelarAvaliacao && (
+            <button
+              type="button"
+              className="evaluation-btn evaluation-btn--secondary"
+              onClick={handleCancelarAvaliacao}
+            >
+              Cancelar avaliação
+            </button>
+          )}
+          {feedback.status !== "CANCELADA" && (
+            <button
+              type="button"
+              className="evaluation-btn evaluation-btn--primary"
+              onClick={() => navigate(`/colaborador/${colaborador.matricula}/feedback/${feedback.id}/editar`)}
+            >
+              Editar avaliação
+            </button>
+          )}
         </div>
       </section>
+
+      {feedback.status === "CANCELADA" && (
+        <section className="evaluation-alert evaluation-alert--warning">
+          <strong>Avaliação cancelada.</strong>
+          <p>{feedback.motivoCancelamento}</p>
+          <small>
+            Cancelada por {feedback.canceladoPorNome ?? "Autor não identificado"}
+            {feedback.dataCancelamento
+              ? ` em ${formatarData(feedback.dataCancelamento)}`
+              : ""}
+          </small>
+        </section>
+      )}
 
       {feedback.encerradaComPendencias && (
         <section className="evaluation-alert evaluation-alert--warning">

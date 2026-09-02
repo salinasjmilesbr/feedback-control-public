@@ -48,6 +48,7 @@ export interface FiltrosRelatorio {
   cargo?: FiltroCargoRelatorio;
   situacao?: SituacaoAvaliacaoCiclo;
   faixaNota?: number;
+  incluirCanceladas?: boolean;
 }
 
 function atendeFiltroCargo(
@@ -159,9 +160,10 @@ export function aplicarEscopoRelatorio<T extends { colaborador: Colaborador }>(
 
 function linhasDoEscopo(
   ciclo: CicloAvaliacao,
-  usuario: Colaborador
+  usuario: Colaborador,
+  incluirCanceladas = false
 ) {
-  const linhas = getPainelCiclo(ciclo, usuario);
+  const linhas = getPainelCiclo(ciclo, usuario, { incluirCanceladas });
   return aplicarEscopoRelatorio(linhas, usuario);
 }
 
@@ -172,7 +174,7 @@ export function getRelatorioVisaoGeral(
 ): RelatorioVisaoGeral {
   const escala = getEscalaAvaliacao();
   const linhas = aplicarFiltrosRelatorio(
-    linhasDoEscopo(ciclo, usuario),
+    linhasDoEscopo(ciclo, usuario, filtros?.incluirCanceladas),
     filtros,
     escala
   );
@@ -477,7 +479,7 @@ export function getRelatorioDetalheCriterio(
   const escala = getEscalaAvaliacao();
 
   const linhasAtuais = aplicarFiltrosRelatorio(
-    linhasDoEscopo(cicloAtual, usuario),
+    linhasDoEscopo(cicloAtual, usuario, filtros?.incluirCanceladas),
     filtros,
     escala
   ).filter((linha) =>
@@ -486,7 +488,7 @@ export function getRelatorioDetalheCriterio(
 
   const linhasAnteriores = cicloAnterior
     ? aplicarFiltrosRelatorio(
-        linhasDoEscopo(cicloAnterior, usuario),
+        linhasDoEscopo(cicloAnterior, usuario, filtros?.incluirCanceladas),
         filtros,
         escala
       ).filter((linha) =>
