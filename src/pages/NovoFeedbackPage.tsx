@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { authorize, can } from "../authorization/authorizationPolicy";
 import type { AuthorizationContext } from "../authorization/AuthorizationContext";
 import type { EvaluationResource } from "../authorization/ResourceContext";
+import AccessRestrictedState from "../components/AccessRestrictedState";
 import CriterionIcon from "../components/CriterionIcon";
 import { getColaboradorByMatricula, getColaboradores } from "../services/colaboradorStorage";
 import { saveFeedback, getFeedbacksByColaborador,} from "../services/feedbackStorage";
@@ -224,21 +225,11 @@ function NovoFeedbackPage() {
 
   if (!authorizationContext || !podeCriarAvaliacao) {
     return (
-      <main className="virtus-page new-evaluation-page">
-        <section className="new-evaluation-header">
-          <div>
-            <button
-              type="button"
-              className="new-evaluation-header__back"
-              onClick={() => navigate(-1)}
-            >
-              ← Voltar
-            </button>
-            <h1>Acesso restrito</h1>
-            <p>Não é possível criar uma nova avaliação para este colaborador.</p>
-          </div>
-        </section>
-      </main>
+      <AccessRestrictedState
+        message="Não é possível criar uma nova avaliação para este colaborador."
+        actionLabel="Voltar"
+        onAction={() => navigate(-1)}
+      />
     );
   }
 

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { can } from "../authorization/authorizationPolicy";
 import type { AuthorizationContext } from "../authorization/AuthorizationContext";
 import type { EvaluationResource } from "../authorization/ResourceContext";
+import AccessRestrictedState from "../components/AccessRestrictedState";
 import CriterionIcon from "../components/CriterionIcon";
 import { getColaboradorByMatricula, getColaboradores } from "../services/colaboradorStorage";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
@@ -355,21 +356,11 @@ function EditarFeedbackPage() {
 
   if (!podeAvaliar) {
     return (
-      <main className="virtus-page new-evaluation-page">
-        <section className="new-evaluation-header">
-          <div>
-            <button
-              type="button"
-              className="new-evaluation-header__back"
-              onClick={() => navigate(-1)}
-            >
-              ← Voltar
-            </button>
-            <h1>Acesso restrito</h1>
-            <p>Você não possui permissão para editar esta avaliação.</p>
-          </div>
-        </section>
-      </main>
+      <AccessRestrictedState
+        message="Você não possui permissão para editar esta avaliação."
+        actionLabel="Voltar"
+        onAction={() => navigate(-1)}
+      />
     );
   }
 

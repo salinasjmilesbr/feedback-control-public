@@ -1,0 +1,73 @@
+.access-restricted-state {
+  display: grid;
+  min-height: min(520px, calc(100vh - 180px));
+  place-items: center;
+}
+
+.access-restricted-state__card {
+  width: min(100%, 560px);
+  padding: 40px;
+  border: 1px solid var(--color-border, #ddd7e2);
+  border-radius: 16px;
+  background: var(--color-surface, #fff);
+  box-shadow: 0 16px 40px rgb(45 18 58 / 8%);
+  text-align: center;
+}
+
+.access-restricted-state__eyebrow {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--brand-primary, #660099);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.access-restricted-state__card h1 {
+  margin: 0;
+  color: var(--color-text, #24152c);
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+}
+
+.access-restricted-state__card p {
+  max-width: 440px;
+  margin: 14px auto 24px;
+  color: var(--color-text-muted, #6d6272);
+  line-height: 1.6;
+}
+
+.access-restricted-state__action {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 20px;
+  border: 1px solid var(--brand-primary, #660099);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--brand-primary, #660099);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.access-restricted-state__action:hover {
+  background: color-mix(in srgb, var(--brand-primary, #660099) 7%, white);
+}
+
+.access-restricted-state__action:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--brand-primary, #660099) 24%, transparent);
+  outline-offset: 3px;
+}
+
+@media (max-width: 640px) {
+  .access-restricted-state {
+    min-height: 420px;
+  }
+
+  .access-restricted-state__card {
+    padding: 30px 22px;
+  }
+}

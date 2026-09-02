@@ -1,6 +1,7 @@
 ﻿import { useLayoutEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { can, scopeCollaborators } from "../authorization/authorizationPolicy";
+import AccessRestrictedState from "../components/AccessRestrictedState";
 import CollaboratorIdentity from "../components/CollaboratorIdentity";
 import CriterionIcon from "../components/CriterionIcon";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
@@ -368,19 +369,7 @@ function ColaboradorDetalhePage() {
 
   if (!podeVisualizarColaborador) {
     return (
-      <main className="virtus-page">
-        <section className="virtus-empty">
-          <h2>Acesso restrito</h2>
-          <p>Você não possui acesso administrativo a este colaborador.</p>
-          <button
-            className="virtus-btn virtus-btn--outline"
-            type="button"
-            onClick={() => navigate("/")}
-          >
-            Voltar
-          </button>
-        </section>
-      </main>
+      <AccessRestrictedState message="Você não possui acesso administrativo a este colaborador." />
     );
   }
 
