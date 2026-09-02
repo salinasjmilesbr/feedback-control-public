@@ -10,6 +10,7 @@ import CollaboratorIdentity from "../components/CollaboratorIdentity";
 import RoleExpectationsCard from "../components/RoleExpectationsCard";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import { cancelarAvaliacao } from "../services/cancelamentoAvaliacaoService";
+import { reabrirAvaliacao } from "../services/reaberturaAvaliacaoService";
 import { getCiclosAvaliacao } from "../services/cicloAvaliacaoStorage";
 import {
   getColaboradorByMatricula,
@@ -98,6 +99,13 @@ function FeedbackDetalhePage() {
         evaluationResource
       )
     : false;
+  const podeReabrirAvaliacao = authorizationContext
+    ? can(
+        authorizationContext,
+        "evaluation.reopen.manager",
+        evaluationResource
+      )
+    : false;
 
   if (!podeConsultarAvaliacao) {
     return (
@@ -153,6 +161,24 @@ function FeedbackDetalhePage() {
     }
   }
 
+  function handleReabrirAvaliacao() {
+    if (!usuarioAtual) return;
+    const motivo = window.prompt("Informe o motivo da reabertura:");
+    if (motivo === null) return;
+
+    try {
+      reabrirAvaliacao(feedback!.id, motivo, usuarioAtual);
+      setVersao((atual) => atual + 1);
+      alert("Avaliação reaberta com sucesso.");
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível reabrir a avaliação."
+      );
+    }
+  }
+
   const feedbackFinalGerente = feedback.feedbackFinalGerente ?? "";
   const feedbackFinalCoordenador = feedback.feedbackFinalCoordenador ?? "";
   const temFeedbackFinal = Boolean(feedbackFinalGerente || feedbackFinalCoordenador);
@@ -169,6 +195,15 @@ function FeedbackDetalhePage() {
         </div>
 
         <div className="evaluation-detail-actions admin-evaluation-actions">
+          {podeReabrirAvaliacao && (
+            <button
+              type="button"
+              className="evaluation-btn evaluation-btn--secondary"
+              onClick={handleReabrirAvaliacao}
+            >
+              Reabrir avaliação
+            </button>
+          )}
           {podeCancelarAvaliacao && (
             <button
               type="button"
@@ -200,6 +235,19 @@ function FeedbackDetalhePage() {
               ? ` em ${formatarData(feedback.dataCancelamento)}`
               : ""}
           </small>
+        </section>
+      )}
+
+      {(feedback.reaberturas?.length ?? 0) > 0 && (
+        <section className="evaluation-alert evaluation-alert--warning">
+          <strong>Histórico de reaberturas</strong>
+          <ul>
+            {feedback.reaberturas!.map((evento, indice) => (
+              <li key={`${evento.data}-${indice}`}>
+                {evento.motivo} — {evento.autorNome} em {formatarData(evento.data)}
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

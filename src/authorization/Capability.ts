@@ -7,6 +7,7 @@ export type Capability =
   | "cycle.team.panel.view"
   | "evaluation.create"
   | "evaluation.cancel.manager"
+  | "evaluation.reopen.manager"
   | "evaluation.view.admin"
   | "evaluation.edit.manager"
   | "evaluation.edit.coordinator"
