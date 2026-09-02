@@ -155,6 +155,12 @@ describe("authorizationPolicy", () => {
     ).toBe(false);
   });
 
+  it("impede coordenador de executar mutação de colaborador protegida", () => {
+    expect(() =>
+      authorize(contexto(coordenador), "collaborator.edit", collaboratorResource)
+    ).toThrow(AuthorizationError);
+  });
+
   it.each([
     ["GERENTE", gerente, true],
     ["COORDENADOR", coordenador, true],

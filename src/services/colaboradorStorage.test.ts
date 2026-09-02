@@ -69,4 +69,16 @@ describe("colaboradorStorage", () => {
       senioridade: "PLENO",
     });
   });
+
+  it("mantém o colaborador persistido ao alterar seu status para desligado", () => {
+    const colaborador = analista("Analista de Testes");
+    saveColaborador(colaborador);
+
+    updateColaborador({ ...colaborador, status: "DESLIGADO" });
+
+    expect(getColaboradorByMatricula(colaborador.matricula)).toMatchObject({
+      matricula: colaborador.matricula,
+      status: "DESLIGADO",
+    });
+  });
 });

@@ -137,8 +137,8 @@ export function registrarMovimentacaoOrganizacional(params: {
   dataVigencia: string;
   escopo: EscopoMovimentacaoOrganizacional;
   motivo?: string;
-  autorMatricula?: number;
-  autorNome?: string;
+  autorMatricula: number;
+  autorNome: string;
 }): MovimentacaoOrganizacional {
   const cicloAtivo = getCicloAtivo();
   const agora = new Date().toISOString();
