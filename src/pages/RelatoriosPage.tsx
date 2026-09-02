@@ -33,6 +33,7 @@ const statusLabels: Record<SituacaoAvaliacaoCiclo, string> = {
   EM_ANDAMENTO: "Em andamento",
   PRONTA_PARA_FEEDBACK: "Pronta para Feedback",
   CONCLUIDA: "Concluída",
+  CANCELADA: "Cancelada",
   SUSPENSA: "Suspensa",
   NAO_APLICAVEL: "Não aplicável",
 };
@@ -75,6 +76,7 @@ function RelatoriosPage() {
   const [cargoFiltro, setCargoFiltro] = useState("");
   const [situacaoFiltro, setSituacaoFiltro] = useState("");
   const [faixaFiltro, setFaixaFiltro] = useState("");
+  const [incluirCanceladas, setIncluirCanceladas] = useState(false);
   const [criterioAbertoId, setCriterioAbertoId] = useState<string | null>(null);
   const podeVerRelatorios = usuarioAtual
     ? can(
@@ -134,6 +136,7 @@ function RelatoriosPage() {
         ? (situacaoFiltro as SituacaoAvaliacaoCiclo)
         : undefined,
     faixaNota: faixaFiltro !== "" ? Number(faixaFiltro) : undefined,
+    incluirCanceladas,
   };
 
   const relatorio = getRelatorioVisaoGeral(ciclo, usuarioAtual, filtros);
@@ -163,6 +166,7 @@ function RelatoriosPage() {
     cargoFiltro,
     situacaoFiltro,
     faixaFiltro,
+    incluirCanceladas ? "canceladas" : "",
   ].filter(Boolean).length;
 
   function limparFiltros() {
@@ -170,6 +174,7 @@ function RelatoriosPage() {
     setCargoFiltro("");
     setSituacaoFiltro("");
     setFaixaFiltro("");
+    setIncluirCanceladas(false);
   }
 
   const ciclosOrdenados = [...ciclosDisponiveis].sort(
@@ -348,6 +353,7 @@ function RelatoriosPage() {
               <option value="EM_ANDAMENTO">Em andamento</option>
               <option value="PRONTA_PARA_FEEDBACK">Pronta para Feedback</option>
               <option value="CONCLUIDA">Concluída</option>
+              <option value="CANCELADA">Cancelada</option>
               <option value="SUSPENSA">Suspensa</option>
               <option value="NAO_APLICAVEL">Não aplicável</option>
             </select>
@@ -366,6 +372,18 @@ function RelatoriosPage() {
                 </option>
               ))}
             </select>
+          </label>
+
+          <label className="reports-filter-control reports-filter-control--checkbox">
+            <span>Canceladas</span>
+            <span>
+              <input
+                type="checkbox"
+                checked={incluirCanceladas}
+                onChange={(event) => setIncluirCanceladas(event.target.checked)}
+              />
+              Incluir canceladas
+            </span>
           </label>
         </div>
       </section>

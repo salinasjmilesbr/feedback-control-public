@@ -1,0 +1,101 @@
+import { beforeEach, describe, expect, it } from "vitest";
+import { instalarLocalStorageEmMemoria } from "../test/localStorageMock";
+import type { CicloAvaliacao } from "../types/CicloAvaliacao";
+import type { Colaborador } from "../types/Colaborador";
+import type { Feedback } from "../types/Feedback";
+import {
+  analisarPendenciasDoCiclo,
+  concluirAvaliacoesNoEncerramentoDoCiclo,
+  getPainelCiclo,
+} from "./cicloEquipeService";
+
+const gerente: Colaborador = {
+  matricula: 1,
+  status: "ATIVO",
+  nome: "Gerente Fictício",
+  email: "gerente@example.com",
+  cargo: "Gerente",
+  area: "Área fictícia",
+  funcao: "GERENTE",
+  respondePara: "",
+};
+const avaliado: Colaborador = {
+  matricula: 2,
+  status: "ATIVO",
+  nome: "Pessoa Avaliada",
+  email: "avaliado@example.com",
+  cargo: "Consultor",
+  area: "Área fictícia",
+  funcao: "CONSULTOR",
+  gestorDiretoMatricula: gerente.matricula,
+  respondePara: gerente.nome,
+};
+const ciclo: CicloAvaliacao = {
+  id: "ciclo-cancelada",
+  ano: 2026,
+  ciclo: 1,
+  status: "ATIVO",
+  dataCriacao: "2026-01-01T00:00:00.000Z",
+  dataUltimaAtualizacao: "2026-01-01T00:00:00.000Z",
+};
+const cancelada: Feedback = {
+  id: "avaliacao-cancelada",
+  colaboradorId: avaliado.matricula,
+  colaboradorNome: avaliado.nome,
+  status: "CANCELADA",
+  data: "2026-01-10T00:00:00.000Z",
+  ano: 2026,
+  ciclo: 1,
+  notaMedia: 0,
+  competencias: [],
+  criteriosDetalhados: [
+    {
+      criterioId: "criterio",
+      criterioNome: "Critério",
+      nota: 0,
+      observacaoGerente: "",
+      observacaoCoordenador: "",
+      subcriterios: [
+        {
+          nome: "Subcritério",
+          notaGerente: 0,
+          notaCoordenador: 0,
+          notaColegiado: 0,
+          notaFinal: 0,
+        },
+      ],
+    },
+  ],
+};
+
+describe("cicloEquipeService com avaliação cancelada", () => {
+  beforeEach(() => {
+    instalarLocalStorageEmMemoria();
+    localStorage.setItem(
+      "feedback-control-colaboradores",
+      JSON.stringify([gerente, avaliado])
+    );
+    localStorage.setItem("feedback-control-ciclos", JSON.stringify([ciclo]));
+    localStorage.setItem("feedback-control-feedbacks", JSON.stringify([cancelada]));
+  });
+
+  it("oculta no painel por padrão e inclui com status explícito", () => {
+    expect(getPainelCiclo(ciclo, gerente)).toEqual([]);
+
+    const linhas = getPainelCiclo(ciclo, gerente, { incluirCanceladas: true });
+    expect(linhas).toHaveLength(1);
+    expect(linhas[0].situacao).toBe("CANCELADA");
+    expect(linhas[0].possuiPendencias).toBe(false);
+  });
+
+  it("não gera pendência de encerramento", () => {
+    expect(analisarPendenciasDoCiclo(ciclo)).toEqual([]);
+
+    concluirAvaliacoesNoEncerramentoDoCiclo(ciclo, []);
+
+    expect(
+      JSON.parse(localStorage.getItem("feedback-control-feedbacks") ?? "[]")[0]
+        .status
+    ).toBe("CANCELADA");
+  });
+});

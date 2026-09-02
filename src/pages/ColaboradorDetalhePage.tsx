@@ -8,7 +8,7 @@ import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 
 import ObservacoesColaborador from "../components/ObservacoesColaborador";
 import { getColaboradorByMatricula, getColaboradores } from "../services/colaboradorStorage";
-import { getFeedbacksByColaborador } from "../services/feedbackStorage";
+import { getFeedbacksAdministrativosByColaborador } from "../services/feedbackStorage";
 import { getObservacoesByColaborador } from "../services/observacaoStorage";
 import { getHistoricoOrganizacional } from "../services/historicoOrganizacionalStorage";
 import type { MovimentacaoOrganizacional } from "../types/HistoricoOrganizacional";
@@ -206,12 +206,14 @@ function calcularPreenchimentoFeedback(feedback: Feedback) {
 }
 
 function labelStatusFeedback(status: Feedback["status"]) {
+  if (status === "CANCELADA") return "Cancelada";
   if (status === "CONCLUIDA") return "Concluída";
   if (status === "PRONTA_PARA_FEEDBACK") return "Pronta para feedback";
   return "Em andamento";
 }
 
 function classeStatusFeedback(status: Feedback["status"]) {
+  if (status === "CANCELADA") return "is-cancelled";
   if (status === "CONCLUIDA") return "is-complete";
   if (status === "PRONTA_PARA_FEEDBACK") return "is-ready";
   return "is-progress";
@@ -311,6 +313,7 @@ function ColaboradorDetalhePage() {
     window.scrollTo(0, 0);
   }, [id]);
   const [mostrarObservacoes, setMostrarObservacoes] = useState(false);
+  const [mostrarCanceladas, setMostrarCanceladas] = useState(false);
   const [novaObservacaoToken, setNovaObservacaoToken] = useState(0);
   const [ordenacao, setOrdenacao] = useState<"RECENTES" | "ANTIGAS">("RECENTES");
   const [avaliacoesAbertas, setAvaliacoesAbertas] = useState<Set<string>>(
@@ -407,7 +410,10 @@ function ColaboradorDetalhePage() {
   const historicoOrganizacional = getHistoricoOrganizacional(
     colaborador.matricula
   );
-  const feedbacksBase = getFeedbacksByColaborador(colaborador.matricula);
+  const feedbacksBase = getFeedbacksAdministrativosByColaborador(
+    colaborador.matricula,
+    mostrarCanceladas
+  );
   const feedbacksOrdenados = [...feedbacksBase].sort((a, b) => {
     const dataA = new Date(a.dataCriacao ?? a.data).getTime();
     const dataB = new Date(b.dataCriacao ?? b.data).getTime();
@@ -697,18 +703,28 @@ function ColaboradorDetalhePage() {
             <h2>Histórico de avaliações</h2>
           </div>
 
-          <label className="collaborator-sort">
-            <span>Ordenar por:</span>
-            <select
-              value={ordenacao}
-              onChange={(event) =>
-                setOrdenacao(event.target.value as "RECENTES" | "ANTIGAS")
-              }
-            >
-              <option value="RECENTES">Mais recentes</option>
-              <option value="ANTIGAS">Mais antigas</option>
-            </select>
-          </label>
+          <div className="collaborator-history-controls">
+            <label className="collaborator-show-cancelled">
+              <input
+                type="checkbox"
+                checked={mostrarCanceladas}
+                onChange={(event) => setMostrarCanceladas(event.target.checked)}
+              />
+              Mostrar canceladas
+            </label>
+            <label className="collaborator-sort">
+              <span>Ordenar por:</span>
+              <select
+                value={ordenacao}
+                onChange={(event) =>
+                  setOrdenacao(event.target.value as "RECENTES" | "ANTIGAS")
+                }
+              >
+                <option value="RECENTES">Mais recentes</option>
+                <option value="ANTIGAS">Mais antigas</option>
+              </select>
+            </label>
+          </div>
         </div>
 
         {feedbacksOrdenados.length === 0 ? (
@@ -767,7 +783,8 @@ function ColaboradorDetalhePage() {
                         className="virtus-btn virtus-btn--outline collaborator-link-button collaborator-link-button--compact"
                         to={`/colaborador/${colaborador.matricula}/feedback/${feedback.id}`}
                       >
-                        {feedback.status === "CONCLUIDA"
+                        {feedback.status === "CONCLUIDA" ||
+                        feedback.status === "CANCELADA"
                           ? "Ver avaliação"
                           : "Abrir avaliação"}{" "}
                         →

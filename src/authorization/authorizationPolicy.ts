@@ -119,8 +119,16 @@ function decidir(
       return permissoes.podeAvaliar;
     }
 
+    if (capability === "evaluation.cancel.manager") {
+      return (
+        resource.evaluationStatus !== "CANCELADA" &&
+        permissoes.podeAvaliarComoGerente
+      );
+    }
+
     if (
-      resource.evaluationStatus === "CONCLUIDA" &&
+      (resource.evaluationStatus === "CONCLUIDA" ||
+        resource.evaluationStatus === "CANCELADA") &&
       (capability === "evaluation.edit.manager" ||
         capability === "evaluation.edit.coordinator" ||
         capability === "evaluation.edit.board")

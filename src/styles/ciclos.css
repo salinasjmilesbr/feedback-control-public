@@ -322,6 +322,23 @@
   color: #625b6d;
 }
 
+.cycle-show-cancelled {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 18px auto;
+  color: var(--brand-text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.cycle-general-status.is-cancelled {
+  border-color: #efc2c5;
+  background: #fde7e9;
+  color: #a4262c;
+}
+
 .cycle-card__meta-grid {
   display: flex;
   gap: 26px;

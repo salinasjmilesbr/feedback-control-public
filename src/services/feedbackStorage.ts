@@ -625,8 +625,12 @@ export function updateFeedback(
     (feedback) => feedback.id === updatedFeedback.id
   );
 
-  if (usuarioAtual && feedbackAtual?.status === "CONCLUIDA") {
-    throw new Error("Avaliações concluídas não podem ser alteradas.");
+  if (
+    usuarioAtual &&
+    (feedbackAtual?.status === "CONCLUIDA" ||
+      feedbackAtual?.status === "CANCELADA")
+  ) {
+    throw new Error("Avaliações concluídas ou canceladas não podem ser alteradas.");
   }
 
   const updatedFeedbacks = feedbacks.map((feedback) => {
@@ -641,4 +645,54 @@ export function updateFeedback(
   });
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedFeedbacks));
+}
+
+export function getFeedbacksAdministrativosByColaborador(
+  colaboradorId: number,
+  incluirCanceladas = false
+): Feedback[] {
+  return getFeedbacksByColaborador(colaboradorId).filter(
+    (feedback) => incluirCanceladas || feedback.status !== "CANCELADA"
+  );
+}
+
+export function getFeedbacksConcluidosByColaborador(
+  colaboradorId: number
+): Feedback[] {
+  return getFeedbacksByColaborador(colaboradorId).filter(
+    (feedback) => feedback.status === "CONCLUIDA"
+  );
+}
+
+export function persistirCancelamentoAuditadoInterno(
+  feedbackId: string,
+  motivo: string,
+  autor: Colaborador,
+  dataCancelamento: string
+): Feedback {
+  const feedbacks = getFeedbacks();
+  const atual = feedbacks.find((feedback) => feedback.id === feedbackId);
+  if (!atual) throw new Error("Avaliação não encontrada.");
+  if (atual.status === "CANCELADA") {
+    throw new Error("A avaliação já está cancelada.");
+  }
+
+  const cancelada: Feedback = {
+    ...atual,
+    status: "CANCELADA",
+    motivoCancelamento: motivo,
+    canceladoPorMatricula: autor.matricula,
+    canceladoPorNome: autor.nome,
+    dataCancelamento,
+    dataUltimaAtualizacao: dataCancelamento,
+  };
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify(
+      feedbacks.map((feedback) =>
+        feedback.id === feedbackId ? cancelada : feedback
+      )
+    )
+  );
+  return cancelada;
 }

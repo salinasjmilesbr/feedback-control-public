@@ -57,7 +57,8 @@ export interface FeedbackCriterioDetalhado {
 export type StatusFeedback =
   | "RASCUNHO"
   | "PRONTA_PARA_FEEDBACK"
-  | "CONCLUIDA";
+  | "CONCLUIDA"
+  | "CANCELADA";
 
 export interface Feedback {
   id: string;
@@ -71,6 +72,10 @@ export interface Feedback {
   dataCriacao?: string;
   dataUltimaAtualizacao?: string;
   dataConclusao?: string;
+  motivoCancelamento?: string;
+  canceladoPorMatricula?: number;
+  canceladoPorNome?: string;
+  dataCancelamento?: string;
 
   ano: number;
   ciclo: 1 | 2 | 3;

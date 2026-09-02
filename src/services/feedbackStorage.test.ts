@@ -5,6 +5,8 @@ import type { Feedback } from "../types/Feedback";
 import * as feedbackStorage from "./feedbackStorage";
 import {
   getFeedbacks,
+  getFeedbacksAdministrativosByColaborador,
+  getFeedbacksConcluidosByColaborador,
   removerAvaliacaoVaziaNoCleanupInterno,
   updateFeedback,
 } from "./feedbackStorage";
@@ -78,6 +80,30 @@ describe("feedbackStorage", () => {
 
   it("não expõe caminho genérico de exclusão física", () => {
     expect("deleteFeedback" in feedbackStorage).toBe(false);
+  });
+
+  it("oculta canceladas por padrão e inclui somente sob opção administrativa", () => {
+    const cancelada = { ...avaliacaoConcluida, status: "CANCELADA" as const };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([avaliacaoConcluida, cancelada]));
+
+    expect(
+      getFeedbacksAdministrativosByColaborador(avaliacaoConcluida.colaboradorId)
+    ).toEqual([avaliacaoConcluida]);
+    expect(
+      getFeedbacksAdministrativosByColaborador(
+        avaliacaoConcluida.colaboradorId,
+        true
+      )
+    ).toHaveLength(2);
+  });
+
+  it("mantém canceladas fora das avaliações concluídas do avaliado", () => {
+    const cancelada = { ...avaliacaoConcluida, status: "CANCELADA" as const };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([cancelada]));
+
+    expect(
+      getFeedbacksConcluidosByColaborador(cancelada.colaboradorId)
+    ).toEqual([]);
   });
 
   it("remove avaliação realmente vazia somente pelo cleanup interno", () => {
@@ -166,8 +192,18 @@ describe("feedbackStorage", () => {
         { ...avaliacaoConcluida, notaMedia: 5 },
         gerente
       )
-    ).toThrow("Avaliações concluídas não podem ser alteradas.");
+    ).toThrow("Avaliações concluídas ou canceladas não podem ser alteradas.");
 
+    expect(getFeedbacks()[0].notaMedia).toBe(4);
+  });
+
+  it("rejeita mutação normal de usuário sobre avaliação cancelada", () => {
+    const cancelada = { ...avaliacaoConcluida, status: "CANCELADA" as const };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([cancelada]));
+
+    expect(() =>
+      updateFeedback({ ...cancelada, notaMedia: 5 }, gerente)
+    ).toThrow("Avaliações concluídas ou canceladas não podem ser alteradas.");
     expect(getFeedbacks()[0].notaMedia).toBe(4);
   });
 

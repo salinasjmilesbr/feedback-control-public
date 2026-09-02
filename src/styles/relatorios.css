@@ -376,6 +376,18 @@
   color: #107c41;
 }
 
+.reports-status.is-cancelada {
+  background: #fde7e9;
+  color: #a4262c;
+}
+
+.reports-filter-control--checkbox > span:last-child {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 8px;
+}
+
 .reports-status.is-pronta-para-feedback,
 .reports-status.is-em-andamento {
   background: #fff4ce;

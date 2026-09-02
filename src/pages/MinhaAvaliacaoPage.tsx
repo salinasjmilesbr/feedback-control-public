@@ -2,7 +2,7 @@ import type { CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import CollaboratorIdentity from "../components/CollaboratorIdentity";
-import { getFeedbacksByColaborador } from "../services/feedbackStorage";
+import { getFeedbacksConcluidosByColaborador } from "../services/feedbackStorage";
 import {
   formatarNota,
   getEscalaAvaliacao,
@@ -41,10 +41,9 @@ function MinhaAvaliacaoPage() {
     return getItemEscalaPorNota(valor, escalaAvaliacao).significado;
   }
 
-  const avaliacoesConcluidas = getFeedbacksByColaborador(
+  const avaliacoesConcluidas = getFeedbacksConcluidosByColaborador(
     usuarioAtual.matricula
   )
-    .filter((feedback) => feedback.status === "CONCLUIDA")
     .sort((a, b) => b.ano - a.ano || b.ciclo - a.ciclo);
 
   return (
