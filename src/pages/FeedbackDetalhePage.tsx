@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import type { AuthorizationContext } from "../authorization/AuthorizationContext";
 import type { EvaluationResource } from "../authorization/ResourceContext";
 import { can } from "../authorization/authorizationPolicy";
+import AccessRestrictedState from "../components/AccessRestrictedState";
 import CriterionIcon from "../components/CriterionIcon";
 import CollaboratorIdentity from "../components/CollaboratorIdentity";
 import RoleExpectationsCard from "../components/RoleExpectationsCard";
@@ -91,19 +92,7 @@ function FeedbackDetalhePage() {
 
   if (!podeConsultarAvaliacao) {
     return (
-      <main className="virtus-page">
-        <section className="evaluation-empty">
-          <h1>Acesso restrito</h1>
-          <p>Você não possui acesso administrativo a esta avaliação.</p>
-          <button
-            type="button"
-            className="evaluation-btn evaluation-btn--secondary"
-            onClick={() => navigate("/")}
-          >
-            Voltar ao início
-          </button>
-        </section>
-      </main>
+      <AccessRestrictedState message="Você não possui acesso administrativo a esta avaliação." />
     );
   }
 
