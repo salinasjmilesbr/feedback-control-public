@@ -106,6 +106,23 @@ function FeedbackDetalhePage() {
         evaluationResource
       )
     : false;
+  const podeEditarAvaliacao = authorizationContext
+    ? can(
+        authorizationContext,
+        "evaluation.edit.manager",
+        evaluationResource
+      ) ||
+      can(
+        authorizationContext,
+        "evaluation.edit.coordinator",
+        evaluationResource
+      ) ||
+      can(
+        authorizationContext,
+        "evaluation.edit.board",
+        evaluationResource
+      )
+    : false;
 
   if (!podeConsultarAvaliacao) {
     return (
@@ -213,7 +230,7 @@ function FeedbackDetalhePage() {
               Cancelar avaliação
             </button>
           )}
-          {feedback.status !== "CANCELADA" && (
+          {podeEditarAvaliacao && (
             <button
               type="button"
               className="evaluation-btn evaluation-btn--primary"
