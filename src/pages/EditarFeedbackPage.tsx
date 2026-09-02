@@ -352,6 +352,27 @@ function EditarFeedbackPage() {
     podeAvaliarComoGerente ||
     podeAvaliarComoCoordenador ||
     podeAvaliarComoColegiado;
+
+  if (!podeAvaliar) {
+    return (
+      <main className="virtus-page new-evaluation-page">
+        <section className="new-evaluation-header">
+          <div>
+            <button
+              type="button"
+              className="new-evaluation-header__back"
+              onClick={() => navigate(-1)}
+            >
+              ← Voltar
+            </button>
+            <h1>Acesso restrito</h1>
+            <p>Você não possui permissão para editar esta avaliação.</p>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   const papeisPermitidos: string[] = [];
   if (podeAvaliarComoGerente) papeisPermitidos.push("Gerente");
   if (podeAvaliarComoCoordenador) papeisPermitidos.push("Coordenador direto");
