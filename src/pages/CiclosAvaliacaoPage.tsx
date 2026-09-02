@@ -18,7 +18,6 @@ import {
   criarAvaliacoesDoCicloAtivado,
   excluirAvaliacoesVaziasDoCiclo,
 } from "../services/cicloEquipeService";
-import type { StatusCicloAvaliacao } from "../types/CicloAvaliacao";
 import "../styles/ciclos.css";
 
 function CiclosAvaliacaoPage() {
@@ -35,9 +34,6 @@ function CiclosAvaliacaoPage() {
     useState<0 | 1 | 2 | 3>(0);
   const [ativarAgora, setAtivarAgora] = useState(false);
   const [editandoPeriodoId, setEditandoPeriodoId] = useState<string | null>(null);
-  const [editandoStatusId, setEditandoStatusId] = useState<string | null>(null);
-  const [statusEdicao, setStatusEdicao] =
-    useState<StatusCicloAvaliacao>("PLANEJADO");
   const [periodoInicioEdicao, setPeriodoInicioEdicao] = useState("");
   const [periodoFimEdicao, setPeriodoFimEdicao] = useState("");
   const [editandoMetasId, setEditandoMetasId] = useState<string | null>(null);
@@ -160,7 +156,6 @@ function CiclosAvaliacaoPage() {
 
       concluirAvaliacoesNoEncerramentoDoCiclo(item, pendencias);
       encerrarCiclo(item.id, totalPendencias);
-      setEditandoStatusId(null);
       setVersao((valor) => valor + 1);
       return;
     }
@@ -173,29 +168,19 @@ function CiclosAvaliacaoPage() {
 
     concluirAvaliacoesNoEncerramentoDoCiclo(item, []);
     encerrarCiclo(item.id, 0);
-    setEditandoStatusId(null);
     setVersao((valor) => valor + 1);
   }
 
-  function salvarStatus(
+  function ativarComValidacao(
     item: ReturnType<typeof getCiclosAvaliacao>[number]
   ) {
     try {
-      if (statusEdicao === "ENCERRADO") {
-        encerrarComValidacao(item);
-        return;
-      }
+      atualizarStatusCiclo(item.id, "ATIVO");
+      const cicloAtivado = getCiclosAvaliacao().find(
+        (cicloAtual) => cicloAtual.id === item.id
+      );
+      if (cicloAtivado) criarAvaliacoesDoCicloAtivado(cicloAtivado);
 
-      atualizarStatusCiclo(item.id, statusEdicao);
-
-      if (statusEdicao === "ATIVO") {
-        const cicloAtivado = getCiclosAvaliacao().find(
-          (cicloAtual) => cicloAtual.id === item.id
-        );
-        if (cicloAtivado) criarAvaliacoesDoCicloAtivado(cicloAtivado);
-      }
-
-      setEditandoStatusId(null);
       setErro("");
       setVersao((valor) => valor + 1);
     } catch (error) {
@@ -570,44 +555,24 @@ function CiclosAvaliacaoPage() {
 
                   <div className="cycle-editor cycle-editor--actions">
                     <span className="cycle-editor__label">Status</span>
-                    {editandoStatusId === item.id ? (
-                      <div className="cycle-inline-form">
-                        <select
-                          value={statusEdicao}
-                          onChange={(event) =>
-                            setStatusEdicao(
-                              event.target.value as StatusCicloAvaliacao
-                            )
-                          }
-                        >
-                          <option value="PLANEJADO">Planejado</option>
-                          <option value="ATIVO">Ativo</option>
-                          <option value="ENCERRADO">Encerrado</option>
-                        </select>
-                        <button
-                          className="cycle-btn cycle-btn--small cycle-btn--primary"
-                          onClick={() => salvarStatus(item)}
-                        >
-                          Salvar
-                        </button>
-                        <button
-                          className="cycle-btn cycle-btn--small cycle-btn--secondary"
-                          onClick={() => setEditandoStatusId(null)}
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                    ) : (
+                    {item.status === "PLANEJADO" && (
                       <button
                         className="cycle-link-button"
-                        onClick={() => {
-                          setEditandoStatusId(item.id);
-                          setStatusEdicao(item.status);
-                          setErro("");
-                        }}
+                        onClick={() => ativarComValidacao(item)}
                       >
-                        Editar status
+                        Ativar ciclo
                       </button>
+                    )}
+                    {item.status === "ATIVO" && (
+                      <button
+                        className="cycle-link-button"
+                        onClick={() => encerrarComValidacao(item)}
+                      >
+                        Encerrar ciclo
+                      </button>
+                    )}
+                    {item.status === "ENCERRADO" && (
+                      <span className="cycle-muted">Lifecycle encerrado</span>
                     )}
                   </div>
 

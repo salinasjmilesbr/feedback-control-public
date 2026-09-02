@@ -16,6 +16,21 @@ function persistir(ciclos: CicloAvaliacao[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(ciclos));
 }
 
+function validarTransicaoNormal(
+  statusAtual: StatusCicloAvaliacao,
+  novoStatus: StatusCicloAvaliacao
+): void {
+  const transicaoValida =
+    (statusAtual === "PLANEJADO" && novoStatus === "ATIVO") ||
+    (statusAtual === "ATIVO" && novoStatus === "ENCERRADO");
+
+  if (!transicaoValida) {
+    throw new Error(
+      `Transição de ciclo inválida: ${statusAtual} → ${novoStatus}.`
+    );
+  }
+}
+
 function inicializarCiclos(): CicloAvaliacao[] {
   const agora = new Date().toISOString();
   const feedbacks = getFeedbacks();
@@ -148,6 +163,8 @@ export function ativarCiclo(id: string): void {
     throw new Error("Ciclo não encontrado.");
   }
 
+  validarTransicaoNormal(alvo.status, "ATIVO");
+
   const outroAtivo = ciclos.find(
     (item) => item.status === "ATIVO" && item.id !== id
   );
@@ -187,6 +204,8 @@ export function encerrarCiclo(
   if (!alvo) {
     throw new Error("Ciclo não encontrado.");
   }
+
+  validarTransicaoNormal(alvo.status, "ENCERRADO");
 
   const agora = new Date().toISOString();
 
@@ -261,16 +280,18 @@ export function atualizarStatusCiclo(
   id: string,
   novoStatus: StatusCicloAvaliacao
 ): void {
-  if (novoStatus === "ATIVO") {
-    ativarCiclo(id);
-    return;
-  }
-
   const ciclos = getCiclosAvaliacao();
   const alvo = ciclos.find((item) => item.id === id);
 
   if (!alvo) {
     throw new Error("Ciclo não encontrado.");
+  }
+
+  validarTransicaoNormal(alvo.status, novoStatus);
+
+  if (novoStatus === "ATIVO") {
+    ativarCiclo(id);
+    return;
   }
 
   if (novoStatus === "ENCERRADO") {
@@ -279,25 +300,7 @@ export function atualizarStatusCiclo(
     );
   }
 
-  if (alvo.status === "ATIVO" && novoStatus === "PLANEJADO") {
-    throw new Error(
-      "Um ciclo ativo não pode voltar diretamente para Planejado. Encerre o ciclo primeiro."
-    );
-  }
-
-  const agora = new Date().toISOString();
-
-  persistir(
-    ciclos.map((item) =>
-      item.id === id
-        ? {
-            ...item,
-            status: novoStatus,
-            dataUltimaAtualizacao: agora,
-          }
-        : item
-    )
-  );
+  throw new Error("Transição de status não suportada no fluxo normal.");
 }
 
 export function atualizarConfiguracaoMetasCiclo(
