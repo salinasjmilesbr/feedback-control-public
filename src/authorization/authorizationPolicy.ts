@@ -115,6 +115,10 @@ function decidir(
       );
     }
 
+    if (capability === "evaluation.view.admin") {
+      return permissoes.podeAvaliar;
+    }
+
     if (capability === "evaluation.edit.manager") {
       return permissoes.podeAvaliarComoGerente;
     }

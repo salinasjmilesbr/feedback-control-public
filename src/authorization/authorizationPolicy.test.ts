@@ -408,6 +408,35 @@ describe("authorizationPolicy", () => {
     ).toBe(false);
   });
 
+  it.each([
+    ["GERENTE_RESPONSAVEL", gerente, true],
+    ["COORDENADOR_DIRETO", coordenador, true],
+    ["MEMBRO_COLEGIADO", outroCoordenador, true],
+    ["SEM_RESPONSABILIDADE", externo, false],
+    ["PROPRIO_AVALIADO", direto, false],
+  ] as const)(
+    "autoriza evaluation.view.admin para %s conforme a responsabilidade do ciclo",
+    (_perfil, actor, esperado) => {
+      const resource: EvaluationResource = {
+        ...evaluationResource,
+        evaluatedCollaborator: {
+          ...direto,
+          avaliadoresColegiadoMatriculas: [outroCoordenador.matricula],
+        },
+      };
+
+      expect(
+        can(contexto(actor), "evaluation.view.admin", resource)
+      ).toBe(esperado);
+    }
+  );
+
+  it("nega evaluation.view.admin para recurso incompatível", () => {
+    expect(
+      can(contexto(gerente), "evaluation.view.admin", { kind: "global" })
+    ).toBe(false);
+  });
+
   it("preserva papéis simultâneos de coordenador direto e colegiado", () => {
     const avaliadoComPapeisSimultaneos = {
       ...direto,
@@ -519,6 +548,12 @@ describe("authorizationPolicy", () => {
     ).toBe(true);
     expect(
       can(contexto(coordenadorAtual), "evaluation.edit.coordinator", resource)
+    ).toBe(false);
+    expect(
+      can(contexto(coordenadorAnterior), "evaluation.view.admin", resource)
+    ).toBe(true);
+    expect(
+      can(contexto(coordenadorAtual), "evaluation.view.admin", resource)
     ).toBe(false);
   });
 
