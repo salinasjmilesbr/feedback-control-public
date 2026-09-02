@@ -873,11 +873,16 @@ function ColaboradorDetalhePage() {
                       </div>
                     )}
 
-                    {(movimento.motivo || movimento.cicloReferenciaLabel) && (
+                    {(movimento.motivo ||
+                      movimento.cicloReferenciaLabel ||
+                      movimento.autorNome) && (
                       <footer>
                         {movimento.motivo && <span>Motivo: {movimento.motivo}</span>}
                         {movimento.cicloReferenciaLabel && (
                           <span>Ciclo de referência: {movimento.cicloReferenciaLabel}</span>
+                        )}
+                        {movimento.autorNome && (
+                          <span>Alterado por: {movimento.autorNome}</span>
                         )}
                       </footer>
                     )}

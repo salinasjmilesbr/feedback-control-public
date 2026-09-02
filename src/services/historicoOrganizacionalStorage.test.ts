@@ -189,8 +189,9 @@ describe("historicoOrganizacionalStorage", () => {
       JSON.stringify([movimentoAntigo])
     );
 
-    expect(getHistoricoOrganizacional(colaborador.matricula)).toEqual([
-      movimentoAntigo,
-    ]);
+    const historico = getHistoricoOrganizacional(colaborador.matricula);
+
+    expect(historico).toEqual([movimentoAntigo]);
+    expect(historico[0].autorNome).toBeUndefined();
   });
 });
