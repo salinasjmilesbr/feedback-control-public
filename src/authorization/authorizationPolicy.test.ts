@@ -235,6 +235,8 @@ describe("authorizationPolicy", () => {
     ["GERENTE", gerente, true],
     ["COORDENADOR", coordenador, true],
     ["ANALISTA", direto, false],
+    ["CONSULTOR", pessoa(24, "CONSULTOR"), false],
+    ["ESTAGIARIO", pessoa(25, "ESTAGIARIO"), false],
   ] as const)(
     "caracteriza collaborator.list para %s",
     (_perfil, actor, esperado) => {
@@ -245,6 +247,38 @@ describe("authorizationPolicy", () => {
           { kind: "collaborator-list", collaborators }
         )
       ).toBe(esperado);
+    }
+  );
+
+  it.each([
+    ["GERENTE_NO_ESCOPO", gerente, direto, true],
+    ["COORDENADOR_DIRETO", coordenador, direto, true],
+    ["COORDENADOR_COLEGIADO", coordenador, apenasColegiado, true],
+    ["COORDENADOR_FORA_DO_ESCOPO", externo, direto, false],
+    ["ANALISTA_PROPRIO_PERFIL", direto, direto, false],
+    ["CONSULTOR_PROPRIO_PERFIL", pessoa(60, "CONSULTOR"), pessoa(60, "CONSULTOR"), false],
+    ["ESTAGIARIO_PROPRIO_PERFIL", pessoa(61, "ESTAGIARIO"), pessoa(61, "ESTAGIARIO"), false],
+  ] as const)(
+    "combina collaborator.list e OPERATIONAL_TEAM para perfil administrativo: %s",
+    (_cenario, actor, target, esperado) => {
+      const equipe = [...collaborators];
+      if (!equipe.some((item) => item.matricula === actor.matricula)) {
+        equipe.push(actor);
+      }
+
+      const podeListar = can(
+        contexto(actor),
+        "collaborator.list",
+        { kind: "collaborator-list", collaborators: equipe }
+      );
+      const podeVisualizar =
+        podeListar &&
+        scopeCollaborators(
+          contexto(actor),
+          { purpose: "OPERATIONAL_TEAM", collaborators: equipe }
+        ).some((item) => item.matricula === target.matricula);
+
+      expect(podeVisualizar).toBe(esperado);
     }
   );
 
