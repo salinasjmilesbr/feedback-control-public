@@ -237,6 +237,12 @@ export function atualizarPeriodoCiclo(
     throw new Error("Ciclo não encontrado.");
   }
 
+  if (alvo.status !== "PLANEJADO") {
+    throw new Error(
+      "O período só pode ser alterado enquanto o ciclo estiver Planejado."
+    );
+  }
+
   if (!dataInicio || !dataFim) {
     throw new Error("Informe as datas de início e fim do ciclo.");
   }
