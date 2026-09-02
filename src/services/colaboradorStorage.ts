@@ -96,7 +96,6 @@ function migrarColaborador(colaborador: Colaborador): Colaborador {
     colaborador.funcao ?? "ANALISTA";
 
   let senioridade = colaborador.senioridade;
-  let cargo = colaborador.cargo;
 
   if (funcao === "ANALISTA" && !senioridade) {
     const cargoNormalizado = colaborador.cargo
@@ -121,23 +120,6 @@ function migrarColaborador(colaborador: Colaborador): Colaborador {
     senioridade = senioridadeEncontrada?.senioridade;
   }
 
-  if (
-    funcao === "ANALISTA" &&
-    /analista/i.test(colaborador.cargo)
-  ) {
-    const cargosDisponiveis = [
-      "Designer",
-      "Programador",
-      "Tráfego",
-      "QA",
-    ];
-
-    const indiceCargo =
-      Math.abs(colaborador.matricula) % cargosDisponiveis.length;
-
-    cargo = cargosDisponiveis[indiceCargo];
-  }
-
   return {
     ...colaborador,
     nome: formatarNomePessoa(colaborador.nome),
@@ -145,7 +127,6 @@ function migrarColaborador(colaborador: Colaborador): Colaborador {
     gerente: colaborador.gerente
       ? formatarNomePessoa(colaborador.gerente)
       : colaborador.gerente,
-    cargo,
     funcao,
     senioridade,
     gestorDiretoMatricula,
