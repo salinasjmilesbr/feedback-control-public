@@ -56,6 +56,7 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     expect(html).toContain("Ativar ciclo");
     expect(html).not.toContain("Encerrar ciclo");
     expect(html).not.toContain("Editar status");
+    expect(html).toContain("Editar período");
   });
 
   it("mostra somente encerramento para ciclo ativo", () => {
@@ -64,6 +65,7 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     expect(html).toContain("Encerrar ciclo");
     expect(html).not.toContain("Ativar ciclo");
     expect(html).not.toContain("Editar status");
+    expect(html).not.toContain("Editar período");
   });
 
   it("não mostra ação de transição para ciclo encerrado", () => {
@@ -73,5 +75,6 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     expect(html).not.toContain("Encerrar ciclo");
     expect(html).not.toContain("Editar status");
     expect(html).toContain("Lifecycle encerrado");
+    expect(html).not.toContain("Editar período");
   });
 });

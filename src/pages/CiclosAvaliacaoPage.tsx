@@ -419,58 +419,62 @@ function CiclosAvaliacaoPage() {
                 <div className="cycle-card__editors">
                   <div className="cycle-editor">
                     <span className="cycle-editor__label">Período</span>
-                    {editandoPeriodoId === item.id ? (
-                      <div className="cycle-inline-form cycle-inline-form--period">
-                        <input
-                          type="date"
-                          value={periodoInicioEdicao}
-                          onChange={(event) =>
-                            setPeriodoInicioEdicao(event.target.value)
-                          }
-                        />
-                        <input
-                          type="date"
-                          value={periodoFimEdicao}
-                          onChange={(event) =>
-                            setPeriodoFimEdicao(event.target.value)
-                          }
-                        />
-                        <button
-                          className="cycle-btn cycle-btn--small cycle-btn--primary"
-                          onClick={() => {
-                            try {
-                              atualizarPeriodoCiclo(
-                                item.id,
-                                periodoInicioEdicao,
-                                periodoFimEdicao
-                              );
-                              setEditandoPeriodoId(null);
-                              setErro("");
-                              setVersao((valor) => valor + 1);
-                            } catch (error) {
-                              setErro(
-                                error instanceof Error
-                                  ? error.message
-                                  : "Não foi possível atualizar o período."
-                              );
+                    {item.status === "PLANEJADO" ? (
+                      editandoPeriodoId === item.id ? (
+                        <div className="cycle-inline-form cycle-inline-form--period">
+                          <input
+                            type="date"
+                            value={periodoInicioEdicao}
+                            onChange={(event) =>
+                              setPeriodoInicioEdicao(event.target.value)
                             }
+                          />
+                          <input
+                            type="date"
+                            value={periodoFimEdicao}
+                            onChange={(event) =>
+                              setPeriodoFimEdicao(event.target.value)
+                            }
+                          />
+                          <button
+                            className="cycle-btn cycle-btn--small cycle-btn--primary"
+                            onClick={() => {
+                              try {
+                                atualizarPeriodoCiclo(
+                                  item.id,
+                                  periodoInicioEdicao,
+                                  periodoFimEdicao
+                                );
+                                setEditandoPeriodoId(null);
+                                setErro("");
+                                setVersao((valor) => valor + 1);
+                              } catch (error) {
+                                setErro(
+                                  error instanceof Error
+                                    ? error.message
+                                    : "Não foi possível atualizar o período."
+                                );
+                              }
+                            }}
+                          >
+                            Salvar
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          className="cycle-link-button"
+                          onClick={() => {
+                            setEditandoPeriodoId(item.id);
+                            setPeriodoInicioEdicao(item.dataInicio ?? "");
+                            setPeriodoFimEdicao(item.dataFim ?? "");
+                            setErro("");
                           }}
                         >
-                          Salvar
+                          Editar período
                         </button>
-                      </div>
+                      )
                     ) : (
-                      <button
-                        className="cycle-link-button"
-                        onClick={() => {
-                          setEditandoPeriodoId(item.id);
-                          setPeriodoInicioEdicao(item.dataInicio ?? "");
-                          setPeriodoFimEdicao(item.dataFim ?? "");
-                          setErro("");
-                        }}
-                      >
-                        Editar período
-                      </button>
+                      <span className="cycle-muted">Bloqueado após o início</span>
                     )}
                   </div>
 
