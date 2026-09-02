@@ -6,7 +6,11 @@ import type { EvaluationResource } from "../authorization/ResourceContext";
 import AccessRestrictedState from "../components/AccessRestrictedState";
 import CriterionIcon from "../components/CriterionIcon";
 import { getColaboradorByMatricula, getColaboradores } from "../services/colaboradorStorage";
-import { saveFeedback, getFeedbacksByColaborador,} from "../services/feedbackStorage";
+import {
+  existeAvaliacaoNaoCanceladaNoCiclo,
+  getFeedbacksByColaborador,
+  saveFeedback,
+} from "../services/feedbackStorage";
 import type { Feedback } from "../types/Feedback";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import CollaboratorIdentity from "../components/CollaboratorIdentity";
@@ -773,12 +777,11 @@ function NovoFeedbackPage() {
       feedbackFinalCoordenador,
     } as unknown as Feedback;
 
-    const feedbackExistente = getFeedbacksByColaborador(
-      colaborador!.matricula
-    ).find(
-      (feedback) =>
-        feedback.ano === anoAvaliacao &&
-        feedback.ciclo === cicloAvaliacao
+    const feedbackExistente = existeAvaliacaoNaoCanceladaNoCiclo(
+      getFeedbacksByColaborador(colaborador!.matricula),
+      colaborador!.matricula,
+      anoAvaliacao,
+      cicloAvaliacao
     );
 
 if (feedbackExistente) {

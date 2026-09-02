@@ -32,6 +32,21 @@ export function getFeedbacksByColaborador(colaboradorId: number): Feedback[] {
   );
 }
 
+export function existeAvaliacaoNaoCanceladaNoCiclo(
+  feedbacks: Feedback[],
+  colaboradorId: number,
+  ano: number,
+  ciclo: number
+): boolean {
+  return feedbacks.some(
+    (feedback) =>
+      feedback.colaboradorId === colaboradorId &&
+      feedback.ano === ano &&
+      feedback.ciclo === ciclo &&
+      feedback.status !== "CANCELADA"
+  );
+}
+
 function encontrarGerenteResponsavelEmData(
   colaborador: Colaborador,
   colaboradores: Colaborador[],
@@ -504,6 +519,21 @@ export function saveFeedback(
   usuarioAtual?: Colaborador
 ): void {
   const feedbacks = getFeedbacks();
+
+  if (
+    feedback.status !== "CANCELADA" &&
+    existeAvaliacaoNaoCanceladaNoCiclo(
+      feedbacks,
+      feedback.colaboradorId,
+      feedback.ano,
+      feedback.ciclo
+    )
+  ) {
+    throw new Error(
+      `Já existe uma avaliação para ${feedback.ano} - Ciclo ${feedback.ciclo}.`
+    );
+  }
+
   let paraSalvar = feedback;
 
   if (usuarioAtual) {

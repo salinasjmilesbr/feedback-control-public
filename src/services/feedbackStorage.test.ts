@@ -8,6 +8,7 @@ import {
   getFeedbacksAdministrativosByColaborador,
   getFeedbacksConcluidosByColaborador,
   removerAvaliacaoVaziaNoCleanupInterno,
+  saveFeedback,
   updateFeedback,
 } from "./feedbackStorage";
 
@@ -104,6 +105,55 @@ describe("feedbackStorage", () => {
     expect(
       getFeedbacksConcluidosByColaborador(cancelada.colaboradorId)
     ).toEqual([]);
+  });
+
+  it("permite criar registro novo e vazio quando só existe avaliação cancelada", () => {
+    const cancelada: Feedback = {
+      ...avaliacaoVazia,
+      id: "avaliacao-cancelada-com-conteudo",
+      status: "CANCELADA",
+      notaMedia: 4,
+      competencias: avaliacaoVazia.competencias.map((competencia) => ({
+        ...competencia,
+        nota: 4,
+        comentario: "Conteúdo histórico preservado",
+      })),
+      feedbackFinalGerente: "Feedback histórico",
+      motivoCancelamento: "Criada indevidamente",
+      canceladoPorMatricula: gerente.matricula,
+      canceladoPorNome: gerente.nome,
+      dataCancelamento: "2026-02-01T10:00:00.000Z",
+    };
+    const nova: Feedback = {
+      ...avaliacaoVazia,
+      id: "avaliacao-nova",
+      competencias: avaliacaoVazia.competencias.map((competencia) => ({
+        ...competencia,
+        nota: 0,
+        comentario: "",
+      })),
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([cancelada]));
+
+    saveFeedback(nova);
+
+    const persistidas = getFeedbacks();
+    expect(persistidas).toHaveLength(2);
+    expect(persistidas[0]).toEqual(cancelada);
+    expect(persistidas[1].id).not.toBe(cancelada.id);
+    expect(persistidas[1]).toEqual(nova);
+    expect(persistidas[1]).not.toHaveProperty("motivoCancelamento");
+    expect(persistidas[1]).not.toHaveProperty("canceladoPorMatricula");
+    expect(persistidas[1]).not.toHaveProperty("dataCancelamento");
+  });
+
+  it("bloqueia uma segunda avaliação não cancelada no mesmo ciclo", () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([avaliacaoVazia]));
+
+    expect(() =>
+      saveFeedback({ ...avaliacaoVazia, id: "outra-avaliacao" })
+    ).toThrow("Já existe uma avaliação para 2026 - Ciclo 1.");
+    expect(getFeedbacks()).toEqual([avaliacaoVazia]);
   });
 
   it("remove avaliação realmente vazia somente pelo cleanup interno", () => {

@@ -6,6 +6,7 @@ import type { Feedback } from "../types/Feedback";
 import {
   analisarPendenciasDoCiclo,
   concluirAvaliacoesNoEncerramentoDoCiclo,
+  criarAvaliacoesDoCicloAtivado,
   getPainelCiclo,
 } from "./cicloEquipeService";
 
@@ -97,5 +98,42 @@ describe("cicloEquipeService com avaliação cancelada", () => {
       JSON.parse(localStorage.getItem("feedback-control-feedbacks") ?? "[]")[0]
         .status
     ).toBe("CANCELADA");
+  });
+
+  it("gera avaliação automática nova e vazia quando só existe cancelada", () => {
+    const resultado = criarAvaliacoesDoCicloAtivado(ciclo);
+
+    expect(resultado.criadas).toBeGreaterThan(0);
+    expect(resultado.existentes).toBe(0);
+    const persistidas = JSON.parse(
+      localStorage.getItem("feedback-control-feedbacks") ?? "[]"
+    ) as Feedback[];
+    const doAvaliado = persistidas.filter(
+      (feedback) => feedback.colaboradorId === avaliado.matricula
+    );
+    expect(doAvaliado).toHaveLength(2);
+    expect(doAvaliado[0]).toEqual(cancelada);
+    expect(doAvaliado[1].id).not.toBe(cancelada.id);
+    expect(doAvaliado[1].status).toBe("RASCUNHO");
+    expect(doAvaliado[1].notaMedia).toBe(0);
+    expect(doAvaliado[1].feedbackFinalGerente).toBe("");
+    expect(doAvaliado[1].feedbackFinalCoordenador).toBe("");
+    expect(doAvaliado[1]).not.toHaveProperty("motivoCancelamento");
+  });
+
+  it("mantém a avaliação não cancelada como existente na geração automática", () => {
+    localStorage.setItem(
+      "feedback-control-feedbacks",
+      JSON.stringify([{ ...cancelada, id: "avaliacao-ativa", status: "RASCUNHO" }])
+    );
+
+    const resultado = criarAvaliacoesDoCicloAtivado(ciclo);
+    expect(resultado.existentes).toBe(1);
+    const persistidas = JSON.parse(
+      localStorage.getItem("feedback-control-feedbacks") ?? "[]"
+    ) as Feedback[];
+    expect(
+      persistidas.filter((feedback) => feedback.colaboradorId === avaliado.matricula)
+    ).toHaveLength(1);
   });
 });

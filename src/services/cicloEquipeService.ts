@@ -6,6 +6,7 @@ import { criteriosAvaliacao } from "../data/modeloAvaliacao";
 import { getColaboradores } from "./colaboradorStorage";
 import {
   avaliacaoEstaVaziaParaCleanupInterno,
+  existeAvaliacaoNaoCanceladaNoCiclo,
   getFeedbacks,
   removerAvaliacaoVaziaNoCleanupInterno,
   saveFeedback,
@@ -121,11 +122,11 @@ export function criarAvaliacoesDoCicloAtivado(
   let existentes = 0;
 
   elegiveis.forEach((colaborador) => {
-    const jaExiste = feedbacks.some(
-      (feedback) =>
-        feedback.colaboradorId === colaborador.matricula &&
-        feedback.ano === ciclo.ano &&
-        feedback.ciclo === ciclo.ciclo
+    const jaExiste = existeAvaliacaoNaoCanceladaNoCiclo(
+      feedbacks,
+      colaborador.matricula,
+      ciclo.ano,
+      ciclo.ciclo
     );
 
     if (jaExiste) {
