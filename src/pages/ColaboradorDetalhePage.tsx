@@ -362,6 +362,17 @@ function ColaboradorDetalhePage() {
         { kind: "observation", collaborator: colaborador }
       )
     : false;
+  const podeCriarAvaliacao = authorizationContext
+    ? can(
+        authorizationContext,
+        "evaluation.create",
+        {
+          kind: "evaluation",
+          evaluatedCollaborator: colaborador,
+          collaborators: todosColaboradores,
+        }
+      )
+    : false;
   const gestorDireto = colaborador.gestorDiretoMatricula
     ? todosColaboradores.find(
         (item) => item.matricula === colaborador.gestorDiretoMatricula
@@ -508,13 +519,15 @@ function ColaboradorDetalhePage() {
             </button>
           )}
 
-          <Link
-            to={`/colaborador/${colaborador.matricula}/novo-feedback`}
-            className="virtus-btn virtus-btn--primary collaborator-link-button"
-          >
-            <IconPlus />
-            Nova avaliação
-          </Link>
+          {podeCriarAvaliacao && (
+            <Link
+              to={`/colaborador/${colaborador.matricula}/novo-feedback`}
+              className="virtus-btn virtus-btn--primary collaborator-link-button"
+            >
+              <IconPlus />
+              Nova avaliação
+            </Link>
+          )}
         </div>
       </section>
 

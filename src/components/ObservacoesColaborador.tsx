@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { can } from "../authorization/authorizationPolicy";
+import { authorize, can } from "../authorization/authorizationPolicy";
 import type { Colaborador } from "../types/Colaborador";
 import type {
   Observacao,
@@ -170,7 +170,7 @@ function ObservacoesColaborador({
     const podeSalvar = editandoId
       ? podeEditarObservacao(observacaoEmEdicao)
       : podeCriarObservacao;
-    if (!usuarioAtual || !podeSalvar) return;
+    if (!usuarioAtual || !authorizationContext || !podeSalvar) return;
 
     if (!texto.trim()) {
       setErro("Digite o texto da observação.");
@@ -189,6 +189,10 @@ function ObservacoesColaborador({
           usuarioAtual
         );
       } else {
+        authorize(authorizationContext, "observation.create", {
+          kind: "observation",
+          collaborator: colaborador,
+        });
         criarObservacao(
           colaborador.matricula,
           tipo,

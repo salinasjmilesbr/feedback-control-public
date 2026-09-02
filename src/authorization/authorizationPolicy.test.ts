@@ -116,6 +116,76 @@ describe("authorizationPolicy", () => {
     observation: observacaoDeOutroAutor,
   };
 
+  it("mantém criação de avaliação e observação para colaborador ativo", () => {
+    expect(
+      can(contexto(gerente), "evaluation.create", evaluationResource)
+    ).toBe(true);
+    expect(
+      can(contexto(gerente), "observation.create", observationResource)
+    ).toBe(true);
+  });
+
+  it("bloqueia nova avaliação e mantém nova observação durante licença", () => {
+    const colaboradorEmLicenca = { ...direto, status: "LICENCA" as const };
+    const evaluationInLeave: EvaluationResource = {
+      ...evaluationResource,
+      evaluatedCollaborator: colaboradorEmLicenca,
+    };
+    const observationInLeave: ObservationResource = {
+      ...observationResource,
+      collaborator: colaboradorEmLicenca,
+    };
+
+    expect(
+      can(contexto(gerente), "evaluation.create", evaluationInLeave)
+    ).toBe(false);
+    expect(
+      can(contexto(gerente), "observation.create", observationInLeave)
+    ).toBe(true);
+  });
+
+  it("bloqueia novas avaliações e observações após desligamento", () => {
+    const colaboradorDesligado = { ...direto, status: "DESLIGADO" as const };
+    const evaluationDisconnected: EvaluationResource = {
+      ...evaluationResource,
+      evaluatedCollaborator: colaboradorDesligado,
+    };
+    const observationDisconnected: ObservationResource = {
+      ...observationResource,
+      collaborator: colaboradorDesligado,
+    };
+
+    expect(
+      can(contexto(gerente), "evaluation.create", evaluationDisconnected)
+    ).toBe(false);
+    expect(
+      can(contexto(gerente), "observation.create", observationDisconnected)
+    ).toBe(false);
+  });
+
+  it("nega handlers protegidos para colaborador desligado", () => {
+    const colaboradorDesligado = { ...direto, status: "DESLIGADO" as const };
+
+    expect(() =>
+      authorize(contexto(gerente), "evaluation.create", {
+        ...evaluationResource,
+        evaluatedCollaborator: colaboradorDesligado,
+      })
+    ).toThrow(AuthorizationError);
+    expect(() =>
+      authorize(contexto(gerente), "observation.create", {
+        ...observationResource,
+        collaborator: colaboradorDesligado,
+      })
+    ).toThrow(AuthorizationError);
+  });
+
+  it("nega evaluation.create para recurso incompatível", () => {
+    expect(
+      can(contexto(gerente), "evaluation.create", { kind: "global" })
+    ).toBe(false);
+  });
+
   it.each([
     ["GERENTE", gerente, true],
     ["COORDENADOR", coordenador, false],

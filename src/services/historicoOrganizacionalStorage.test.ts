@@ -127,6 +127,9 @@ describe("historicoOrganizacionalStorage", () => {
       expect(movimento.tipo).toBe(tipoEsperado);
       expect(movimento.anterior?.status).toBe(statusAnterior);
       expect(movimento.atual.status).toBe(statusAtual);
+      expect(getHistoricoOrganizacional(colaborador.matricula)).toContainEqual(
+        movimento
+      );
     }
   );
 

@@ -388,6 +388,17 @@ function EditarColaboradorPage() {
               <option value="DESLIGADO">Desligado</option>
             </select>
           </label>
+
+          {status === "DESLIGADO" && (
+            <div
+              className="collaborator-form-warning collaborator-field--wide"
+              role="status"
+            >
+              Após o desligamento, não será possível criar novas avaliações ou
+              observações para este colaborador. O histórico existente
+              permanecerá disponível.
+            </div>
+          )}
         </div>
       </section>
 
