@@ -1,9 +1,17 @@
 ﻿import { type CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import type { AuthorizationContext } from "../authorization/AuthorizationContext";
+import type { EvaluationResource } from "../authorization/ResourceContext";
+import { can } from "../authorization/authorizationPolicy";
 import CriterionIcon from "../components/CriterionIcon";
 import CollaboratorIdentity from "../components/CollaboratorIdentity";
 import RoleExpectationsCard from "../components/RoleExpectationsCard";
-import { getColaboradorByMatricula } from "../services/colaboradorStorage";
+import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
+import { getCiclosAvaliacao } from "../services/cicloAvaliacaoStorage";
+import {
+  getColaboradorByMatricula,
+  getColaboradores,
+} from "../services/colaboradorStorage";
 import {
   formatarNota,
   getEscalaAvaliacao,
@@ -23,6 +31,7 @@ const criterioIcons = Array.from({ length: 8 }, (_, index) => (
 function FeedbackDetalhePage() {
   const navigate = useNavigate();
   const { id, feedbackId } = useParams();
+  const { usuarioAtual } = useUsuarioAtual();
   const matricula = Number(id);
   const colaborador = Number.isFinite(matricula)
     ? getColaboradorByMatricula(matricula)
@@ -48,6 +57,51 @@ function FeedbackDetalhePage() {
         <section className="evaluation-empty">
           <h1>Avaliação não encontrada</h1>
           <button className="evaluation-btn evaluation-btn--secondary" onClick={() => navigate(`/colaborador/${colaborador.matricula}`)}>← Voltar</button>
+        </section>
+      </main>
+    );
+  }
+
+  const colaboradores = getColaboradores();
+  const cicloDaAvaliacao = getCiclosAvaliacao().find(
+    (item) => item.ano === feedback.ano && item.ciclo === feedback.ciclo
+  );
+  const authorizationContext: AuthorizationContext | undefined = usuarioAtual
+    ? {
+        actor: {
+          matricula: usuarioAtual.matricula,
+          funcao: usuarioAtual.funcao,
+          status: usuarioAtual.status,
+        },
+      }
+    : undefined;
+  const evaluationResource: EvaluationResource = {
+    kind: "evaluation",
+    evaluatedCollaborator: colaborador,
+    collaborators: colaboradores,
+    cycle: cicloDaAvaliacao,
+  };
+  const podeConsultarAvaliacao = authorizationContext
+    ? can(
+        authorizationContext,
+        "evaluation.view.admin",
+        evaluationResource
+      )
+    : false;
+
+  if (!podeConsultarAvaliacao) {
+    return (
+      <main className="virtus-page">
+        <section className="evaluation-empty">
+          <h1>Acesso restrito</h1>
+          <p>Você não possui acesso administrativo a esta avaliação.</p>
+          <button
+            type="button"
+            className="evaluation-btn evaluation-btn--secondary"
+            onClick={() => navigate("/")}
+          >
+            Voltar ao início
+          </button>
         </section>
       </main>
     );

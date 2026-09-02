@@ -6,6 +6,7 @@ export type Capability =
   | "cycle.management.view"
   | "cycle.team.panel.view"
   | "evaluation.create"
+  | "evaluation.view.admin"
   | "evaluation.edit.manager"
   | "evaluation.edit.coordinator"
   | "evaluation.edit.board"
