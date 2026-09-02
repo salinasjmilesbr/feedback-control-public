@@ -235,6 +235,51 @@ describe("authorizationPolicy", () => {
   });
 
   it.each([
+    ["GERENTE_RESPONSAVEL", gerente, true],
+    ["COORDENADOR_DIRETO", coordenador, false],
+    ["COLEGIADO", outroCoordenador, false],
+    ["AVALIADO", direto, false],
+  ] as const)(
+    "autoriza evaluation.reopen.manager somente para %s em concluída",
+    (_papel, actor, esperado) => {
+      const resource: EvaluationResource = {
+        ...evaluationResource,
+        evaluatedCollaborator: {
+          ...direto,
+          avaliadoresColegiadoMatriculas: [outroCoordenador.matricula],
+        },
+        evaluationStatus: "CONCLUIDA",
+      };
+
+      expect(
+        can(contexto(actor), "evaluation.reopen.manager", resource)
+      ).toBe(esperado);
+    }
+  );
+
+  it.each(["CANCELADA", "RASCUNHO", "PRONTA_PARA_FEEDBACK"] as const)(
+    "nega evaluation.reopen.manager para status %s",
+    (evaluationStatus) => {
+      expect(
+        can(contexto(gerente), "evaluation.reopen.manager", {
+          ...evaluationResource,
+          evaluationStatus,
+        })
+      ).toBe(false);
+    }
+  );
+
+  it("nega evaluation.reopen.manager em ciclo encerrado", () => {
+    expect(
+      can(contexto(gerente), "evaluation.reopen.manager", {
+        ...evaluationResource,
+        cycle: { ...ciclo, status: "ENCERRADO" },
+        evaluationStatus: "CONCLUIDA",
+      })
+    ).toBe(false);
+  });
+
+  it.each([
     ["GERENTE", gerente, true],
     ["COORDENADOR", coordenador, false],
     ["ANALISTA", direto, false],

@@ -54,6 +54,13 @@ export interface FeedbackCriterioDetalhado {
   observacaoCoordenadorData?: string;
 }
 
+export interface EventoReaberturaAvaliacao {
+  motivo: string;
+  autorMatricula: number;
+  autorNome: string;
+  data: string;
+}
+
 export type StatusFeedback =
   | "RASCUNHO"
   | "PRONTA_PARA_FEEDBACK"
@@ -76,6 +83,7 @@ export interface Feedback {
   canceladoPorMatricula?: number;
   canceladoPorNome?: string;
   dataCancelamento?: string;
+  reaberturas?: EventoReaberturaAvaliacao[];
 
   ano: number;
   ciclo: 1 | 2 | 3;

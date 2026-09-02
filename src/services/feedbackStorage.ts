@@ -726,3 +726,44 @@ export function persistirCancelamentoAuditadoInterno(
   );
   return cancelada;
 }
+
+export function persistirReaberturaAuditadaInterno(
+  feedbackId: string,
+  motivoInformado: string,
+  autor: Colaborador,
+  dataReabertura: string
+): Feedback {
+  const motivo = motivoInformado.trim();
+  if (!motivo) throw new Error("Informe o motivo da reabertura.");
+
+  const feedbacks = getFeedbacks();
+  const atual = feedbacks.find((feedback) => feedback.id === feedbackId);
+  if (!atual) throw new Error("Avaliação não encontrada.");
+  if (atual.status !== "CONCLUIDA") {
+    throw new Error("Somente avaliações concluídas podem ser reabertas.");
+  }
+
+  const reaberta: Feedback = {
+    ...atual,
+    status: "RASCUNHO",
+    reaberturas: [
+      ...(atual.reaberturas ?? []),
+      {
+        motivo,
+        autorMatricula: autor.matricula,
+        autorNome: autor.nome,
+        data: dataReabertura,
+      },
+    ],
+    dataUltimaAtualizacao: dataReabertura,
+  };
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify(
+      feedbacks.map((feedback) =>
+        feedback.id === feedbackId ? reaberta : feedback
+      )
+    )
+  );
+  return reaberta;
+}

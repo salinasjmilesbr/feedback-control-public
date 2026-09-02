@@ -126,6 +126,14 @@ function decidir(
       );
     }
 
+    if (capability === "evaluation.reopen.manager") {
+      return (
+        resource.evaluationStatus === "CONCLUIDA" &&
+        resource.cycle?.status !== "ENCERRADO" &&
+        permissoes.podeAvaliarComoGerente
+      );
+    }
+
     if (
       (resource.evaluationStatus === "CONCLUIDA" ||
         resource.evaluationStatus === "CANCELADA") &&
