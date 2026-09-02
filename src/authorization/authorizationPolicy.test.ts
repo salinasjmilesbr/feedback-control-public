@@ -469,6 +469,7 @@ describe("authorizationPolicy", () => {
     ["COORDENADOR_DIRETO", coordenador, true],
     ["SOMENTE_COLEGIADO", outroCoordenador, true],
     ["EXTERNO", externo, false],
+    ["PROPRIO_AVALIADO", direto, false],
   ] as const)("caracteriza o agregado OR para %s", (_perfil, actor, esperado) => {
     const resource =
       actor === outroCoordenador
