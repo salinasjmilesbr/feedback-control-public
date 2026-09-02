@@ -18,10 +18,7 @@ import {
   getEscalaAvaliacao,
   getItemEscalaPorNota,
 } from "../services/escalaAvaliacaoStorage";
-import {
-  deleteFeedback,
-  getFeedbacksByColaborador,
-} from "../services/feedbackStorage";
+import { getFeedbacksByColaborador } from "../services/feedbackStorage";
 import "../styles/avaliacoes.css";
 import "../styles/feedback-detalhe.css";
 
@@ -126,13 +123,6 @@ function FeedbackDetalhePage() {
     return "Rascunho";
   }
 
-  function handleExcluirFeedback() {
-    if (!window.confirm("Deseja realmente excluir este feedback?")) return;
-    deleteFeedback(feedback!.id);
-    alert("Feedback excluído com sucesso.");
-    navigate(`/colaborador/${colaborador!.matricula}`);
-  }
-
   const feedbackFinalGerente = feedback.feedbackFinalGerente ?? "";
   const feedbackFinalCoordenador = feedback.feedbackFinalCoordenador ?? "";
   const temFeedbackFinal = Boolean(feedbackFinalGerente || feedbackFinalCoordenador);
@@ -149,13 +139,6 @@ function FeedbackDetalhePage() {
         </div>
 
         <div className="evaluation-detail-actions admin-evaluation-actions">
-          <button
-            type="button"
-            className="evaluation-btn evaluation-btn--secondary admin-evaluation-delete"
-            onClick={handleExcluirFeedback}
-          >
-            Excluir avaliação
-          </button>
           <button
             type="button"
             className="evaluation-btn evaluation-btn--primary"
