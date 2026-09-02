@@ -1,6 +1,6 @@
 ﻿import { useLayoutEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { can } from "../authorization/authorizationPolicy";
+import { can, scopeCollaborators } from "../authorization/authorizationPolicy";
 import CollaboratorIdentity from "../components/CollaboratorIdentity";
 import CriterionIcon from "../components/CriterionIcon";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
@@ -348,6 +348,42 @@ function ColaboradorDetalhePage() {
         },
       }
     : undefined;
+  const podeListarColaboradores = authorizationContext
+    ? can(
+        authorizationContext,
+        "collaborator.list",
+        { kind: "collaborator-list", collaborators: todosColaboradores }
+      )
+    : false;
+  const podeVisualizarColaborador =
+    authorizationContext && podeListarColaboradores
+      ? scopeCollaborators(
+          authorizationContext,
+          {
+            purpose: "OPERATIONAL_TEAM",
+            collaborators: todosColaboradores,
+          }
+        ).some((item) => item.matricula === colaborador.matricula)
+      : false;
+
+  if (!podeVisualizarColaborador) {
+    return (
+      <main className="virtus-page">
+        <section className="virtus-empty">
+          <h2>Acesso restrito</h2>
+          <p>Você não possui acesso administrativo a este colaborador.</p>
+          <button
+            className="virtus-btn virtus-btn--outline"
+            type="button"
+            onClick={() => navigate("/")}
+          >
+            Voltar
+          </button>
+        </section>
+      </main>
+    );
+  }
+
   const podeEditarColaborador = authorizationContext
     ? can(
         authorizationContext,
