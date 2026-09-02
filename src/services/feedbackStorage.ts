@@ -543,11 +543,77 @@ export function saveFeedback(
   );
 }
 
-export function deleteFeedback(feedbackId: string): void {
-  const updatedFeedbacks = getFeedbacks().filter(
-    (feedback) => feedback.id !== feedbackId
+export function avaliacaoEstaVaziaParaCleanupInterno(
+  feedback: Feedback
+): boolean {
+  const competenciasVazias = feedback.competencias.every(
+    (competencia) =>
+      competencia.nota <= 0 && competencia.comentario.trim().length === 0
   );
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedFeedbacks));
+  const criteriosVazios =
+    feedback.criteriosDetalhados?.every(
+      (criterio) =>
+        criterio.nota <= 0 &&
+        criterio.observacaoGerente.trim().length === 0 &&
+        criterio.observacaoCoordenador.trim().length === 0 &&
+        !criterio.observacaoGerenteAutorMatricula &&
+        !criterio.observacaoGerenteAutorNome &&
+        !criterio.observacaoGerenteData &&
+        !criterio.observacaoCoordenadorAutorMatricula &&
+        !criterio.observacaoCoordenadorAutorNome &&
+        !criterio.observacaoCoordenadorData &&
+        criterio.subcriterios.every(
+          (subcriterio) =>
+            subcriterio.notaGerente <= 0 &&
+            subcriterio.notaCoordenador <= 0 &&
+            subcriterio.notaColegiado <= 0 &&
+            subcriterio.notaFinal <= 0 &&
+            (subcriterio.votosColegiado?.length ?? 0) === 0 &&
+            !subcriterio.avaliadorGerenteMatricula &&
+            !subcriterio.avaliadorGerenteNome &&
+            !subcriterio.dataAvaliacaoGerente &&
+            !subcriterio.avaliadorCoordenadorMatricula &&
+            !subcriterio.avaliadorCoordenadorNome &&
+            !subcriterio.dataAvaliacaoCoordenador
+        )
+    ) ?? true;
+
+  return (
+    feedback.status === "RASCUNHO" &&
+    feedback.notaMedia <= 0 &&
+    competenciasVazias &&
+    criteriosVazios &&
+    !feedback.feedbackFinalGerente?.trim() &&
+    !feedback.feedbackFinalGerenteAutorMatricula &&
+    !feedback.feedbackFinalGerenteAutorNome &&
+    !feedback.feedbackFinalGerenteData &&
+    !feedback.feedbackFinalCoordenador?.trim() &&
+    !feedback.feedbackFinalCoordenadorAutorMatricula &&
+    !feedback.feedbackFinalCoordenadorAutorNome &&
+    !feedback.feedbackFinalCoordenadorData &&
+    !feedback.dataConclusao &&
+    feedback.encerradaComPendencias !== true &&
+    (feedback.pendenciasEncerramento?.length ?? 0) === 0
+  );
+}
+
+export function removerAvaliacaoVaziaNoCleanupInterno(
+  feedbackId: string
+): void {
+  const feedbacks = getFeedbacks();
+  const feedback = feedbacks.find((item) => item.id === feedbackId);
+
+  if (!feedback) {
+    throw new Error("Avaliação não encontrada para cleanup interno.");
+  }
+  if (!avaliacaoEstaVaziaParaCleanupInterno(feedback)) {
+    throw new Error("O cleanup interno só pode remover avaliações vazias.");
+  }
+
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify(feedbacks.filter((item) => item.id !== feedbackId))
+  );
 }
 
 export function updateFeedback(

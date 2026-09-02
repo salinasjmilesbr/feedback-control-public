@@ -5,8 +5,9 @@ import type { Feedback } from "../types/Feedback";
 import { criteriosAvaliacao } from "../data/modeloAvaliacao";
 import { getColaboradores } from "./colaboradorStorage";
 import {
-  deleteFeedback,
+  avaliacaoEstaVaziaParaCleanupInterno,
   getFeedbacks,
+  removerAvaliacaoVaziaNoCleanupInterno,
   saveFeedback,
   updateFeedback,
 } from "./feedbackStorage";
@@ -375,7 +376,7 @@ export function excluirAvaliacoesVaziasDoCiclo(
     (feedback) => feedback.ano === ciclo.ano && feedback.ciclo === ciclo.ciclo
   );
   const preenchidas = feedbacksDoCiclo.filter(
-    (feedback) => feedback.status !== "RASCUNHO" || temPreenchimento(feedback)
+    (feedback) => !avaliacaoEstaVaziaParaCleanupInterno(feedback)
   );
 
   if (preenchidas.length > 0) {
@@ -386,7 +387,9 @@ export function excluirAvaliacoesVaziasDoCiclo(
     );
   }
 
-  feedbacksDoCiclo.forEach((feedback) => deleteFeedback(feedback.id));
+  feedbacksDoCiclo.forEach((feedback) =>
+    removerAvaliacaoVaziaNoCleanupInterno(feedback.id)
+  );
   return { excluidas: feedbacksDoCiclo.length, bloqueadas: 0 };
 }
 
