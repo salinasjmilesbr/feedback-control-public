@@ -57,11 +57,12 @@ const feedbackBase: Feedback = {
 function renderizar(
   actor: Colaborador,
   status: StatusFeedback,
-  statusCiclo: CicloAvaliacao["status"] = "ATIVO"
+  statusCiclo: CicloAvaliacao["status"] = "ATIVO",
+  dados: Partial<Feedback> = {}
 ): string {
   localStorage.setItem(
     "feedback-control-feedbacks",
-    JSON.stringify([{ ...feedbackBase, status }])
+    JSON.stringify([{ ...feedbackBase, status, ...dados }])
   );
   localStorage.setItem(
     "feedback-control-ciclos",
@@ -151,4 +152,38 @@ describe("ações administrativas de FeedbackDetalhePage", () => {
       expect(persistido.status).toBe("RASCUNHO");
     }
   );
+
+  it("apresenta nota final, critério e subcritério sem nota de forma neutra", () => {
+    const criteriosDetalhados: Feedback["criteriosDetalhados"] = [{
+      criterioId: "criterio-sem-nota",
+      criterioNome: "Critério sem nota",
+      nota: 0,
+      observacaoGerente: "",
+      observacaoCoordenador: "",
+      subcriterios: [{
+        nome: "Subcritério sem nota",
+        notaGerente: 0,
+        notaCoordenador: 0,
+        notaColegiado: 0,
+        votosColegiado: [],
+        notaFinal: 0,
+      }],
+    }];
+    const html = renderizar(gerente, "RASCUNHO", "ATIVO", {
+      notaMedia: 0,
+      criteriosDetalhados,
+    });
+    const persistido = JSON.parse(
+      localStorage.getItem("feedback-control-feedbacks") ?? "[]"
+    )[0] as Feedback;
+
+    expect(html).toContain("Sem avaliação");
+    expect(html).toContain("Critério sem nota");
+    expect(html).toContain("Subcritério sem nota");
+    expect(html).not.toContain(">0.0</strong>");
+    expect(html).toContain("--score-color:#655d69");
+    expect(persistido.notaMedia).toBe(0);
+    expect(persistido.criteriosDetalhados?.[0].nota).toBe(0);
+    expect(persistido.criteriosDetalhados?.[0].subcriterios[0].notaFinal).toBe(0);
+  });
 });

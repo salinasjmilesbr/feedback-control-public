@@ -14,13 +14,21 @@ import { getObservacoesByColaborador } from "../services/observacaoStorage";
 import { getHistoricoOrganizacional } from "../services/historicoOrganizacionalStorage";
 import type { MovimentacaoOrganizacional } from "../types/HistoricoOrganizacional";
 import {
-  formatarNota,
   getEscalaAvaliacao,
   getItemEscalaPorNota,
 } from "../services/escalaAvaliacaoStorage";
+import {
+  formatarNotaAvaliacao,
+  getTextoNotaAvaliacao,
+  possuiNotaAvaliacao,
+} from "../services/apresentacaoNota";
 import type { Feedback } from "../types/Feedback";
 import "../styles/colaborador-detalhe.css";
 import { getStatusAvaliacaoAdministrativa } from "./statusAvaliacaoAdministrativa";
+import {
+  getAcaoConsultaHistoricoAdministrativo,
+  ordenarHistoricoAdministrativo,
+} from "./historicoAvaliacaoAdministrativa";
 
 function Icon({
   children,
@@ -403,11 +411,10 @@ function ColaboradorDetalhePage() {
     mostrarCanceladas
   );
   const ciclos = getCiclosAvaliacao();
-  const feedbacksOrdenados = [...feedbacksBase].sort((a, b) => {
-    const dataA = new Date(a.dataCriacao ?? a.data).getTime();
-    const dataB = new Date(b.dataCriacao ?? b.data).getTime();
-    return ordenacao === "RECENTES" ? dataB - dataA : dataA - dataB;
-  });
+  const feedbacksOrdenados = ordenarHistoricoAdministrativo(
+    feedbacksBase,
+    ordenacao
+  );
 
   const feedbacksConcluidos = feedbacksBase.filter(
     (feedback) => feedback.status === "CONCLUIDA"
@@ -479,11 +486,11 @@ function ColaboradorDetalhePage() {
   }
 
   function estiloNota(valor: number) {
-    if (valor <= 0) {
+    if (!possuiNotaAvaliacao(valor)) {
       return {
-        "--score-color": "var(--brand-primary)",
-        "--score-bg": "#f7f3f9",
-        "--score-border": "#e7dbea",
+        "--score-color": "#655d69",
+        "--score-bg": "#f4f1f5",
+        "--score-border": "#d8d2dc",
       } as CSSProperties;
     }
 
@@ -496,8 +503,7 @@ function ColaboradorDetalhePage() {
   }
 
   function labelNota(valor: number) {
-    if (valor <= 0) return "Sem nota";
-    return getItemEscalaPorNota(valor, escala).significado;
+    return getTextoNotaAvaliacao(valor, escala);
   }
 
   return (
@@ -573,7 +579,7 @@ function ColaboradorDetalhePage() {
           <div>
             <small>Última nota</small>
             <strong className="is-score">
-              {ultimaNota > 0 ? formatarNota(ultimaNota) : "—"}
+              {formatarNotaAvaliacao(ultimaNota)}
             </strong>
             <span className="collaborator-kpi__score-label">
               {labelNota(ultimaNota)}
@@ -591,7 +597,7 @@ function ColaboradorDetalhePage() {
           <div>
             <small>Melhor nota</small>
             <strong className="is-score">
-              {melhorNota > 0 ? formatarNota(melhorNota) : "—"}
+              {formatarNotaAvaliacao(melhorNota)}
             </strong>
             <span className="collaborator-kpi__score-label">
               {labelNota(melhorNota)}
@@ -732,10 +738,18 @@ function ColaboradorDetalhePage() {
                 feedback.status,
                 cicloDaAvaliacao?.status
               );
+              const acaoConsulta = usuarioAtual
+                ? getAcaoConsultaHistoricoAdministrativo(
+                    usuarioAtual,
+                    colaborador,
+                    todosColaboradores,
+                    cicloDaAvaliacao,
+                    feedback
+                  )
+                : undefined;
               const preenchimento = calcularPreenchimentoFeedback(feedback);
               const dataInicio = formatarData(feedback.dataCriacao ?? feedback.data);
               const dataFim = formatarData(feedback.dataConclusao);
-              const temNota = feedback.notaMedia > 0;
               const aberta = estaAberta(feedback.id);
 
               return (
@@ -775,16 +789,14 @@ function ColaboradorDetalhePage() {
                     </button>
 
                     <div className="collaborator-evaluation-card__actions">
-                      <Link
-                        className="virtus-btn virtus-btn--outline collaborator-link-button collaborator-link-button--compact"
-                        to={`/colaborador/${colaborador.matricula}/feedback/${feedback.id}`}
-                      >
-                        {feedback.status === "CONCLUIDA" ||
-                        feedback.status === "CANCELADA"
-                          ? "Ver avaliação"
-                          : "Abrir avaliação"}{" "}
-                        →
-                      </Link>
+                      {acaoConsulta && (
+                        <Link
+                          className="virtus-btn virtus-btn--outline collaborator-link-button collaborator-link-button--compact"
+                          to={acaoConsulta.destino}
+                        >
+                          {acaoConsulta.label} →
+                        </Link>
+                      )}
 
                       <button
                         type="button"
@@ -807,7 +819,7 @@ function ColaboradorDetalhePage() {
                               : "Nota atual / final"}
                           </small>
                           <strong>
-                            {temNota ? formatarNota(feedback.notaMedia) : "—"}
+                            {formatarNotaAvaliacao(feedback.notaMedia)}
                           </strong>
                           <span>{labelNota(feedback.notaMedia)}</span>
                         </div>
@@ -852,10 +864,16 @@ function ColaboradorDetalhePage() {
                             return (
                               <div
                                 className={`collaborator-competency ${
-                                  nota > 0 ? "score-semantic has-score" : ""
+                                  possuiNotaAvaliacao(nota)
+                                    ? "score-semantic has-score"
+                                    : ""
                                 }`}
                                 key={sigla}
-                                style={nota > 0 ? estiloNota(nota) : undefined}
+                                style={
+                                  possuiNotaAvaliacao(nota)
+                                    ? estiloNota(nota)
+                                    : undefined
+                                }
                               >
                                 <span className="collaborator-competency__icon">
                                   {criterioIconPorSigla[sigla]}
@@ -864,7 +882,7 @@ function ColaboradorDetalhePage() {
                                   {criterioNomePorSigla[sigla]}
                                 </span>
                                 <strong>
-                                  {nota > 0 ? formatarNota(nota) : "—"}
+                                  {formatarNotaAvaliacao(nota)}
                                 </strong>
                               </div>
                             );

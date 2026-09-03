@@ -8,10 +8,16 @@ import {
 } from "../services/feedbackStorage";
 import { getCiclosAvaliacao } from "../services/cicloAvaliacaoStorage";
 import {
-  formatarNota,
   getEscalaAvaliacao,
   getItemEscalaPorNota,
 } from "../services/escalaAvaliacaoStorage";
+import {
+  formatarNotaAvaliacao,
+  getTextoNotaAvaliacao,
+  possuiNotaAvaliacao,
+} from "../services/apresentacaoNota";
+import type { CicloAvaliacao } from "../types/CicloAvaliacao";
+import type { Feedback } from "../types/Feedback";
 import "../styles/avaliacoes.css";
 import "../styles/minhas-avaliacoes.css";
 
@@ -32,6 +38,13 @@ function MinhaAvaliacaoPage() {
   const escalaAvaliacao = getEscalaAvaliacao();
 
   function estiloNota(valor: number) {
+    if (!possuiNotaAvaliacao(valor)) {
+      return {
+        "--score-color": "#655d69",
+        "--score-bg": "#f4f1f5",
+        "--score-border": "#d8d2dc",
+      } as CSSProperties;
+    }
     const faixa = getItemEscalaPorNota(valor, escalaAvaliacao);
 
     return {
@@ -42,7 +55,7 @@ function MinhaAvaliacaoPage() {
   }
 
   function labelNota(valor: number) {
-    return getItemEscalaPorNota(valor, escalaAvaliacao).significado;
+    return getTextoNotaAvaliacao(valor, escalaAvaliacao);
   }
 
   const ciclos = getCiclosAvaliacao();
@@ -71,8 +84,23 @@ function MinhaAvaliacaoPage() {
       )
     )
     .sort((a, b) => b.ano - a.ano || b.ciclo - a.ciclo);
-  const possuiHistorico =
-    avaliacoesConcluidas.length > 0 || ciclosCanceladosParticipados.length > 0;
+  type ItemHistorico =
+    | { tipo: "CONCLUIDA"; ano: number; ciclo: number; feedback: Feedback }
+    | { tipo: "CANCELADO"; ano: number; ciclo: number; cicloCancelado: CicloAvaliacao };
+  const historico: ItemHistorico[] = [
+    ...avaliacoesConcluidas.map((feedback) => ({
+      tipo: "CONCLUIDA" as const,
+      ano: feedback.ano,
+      ciclo: feedback.ciclo,
+      feedback,
+    })),
+    ...ciclosCanceladosParticipados.map((cicloCancelado) => ({
+      tipo: "CANCELADO" as const,
+      ano: cicloCancelado.ano,
+      ciclo: cicloCancelado.ciclo,
+      cicloCancelado,
+    })),
+  ].sort((a, b) => b.ano - a.ano || b.ciclo - a.ciclo);
 
   return (
     <main className="virtus-page evaluation-page my-evaluations-page">
@@ -116,7 +144,7 @@ function MinhaAvaliacaoPage() {
         </div>
       </section>
 
-      {!possuiHistorico ? (
+      {historico.length === 0 ? (
         <section className="evaluation-empty">
           <h2>Nenhuma avaliação concluída disponível</h2>
           <p>
@@ -134,34 +162,26 @@ function MinhaAvaliacaoPage() {
           </div>
 
           <div className="evaluation-history-grid">
-            {ciclosCanceladosParticipados.map((ciclo) => (
-              <article
-                className="my-evaluations-history-card"
-                key={`ciclo-cancelado-${ciclo.id}`}
-              >
+            {historico.map((item) => item.tipo === "CANCELADO" ? (
+              <article className="my-evaluations-history-card" key={`ciclo-cancelado-${item.cicloCancelado.id}`}>
                 <div className="my-evaluations-history-card__main">
                   <div className="my-evaluations-history-card__cycle">
-                    <span className="evaluation-cycle-label">
-                      {ciclo.ano} • Ciclo {ciclo.ciclo}
-                    </span>
-                    <span className="my-evaluations-history-card__status is-historical">
-                      Cancelado
-                    </span>
+                    <span className="evaluation-cycle-label">{item.ano} • Ciclo {item.ciclo}</span>
+                    <span className="my-evaluations-history-card__status is-historical">Cancelado</span>
                   </div>
                   <p>Ciclo cancelado pela gerência.</p>
                 </div>
               </article>
-            ))}
-            {avaliacoesConcluidas.map((feedback) => (
+            ) : (
               <article
                 className="my-evaluations-history-card score-semantic"
-                style={estiloNota(feedback.notaMedia)}
-                key={feedback.id}
+                style={estiloNota(item.feedback.notaMedia)}
+                key={item.feedback.id}
               >
                 <div className="my-evaluations-history-card__main">
                   <div className="my-evaluations-history-card__cycle">
                     <span className="evaluation-cycle-label">
-                      {feedback.ano} • Ciclo {feedback.ciclo}
+                      {item.ano} • Ciclo {item.ciclo}
                     </span>
                     <span className="my-evaluations-history-card__status">
                       Concluída
@@ -169,10 +189,10 @@ function MinhaAvaliacaoPage() {
                   </div>
 
                   <div className="my-evaluations-history-card__score">
-                    <strong>{formatarNota(feedback.notaMedia)}</strong>
+                    <strong>{formatarNotaAvaliacao(item.feedback.notaMedia)}</strong>
                     <div>
                       <span>Nota final</span>
-                      <small>{labelNota(feedback.notaMedia)}</small>
+                      <small>{labelNota(item.feedback.notaMedia)}</small>
                     </div>
                   </div>
                 </div>
@@ -181,7 +201,7 @@ function MinhaAvaliacaoPage() {
                   type="button"
                   className="evaluation-btn evaluation-btn--primary"
                   onClick={() =>
-                    navigate(`/minha-avaliacao/${feedback.id}`)
+                    navigate(`/minha-avaliacao/${item.feedback.id}`)
                   }
                 >
                   Ver avaliação →

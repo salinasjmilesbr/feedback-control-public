@@ -17,10 +17,14 @@ import {
   getColaboradores,
 } from "../services/colaboradorStorage";
 import {
-  formatarNota,
   getEscalaAvaliacao,
   getItemEscalaPorNota,
 } from "../services/escalaAvaliacaoStorage";
+import {
+  formatarNotaAvaliacao,
+  getTextoNotaAvaliacao,
+  possuiNotaAvaliacao,
+} from "../services/apresentacaoNota";
 import { getFeedbacksByColaborador } from "../services/feedbackStorage";
 import "../styles/avaliacoes.css";
 import "../styles/feedback-detalhe.css";
@@ -135,6 +139,13 @@ function FeedbackDetalhePage() {
   const escala = getEscalaAvaliacao();
 
   function estiloNota(valor: number) {
+    if (!possuiNotaAvaliacao(valor)) {
+      return {
+        "--score-color": "#655d69",
+        "--score-bg": "#f4f1f5",
+        "--score-border": "#d8d2dc",
+      } as CSSProperties;
+    }
     const faixa = getItemEscalaPorNota(valor, escala);
     return {
       "--score-color": faixa.cor,
@@ -144,7 +155,7 @@ function FeedbackDetalhePage() {
   }
 
   function labelNota(valor: number) {
-    return getItemEscalaPorNota(valor, escala).significado;
+    return getTextoNotaAvaliacao(valor, escala);
   }
 
 
@@ -294,7 +305,7 @@ function FeedbackDetalhePage() {
       <section className="evaluation-score-card" id="resumo">
         <div className="evaluation-score-primary score-semantic evaluation-score-primary--semantic" style={estiloNota(feedback.notaMedia)}>
           <span>Resultado do ciclo</span>
-          <strong>{formatarNota(feedback.notaMedia)}</strong>
+          <strong>{formatarNotaAvaliacao(feedback.notaMedia)}</strong>
           <small>{labelNota(feedback.notaMedia)}</small>
         </div>
         <div className="evaluation-score-divider" />
@@ -337,7 +348,7 @@ function FeedbackDetalhePage() {
                     </div>
                   </div>
                   <div className="evaluation-criterion-score evaluation-criterion-score--featured score-semantic" style={estiloNota(criterio.nota)}>
-                    <span>Nota final</span><strong>{formatarNota(criterio.nota)}</strong><small>{labelNota(criterio.nota)}</small>
+                    <span>Nota final</span><strong>{formatarNotaAvaliacao(criterio.nota)}</strong><small>{labelNota(criterio.nota)}</small>
                   </div>
                 </div>
 
@@ -354,17 +365,17 @@ function FeedbackDetalhePage() {
                       </div>
 
                       <div className="evaluation-rater-group">
-                        <div><span>Gerente</span><strong>{subcriterio.notaGerente > 0 ? formatarNota(subcriterio.notaGerente) : "—"}</strong></div>
+                        <div><span>Gerente</span><strong>{formatarNotaAvaliacao(subcriterio.notaGerente)}</strong></div>
                         {colaborador.funcao === "ANALISTA" && (
                           <>
-                            <div><span>Coordenador</span><strong>{subcriterio.notaCoordenador > 0 ? formatarNota(subcriterio.notaCoordenador) : "—"}</strong></div>
+                            <div><span>Coordenador</span><strong>{formatarNotaAvaliacao(subcriterio.notaCoordenador)}</strong></div>
                             <div>
                               <span>Colegiado</span>
-                              <strong>{subcriterio.notaColegiado > 0 ? formatarNota(subcriterio.notaColegiado) : "—"}</strong>
+                              <strong>{formatarNotaAvaliacao(subcriterio.notaColegiado)}</strong>
                               {(subcriterio.votosColegiado?.length ?? 0) > 0 && (
                                 <div className="admin-evaluation-collegiate-votes">
                                   {subcriterio.votosColegiado!.map((voto) => (
-                                    <small key={voto.avaliadorMatricula}>{voto.avaliadorNome}: <b>{formatarNota(voto.nota)}</b></small>
+                                    <small key={voto.avaliadorMatricula}>{voto.avaliadorNome}: <b>{formatarNotaAvaliacao(voto.nota)}</b></small>
                                   ))}
                                 </div>
                               )}
@@ -374,7 +385,7 @@ function FeedbackDetalhePage() {
                       </div>
 
                       <div className="evaluation-subcriterion-average score-semantic" style={estiloNota(subcriterio.notaFinal)}>
-                        <small>Média</small><strong>{formatarNota(subcriterio.notaFinal)}</strong><span>{labelNota(subcriterio.notaFinal)}</span>
+                        <small>Média</small><strong>{formatarNotaAvaliacao(subcriterio.notaFinal)}</strong><span>{labelNota(subcriterio.notaFinal)}</span>
                       </div>
                     </div>
                   ))}
