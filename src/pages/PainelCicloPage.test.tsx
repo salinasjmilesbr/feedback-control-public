@@ -4,6 +4,7 @@ import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
 import type { Feedback, StatusFeedback } from "../types/Feedback";
 import { obterAcaoAvaliacaoPainel } from "./painelCicloAvaliacaoAction";
+import { getStatusGeralPainel } from "./painelCicloStatus";
 
 function pessoa(matricula: number, funcao: Colaborador["funcao"], gestor?: number): Colaborador {
   return { matricula, funcao, gestorDiretoMatricula: gestor, status: "ATIVO", nome: `Pessoa ${matricula}`, email: `${matricula}@example.com`, cargo: "Cargo", area: "Área", respondePara: "" };
@@ -34,5 +35,12 @@ describe("ação de avaliação no painel do ciclo", () => {
   it("abre consulta quando o ciclo está cancelado", () => {
     const acao = obterAcaoAvaliacaoPainel(gerente, avaliado, colaboradores, { ...ciclo, status: "CANCELADO" }, feedback("RASCUNHO"));
     expect(acao).toEqual({ label: "Ver avaliação", destino: "/colaborador/3/feedback/feedback-RASCUNHO" });
+  });
+
+  it("apresenta ciclo cancelado com label curto e estilo histórico neutro", () => {
+    expect(getStatusGeralPainel("EM_ANDAMENTO", "CANCELADO")).toEqual({
+      label: "Cancelado",
+      className: "is-historical",
+    });
   });
 });

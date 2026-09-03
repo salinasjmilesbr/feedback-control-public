@@ -22,16 +22,7 @@ import "../styles/equipe-colegiado.css";
 import "../styles/metas-gestao.css";
 import "../styles/historico-ciclo.css";
 import { obterAcaoAvaliacaoPainel } from "./painelCicloAvaliacaoAction";
-
-const labelsSituacao: Record<SituacaoAvaliacaoCiclo, string> = {
-  NAO_INICIADA: "Não iniciada",
-  EM_ANDAMENTO: "Em andamento",
-  PRONTA_PARA_FEEDBACK: "Pronta para Feedback",
-  CONCLUIDA: "Concluída",
-  CANCELADA: "Cancelada",
-  SUSPENSA: "Suspensa",
-  NAO_APLICAVEL: "Não aplicável",
-};
+import { getStatusGeralPainel } from "./painelCicloStatus";
 
 function labelPapel(progresso: ProgressoPapelPainel) {
   if (progresso.situacao === "NAO_APLICA") return "—";
@@ -250,10 +241,10 @@ function PainelCicloPage() {
 
               {linhasGrupo.map((linha) => {
                 const acaoAvaliacao = obterAcaoAvaliacao(linha);
-                const situacaoExibida =
-                  cicloAtual.status === "CANCELADO"
-                    ? "CANCELADA"
-                    : linha.situacao;
+                const statusGeral = getStatusGeralPainel(
+                  linha.situacao,
+                  cicloAtual.status
+                );
                 return (
                   <div
                     className="cycle-table__row"
@@ -313,24 +304,9 @@ function PainelCicloPage() {
 
                   <div className="cycle-mobile-field" data-label="Status geral">
                     <span
-                      className={`cycle-general-status ${
-                        situacaoExibida === "CONCLUIDA"
-                          ? "is-complete"
-                          : situacaoExibida === "CANCELADA"
-                          ? "is-cancelled"
-                          : linha.situacao === "PRONTA_PARA_FEEDBACK"
-                          ? "is-feedback"
-                          : linha.situacao === "EM_ANDAMENTO"
-                          ? "is-progress"
-                          : linha.situacao === "SUSPENSA" ||
-                            linha.situacao === "NAO_APLICAVEL"
-                          ? "is-na"
-                          : "is-not-started"
-                      }`}
+                      className={`cycle-general-status ${statusGeral.className}`}
                     >
-                      {cicloAtual.status === "CANCELADO"
-                        ? "Ciclo cancelado"
-                        : labelsSituacao[situacaoExibida]}
+                      {statusGeral.label}
                     </span>
                     {linha.motivoNaoAplicavel && (
                       <small className="cycle-muted">

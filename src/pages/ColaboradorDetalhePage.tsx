@@ -25,6 +25,10 @@ import {
 import type { Feedback } from "../types/Feedback";
 import "../styles/colaborador-detalhe.css";
 import { getStatusAvaliacaoAdministrativa } from "./statusAvaliacaoAdministrativa";
+import {
+  getAcaoConsultaHistoricoAdministrativo,
+  ordenarHistoricoAdministrativo,
+} from "./historicoAvaliacaoAdministrativa";
 
 function Icon({
   children,
@@ -407,11 +411,10 @@ function ColaboradorDetalhePage() {
     mostrarCanceladas
   );
   const ciclos = getCiclosAvaliacao();
-  const feedbacksOrdenados = [...feedbacksBase].sort((a, b) => {
-    const dataA = new Date(a.dataCriacao ?? a.data).getTime();
-    const dataB = new Date(b.dataCriacao ?? b.data).getTime();
-    return ordenacao === "RECENTES" ? dataB - dataA : dataA - dataB;
-  });
+  const feedbacksOrdenados = ordenarHistoricoAdministrativo(
+    feedbacksBase,
+    ordenacao
+  );
 
   const feedbacksConcluidos = feedbacksBase.filter(
     (feedback) => feedback.status === "CONCLUIDA"
@@ -735,6 +738,15 @@ function ColaboradorDetalhePage() {
                 feedback.status,
                 cicloDaAvaliacao?.status
               );
+              const acaoConsulta = usuarioAtual
+                ? getAcaoConsultaHistoricoAdministrativo(
+                    usuarioAtual,
+                    colaborador,
+                    todosColaboradores,
+                    cicloDaAvaliacao,
+                    feedback
+                  )
+                : undefined;
               const preenchimento = calcularPreenchimentoFeedback(feedback);
               const dataInicio = formatarData(feedback.dataCriacao ?? feedback.data);
               const dataFim = formatarData(feedback.dataConclusao);
@@ -777,16 +789,14 @@ function ColaboradorDetalhePage() {
                     </button>
 
                     <div className="collaborator-evaluation-card__actions">
-                      <Link
-                        className="virtus-btn virtus-btn--outline collaborator-link-button collaborator-link-button--compact"
-                        to={`/colaborador/${colaborador.matricula}/feedback/${feedback.id}`}
-                      >
-                        {feedback.status === "CONCLUIDA" ||
-                        feedback.status === "CANCELADA"
-                          ? "Ver avaliação"
-                          : "Abrir avaliação"}{" "}
-                        →
-                      </Link>
+                      {acaoConsulta && (
+                        <Link
+                          className="virtus-btn virtus-btn--outline collaborator-link-button collaborator-link-button--compact"
+                          to={acaoConsulta.destino}
+                        >
+                          {acaoConsulta.label} →
+                        </Link>
+                      )}
 
                       <button
                         type="button"
