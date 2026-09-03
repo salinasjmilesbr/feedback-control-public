@@ -101,6 +101,16 @@ describe("cicloEquipeService com avaliação cancelada", () => {
     ).toBe("CANCELADA");
   });
 
+  it("não gera pendências para ciclo cancelado", () => {
+    const cicloCancelado = { ...ciclo, status: "CANCELADO" as const };
+    localStorage.setItem(
+      "feedback-control-ciclos",
+      JSON.stringify([cicloCancelado])
+    );
+
+    expect(analisarPendenciasDoCiclo(cicloCancelado)).toEqual([]);
+  });
+
   it("gera avaliação automática nova e vazia quando só existe cancelada", () => {
     const resultado = criarAvaliacoesDoCicloAtivado(ciclo);
 

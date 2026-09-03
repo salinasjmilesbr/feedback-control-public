@@ -71,7 +71,10 @@ function limiteDoTipo(ciclo: CicloAvaliacao, tipo: TipoMeta): number {
 }
 
 function validarCicloAtivo(ciclo: CicloAvaliacao) {
-  if (ciclo.status !== "ATIVO") {
+  const cicloPersistido = getCiclosAvaliacao().find(
+    (item) => item.id === ciclo.id
+  );
+  if (cicloPersistido?.status !== "ATIVO") {
     throw new Error(
       "As metas só podem ser cadastradas ou alteradas enquanto o ciclo estiver Ativo."
     );

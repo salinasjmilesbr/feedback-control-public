@@ -114,29 +114,43 @@ function ObservacoesColaborador({
         },
       }
     : undefined;
+  const cicloSelecionado = ciclosDisponiveis.find(
+    (item) => item.ano === ano && item.ciclo === ciclo
+  );
   const podeCriarObservacao = authorizationContext
     ? can(authorizationContext, "observation.create", {
         kind: "observation",
         collaborator: colaborador,
+        cycle: cicloSelecionado,
       })
     : false;
 
   function podeEditarObservacao(observacao?: Observacao) {
+    const cicloDaObservacao = ciclosDisponiveis.find(
+      (item) =>
+        item.ano === observacao?.ano && item.ciclo === observacao?.ciclo
+    );
     return authorizationContext
       ? can(authorizationContext, "observation.edit", {
           kind: "observation",
           collaborator: colaborador,
           observation: observacao,
+          cycle: cicloDaObservacao,
         })
       : false;
   }
 
   function podeExcluirObservacao(observacao: Observacao) {
+    const cicloDaObservacao = ciclosDisponiveis.find(
+      (item) =>
+        item.ano === observacao.ano && item.ciclo === observacao.ciclo
+    );
     return authorizationContext
       ? can(authorizationContext, "observation.delete", {
           kind: "observation",
           collaborator: colaborador,
           observation: observacao,
+          cycle: cicloDaObservacao,
         })
       : false;
   }
@@ -192,6 +206,7 @@ function ObservacoesColaborador({
         authorize(authorizationContext, "observation.create", {
           kind: "observation",
           collaborator: colaborador,
+          cycle: cicloSelecionado,
         });
         criarObservacao(
           colaborador.matricula,

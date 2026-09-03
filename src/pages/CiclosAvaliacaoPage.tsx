@@ -6,6 +6,7 @@ import {
   criarCiclo,
   encerrarCiclo,
   excluirCiclo,
+  getCiclosAdministrativos,
   getCiclosAvaliacao,
   atualizarConfiguracaoMetasCiclo,
   atualizarPeriodoCiclo,
@@ -19,9 +20,16 @@ import {
   excluirAvaliacoesVaziasDoCiclo,
 } from "../services/cicloEquipeService";
 import { confirmarExclusaoCiclo } from "./confirmarExclusaoCiclo";
+import { cancelarCiclo } from "../services/cancelamentoCicloService";
 import "../styles/ciclos.css";
 
-function CiclosAvaliacaoPage() {
+type CiclosAvaliacaoPageProps = {
+  mostrarCanceladosInicial?: boolean;
+};
+
+function CiclosAvaliacaoPage({
+  mostrarCanceladosInicial = false,
+}: CiclosAvaliacaoPageProps = {}) {
   const navigate = useNavigate();
   const { usuarioAtual } = useUsuarioAtual();
   const [versao, setVersao] = useState(0);
@@ -34,6 +42,9 @@ function CiclosAvaliacaoPage() {
   const [quantidadeMetasIndividuais, setQuantidadeMetasIndividuais] =
     useState<0 | 1 | 2 | 3>(0);
   const [ativarAgora, setAtivarAgora] = useState(false);
+  const [mostrarCancelados, setMostrarCancelados] = useState(
+    mostrarCanceladosInicial
+  );
   const [editandoPeriodoId, setEditandoPeriodoId] = useState<string | null>(null);
   const [periodoInicioEdicao, setPeriodoInicioEdicao] = useState("");
   const [periodoFimEdicao, setPeriodoFimEdicao] = useState("");
@@ -73,7 +84,8 @@ function CiclosAvaliacaoPage() {
     );
   }
 
-  const ciclos = getCiclosAvaliacao().sort((a, b) => {
+  const ciclos = getCiclosAdministrativos(mostrarCancelados)
+    .sort((a, b) => {
     if (a.status !== b.status) {
       if (a.status === "ATIVO") return -1;
       if (b.status === "ATIVO") return 1;
@@ -82,7 +94,7 @@ function CiclosAvaliacaoPage() {
     }
     if (a.ano !== b.ano) return b.ano - a.ano;
     return b.ciclo - a.ciclo;
-  });
+    });
 
   const totalAtivos = ciclos.filter((item) => item.status === "ATIVO").length;
   const totalPlanejados = ciclos.filter((item) => item.status === "PLANEJADO").length;
@@ -189,6 +201,25 @@ function CiclosAvaliacaoPage() {
         error instanceof Error
           ? error.message
           : "Não foi possível atualizar o status."
+      );
+    }
+  }
+
+  function cancelarComMotivo(
+    item: ReturnType<typeof getCiclosAvaliacao>[number]
+  ) {
+    const motivo = window.prompt("Informe o motivo do cancelamento do ciclo:");
+    if (motivo === null) return;
+
+    try {
+      cancelarCiclo(item.id, motivo, usuarioAtual!);
+      setErro("");
+      setVersao((valor) => valor + 1);
+    } catch (error) {
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível cancelar o ciclo."
       );
     }
   }
@@ -340,6 +371,14 @@ function CiclosAvaliacaoPage() {
             <span className="cycle-eyebrow">Histórico</span>
             <h2>Ciclos cadastrados</h2>
           </div>
+          <label className="cycle-checkbox">
+            <input
+              type="checkbox"
+              checked={mostrarCancelados}
+              onChange={(event) => setMostrarCancelados(event.target.checked)}
+            />
+            <span>Mostrar cancelados</span>
+          </label>
         </div>
 
         {ciclos.length === 0 ? (
@@ -354,6 +393,8 @@ function CiclosAvaliacaoPage() {
                 ? "Ativo"
                 : item.status === "PLANEJADO"
                 ? "Planejado"
+                : item.status === "CANCELADO"
+                ? "Cancelado"
                 : item.encerradoComPendencias
                 ? "Encerrado com pendências"
                 : "Encerrado";
@@ -363,6 +404,8 @@ function CiclosAvaliacaoPage() {
                 ? "is-active"
                 : item.status === "PLANEJADO"
                 ? "is-planned"
+                : item.status === "CANCELADO"
+                ? "is-cancelled"
                 : item.encerradoComPendencias
                 ? "is-warning"
                 : "is-closed";
@@ -404,6 +447,12 @@ function CiclosAvaliacaoPage() {
                           <strong className="cycle-danger">
                             {item.quantidadePendencias ?? 0}
                           </strong>
+                        </div>
+                      )}
+                      {item.cancelamento && (
+                        <div>
+                          <small>Cancelamento</small>
+                          <strong>{item.cancelamento.motivo}</strong>
                         </div>
                       )}
                     </div>
@@ -579,7 +628,29 @@ function CiclosAvaliacaoPage() {
                     {item.status === "ENCERRADO" && (
                       <span className="cycle-muted">Lifecycle encerrado</span>
                     )}
+                    {item.status === "CANCELADO" && (
+                      <span className="cycle-muted">Lifecycle cancelado</span>
+                    )}
                   </div>
+
+                  {can(
+                    {
+                      actor: {
+                        matricula: usuarioAtual.matricula,
+                        funcao: usuarioAtual.funcao,
+                        status: usuarioAtual.status,
+                      },
+                    },
+                    "cycle.cancel.manager",
+                    { kind: "cycle", cycle: item }
+                  ) && (
+                    <button
+                      className="cycle-link-button cycle-link-button--danger"
+                      onClick={() => cancelarComMotivo(item)}
+                    >
+                      Cancelar ciclo
+                    </button>
+                  )}
 
                   {item.status === "PLANEJADO" && (
                     <button

@@ -3,6 +3,7 @@ import type {
   TipoObservacao,
 } from "../types/Observacao";
 import type { Colaborador } from "../types/Colaborador";
+import { getCiclosAvaliacao } from "./cicloAvaliacaoStorage";
 
 const STORAGE_KEY = "feedback-control-observacoes";
 
@@ -20,6 +21,16 @@ function getTodasObservacoes(): Observacao[] {
 
 function persistir(observacoes: Observacao[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(observacoes));
+}
+
+function validarCicloNaoCancelado(ano?: number, ciclo?: 1 | 2 | 3): void {
+  if (ano === undefined || ciclo === undefined) return;
+  const cicloPersistido = getCiclosAvaliacao().find(
+    (item) => item.ano === ano && item.ciclo === ciclo
+  );
+  if (cicloPersistido?.status === "CANCELADO") {
+    throw new Error("Observações de ciclo cancelado não podem ser alteradas.");
+  }
 }
 
 export function getObservacoesByColaborador(
@@ -70,6 +81,7 @@ export function criarObservacao(
   ciclo: 1 | 2 | 3,
   autor: Colaborador
 ): Observacao {
+  validarCicloNaoCancelado(ano, ciclo);
   const agora = new Date().toISOString();
 
   const observacao: Observacao = {
@@ -116,6 +128,8 @@ export function atualizarObservacao(
   if (!atual || atual.excluida) {
     throw new Error("Observação não encontrada.");
   }
+  validarCicloNaoCancelado(atual.ano, atual.ciclo);
+  validarCicloNaoCancelado(ano, ciclo);
 
   const agora = new Date().toISOString();
 
@@ -161,6 +175,7 @@ export function excluirObservacao(
   if (!atual || atual.excluida) {
     throw new Error("Observação não encontrada.");
   }
+  validarCicloNaoCancelado(atual.ano, atual.ciclo);
 
   const agora = new Date().toISOString();
 

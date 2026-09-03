@@ -1,7 +1,15 @@
 export type StatusCicloAvaliacao =
   | "PLANEJADO"
   | "ATIVO"
-  | "ENCERRADO";
+  | "ENCERRADO"
+  | "CANCELADO";
+
+export interface CancelamentoCiclo {
+  motivo: string;
+  autorMatricula: number;
+  autorNome: string;
+  data: string;
+}
 
 export interface CicloAvaliacao {
   id: string;
@@ -21,4 +29,5 @@ export interface CicloAvaliacao {
   dataEncerramento?: string;
   encerradoComPendencias?: boolean;
   quantidadePendencias?: number;
+  cancelamento?: CancelamentoCiclo;
 }

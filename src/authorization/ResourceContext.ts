@@ -12,6 +12,11 @@ export type CollaboratorListResource = Readonly<{
   collaborators: readonly Colaborador[];
 }>;
 
+export type CycleResource = Readonly<{
+  kind: "cycle";
+  cycle: CicloAvaliacao;
+}>;
+
 export type CollaboratorResource = Readonly<{
   kind: "collaborator";
   collaborator: Colaborador;
@@ -36,10 +41,12 @@ export type ObservationResource = Readonly<{
   kind: "observation";
   collaborator: Colaborador;
   observation?: Observacao;
+  cycle?: CicloAvaliacao;
 }>;
 
 export type AuthorizationResource =
   | GlobalResource
+  | CycleResource
   | CollaboratorResource
   | CollaboratorListResource
   | EvaluationResource

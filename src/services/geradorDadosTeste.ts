@@ -8,6 +8,7 @@ import type {
   Observacao,
   TipoObservacao,
 } from "../types/Observacao";
+import { getCiclosAvaliacao } from "./cicloAvaliacaoStorage";
 
 const FEEDBACKS_KEY = "feedback-control-feedbacks";
 const METAS_KEY = "feedback-control-metas";
@@ -436,6 +437,13 @@ export function gerarDadosTesteDoCiclo(
   ciclo: CicloAvaliacao,
   usuarioAtual: Colaborador
 ): ResultadoGeracaoDadosTeste {
+  const cicloPersistido = getCiclosAvaliacao().find(
+    (item) => item.id === ciclo.id
+  );
+  if (cicloPersistido?.status === "CANCELADO") {
+    throw new Error("Dados de ciclo cancelado não podem ser alterados.");
+  }
+
   if (usuarioAtual.funcao !== "GERENTE") {
     throw new Error(
       "A geração de dados de teste está disponível apenas para o perfil Gerente."

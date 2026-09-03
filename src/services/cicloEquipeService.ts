@@ -471,6 +471,11 @@ function notasEsperadasDoSubcriterio(
 export function analisarPendenciasDoCiclo(
   ciclo: CicloAvaliacao
 ): PendenciaAvaliacao[] {
+  const cicloPersistido = getCiclosAvaliacao().find(
+    (item) => item.id === ciclo.id
+  );
+  if (cicloPersistido?.status === "CANCELADO") return [];
+
   const colaboradoresBase = getColaboradores();
   const colaboradores = getColaboradoresEfetivosNoCiclo(ciclo, colaboradoresBase);
   const feedbacks = getFeedbacks().filter(
