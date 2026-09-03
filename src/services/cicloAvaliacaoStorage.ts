@@ -345,9 +345,15 @@ export function atualizarConfiguracaoMetasCiclo(
 
 export function excluirCiclo(id: string): void {
   const ciclos = getCiclosAvaliacao();
+  const alvo = ciclos.find((item) => item.id === id);
 
-  if (!ciclos.some((item) => item.id === id)) {
+  if (!alvo) {
     throw new Error("Ciclo não encontrado.");
+  }
+  if (alvo.status !== "PLANEJADO") {
+    throw new Error(
+      "Somente ciclos planejados podem ser excluídos fisicamente."
+    );
   }
 
   persistir(ciclos.filter((item) => item.id !== id));
