@@ -11,6 +11,19 @@ export interface CancelamentoCiclo {
   data: string;
 }
 
+export interface EncerramentoCiclo {
+  data: string;
+  encerradoComPendencias: boolean;
+  quantidadePendencias: number;
+}
+
+export interface ReaberturaCiclo {
+  motivo: string;
+  autorMatricula: number;
+  autorNome: string;
+  data: string;
+}
+
 export interface CicloAvaliacao {
   id: string;
   ano: number;
@@ -30,4 +43,6 @@ export interface CicloAvaliacao {
   encerradoComPendencias?: boolean;
   quantidadePendencias?: number;
   cancelamento?: CancelamentoCiclo;
+  encerramentos?: EncerramentoCiclo[];
+  reaberturas?: ReaberturaCiclo[];
 }

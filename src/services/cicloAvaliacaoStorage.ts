@@ -208,6 +208,19 @@ export function encerrarCiclo(
   validarTransicaoNormal(alvo.status, "ENCERRADO");
 
   const agora = new Date().toISOString();
+  const encerramentosAnteriores = alvo.encerramentos ??
+    (alvo.dataEncerramento
+      ? [{
+          data: alvo.dataEncerramento,
+          encerradoComPendencias: Boolean(alvo.encerradoComPendencias),
+          quantidadePendencias: alvo.quantidadePendencias ?? 0,
+        }]
+      : []);
+  const encerramentoAtual = {
+    data: agora,
+    encerradoComPendencias: quantidadePendencias > 0,
+    quantidadePendencias,
+  };
 
   persistir(
     ciclos.map((item) =>
@@ -218,6 +231,7 @@ export function encerrarCiclo(
             dataEncerramento: agora,
             encerradoComPendencias: quantidadePendencias > 0,
             quantidadePendencias,
+            encerramentos: [...encerramentosAnteriores, encerramentoAtual],
             dataUltimaAtualizacao: agora,
           }
         : item
@@ -399,4 +413,57 @@ export function persistirCancelamentoCicloAuditadoInterno(
     ciclos.map((item) => (item.id === id ? cancelado : item))
   );
   return cancelado;
+}
+
+export function persistirReaberturaCicloAuditadaInterno(
+  id: string,
+  motivoInformado: string,
+  autorMatricula: number,
+  autorNome: string,
+  dataReabertura: string
+): CicloAvaliacao {
+  const motivo = motivoInformado.trim();
+  if (!motivo) throw new Error("Informe o motivo da reabertura do ciclo.");
+
+  const ciclos = getCiclosAvaliacao();
+  const alvo = ciclos.find((item) => item.id === id);
+  if (!alvo) throw new Error("Ciclo não encontrado.");
+  if (alvo.status !== "ENCERRADO") {
+    throw new Error("Somente ciclos encerrados podem ser reabertos.");
+  }
+  const outroAtivo = ciclos.find(
+    (item) => item.status === "ATIVO" && item.id !== id
+  );
+  if (outroAtivo) {
+    throw new Error(
+      `Já existe um ciclo ativo: ${outroAtivo.ano} • Ciclo ${outroAtivo.ciclo}. Encerre-o antes de reabrir outro.`
+    );
+  }
+
+  const encerramentos = alvo.encerramentos ??
+    (alvo.dataEncerramento
+      ? [{
+          data: alvo.dataEncerramento,
+          encerradoComPendencias: Boolean(alvo.encerradoComPendencias),
+          quantidadePendencias: alvo.quantidadePendencias ?? 0,
+        }]
+      : []);
+
+  const reaberto: CicloAvaliacao = {
+    ...alvo,
+    status: "ATIVO",
+    encerramentos,
+    reaberturas: [
+      ...(alvo.reaberturas ?? []),
+      {
+        motivo,
+        autorMatricula,
+        autorNome,
+        data: dataReabertura,
+      },
+    ],
+    dataUltimaAtualizacao: dataReabertura,
+  };
+  persistir(ciclos.map((item) => (item.id === id ? reaberto : item)));
+  return reaberto;
 }
