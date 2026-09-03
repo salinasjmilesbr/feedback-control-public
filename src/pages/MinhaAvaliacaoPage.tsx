@@ -2,7 +2,11 @@ import type { CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import CollaboratorIdentity from "../components/CollaboratorIdentity";
-import { getFeedbacksConcluidosByColaborador } from "../services/feedbackStorage";
+import {
+  getFeedbacksByColaborador,
+  getFeedbacksConcluidosByColaborador,
+} from "../services/feedbackStorage";
+import { getCiclosAvaliacao } from "../services/cicloAvaliacaoStorage";
 import {
   formatarNota,
   getEscalaAvaliacao,
@@ -41,10 +45,34 @@ function MinhaAvaliacaoPage() {
     return getItemEscalaPorNota(valor, escalaAvaliacao).significado;
   }
 
+  const ciclos = getCiclosAvaliacao();
+  const ciclosCancelados = ciclos.filter(
+    (ciclo) => ciclo.status === "CANCELADO"
+  );
+  const chavesCiclosCancelados = new Set(
+    ciclosCancelados.map((ciclo) => `${ciclo.ano}-${ciclo.ciclo}`)
+  );
+  const feedbacksDoColaborador = getFeedbacksByColaborador(
+    usuarioAtual.matricula
+  );
   const avaliacoesConcluidas = getFeedbacksConcluidosByColaborador(
     usuarioAtual.matricula
   )
+    .filter(
+      (feedback) =>
+        !chavesCiclosCancelados.has(`${feedback.ano}-${feedback.ciclo}`)
+    )
     .sort((a, b) => b.ano - a.ano || b.ciclo - a.ciclo);
+  const ciclosCanceladosParticipados = ciclosCancelados
+    .filter((ciclo) =>
+      feedbacksDoColaborador.some(
+        (feedback) =>
+          feedback.ano === ciclo.ano && feedback.ciclo === ciclo.ciclo
+      )
+    )
+    .sort((a, b) => b.ano - a.ano || b.ciclo - a.ciclo);
+  const possuiHistorico =
+    avaliacoesConcluidas.length > 0 || ciclosCanceladosParticipados.length > 0;
 
   return (
     <main className="virtus-page evaluation-page my-evaluations-page">
@@ -88,7 +116,7 @@ function MinhaAvaliacaoPage() {
         </div>
       </section>
 
-      {avaliacoesConcluidas.length === 0 ? (
+      {!possuiHistorico ? (
         <section className="evaluation-empty">
           <h2>Nenhuma avaliação concluída disponível</h2>
           <p>
@@ -106,6 +134,24 @@ function MinhaAvaliacaoPage() {
           </div>
 
           <div className="evaluation-history-grid">
+            {ciclosCanceladosParticipados.map((ciclo) => (
+              <article
+                className="my-evaluations-history-card"
+                key={`ciclo-cancelado-${ciclo.id}`}
+              >
+                <div className="my-evaluations-history-card__main">
+                  <div className="my-evaluations-history-card__cycle">
+                    <span className="evaluation-cycle-label">
+                      {ciclo.ano} • Ciclo {ciclo.ciclo}
+                    </span>
+                    <span className="my-evaluations-history-card__status is-historical">
+                      Cancelado
+                    </span>
+                  </div>
+                  <p>Ciclo cancelado pela gerência.</p>
+                </div>
+              </article>
+            ))}
             {avaliacoesConcluidas.map((feedback) => (
               <article
                 className="my-evaluations-history-card score-semantic"

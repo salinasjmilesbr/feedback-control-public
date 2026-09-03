@@ -257,6 +257,28 @@ describe("feedbackStorage", () => {
     expect(getFeedbacks()[0].notaMedia).toBe(4);
   });
 
+  it("rejeita mutação normal de avaliação vinculada a ciclo cancelado", () => {
+    localStorage.setItem(
+      "feedback-control-ciclos",
+      JSON.stringify([
+        {
+          id: "ciclo-cancelado",
+          ano: avaliacaoVazia.ano,
+          ciclo: avaliacaoVazia.ciclo,
+          status: "CANCELADO",
+          dataCriacao: "2026-01-01T00:00:00.000Z",
+          dataUltimaAtualizacao: "2026-01-01T00:00:00.000Z",
+        },
+      ])
+    );
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([avaliacaoVazia]));
+
+    expect(() =>
+      updateFeedback({ ...avaliacaoVazia, notaMedia: 5 }, gerente)
+    ).toThrow("Avaliações de ciclo cancelado não podem ser alteradas.");
+    expect(getFeedbacks()).toEqual([avaliacaoVazia]);
+  });
+
   it("preserva a mutação interna sem ator usada no encerramento de ciclo", () => {
     updateFeedback({
       ...avaliacaoConcluida,

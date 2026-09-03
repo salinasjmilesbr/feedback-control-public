@@ -519,6 +519,12 @@ export function saveFeedback(
   usuarioAtual?: Colaborador
 ): void {
   const feedbacks = getFeedbacks();
+  const cicloPersistido = getCiclosAvaliacao().find(
+    (ciclo) => ciclo.ano === feedback.ano && ciclo.ciclo === feedback.ciclo
+  );
+  if (cicloPersistido?.status === "CANCELADO") {
+    throw new Error("Avaliações de ciclo cancelado não podem ser alteradas.");
+  }
 
   if (
     feedback.status !== "CANCELADA" &&
@@ -654,13 +660,25 @@ export function updateFeedback(
   const feedbackAtual = feedbacks.find(
     (feedback) => feedback.id === updatedFeedback.id
   );
+  const cicloPersistido = feedbackAtual
+    ? getCiclosAvaliacao().find(
+        (ciclo) =>
+          ciclo.ano === feedbackAtual.ano &&
+          ciclo.ciclo === feedbackAtual.ciclo
+      )
+    : undefined;
 
   if (
     usuarioAtual &&
-    (feedbackAtual?.status === "CONCLUIDA" ||
+    (cicloPersistido?.status === "CANCELADO" ||
+      feedbackAtual?.status === "CONCLUIDA" ||
       feedbackAtual?.status === "CANCELADA")
   ) {
-    throw new Error("Avaliações concluídas ou canceladas não podem ser alteradas.");
+    throw new Error(
+      cicloPersistido?.status === "CANCELADO"
+        ? "Avaliações de ciclo cancelado não podem ser alteradas."
+        : "Avaliações concluídas ou canceladas não podem ser alteradas."
+    );
   }
 
   const updatedFeedbacks = feedbacks.map((feedback) => {

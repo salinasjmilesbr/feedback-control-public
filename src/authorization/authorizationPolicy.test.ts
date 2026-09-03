@@ -186,6 +186,55 @@ describe("authorizationPolicy", () => {
     ).toBe(false);
   });
 
+  it("autoriza cancelamento de ciclo ativo somente para gerente", () => {
+    expect(
+      can(contexto(gerente), "cycle.cancel.manager", {
+        kind: "cycle",
+        cycle: ciclo,
+      })
+    ).toBe(true);
+    expect(
+      can(contexto(coordenador), "cycle.cancel.manager", {
+        kind: "cycle",
+        cycle: ciclo,
+      })
+    ).toBe(false);
+    expect(
+      can(contexto(gerente), "cycle.cancel.manager", {
+        kind: "cycle",
+        cycle: { ...ciclo, status: "CANCELADO" },
+      })
+    ).toBe(false);
+  });
+
+  it("nega operações relacionadas quando o ciclo está cancelado", () => {
+    const cicloCancelado = { ...ciclo, status: "CANCELADO" as const };
+    const avaliacaoCanceladaNoCiclo: EvaluationResource = {
+      ...evaluationResource,
+      cycle: cicloCancelado,
+      evaluationStatus: "RASCUNHO",
+    };
+
+    expect(
+      can(contexto(gerente), "evaluation.edit.manager", avaliacaoCanceladaNoCiclo)
+    ).toBe(false);
+    expect(
+      can(contexto(gerente), "evaluation.create", avaliacaoCanceladaNoCiclo)
+    ).toBe(false);
+    expect(
+      can(contexto(gerente), "goal.approve.manager", {
+        ...goalResource,
+        cycle: cicloCancelado,
+      })
+    ).toBe(false);
+    expect(
+      can(contexto(gerente), "observation.create", {
+        ...observationResource,
+        cycle: cicloCancelado,
+      })
+    ).toBe(false);
+  });
+
   it.each([
     ["GERENTE", gerente, true],
     ["COORDENADOR", coordenador, false],

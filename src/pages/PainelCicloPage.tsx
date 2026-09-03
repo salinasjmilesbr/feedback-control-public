@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { can } from "../authorization/authorizationPolicy";
+import type { GoalResource } from "../authorization/ResourceContext";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import {
   getCiclosAvaliacao,
@@ -14,10 +15,13 @@ import {
 import {
   getMetasDoCiclo,
 } from "../services/metaStorage";
+import { getColaboradores } from "../services/colaboradorStorage";
+import { getColaboradoresEfetivosNoCiclo } from "../services/historicoOrganizacionalStorage";
 import "../styles/ciclos.css";
 import "../styles/equipe-colegiado.css";
 import "../styles/metas-gestao.css";
 import "../styles/historico-ciclo.css";
+import { obterAcaoAvaliacaoPainel } from "./painelCicloAvaliacaoAction";
 
 const labelsSituacao: Record<SituacaoAvaliacaoCiclo, string> = {
   NAO_INICIADA: "Não iniciada",
@@ -96,6 +100,10 @@ function PainelCicloPage() {
   const linhas = getPainelCiclo(cicloAtual, usuario, {
     incluirCanceladas: mostrarCanceladas,
   });
+  const colaboradoresAutorizacao = getColaboradoresEfetivosNoCiclo(
+    cicloAtual,
+    getColaboradores()
+  );
   const colaboradoresEfetivos = new Map(
     linhas.map((linha) => [linha.colaborador.matricula, linha.colaborador])
   );
@@ -145,22 +153,27 @@ function PainelCicloPage() {
       .map((linha) => linha.colaborador.matricula)
   );
 
-  const metasPendentesDoPerfil = metasDoCiclo.filter((meta) => {
-    if (!matriculasComAcessoAMetas.has(meta.colaboradorMatricula)) {
-      return false;
-    }
+  const metasPendentesDoPerfil =
+    cicloAtual.status === "CANCELADO"
+      ? 0
+      : metasDoCiclo.filter((meta) => {
+          if (!matriculasComAcessoAMetas.has(meta.colaboradorMatricula)) {
+            return false;
+          }
 
-    if (usuario.funcao === "GERENTE") {
-      return !meta.aprovacaoGerente;
-    }
+          if (usuario.funcao === "GERENTE") {
+            return !meta.aprovacaoGerente;
+          }
 
-    const colaborador = colaboradoresEfetivos.get(meta.colaboradorMatricula);
+          const colaborador = colaboradoresEfetivos.get(
+            meta.colaboradorMatricula
+          );
 
-    return (
-      colaborador?.gestorDiretoMatricula === usuario.matricula &&
-      !meta.aprovacaoCoordenador
-    );
-  }).length;
+          return (
+            colaborador?.gestorDiretoMatricula === usuario.matricula &&
+            !meta.aprovacaoCoordenador
+          );
+        }).length;
 
   const indicadores = [
     { label: "Total", valor: linhas.length },
@@ -180,9 +193,27 @@ function PainelCicloPage() {
   function podeVerMetas(
     colaborador: (typeof linhas)[number]["colaborador"]
   ) {
-    return (
-      usuario.funcao === "GERENTE" ||
-      colaborador.gestorDiretoMatricula === usuario.matricula
+    const resource: GoalResource = {
+      kind: "goal",
+      owner: colaborador,
+      collaborators: colaboradoresAutorizacao,
+      cycle: cicloAtual,
+    };
+    return can(
+      { actor: usuario },
+      "goal.view.admin",
+      resource
+    );
+  }
+
+  function obterAcaoAvaliacao(linha: (typeof linhas)[number]) {
+    if (!linha.feedback) return undefined;
+    return obterAcaoAvaliacaoPainel(
+      usuario,
+      linha.colaborador,
+      colaboradoresAutorizacao,
+      cicloAtual,
+      linha.feedback
     );
   }
 
@@ -217,11 +248,17 @@ function PainelCicloPage() {
                 <div>Ações</div>
               </div>
 
-              {linhasGrupo.map((linha) => (
-                <div
-                  className="cycle-table__row"
-                  key={linha.colaborador.matricula}
-                >
+              {linhasGrupo.map((linha) => {
+                const acaoAvaliacao = obterAcaoAvaliacao(linha);
+                const situacaoExibida =
+                  cicloAtual.status === "CANCELADO"
+                    ? "CANCELADA"
+                    : linha.situacao;
+                return (
+                  <div
+                    className="cycle-table__row"
+                    key={linha.colaborador.matricula}
+                  >
                   <div className="cycle-person">
                     <div className="cycle-person__avatar">
                       {linha.colaborador.nome
@@ -277,9 +314,9 @@ function PainelCicloPage() {
                   <div className="cycle-mobile-field" data-label="Status geral">
                     <span
                       className={`cycle-general-status ${
-                        linha.situacao === "CONCLUIDA"
+                        situacaoExibida === "CONCLUIDA"
                           ? "is-complete"
-                          : linha.situacao === "CANCELADA"
+                          : situacaoExibida === "CANCELADA"
                           ? "is-cancelled"
                           : linha.situacao === "PRONTA_PARA_FEEDBACK"
                           ? "is-feedback"
@@ -291,7 +328,9 @@ function PainelCicloPage() {
                           : "is-not-started"
                       }`}
                     >
-                      {labelsSituacao[linha.situacao]}
+                      {cicloAtual.status === "CANCELADO"
+                        ? "Ciclo cancelado"
+                        : labelsSituacao[situacaoExibida]}
                     </span>
                     {linha.motivoNaoAplicavel && (
                       <small className="cycle-muted">
@@ -327,27 +366,20 @@ function PainelCicloPage() {
                       </button>
                     )}
 
-                    {linha.feedback ? (
+                    {acaoAvaliacao ? (
                       <button
                         className="cycle-btn cycle-btn--small cycle-btn--secondary"
-                        onClick={() =>
-                          navigate(
-                            linha.feedback!.status === "CANCELADA"
-                              ? `/colaborador/${linha.colaborador.matricula}/feedback/${linha.feedback!.id}`
-                              : `/colaborador/${linha.colaborador.matricula}/feedback/${linha.feedback!.id}/editar`
-                          )
-                        }
+                        onClick={() => navigate(acaoAvaliacao.destino)}
                       >
-                        {linha.feedback.status === "CANCELADA"
-                          ? "Ver avaliação"
-                          : "Abrir avaliação"}
+                        {acaoAvaliacao.label}
                       </button>
-                    ) : (
+                    ) : !linha.feedback ? (
                       <span className="cycle-muted">Avaliação não criada</span>
-                    )}
+                    ) : null}
                   </div>
-                </div>
-              ))}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -388,6 +420,8 @@ function PainelCicloPage() {
         >
           {ciclo.status === "ATIVO"
             ? "Ativo"
+            : ciclo.status === "CANCELADO"
+            ? "Cancelado"
             : ciclo.encerradoComPendencias
             ? "Encerrado com pendências"
             : "Encerrado"}

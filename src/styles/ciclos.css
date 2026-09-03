@@ -322,6 +322,12 @@
   color: #625b6d;
 }
 
+.cycle-status.is-cancelled {
+  border: 1px solid #efc2c5;
+  background: #fde7e9;
+  color: #a4262c;
+}
+
 .cycle-show-cancelled {
   display: flex;
   width: fit-content;

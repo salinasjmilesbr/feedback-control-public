@@ -22,7 +22,10 @@ const gerente: Colaborador = {
   respondePara: "",
 };
 
-function renderizar(status: StatusCicloAvaliacao): string {
+function renderizar(
+  status: StatusCicloAvaliacao,
+  mostrarCanceladosInicial = false
+): string {
   const ciclo: CicloAvaliacao = {
     id: "ciclo-ui",
     ano: 2026,
@@ -42,7 +45,9 @@ function renderizar(status: StatusCicloAvaliacao): string {
       }}
     >
       <MemoryRouter>
-        <CiclosAvaliacaoPage />
+        <CiclosAvaliacaoPage
+          mostrarCanceladosInicial={mostrarCanceladosInicial}
+        />
       </MemoryRouter>
     </UsuarioAtualContext.Provider>
   );
@@ -59,6 +64,7 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     expect(html).not.toContain("Editar status");
     expect(html).toContain("Editar período");
     expect(html).toContain("Excluir ciclo");
+    expect(html).not.toContain("Cancelar ciclo");
   });
 
   it("mostra somente encerramento para ciclo ativo", () => {
@@ -69,6 +75,7 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     expect(html).not.toContain("Editar status");
     expect(html).not.toContain("Editar período");
     expect(html).not.toContain("Excluir ciclo");
+    expect(html).toContain("Cancelar ciclo");
   });
 
   it("não mostra ação de transição para ciclo encerrado", () => {
@@ -77,9 +84,29 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     expect(html).not.toContain("Ativar ciclo");
     expect(html).not.toContain("Encerrar ciclo");
     expect(html).not.toContain("Editar status");
-    expect(html).toContain("Lifecycle encerrado");
+    expect(html).toContain("Ciclo encerrado");
     expect(html).not.toContain("Editar período");
     expect(html).not.toContain("Excluir ciclo");
+    expect(html).not.toContain("Cancelar ciclo");
+  });
+
+  it("oculta cancelados por padrão e oferece controle explícito", () => {
+    const html = renderizar("CANCELADO");
+
+    expect(html).toContain("Mostrar cancelados");
+    expect(html).not.toContain("Ciclo cancelado");
+  });
+
+  it("identifica cancelado quando exibido e oculta todas as ações normais", () => {
+    const html = renderizar("CANCELADO", true);
+
+    expect(html).toContain("Cancelado");
+    expect(html).toContain("Ciclo cancelado");
+    expect(html).not.toContain("Ativar ciclo");
+    expect(html).not.toContain("Encerrar ciclo");
+    expect(html).not.toContain("Editar período");
+    expect(html).not.toContain("Excluir ciclo");
+    expect(html).not.toContain("Cancelar ciclo");
   });
 
   it("exige confirmação explícita antes da exclusão", () => {

@@ -1,8 +1,17 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
+import type { Meta } from "../types/Meta";
 import { instalarLocalStorageEmMemoria } from "../test/localStorageMock";
-import { podeAprovarMetaNoCiclo } from "./metaStorage";
+import {
+  aprovarMeta,
+  atualizarAcompanhamentoMeta,
+  atualizarMeta,
+  criarMeta,
+  excluirMeta,
+  finalizarMeta,
+  podeAprovarMetaNoCiclo,
+} from "./metaStorage";
 
 function pessoa(
   matricula: number,
@@ -52,5 +61,49 @@ describe("podeAprovarMetaNoCiclo", () => {
 
   it("nega aprovação a usuário fora da cadeia", () => {
     expect(podeAprovarMetaNoCiclo(externo, colaborador, equipe, ciclo)).toBe(false);
+  });
+
+  it("mantém todas as mutações de meta bloqueadas em ciclo cancelado", () => {
+    const cicloCancelado = { ...ciclo, status: "CANCELADO" as const };
+    const meta: Meta = {
+      id: "meta-cancelada",
+      colaboradorMatricula: colaborador.matricula,
+      colaboradorNome: colaborador.nome,
+      cicloId: ciclo.id,
+      ano: ciclo.ano,
+      ciclo: ciclo.ciclo,
+      tipo: "INDIVIDUAL",
+      descricao: "Meta preservada",
+      kpi: "KPI preservado",
+      valorAlvo: "100",
+      status: "EM_ANDAMENTO",
+      dataCriacao: "2026-01-01T00:00:00.000Z",
+      dataUltimaAtualizacao: "2026-01-01T00:00:00.000Z",
+      excluida: false,
+      historico: [],
+    };
+    localStorage.setItem(
+      "feedback-control-ciclos",
+      JSON.stringify([cicloCancelado])
+    );
+    localStorage.setItem("feedback-control-metas", JSON.stringify([meta]));
+
+    const operacoes = [
+      () => criarMeta(colaborador, ciclo, "INDIVIDUAL", "Nova", "KPI", "1"),
+      () => atualizarMeta(meta.id, colaborador, ciclo, "Nova", "KPI", "1"),
+      () => aprovarMeta(meta.id, gerente, colaborador, ciclo),
+      () => excluirMeta(meta.id, colaborador, ciclo),
+      () => atualizarAcompanhamentoMeta(meta.id, colaborador, ciclo, "Atual", 50),
+      () => finalizarMeta(meta.id, colaborador, ciclo, "Final", true),
+    ];
+
+    operacoes.forEach((operacao) =>
+      expect(operacao).toThrow(
+        "As metas só podem ser cadastradas ou alteradas enquanto o ciclo estiver Ativo."
+      )
+    );
+    expect(JSON.parse(localStorage.getItem("feedback-control-metas")!)).toEqual([
+      meta,
+    ]);
   });
 });

@@ -358,3 +358,45 @@ export function excluirCiclo(id: string): void {
 
   persistir(ciclos.filter((item) => item.id !== id));
 }
+
+export function getCiclosAdministrativos(
+  incluirCancelados = false
+): CicloAvaliacao[] {
+  return getCiclosAvaliacao().filter(
+    (ciclo) => incluirCancelados || ciclo.status !== "CANCELADO"
+  );
+}
+
+export function persistirCancelamentoCicloAuditadoInterno(
+  id: string,
+  motivoInformado: string,
+  autorMatricula: number,
+  autorNome: string,
+  dataCancelamento: string
+): CicloAvaliacao {
+  const motivo = motivoInformado.trim();
+  if (!motivo) throw new Error("Informe o motivo do cancelamento do ciclo.");
+
+  const ciclos = getCiclosAvaliacao();
+  const alvo = ciclos.find((item) => item.id === id);
+  if (!alvo) throw new Error("Ciclo não encontrado.");
+  if (alvo.status !== "ATIVO") {
+    throw new Error("Somente ciclos ativos podem ser cancelados.");
+  }
+
+  const cancelado: CicloAvaliacao = {
+    ...alvo,
+    status: "CANCELADO",
+    cancelamento: {
+      motivo,
+      autorMatricula,
+      autorNome,
+      data: dataCancelamento,
+    },
+    dataUltimaAtualizacao: dataCancelamento,
+  };
+  persistir(
+    ciclos.map((item) => (item.id === id ? cancelado : item))
+  );
+  return cancelado;
+}

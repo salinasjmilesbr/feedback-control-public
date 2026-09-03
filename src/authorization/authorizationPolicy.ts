@@ -63,6 +63,14 @@ function decidir(
     return resource.kind === "global" && actor.funcao === "GERENTE";
   }
 
+  if (capability === "cycle.cancel.manager") {
+    return (
+      resource.kind === "cycle" &&
+      resource.cycle.status === "ATIVO" &&
+      actor.funcao === "GERENTE"
+    );
+  }
+
   if (capability === "cycle.coordinator.list") {
     return resource.kind === "global" && actor.funcao === "COORDENADOR";
   }
@@ -81,6 +89,7 @@ function decidir(
   if (capability === "observation.create") {
     return (
       resource.kind === "observation" &&
+      resource.cycle?.status !== "CANCELADO" &&
       resource.collaborator.status !== "DESLIGADO" &&
       (actor.funcao === "GERENTE" || actor.funcao === "COORDENADOR")
     );
@@ -92,6 +101,7 @@ function decidir(
   ) {
     return (
       resource.kind === "observation" &&
+      resource.cycle?.status !== "CANCELADO" &&
       (actor.funcao === "GERENTE" || actor.funcao === "COORDENADOR")
     );
   }
@@ -108,6 +118,7 @@ function decidir(
 
     if (capability === "evaluation.create") {
       return (
+        resource.cycle?.status !== "CANCELADO" &&
         resource.evaluatedCollaborator.status === "ATIVO" &&
         (permissoes.podeAvaliarComoGerente ||
           permissoes.podeAvaliarComoCoordenador ||
@@ -121,6 +132,7 @@ function decidir(
 
     if (capability === "evaluation.cancel.manager") {
       return (
+        resource.cycle?.status !== "CANCELADO" &&
         resource.evaluationStatus !== "CANCELADA" &&
         permissoes.podeAvaliarComoGerente
       );
@@ -130,12 +142,14 @@ function decidir(
       return (
         resource.evaluationStatus === "CONCLUIDA" &&
         resource.cycle?.status !== "ENCERRADO" &&
+        resource.cycle?.status !== "CANCELADO" &&
         permissoes.podeAvaliarComoGerente
       );
     }
 
     if (
-      (resource.evaluationStatus === "CONCLUIDA" ||
+      (resource.cycle?.status === "CANCELADO" ||
+        resource.evaluationStatus === "CONCLUIDA" ||
         resource.evaluationStatus === "CANCELADA") &&
       (capability === "evaluation.edit.manager" ||
         capability === "evaluation.edit.coordinator" ||
@@ -165,11 +179,23 @@ function decidir(
       resource.cycle
     );
 
+    if (capability === "goal.view.admin") {
+      return podeAprovar;
+    }
+
     if (capability === "goal.approve.manager") {
-      return actor.funcao === "GERENTE" && podeAprovar;
+      return (
+        resource.cycle.status !== "CANCELADO" &&
+        actor.funcao === "GERENTE" &&
+        podeAprovar
+      );
     }
     if (capability === "goal.approve.coordinator") {
-      return actor.funcao === "COORDENADOR" && podeAprovar;
+      return (
+        resource.cycle.status !== "CANCELADO" &&
+        actor.funcao === "COORDENADOR" &&
+        podeAprovar
+      );
     }
   }
 

@@ -8,6 +8,7 @@ import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 
 import ObservacoesColaborador from "../components/ObservacoesColaborador";
 import { getColaboradorByMatricula, getColaboradores } from "../services/colaboradorStorage";
+import { getCiclosAvaliacao } from "../services/cicloAvaliacaoStorage";
 import { getFeedbacksAdministrativosByColaborador } from "../services/feedbackStorage";
 import { getObservacoesByColaborador } from "../services/observacaoStorage";
 import { getHistoricoOrganizacional } from "../services/historicoOrganizacionalStorage";
@@ -19,6 +20,7 @@ import {
 } from "../services/escalaAvaliacaoStorage";
 import type { Feedback } from "../types/Feedback";
 import "../styles/colaborador-detalhe.css";
+import { getStatusAvaliacaoAdministrativa } from "./statusAvaliacaoAdministrativa";
 
 function Icon({
   children,
@@ -203,20 +205,6 @@ function calcularPreenchimentoFeedback(feedback: Feedback) {
     coordenador: calcularPercentual(coordenador, totalSubcriterios),
     colegiado: calcularPercentual(colegiado, totalSubcriterios),
   };
-}
-
-function labelStatusFeedback(status: Feedback["status"]) {
-  if (status === "CANCELADA") return "Cancelada";
-  if (status === "CONCLUIDA") return "Concluída";
-  if (status === "PRONTA_PARA_FEEDBACK") return "Pronta para feedback";
-  return "Em andamento";
-}
-
-function classeStatusFeedback(status: Feedback["status"]) {
-  if (status === "CANCELADA") return "is-cancelled";
-  if (status === "CONCLUIDA") return "is-complete";
-  if (status === "PRONTA_PARA_FEEDBACK") return "is-ready";
-  return "is-progress";
 }
 
 function formatarData(valor?: string) {
@@ -414,6 +402,7 @@ function ColaboradorDetalhePage() {
     colaborador.matricula,
     mostrarCanceladas
   );
+  const ciclos = getCiclosAvaliacao();
   const feedbacksOrdenados = [...feedbacksBase].sort((a, b) => {
     const dataA = new Date(a.dataCriacao ?? a.data).getTime();
     const dataB = new Date(b.dataCriacao ?? b.data).getTime();
@@ -734,6 +723,15 @@ function ColaboradorDetalhePage() {
         ) : (
           <div className="collaborator-history">
             {feedbacksOrdenados.map((feedback) => {
+              const cicloDaAvaliacao = ciclos.find(
+                (ciclo) =>
+                  ciclo.ano === feedback.ano &&
+                  ciclo.ciclo === feedback.ciclo
+              );
+              const statusExibido = getStatusAvaliacaoAdministrativa(
+                feedback.status,
+                cicloDaAvaliacao?.status
+              );
               const preenchimento = calcularPreenchimentoFeedback(feedback);
               const dataInicio = formatarData(feedback.dataCriacao ?? feedback.data);
               const dataFim = formatarData(feedback.dataConclusao);
@@ -764,11 +762,9 @@ function ColaboradorDetalhePage() {
                             {feedback.ano} • Ciclo {feedback.ciclo}
                           </strong>
                           <span
-                            className={`collaborator-evaluation-status ${classeStatusFeedback(
-                              feedback.status
-                            )}`}
+                            className={`collaborator-evaluation-status ${statusExibido.className}`}
                           >
-                            {labelStatusFeedback(feedback.status)}
+                            {statusExibido.label}
                           </span>
                         </span>
                         <small>

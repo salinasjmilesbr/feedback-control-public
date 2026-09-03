@@ -26,10 +26,10 @@
 .admin-evaluation-person-status.is-ativo { background:#e7f6ec; color:#107c41; }
 .admin-evaluation-person-status.is-licenca { background:#fff4ce; color:#806000; }
 .admin-evaluation-person-status.is-desligado { background:#f4f1f5; color:#655d69; }
-.admin-evaluation-status.is-concluida { background:#e7f6ec; color:#107c41; }
-.admin-evaluation-status.is-pronta_para_feedback { background:#fff4ce; color:#806000; }
-.admin-evaluation-status.is-rascunho { background:#f4eaf8; color:var(--brand-primary); }
-.admin-evaluation-status.is-cancelada { background:#fde7e9; color:#a4262c; }
+.admin-evaluation-status.is-complete { background:#e7f6ec; color:#107c41; }
+.admin-evaluation-status.is-ready { background:#fff4ce; color:#806000; }
+.admin-evaluation-status.is-progress { background:#f4eaf8; color:var(--brand-primary); }
+.admin-evaluation-status.is-historical { background:#f4f1f5; color:#655d69; }
 
 .admin-evaluation-detail .evaluation-score-card { margin-bottom:14px; }
 .admin-evaluation-detail .evaluation-score-card__meta p { margin:4px 0 0; color:var(--brand-text-muted); font-size:12px; }

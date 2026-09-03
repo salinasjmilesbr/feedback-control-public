@@ -110,10 +110,10 @@
   color: #0067b8;
 }
 
-.collaborator-evaluation-status.is-cancelled {
-  border-color: #efc2c5;
-  background: #fde7e9;
-  color: #a4262c;
+.collaborator-evaluation-status.is-historical {
+  border-color: #d8d2dc;
+  background: #f4f1f5;
+  color: #655d69;
 }
 
 .collaborator-history-controls,

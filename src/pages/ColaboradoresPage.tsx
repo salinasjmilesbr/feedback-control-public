@@ -6,7 +6,7 @@ import { getColaboradores } from "../services/colaboradorStorage";
 import type { StatusColaborador } from "../types/Colaborador";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import { getColaboradoresVisiveis } from "../services/visibilidadeColaboradores";
-import { getCiclosAvaliacao } from "../services/cicloAvaliacaoStorage";
+import { getCiclosAdministrativos } from "../services/cicloAvaliacaoStorage";
 import { gerarDadosTesteDoCiclo } from "../services/geradorDadosTeste";
 import "../styles/dados-teste.css";
 import "../styles/equipe-colegiado.css";
@@ -21,7 +21,7 @@ function ColaboradoresPage() {
   const [busca, setBusca] = useState("");
   const [coordenadorFiltro, setCoordenadorFiltro] = useState("TODOS");
   const [statusFiltro, setStatusFiltro] = useState<StatusFiltro>("TODOS");
-  const ciclosDisponiveis = getCiclosAvaliacao();
+  const ciclosDisponiveis = getCiclosAdministrativos();
   const [cicloTesteId, setCicloTesteId] = useState(
     ciclosDisponiveis[0]?.id ?? ""
   );

@@ -24,6 +24,7 @@ import {
 import { getFeedbacksByColaborador } from "../services/feedbackStorage";
 import "../styles/avaliacoes.css";
 import "../styles/feedback-detalhe.css";
+import { getStatusAvaliacaoAdministrativa } from "./statusAvaliacaoAdministrativa";
 
 const criterioIcons = Array.from({ length: 8 }, (_, index) => (
   <CriterionIcon index={index} key={index} />
@@ -153,12 +154,10 @@ function FeedbackDetalhePage() {
     return Number.isNaN(valor.getTime()) ? "—" : valor.toLocaleDateString("pt-BR");
   }
 
-  function statusLabel() {
-    if (feedback!.status === "CANCELADA") return "Cancelada";
-    if (feedback!.status === "CONCLUIDA") return "Concluída";
-    if (feedback!.status === "PRONTA_PARA_FEEDBACK") return "Pronta para Feedback";
-    return "Rascunho";
-  }
+  const statusExibido = getStatusAvaliacaoAdministrativa(
+    feedback.status,
+    cicloDaAvaliacao?.status
+  );
 
   function handleCancelarAvaliacao() {
     if (!usuarioAtual) return;
@@ -281,7 +280,9 @@ function FeedbackDetalhePage() {
       <section className="admin-evaluation-profile admin-evaluation-profile--identity">
         <CollaboratorIdentity colaborador={colaborador} variant="standard" />
         <div className="admin-evaluation-profile__context">
-          <span className={`admin-evaluation-status is-${feedback.status.toLowerCase()}`}>{statusLabel()}</span>
+          <span className={`admin-evaluation-status ${statusExibido.className}`}>
+            {statusExibido.label}
+          </span>
           <small>Avaliação em {formatarData(feedback.data)}</small>
         </div>
       </section>
