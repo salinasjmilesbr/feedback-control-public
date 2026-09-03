@@ -13,10 +13,14 @@ import {
 import { getColaboradores } from "../services/colaboradorStorage";
 import { getMetasDoColaboradorNoCiclo } from "../services/metaStorage";
 import {
-  formatarNota,
   getEscalaAvaliacao,
   getItemEscalaPorNota,
 } from "../services/escalaAvaliacaoStorage";
+import {
+  formatarNotaAvaliacao,
+  getTextoNotaAvaliacao,
+  possuiNotaAvaliacao,
+} from "../services/apresentacaoNota";
 import "../styles/avaliacoes.css";
 
 const criterioIcons = Array.from({ length: 8 }, (_, index) => (
@@ -176,6 +180,13 @@ function MinhaAvaliacaoDetalhePage() {
   const escalaAvaliacao = getEscalaAvaliacao();
 
   function estiloNota(valor: number) {
+    if (!possuiNotaAvaliacao(valor)) {
+      return {
+        "--score-color": "#655d69",
+        "--score-bg": "#f4f1f5",
+        "--score-border": "#d8d2dc",
+      } as CSSProperties;
+    }
     const faixa = getItemEscalaPorNota(valor, escalaAvaliacao);
 
     return {
@@ -186,7 +197,7 @@ function MinhaAvaliacaoDetalhePage() {
   }
 
   function labelNota(valor: number) {
-    return getItemEscalaPorNota(valor, escalaAvaliacao).significado;
+    return getTextoNotaAvaliacao(valor, escalaAvaliacao);
   }
 
   function labelStatusMeta(status: string) {
@@ -256,7 +267,7 @@ function MinhaAvaliacaoDetalhePage() {
           style={estiloNota(feedback.notaMedia)}
         >
           <span>Resultado do ciclo</span>
-          <strong>{formatarNota(feedback.notaMedia)}</strong>
+          <strong>{formatarNotaAvaliacao(feedback.notaMedia)}</strong>
           <small>{labelNota(feedback.notaMedia)}</small>
         </div>
 
@@ -337,7 +348,7 @@ function MinhaAvaliacaoDetalhePage() {
                 </div>
 
                 <div className="evaluation-history-compact-card__score">
-                  {formatarNota(item.notaMedia)}
+                  {formatarNotaAvaliacao(item.notaMedia)}
                 </div>
 
                 <div className="evaluation-history-compact-card__footer">
@@ -388,7 +399,11 @@ function MinhaAvaliacaoDetalhePage() {
                 <span className="evaluation-summary-metric__icon is-purple">☆</span>
                 <div>
                   <small>Nota final</small>
-                  <strong>{formatarNota(feedback.notaMedia)} / 5</strong>
+                  <strong>
+                    {possuiNotaAvaliacao(feedback.notaMedia)
+                      ? `${formatarNotaAvaliacao(feedback.notaMedia)} / 5`
+                      : "—"}
+                  </strong>
                 </div>
               </div>
 
@@ -396,7 +411,7 @@ function MinhaAvaliacaoDetalhePage() {
                 <span className="evaluation-summary-metric__icon is-blue">▥</span>
                 <div>
                   <small>Média geral</small>
-                  <strong>{formatarNota(feedback.notaMedia)}</strong>
+                  <strong>{formatarNotaAvaliacao(feedback.notaMedia)}</strong>
                 </div>
               </div>
 
@@ -522,7 +537,7 @@ function MinhaAvaliacaoDetalhePage() {
                     style={estiloNota(criterio.nota)}
                   >
                     <span>Nota final</span>
-                    <strong>{formatarNota(criterio.nota)}</strong>
+                    <strong>{formatarNotaAvaliacao(criterio.nota)}</strong>
                     <small>{labelNota(criterio.nota)}</small>
                   </div>
                 </div>
@@ -550,9 +565,7 @@ function MinhaAvaliacaoDetalhePage() {
                         <div>
                           <span>Gerente</span>
                           <strong>
-                            {subcriterio.notaGerente > 0
-                              ? formatarNota(subcriterio.notaGerente)
-                              : "—"}
+                            {formatarNotaAvaliacao(subcriterio.notaGerente)}
                           </strong>
                         </div>
 
@@ -561,18 +574,14 @@ function MinhaAvaliacaoDetalhePage() {
                             <div>
                               <span>Coordenador</span>
                               <strong>
-                                {subcriterio.notaCoordenador > 0
-                                  ? formatarNota(subcriterio.notaCoordenador)
-                                  : "—"}
+                                {formatarNotaAvaliacao(subcriterio.notaCoordenador)}
                               </strong>
                             </div>
 
                             <div>
                               <span>Colegiado</span>
                               <strong>
-                                {subcriterio.notaColegiado > 0
-                                  ? formatarNota(subcriterio.notaColegiado)
-                                  : "—"}
+                                {formatarNotaAvaliacao(subcriterio.notaColegiado)}
                               </strong>
                             </div>
                           </>
@@ -584,7 +593,7 @@ function MinhaAvaliacaoDetalhePage() {
                         style={estiloNota(subcriterio.notaFinal)}
                       >
                         <small>Média</small>
-                        <strong>{formatarNota(subcriterio.notaFinal)}</strong>
+                        <strong>{formatarNotaAvaliacao(subcriterio.notaFinal)}</strong>
                         <span>{labelNota(subcriterio.notaFinal)}</span>
                       </div>
                     </div>
@@ -858,4 +867,3 @@ function MinhaAvaliacaoDetalhePage() {
 }
 
 export default MinhaAvaliacaoDetalhePage;
-
