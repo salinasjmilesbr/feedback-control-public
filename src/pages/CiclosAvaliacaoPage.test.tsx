@@ -84,7 +84,7 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     expect(html).not.toContain("Ativar ciclo");
     expect(html).not.toContain("Encerrar ciclo");
     expect(html).not.toContain("Editar status");
-    expect(html).toContain("Lifecycle encerrado");
+    expect(html).toContain("Ciclo encerrado");
     expect(html).not.toContain("Editar período");
     expect(html).not.toContain("Excluir ciclo");
     expect(html).not.toContain("Cancelar ciclo");
@@ -94,14 +94,14 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     const html = renderizar("CANCELADO");
 
     expect(html).toContain("Mostrar cancelados");
-    expect(html).not.toContain("Lifecycle cancelado");
+    expect(html).not.toContain("Ciclo cancelado");
   });
 
   it("identifica cancelado quando exibido e oculta todas as ações normais", () => {
     const html = renderizar("CANCELADO", true);
 
     expect(html).toContain("Cancelado");
-    expect(html).toContain("Lifecycle cancelado");
+    expect(html).toContain("Ciclo cancelado");
     expect(html).not.toContain("Ativar ciclo");
     expect(html).not.toContain("Encerrar ciclo");
     expect(html).not.toContain("Editar período");

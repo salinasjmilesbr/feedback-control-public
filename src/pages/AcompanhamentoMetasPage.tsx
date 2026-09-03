@@ -41,11 +41,7 @@ function AcompanhamentoMetasPage() {
   const [versao, setVersao] = useState(0);
   const [erro, setErro] = useState("");
 
-  if (
-    !usuarioAtual ||
-    (usuarioAtual.funcao !== "GERENTE" &&
-      usuarioAtual.funcao !== "COORDENADOR")
-  ) {
+  if (!usuarioAtual) {
     return (
       <main className="virtus-page">
         <section className="cycle-empty">
@@ -104,8 +100,11 @@ function AcompanhamentoMetasPage() {
     "goal.approve.coordinator",
     goalResource
   );
-  const podeAcessar =
-    podeAprovarComoGerente || podeAprovarComoCoordenador;
+  const podeAcessar = can(
+    authorizationContext,
+    "goal.view.admin",
+    goalResource
+  );
 
   if (!podeAcessar) {
     return (
@@ -144,15 +143,18 @@ function AcompanhamentoMetasPage() {
       )
     : 0;
 
-  const pendentesDoPerfil = metas.filter((meta) => {
-    if (!podeAcessar) {
-      return false;
-    }
+  const pendentesDoPerfil =
+    cicloAtual.status === "CANCELADO"
+      ? 0
+      : metas.filter((meta) => {
+          if (!podeAcessar) {
+            return false;
+          }
 
-    return podeAprovarComoGerente
-      ? !meta.aprovacaoGerente
-      : !meta.aprovacaoCoordenador;
-  }).length;
+          return podeAprovarComoGerente
+            ? !meta.aprovacaoGerente
+            : !meta.aprovacaoCoordenador;
+        }).length;
 
   function aprovar(meta: Meta) {
     setErro("");
@@ -303,7 +305,7 @@ function AcompanhamentoMetasPage() {
           </label>
         </div>
 
-        {!aprovada && cicloAtual.status !== "ATIVO" && (
+        {!aprovada && cicloAtual.status === "ENCERRADO" && (
           <div className="goals-manager-warning">
             O ciclo foi encerrado com esta meta sem todas as aprovações
             formais.
@@ -359,7 +361,11 @@ function AcompanhamentoMetasPage() {
               cicloAtual.status === "ATIVO" ? "is-active" : "is-closed"
             }`}
           >
-            {cicloAtual.status === "ATIVO" ? "Ciclo ativo" : "Ciclo encerrado"}
+            {cicloAtual.status === "ATIVO"
+              ? "Ciclo ativo"
+              : cicloAtual.status === "CANCELADO"
+              ? "Ciclo cancelado"
+              : "Ciclo encerrado"}
           </span>
 
           <button

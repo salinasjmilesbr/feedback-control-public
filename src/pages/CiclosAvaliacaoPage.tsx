@@ -626,10 +626,10 @@ function CiclosAvaliacaoPage({
                       </button>
                     )}
                     {item.status === "ENCERRADO" && (
-                      <span className="cycle-muted">Lifecycle encerrado</span>
+                      <span className="cycle-muted">Ciclo encerrado</span>
                     )}
                     {item.status === "CANCELADO" && (
-                      <span className="cycle-muted">Lifecycle cancelado</span>
+                      <span className="cycle-muted">Ciclo cancelado</span>
                     )}
                   </div>
 

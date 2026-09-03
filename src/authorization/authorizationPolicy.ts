@@ -179,6 +179,10 @@ function decidir(
       resource.cycle
     );
 
+    if (capability === "goal.view.admin") {
+      return podeAprovar;
+    }
+
     if (capability === "goal.approve.manager") {
       return (
         resource.cycle.status !== "CANCELADO" &&

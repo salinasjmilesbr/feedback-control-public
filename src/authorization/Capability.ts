@@ -13,6 +13,7 @@ export type Capability =
   | "evaluation.edit.manager"
   | "evaluation.edit.coordinator"
   | "evaluation.edit.board"
+  | "goal.view.admin"
   | "goal.approve.manager"
   | "goal.approve.coordinator"
   | "observation.create"
