@@ -3,6 +3,10 @@ import type {
   TipoObservacao,
 } from "../types/Observacao";
 import type { Colaborador } from "../types/Colaborador";
+import {
+  ordenarPorAnoECiclo,
+  type OrdemPorCiclo,
+} from "../utils/ordenacaoPorCiclo";
 import { getCiclosAvaliacao } from "./cicloAvaliacaoStorage";
 
 const STORAGE_KEY = "feedback-control-observacoes";
@@ -35,19 +39,16 @@ function validarCicloNaoCancelado(ano?: number, ciclo?: 1 | 2 | 3): void {
 
 export function getObservacoesByColaborador(
   colaboradorMatricula: number,
-  incluirExcluidas = false
+  incluirExcluidas = false,
+  ordem: OrdemPorCiclo = "RECENTES"
 ): Observacao[] {
-  return getTodasObservacoes()
-    .filter(
-      (observacao) =>
-        observacao.colaboradorMatricula === colaboradorMatricula &&
-        (incluirExcluidas || !observacao.excluida)
-    )
-    .sort(
-      (a, b) =>
-        new Date(b.dataUltimaAtualizacao).getTime() -
-        new Date(a.dataUltimaAtualizacao).getTime()
-    );
+  const observacoes = getTodasObservacoes().filter(
+    (observacao) =>
+      observacao.colaboradorMatricula === colaboradorMatricula &&
+      (incluirExcluidas || !observacao.excluida)
+  );
+
+  return ordenarPorAnoECiclo(observacoes, ordem);
 }
 
 export function getObservacoesComunicadasByColaborador(
