@@ -5,6 +5,7 @@ export type Capability =
   | "cycle.coordinator.list"
   | "cycle.management.view"
   | "cycle.cancel.manager"
+  | "cycle.reopen.manager"
   | "cycle.team.panel.view"
   | "evaluation.create"
   | "evaluation.cancel.manager"

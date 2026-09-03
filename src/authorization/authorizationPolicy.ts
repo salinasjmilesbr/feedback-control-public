@@ -71,6 +71,14 @@ function decidir(
     );
   }
 
+  if (capability === "cycle.reopen.manager") {
+    return (
+      resource.kind === "cycle" &&
+      resource.cycle.status === "ENCERRADO" &&
+      actor.funcao === "GERENTE"
+    );
+  }
+
   if (capability === "cycle.coordinator.list") {
     return resource.kind === "global" && actor.funcao === "COORDENADOR";
   }

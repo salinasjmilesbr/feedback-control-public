@@ -21,10 +21,18 @@ const gerente: Colaborador = {
   funcao: "GERENTE",
   respondePara: "",
 };
+const coordenador: Colaborador = {
+  ...gerente,
+  matricula: 2,
+  nome: "Coordenador Fictício",
+  email: "coordenador@example.com",
+  funcao: "COORDENADOR",
+};
 
 function renderizar(
   status: StatusCicloAvaliacao,
-  mostrarCanceladosInicial = false
+  mostrarCanceladosInicial = false,
+  usuario: Colaborador = gerente
 ): string {
   const ciclo: CicloAvaliacao = {
     id: "ciclo-ui",
@@ -39,8 +47,8 @@ function renderizar(
   return renderToStaticMarkup(
     <UsuarioAtualContext.Provider
       value={{
-        usuarioAtual: gerente,
-        usuariosDisponiveis: [gerente],
+        usuarioAtual: usuario,
+        usuariosDisponiveis: [gerente, coordenador],
         selecionarUsuario: () => undefined,
       }}
     >
@@ -65,6 +73,7 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     expect(html).toContain("Editar período");
     expect(html).toContain("Excluir ciclo");
     expect(html).not.toContain("Cancelar ciclo");
+    expect(html).not.toContain("Reabrir ciclo");
   });
 
   it("mostra somente encerramento para ciclo ativo", () => {
@@ -76,9 +85,10 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     expect(html).not.toContain("Editar período");
     expect(html).not.toContain("Excluir ciclo");
     expect(html).toContain("Cancelar ciclo");
+    expect(html).not.toContain("Reabrir ciclo");
   });
 
-  it("não mostra ação de transição para ciclo encerrado", () => {
+  it("mostra reabertura somente para gerente autorizado em ciclo encerrado", () => {
     const html = renderizar("ENCERRADO");
 
     expect(html).not.toContain("Ativar ciclo");
@@ -88,6 +98,8 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     expect(html).not.toContain("Editar período");
     expect(html).not.toContain("Excluir ciclo");
     expect(html).not.toContain("Cancelar ciclo");
+    expect(html).toContain("Reabrir ciclo");
+    expect(renderizar("ENCERRADO", false, coordenador)).not.toContain("Reabrir ciclo");
   });
 
   it("oculta cancelados por padrão e oferece controle explícito", () => {
@@ -107,6 +119,7 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     expect(html).not.toContain("Editar período");
     expect(html).not.toContain("Excluir ciclo");
     expect(html).not.toContain("Cancelar ciclo");
+    expect(html).not.toContain("Reabrir ciclo");
   });
 
   it("exige confirmação explícita antes da exclusão", () => {

@@ -21,6 +21,7 @@ import {
 } from "../services/cicloEquipeService";
 import { confirmarExclusaoCiclo } from "./confirmarExclusaoCiclo";
 import { cancelarCiclo } from "../services/cancelamentoCicloService";
+import { reabrirCiclo } from "../services/reaberturaCicloService";
 import "../styles/ciclos.css";
 
 type CiclosAvaliacaoPageProps = {
@@ -220,6 +221,33 @@ function CiclosAvaliacaoPage({
         error instanceof Error
           ? error.message
           : "Não foi possível cancelar o ciclo."
+      );
+    }
+  }
+
+  function reabrirComMotivo(
+    item: ReturnType<typeof getCiclosAvaliacao>[number]
+  ) {
+    const motivo = window.prompt("Informe o motivo da reabertura do ciclo:");
+    if (motivo === null) return;
+    if (!motivo.trim()) {
+      setErro("Informe o motivo da reabertura do ciclo.");
+      return;
+    }
+    const confirmar = window.confirm(
+      `Reabrir ${item.ano} • Ciclo ${item.ciclo}? As avaliações permanecerão com seus estados atuais.`
+    );
+    if (!confirmar) return;
+
+    try {
+      reabrirCiclo(item.id, motivo, usuarioAtual!);
+      setErro("");
+      setVersao((valor) => valor + 1);
+    } catch (error) {
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível reabrir o ciclo."
       );
     }
   }
@@ -632,6 +660,25 @@ function CiclosAvaliacaoPage({
                       <span className="cycle-muted">Ciclo cancelado</span>
                     )}
                   </div>
+
+                  {can(
+                    {
+                      actor: {
+                        matricula: usuarioAtual.matricula,
+                        funcao: usuarioAtual.funcao,
+                        status: usuarioAtual.status,
+                      },
+                    },
+                    "cycle.reopen.manager",
+                    { kind: "cycle", cycle: item }
+                  ) && (
+                    <button
+                      className="cycle-link-button"
+                      onClick={() => reabrirComMotivo(item)}
+                    >
+                      Reabrir ciclo
+                    </button>
+                  )}
 
                   {can(
                     {
