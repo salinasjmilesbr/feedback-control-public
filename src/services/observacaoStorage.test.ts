@@ -7,6 +7,7 @@ import {
   atualizarObservacao,
   criarObservacao,
   excluirObservacao,
+  getObservacoesByColaborador,
 } from "./observacaoStorage";
 
 const autor: Colaborador = {
@@ -89,5 +90,100 @@ describe("observações de ciclo cancelado", () => {
     expect(
       JSON.parse(localStorage.getItem("feedback-control-observacoes")!)
     ).toEqual([observacao]);
+  });
+});
+
+describe("ordenação do histórico de observações", () => {
+  const criarItem = (
+    id: string,
+    ano: number,
+    ciclo: 1 | 2 | 3,
+    tipo: Observacao["tipo"],
+    excluida = false
+  ): Observacao => ({
+    ...observacao,
+    id,
+    ano,
+    ciclo,
+    tipo,
+    excluida,
+    texto: id,
+  });
+
+  beforeEach(() => instalarLocalStorageEmMemoria());
+
+  it("ordena globalmente por ano e ciclo em Mais recentes, independentemente do tipo", () => {
+    const itens = [
+      criarItem("negativa-2026-3", 2026, 3, "NEGATIVA"),
+      criarItem("positiva-2027-1", 2027, 1, "POSITIVA"),
+      criarItem("neutra-2026-1", 2026, 1, "NEUTRA"),
+      criarItem("negativa-2027-2", 2027, 2, "NEGATIVA"),
+      criarItem("positiva-2026-2", 2026, 2, "POSITIVA"),
+    ];
+    localStorage.setItem("feedback-control-observacoes", JSON.stringify(itens));
+
+    expect(
+      getObservacoesByColaborador(2).map((item) => `${item.ano}-${item.ciclo}`)
+    ).toEqual(["2027-2", "2027-1", "2026-3", "2026-2", "2026-1"]);
+  });
+
+  it("suporta a ordem inversa por ano e ciclo em Mais antigas", () => {
+    const itens = [
+      criarItem("novo", 2027, 2, "NEUTRA"),
+      criarItem("intermediario", 2027, 1, "POSITIVA"),
+      criarItem("antigo", 2026, 3, "NEGATIVA"),
+    ];
+    localStorage.setItem("feedback-control-observacoes", JSON.stringify(itens));
+
+    expect(
+      getObservacoesByColaborador(2, false, "ANTIGAS").map((item) => item.id)
+    ).toEqual(["antigo", "intermediario", "novo"]);
+  });
+
+  it("ordena observações do mesmo ciclo pela criação sem considerar edições", () => {
+    const maisAntiga = {
+      ...criarItem("z-antiga", 2027, 2, "POSITIVA"),
+      dataCriacao: "2027-03-01T10:00:00.000Z",
+      dataUltimaAtualizacao: "2027-12-20T10:00:00.000Z",
+    };
+    const maisNova = {
+      ...criarItem("a-nova", 2027, 2, "NEUTRA"),
+      dataCriacao: "2027-04-01T10:00:00.000Z",
+      dataUltimaAtualizacao: "2027-04-01T10:00:00.000Z",
+    };
+    localStorage.setItem(
+      "feedback-control-observacoes",
+      JSON.stringify([maisAntiga, maisNova])
+    );
+
+    expect(
+      getObservacoesByColaborador(2, false, "RECENTES").map((item) => item.id)
+    ).toEqual(["a-nova", "z-antiga"]);
+    expect(
+      getObservacoesByColaborador(2, false, "ANTIGAS").map((item) => item.id)
+    ).toEqual(["z-antiga", "a-nova"]);
+  });
+
+  it("preserva filtros e não modifica os dados persistidos", () => {
+    const itens = [
+      criarItem("visivel", 2026, 1, "NEUTRA"),
+      criarItem("excluida", 2027, 2, "POSITIVA", true),
+      {
+        ...criarItem("outro-colaborador", 2028, 3, "NEGATIVA"),
+        colaboradorMatricula: 99,
+      },
+    ];
+    const persistido = JSON.stringify(itens);
+    localStorage.setItem("feedback-control-observacoes", persistido);
+
+    expect(getObservacoesByColaborador(2).map((item) => item.id)).toEqual([
+      "visivel",
+    ]);
+    expect(
+      getObservacoesByColaborador(2, true).map((item) => item.id)
+    ).toEqual(["excluida", "visivel"]);
+    expect(localStorage.getItem("feedback-control-observacoes")).toBe(
+      persistido
+    );
   });
 });
