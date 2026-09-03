@@ -48,7 +48,11 @@ export function getObservacoesByColaborador(
       (incluirExcluidas || !observacao.excluida)
   );
 
-  return ordenarPorAnoECiclo(observacoes, ordem);
+  return ordenarPorAnoECiclo(
+    observacoes,
+    ordem,
+    (observacao) => observacao.dataCriacao
+  );
 }
 
 export function getObservacoesComunicadasByColaborador(

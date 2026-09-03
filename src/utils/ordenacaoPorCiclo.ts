@@ -8,7 +8,8 @@ type ItemComAnoECiclo = {
 
 export function ordenarPorAnoECiclo<T extends ItemComAnoECiclo>(
   itens: readonly T[],
-  ordem: OrdemPorCiclo
+  ordem: OrdemPorCiclo,
+  obterDataOriginal?: (item: T) => string | undefined
 ): T[] {
   const direcao = ordem === "RECENTES" ? -1 : 1;
 
@@ -24,6 +25,16 @@ export function ordenarPorAnoECiclo<T extends ItemComAnoECiclo>(
 
       const porCiclo = (a.ciclo! - b.ciclo!) * direcao;
       if (porCiclo !== 0) return porCiclo;
+    }
+
+    if (obterDataOriginal) {
+      const dataA = Date.parse(obterDataOriginal(a) ?? "");
+      const dataB = Date.parse(obterDataOriginal(b) ?? "");
+
+      if (!Number.isNaN(dataA) && !Number.isNaN(dataB)) {
+        const porData = (dataA - dataB) * direcao;
+        if (porData !== 0) return porData;
+      }
     }
 
     return a.id.localeCompare(b.id);

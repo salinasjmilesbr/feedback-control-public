@@ -140,6 +140,30 @@ describe("ordenação do histórico de observações", () => {
     ).toEqual(["antigo", "intermediario", "novo"]);
   });
 
+  it("ordena observações do mesmo ciclo pela criação sem considerar edições", () => {
+    const maisAntiga = {
+      ...criarItem("z-antiga", 2027, 2, "POSITIVA"),
+      dataCriacao: "2027-03-01T10:00:00.000Z",
+      dataUltimaAtualizacao: "2027-12-20T10:00:00.000Z",
+    };
+    const maisNova = {
+      ...criarItem("a-nova", 2027, 2, "NEUTRA"),
+      dataCriacao: "2027-04-01T10:00:00.000Z",
+      dataUltimaAtualizacao: "2027-04-01T10:00:00.000Z",
+    };
+    localStorage.setItem(
+      "feedback-control-observacoes",
+      JSON.stringify([maisAntiga, maisNova])
+    );
+
+    expect(
+      getObservacoesByColaborador(2, false, "RECENTES").map((item) => item.id)
+    ).toEqual(["a-nova", "z-antiga"]);
+    expect(
+      getObservacoesByColaborador(2, false, "ANTIGAS").map((item) => item.id)
+    ).toEqual(["z-antiga", "a-nova"]);
+  });
+
   it("preserva filtros e não modifica os dados persistidos", () => {
     const itens = [
       criarItem("visivel", 2026, 1, "NEUTRA"),
