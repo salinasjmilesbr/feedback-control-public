@@ -54,10 +54,18 @@ const feedbackBase: Feedback = {
   notaMedia: 4,
 };
 
-function renderizar(actor: Colaborador, status: StatusFeedback): string {
+function renderizar(
+  actor: Colaborador,
+  status: StatusFeedback,
+  statusCiclo: CicloAvaliacao["status"] = "ATIVO"
+): string {
   localStorage.setItem(
     "feedback-control-feedbacks",
     JSON.stringify([{ ...feedbackBase, status }])
+  );
+  localStorage.setItem(
+    "feedback-control-ciclos",
+    JSON.stringify([{ ...ciclo, status: statusCiclo }])
   );
 
   return renderToStaticMarkup(
@@ -125,4 +133,22 @@ describe("ações administrativas de FeedbackDetalhePage", () => {
   it("oculta Editar em cancelada", () => {
     expect(renderizar(gerente, "CANCELADA")).not.toContain("Editar avaliação");
   });
+
+  it.each([
+    ["CANCELADO", "Cancelado"],
+    ["ENCERRADO", "Encerrado"],
+  ] as const)(
+    "apresenta rascunho em ciclo %s como contexto histórico neutro",
+    (statusCiclo, label) => {
+      const html = renderizar(gerente, "RASCUNHO", statusCiclo);
+      const persistido = JSON.parse(
+        localStorage.getItem("feedback-control-feedbacks") ?? "[]"
+      )[0] as Feedback;
+
+      expect(html).toContain(`admin-evaluation-status is-historical`);
+      expect(html).toContain(`>${label}</span>`);
+      expect(html).not.toContain(">Rascunho</span>");
+      expect(persistido.status).toBe("RASCUNHO");
+    }
+  );
 });

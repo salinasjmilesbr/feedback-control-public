@@ -27,7 +27,9 @@ describe("histórico pessoal de ciclo cancelado", () => {
 
   it("mostra ciclo cancelado sanitizado sem contar nem expor avaliação interna", () => {
     const html = renderizar();
-    expect(html).toContain("Ciclo cancelado");
+    expect(html).toContain(
+      'my-evaluations-history-card__status is-historical">Cancelado'
+    );
     expect(html).toContain("Ciclo cancelado pela gerência.");
     expect(html).not.toContain("rascunho-interno");
     expect(html).not.toContain("Conteúdo interno secreto");

@@ -20,7 +20,7 @@ import {
 } from "../services/escalaAvaliacaoStorage";
 import type { Feedback } from "../types/Feedback";
 import "../styles/colaborador-detalhe.css";
-import { labelStatusFeedback } from "./statusAvaliacaoAdministrativa";
+import { getStatusAvaliacaoAdministrativa } from "./statusAvaliacaoAdministrativa";
 
 function Icon({
   children,
@@ -205,13 +205,6 @@ function calcularPreenchimentoFeedback(feedback: Feedback) {
     coordenador: calcularPercentual(coordenador, totalSubcriterios),
     colegiado: calcularPercentual(colegiado, totalSubcriterios),
   };
-}
-
-function classeStatusFeedback(status: Feedback["status"]) {
-  if (status === "CANCELADA") return "is-cancelled";
-  if (status === "CONCLUIDA") return "is-complete";
-  if (status === "PRONTA_PARA_FEEDBACK") return "is-ready";
-  return "is-progress";
 }
 
 function formatarData(valor?: string) {
@@ -730,11 +723,14 @@ function ColaboradorDetalhePage() {
         ) : (
           <div className="collaborator-history">
             {feedbacksOrdenados.map((feedback) => {
-              const cicloCancelado = ciclos.some(
+              const cicloDaAvaliacao = ciclos.find(
                 (ciclo) =>
                   ciclo.ano === feedback.ano &&
-                  ciclo.ciclo === feedback.ciclo &&
-                  ciclo.status === "CANCELADO"
+                  ciclo.ciclo === feedback.ciclo
+              );
+              const statusExibido = getStatusAvaliacaoAdministrativa(
+                feedback.status,
+                cicloDaAvaliacao?.status
               );
               const preenchimento = calcularPreenchimentoFeedback(feedback);
               const dataInicio = formatarData(feedback.dataCriacao ?? feedback.data);
@@ -766,13 +762,9 @@ function ColaboradorDetalhePage() {
                             {feedback.ano} • Ciclo {feedback.ciclo}
                           </strong>
                           <span
-                            className={`collaborator-evaluation-status ${
-                              cicloCancelado
-                                ? "is-cancelled"
-                                : classeStatusFeedback(feedback.status)
-                            }`}
+                            className={`collaborator-evaluation-status ${statusExibido.className}`}
                           >
-                            {labelStatusFeedback(feedback.status, cicloCancelado)}
+                            {statusExibido.label}
                           </span>
                         </span>
                         <small>

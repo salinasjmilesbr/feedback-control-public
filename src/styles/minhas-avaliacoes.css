@@ -121,6 +121,12 @@
   font-weight: 760;
 }
 
+.my-evaluations-history-card__status.is-historical {
+  border-color: #d8d2dc;
+  background: #f4f1f5;
+  color: #655d69;
+}
+
 .my-evaluations-history-card__score {
   display: flex;
   align-items: baseline;

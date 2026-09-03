@@ -144,8 +144,8 @@ function MinhaAvaliacaoPage() {
                     <span className="evaluation-cycle-label">
                       {ciclo.ano} • Ciclo {ciclo.ciclo}
                     </span>
-                    <span className="my-evaluations-history-card__status">
-                      Ciclo cancelado
+                    <span className="my-evaluations-history-card__status is-historical">
+                      Cancelado
                     </span>
                   </div>
                   <p>Ciclo cancelado pela gerência.</p>
