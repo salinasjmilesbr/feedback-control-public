@@ -7,6 +7,12 @@ import CriterionIcon from "../components/CriterionIcon";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 
 import ObservacoesColaborador from "../components/ObservacoesColaborador";
+import {
+  contarObservacoesPorTipo,
+  filtrarObservacoesPorCiclo,
+  getChaveCicloObservacoes,
+  getFiltroCicloInicial,
+} from "../components/filtroObservacoesPorCiclo";
 import { getColaboradorByMatricula, getColaboradores } from "../services/colaboradorStorage";
 import {
   getCicloAtivo,
@@ -307,11 +313,18 @@ function ColaboradorDetalhePage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { usuarioAtual } = useUsuarioAtual();
+  const ciclos = getCiclosAvaliacao();
 
   useLayoutEffect(() => {
     window.scrollTo(0, 0);
   }, [id]);
   const [mostrarObservacoes, setMostrarObservacoes] = useState(false);
+  const [mostrarObservacoesExcluidas, setMostrarObservacoesExcluidas] =
+    useState(false);
+  const [filtroCicloObservacoes, setFiltroCicloObservacoes] = useState(
+    () => getFiltroCicloInicial(ciclos)
+  );
+  const [versaoObservacoes, setVersaoObservacoes] = useState(0);
   const [mostrarCanceladas, setMostrarCanceladas] = useState(false);
   const [novaObservacaoToken, setNovaObservacaoToken] = useState(0);
   const [ordenacao, setOrdenacao] = useState<"RECENTES" | "ANTIGAS">("RECENTES");
@@ -418,7 +431,6 @@ function ColaboradorDetalhePage() {
     colaborador.matricula,
     mostrarCanceladas
   );
-  const ciclos = getCiclosAvaliacao();
   const feedbacksOrdenados = ordenarHistoricoAdministrativo(
     feedbacksBase,
     ordenacao
@@ -441,16 +453,18 @@ function ColaboradorDetalhePage() {
   const melhorNota = notasValidas.length > 0 ? Math.max(...notasValidas) : 0;
   const escala = getEscalaAvaliacao();
 
-  const observacoes = getObservacoesByColaborador(colaborador.matricula);
-  const observacoesPositivas = observacoes.filter(
-    (observacao) => observacao.tipo === "POSITIVA"
-  ).length;
-  const observacoesNeutras = observacoes.filter(
-    (observacao) => observacao.tipo === "NEUTRA"
-  ).length;
-  const observacoesNegativas = observacoes.filter(
-    (observacao) => observacao.tipo === "NEGATIVA"
-  ).length;
+  void versaoObservacoes;
+  const observacoes = filtrarObservacoesPorCiclo(
+    getObservacoesByColaborador(
+      colaborador.matricula,
+      mostrarObservacoesExcluidas
+    ),
+    filtroCicloObservacoes
+  );
+  const resumoObservacoes = contarObservacoesPorTipo(observacoes);
+  const observacoesPositivas = resumoObservacoes.POSITIVA;
+  const observacoesNeutras = resumoObservacoes.NEUTRA;
+  const observacoesNegativas = resumoObservacoes.NEGATIVA;
 
   const idMaisRecente = [...feedbacksBase].sort(
     (a, b) =>
@@ -465,6 +479,9 @@ function ColaboradorDetalhePage() {
   }
 
   function abrirNovaObservacao() {
+    if (cicloAtivo) {
+      setFiltroCicloObservacoes(getChaveCicloObservacoes(cicloAtivo));
+    }
     setMostrarObservacoes(true);
     setNovaObservacaoToken((valor) => valor + 1);
 
@@ -695,6 +712,13 @@ function ColaboradorDetalhePage() {
             <ObservacoesColaborador
               colaborador={colaborador}
               abrirNovaObservacaoToken={novaObservacaoToken}
+              filtroCiclo={filtroCicloObservacoes}
+              onFiltroCicloChange={setFiltroCicloObservacoes}
+              mostrarExcluidas={mostrarObservacoesExcluidas}
+              onMostrarExcluidasChange={setMostrarObservacoesExcluidas}
+              onObservacoesChange={() =>
+                setVersaoObservacoes((valor) => valor + 1)
+              }
             />
           </div>
         )}
