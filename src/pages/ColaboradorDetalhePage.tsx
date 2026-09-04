@@ -8,7 +8,10 @@ import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 
 import ObservacoesColaborador from "../components/ObservacoesColaborador";
 import { getColaboradorByMatricula, getColaboradores } from "../services/colaboradorStorage";
-import { getCiclosAvaliacao } from "../services/cicloAvaliacaoStorage";
+import {
+  getCicloAtivo,
+  getCiclosAvaliacao,
+} from "../services/cicloAvaliacaoStorage";
 import { getFeedbacksAdministrativosByColaborador } from "../services/feedbackStorage";
 import { getObservacoesByColaborador } from "../services/observacaoStorage";
 import { getHistoricoOrganizacional } from "../services/historicoOrganizacionalStorage";
@@ -379,11 +382,16 @@ function ColaboradorDetalhePage() {
         { kind: "collaborator", collaborator: colaborador }
       )
     : false;
+  const cicloAtivo = getCicloAtivo();
   const podeCriarObservacao = authorizationContext
     ? can(
         authorizationContext,
         "observation.create",
-        { kind: "observation", collaborator: colaborador }
+        {
+          kind: "observation",
+          collaborator: colaborador,
+          cycle: cicloAtivo,
+        }
       )
     : false;
   const podeCriarAvaliacao = authorizationContext

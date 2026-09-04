@@ -114,6 +114,7 @@ describe("authorizationPolicy", () => {
     kind: "observation",
     collaborator: direto,
     observation: observacaoDeOutroAutor,
+    cycle: ciclo,
   };
 
   it("mantém criação de avaliação e observação para colaborador ativo", () => {
@@ -234,6 +235,31 @@ describe("authorizationPolicy", () => {
       })
     ).toBe(false);
   });
+
+  it.each([
+    ["ATIVO", true],
+    ["PLANEJADO", false],
+    ["ENCERRADO", false],
+    ["CANCELADO", false],
+  ] as const)(
+    "restringe capabilities de observação ao ciclo %s",
+    (status, esperado) => {
+      const resource: ObservationResource = {
+        ...observationResource,
+        cycle: { ...ciclo, status },
+      };
+
+      expect(can(contexto(gerente), "observation.create", resource)).toBe(
+        esperado
+      );
+      expect(can(contexto(gerente), "observation.edit", resource)).toBe(
+        esperado
+      );
+      expect(can(contexto(gerente), "observation.delete", resource)).toBe(
+        esperado
+      );
+    }
+  );
 
   it.each([
     ["GERENTE", gerente, true],

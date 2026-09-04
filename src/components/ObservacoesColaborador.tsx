@@ -62,6 +62,9 @@ function ObservacoesColaborador({
   const { usuarioAtual } = useUsuarioAtual();
   const cicloAtivo = getCicloAtivo();
   const ciclosDisponiveis = getCiclosAvaliacao();
+  const ciclosAtivos = ciclosDisponiveis.filter(
+    (item) => item.status === "ATIVO"
+  );
 
   const [versao, setVersao] = useState(0);
   const [formAberto, setFormAberto] = useState(false);
@@ -317,6 +320,7 @@ function ObservacoesColaborador({
               <strong>Ciclo da observação</strong>
               <select
                 value={`${ano}-${ciclo}`}
+                disabled={Boolean(editandoId)}
                 onChange={(event) => {
                   const [anoSelecionado, cicloSelecionado] =
                     event.target.value.split("-");
@@ -326,7 +330,12 @@ function ObservacoesColaborador({
                 }}
                 className="observation-control"
               >
-                {ciclosDisponiveis.map((item) => (
+                {(editandoId
+                  ? ciclosDisponiveis.filter(
+                      (item) => item.ano === ano && item.ciclo === ciclo
+                    )
+                  : ciclosAtivos
+                ).map((item) => (
                   <option
                     key={item.id}
                     value={`${item.ano}-${item.ciclo}`}
