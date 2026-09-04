@@ -6,6 +6,7 @@ export type Capability =
   | "cycle.management.view"
   | "cycle.cancel.manager"
   | "cycle.reopen.manager"
+  | "cycle.period.correct.manager"
   | "cycle.team.panel.view"
   | "evaluation.create"
   | "evaluation.cancel.manager"

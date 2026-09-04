@@ -208,6 +208,24 @@ describe("authorizationPolicy", () => {
     ).toBe(false);
   });
 
+  it.each([
+    ["ATIVO", gerente, true],
+    ["ATIVO", coordenador, false],
+    ["PLANEJADO", gerente, false],
+    ["ENCERRADO", gerente, false],
+    ["CANCELADO", gerente, false],
+  ] as const)(
+    "autoriza correção excepcional de período em %s para o perfil esperado",
+    (status, actor, esperado) => {
+      expect(
+        can(contexto(actor), "cycle.period.correct.manager", {
+          kind: "cycle",
+          cycle: { ...ciclo, status },
+        })
+      ).toBe(esperado);
+    }
+  );
+
   it("nega operações relacionadas quando o ciclo está cancelado", () => {
     const cicloCancelado = { ...ciclo, status: "CANCELADO" as const };
     const avaliacaoCanceladaNoCiclo: EvaluationResource = {

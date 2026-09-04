@@ -1,5 +1,6 @@
 import type {
   CicloAvaliacao,
+  ImpactoTemporalPeriodoCiclo,
   StatusCicloAvaliacao,
 } from "../types/CicloAvaliacao";
 import { getFeedbacks } from "./feedbackStorage";
@@ -466,4 +467,61 @@ export function persistirReaberturaCicloAuditadaInterno(
   };
   persistir(ciclos.map((item) => (item.id === id ? reaberto : item)));
   return reaberto;
+}
+
+export function persistirCorrecaoPeriodoCicloAtivoInterno(
+  id: string,
+  dataInicio: string,
+  dataFim: string,
+  justificativaInformada: string,
+  autorMatricula: number,
+  autorNome: string,
+  dataCorrecao: string,
+  impacto: ImpactoTemporalPeriodoCiclo
+): CicloAvaliacao {
+  const justificativa = justificativaInformada.trim();
+  if (!justificativa) {
+    throw new Error("Informe a justificativa da correção do período.");
+  }
+
+  const ciclos = getCiclosAvaliacao();
+  const alvo = ciclos.find((item) => item.id === id);
+  if (!alvo) throw new Error("Ciclo não encontrado.");
+  if (alvo.status !== "ATIVO") {
+    throw new Error("Somente ciclos ativos podem ter o período corrigido.");
+  }
+  if (!dataInicio || !dataFim) {
+    throw new Error("Informe as datas de início e fim do ciclo.");
+  }
+  if (new Date(dataInicio).getTime() > new Date(dataFim).getTime()) {
+    throw new Error("A data de início não pode ser posterior à data de fim.");
+  }
+  if (alvo.dataInicio === dataInicio && alvo.dataFim === dataFim) {
+    throw new Error("Informe um período diferente do período atual.");
+  }
+
+  const corrigido: CicloAvaliacao = {
+    ...alvo,
+    dataInicio,
+    dataFim,
+    correcoesPeriodo: [
+      ...(alvo.correcoesPeriodo ?? []),
+      {
+        periodoAnterior: {
+          dataInicio: alvo.dataInicio,
+          dataFim: alvo.dataFim,
+        },
+        novoPeriodo: { dataInicio, dataFim },
+        justificativa,
+        autorMatricula,
+        autorNome,
+        data: dataCorrecao,
+        impacto,
+      },
+    ],
+    dataUltimaAtualizacao: dataCorrecao,
+  };
+
+  persistir(ciclos.map((item) => (item.id === id ? corrigido : item)));
+  return corrigido;
 }

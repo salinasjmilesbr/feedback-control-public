@@ -22,11 +22,94 @@ import {
 import { confirmarExclusaoCiclo } from "./confirmarExclusaoCiclo";
 import { cancelarCiclo } from "../services/cancelamentoCicloService";
 import { reabrirCiclo } from "../services/reaberturaCicloService";
+import {
+  analisarImpactoCorrecaoPeriodoCicloAtivo,
+  corrigirPeriodoCicloAtivo,
+} from "../services/correcaoPeriodoCicloService";
+import { confirmarCorrecaoPeriodoComImpacto } from "./confirmarCorrecaoPeriodoCiclo";
+import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import "../styles/ciclos.css";
 
 type CiclosAvaliacaoPageProps = {
   mostrarCanceladosInicial?: boolean;
 };
+
+type EventoHistoricoCiclo =
+  | {
+      tipo: "encerramento";
+      data: string;
+      encerradoComPendencias: boolean;
+      quantidadePendencias: number;
+    }
+  | {
+      tipo: "reabertura";
+      data: string;
+      motivo: string;
+      autorNome: string;
+      autorMatricula: number;
+    }
+  | {
+      tipo: "cancelamento";
+      data: string;
+      motivo: string;
+      autorNome: string;
+      autorMatricula: number;
+    }
+  | {
+      tipo: "correcao-periodo";
+      data: string;
+      justificativa: string;
+      autorNome: string;
+      autorMatricula: number;
+      periodoAnterior: { dataInicio?: string; dataFim?: string };
+      novoPeriodo: { dataInicio: string; dataFim: string };
+      impacto: NonNullable<CicloAvaliacao["correcoesPeriodo"]>[number]["impacto"];
+    };
+
+function getEventosHistoricoCiclo(
+  ciclo: CicloAvaliacao
+): EventoHistoricoCiclo[] {
+  const encerramentos =
+    ciclo.encerramentos ??
+    (ciclo.dataEncerramento
+      ? [
+          {
+            data: ciclo.dataEncerramento,
+            encerradoComPendencias: Boolean(ciclo.encerradoComPendencias),
+            quantidadePendencias: ciclo.quantidadePendencias ?? 0,
+          },
+        ]
+      : []);
+
+  return [
+    ...encerramentos.map((evento) => ({
+      tipo: "encerramento" as const,
+      ...evento,
+    })),
+    ...(ciclo.reaberturas ?? []).map((evento) => ({
+      tipo: "reabertura" as const,
+      ...evento,
+    })),
+    ...(ciclo.cancelamento
+      ? [{ tipo: "cancelamento" as const, ...ciclo.cancelamento }]
+      : []),
+    ...(ciclo.correcoesPeriodo ?? []).map((evento) => ({
+      tipo: "correcao-periodo" as const,
+      ...evento,
+    })),
+  ].sort((a, b) => {
+    const diferencaData = Date.parse(b.data) - Date.parse(a.data);
+    if (diferencaData !== 0) return diferencaData;
+    return a.tipo.localeCompare(b.tipo);
+  });
+}
+
+function formatarDataHoraHistorico(data: string): string {
+  return new Date(data).toLocaleString("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+}
 
 function CiclosAvaliacaoPage({
   mostrarCanceladosInicial = false,
@@ -49,6 +132,10 @@ function CiclosAvaliacaoPage({
   const [editandoPeriodoId, setEditandoPeriodoId] = useState<string | null>(null);
   const [periodoInicioEdicao, setPeriodoInicioEdicao] = useState("");
   const [periodoFimEdicao, setPeriodoFimEdicao] = useState("");
+  const [corrigindoPeriodoId, setCorrigindoPeriodoId] = useState<string | null>(null);
+  const [periodoInicioCorrecao, setPeriodoInicioCorrecao] = useState("");
+  const [periodoFimCorrecao, setPeriodoFimCorrecao] = useState("");
+  const [justificativaCorrecao, setJustificativaCorrecao] = useState("");
   const [editandoMetasId, setEditandoMetasId] = useState<string | null>(null);
   const [metasNegocioEdicao, setMetasNegocioEdicao] =
     useState<0 | 1 | 2 | 3>(0);
@@ -85,17 +172,7 @@ function CiclosAvaliacaoPage({
     );
   }
 
-  const ciclos = getCiclosAdministrativos(mostrarCancelados)
-    .sort((a, b) => {
-    if (a.status !== b.status) {
-      if (a.status === "ATIVO") return -1;
-      if (b.status === "ATIVO") return 1;
-      if (a.status === "PLANEJADO") return -1;
-      if (b.status === "PLANEJADO") return 1;
-    }
-    if (a.ano !== b.ano) return b.ano - a.ano;
-    return b.ciclo - a.ciclo;
-    });
+  const ciclos = getCiclosAdministrativos(mostrarCancelados);
 
   const totalAtivos = ciclos.filter((item) => item.status === "ATIVO").length;
   const totalPlanejados = ciclos.filter((item) => item.status === "PLANEJADO").length;
@@ -248,6 +325,42 @@ function CiclosAvaliacaoPage({
         error instanceof Error
           ? error.message
           : "Não foi possível reabrir o ciclo."
+      );
+    }
+  }
+
+  function corrigirPeriodoComAuditoria(
+    item: ReturnType<typeof getCiclosAvaliacao>[number]
+  ) {
+    setErro("");
+    if (!justificativaCorrecao.trim()) {
+      setErro("Informe a justificativa da correção do período.");
+      return;
+    }
+
+    try {
+      const impacto = analisarImpactoCorrecaoPeriodoCicloAtivo(
+        item.id,
+        periodoInicioCorrecao,
+        periodoFimCorrecao
+      );
+      if (!confirmarCorrecaoPeriodoComImpacto(impacto)) return;
+
+      corrigirPeriodoCicloAtivo(
+        item.id,
+        periodoInicioCorrecao,
+        periodoFimCorrecao,
+        justificativaCorrecao,
+        usuarioAtual!
+      );
+      setCorrigindoPeriodoId(null);
+      setJustificativaCorrecao("");
+      setVersao((valor) => valor + 1);
+    } catch (error) {
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível corrigir o período."
       );
     }
   }
@@ -416,6 +529,18 @@ function CiclosAvaliacaoPage({
           </div>
         ) : (
           ciclos.map((item) => {
+            const eventosHistorico = getEventosHistoricoCiclo(item);
+            const podeCorrigirPeriodo = can(
+              {
+                actor: {
+                  matricula: usuarioAtual.matricula,
+                  funcao: usuarioAtual.funcao,
+                  status: usuarioAtual.status,
+                },
+              },
+              "cycle.period.correct.manager",
+              { kind: "cycle", cycle: item }
+            );
             const statusLabel =
               item.status === "ATIVO"
                 ? "Ativo"
@@ -549,6 +674,68 @@ function CiclosAvaliacaoPage({
                           }}
                         >
                           Editar período
+                        </button>
+                      )
+                    ) : podeCorrigirPeriodo ? (
+                      corrigindoPeriodoId === item.id ? (
+                        <div className="cycle-period-correction-form">
+                          <div className="cycle-inline-form cycle-inline-form--period">
+                            <input
+                              type="date"
+                              aria-label="Nova data inicial"
+                              value={periodoInicioCorrecao}
+                              onChange={(event) =>
+                                setPeriodoInicioCorrecao(event.target.value)
+                              }
+                            />
+                            <input
+                              type="date"
+                              aria-label="Nova data final"
+                              value={periodoFimCorrecao}
+                              onChange={(event) =>
+                                setPeriodoFimCorrecao(event.target.value)
+                              }
+                            />
+                          </div>
+                          <textarea
+                            aria-label="Justificativa da correção"
+                            placeholder="Justificativa obrigatória"
+                            value={justificativaCorrecao}
+                            onChange={(event) =>
+                              setJustificativaCorrecao(event.target.value)
+                            }
+                          />
+                          <div className="cycle-inline-form">
+                            <button
+                              className="cycle-btn cycle-btn--small cycle-btn--primary"
+                              onClick={() => corrigirPeriodoComAuditoria(item)}
+                            >
+                              Confirmar correção
+                            </button>
+                            <button
+                              className="cycle-btn cycle-btn--small cycle-btn--secondary"
+                              onClick={() => {
+                                setCorrigindoPeriodoId(null);
+                                setJustificativaCorrecao("");
+                                setErro("");
+                              }}
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          className="cycle-link-button"
+                          onClick={() => {
+                            setCorrigindoPeriodoId(item.id);
+                            setPeriodoInicioCorrecao(item.dataInicio ?? "");
+                            setPeriodoFimCorrecao(item.dataFim ?? "");
+                            setJustificativaCorrecao("");
+                            setErro("");
+                          }}
+                        >
+                          Corrigir período
                         </button>
                       )
                     ) : (
@@ -723,6 +910,80 @@ function CiclosAvaliacaoPage({
                     </button>
                   )}
                 </div>
+
+                <details className="cycle-history">
+                  <summary>Ver histórico</summary>
+                  <div className="cycle-history__content">
+                    {eventosHistorico.length === 0 ? (
+                      <p className="cycle-muted">
+                        Nenhuma alteração auditada registrada.
+                      </p>
+                    ) : (
+                      <ol className="cycle-history__timeline">
+                        {eventosHistorico.map((evento, indice) => (
+                          <li key={`${evento.tipo}-${evento.data}-${indice}`}>
+                            <div className="cycle-history__heading">
+                              <strong>
+                                {evento.tipo === "encerramento"
+                                  ? "Encerramento"
+                                  : evento.tipo === "reabertura"
+                                  ? "Reabertura"
+                                  : evento.tipo === "cancelamento"
+                                  ? "Cancelamento"
+                                  : "Correção de período"}
+                              </strong>
+                              <time dateTime={evento.data}>
+                                {formatarDataHoraHistorico(evento.data)}
+                              </time>
+                            </div>
+
+                            {evento.tipo === "encerramento" ? (
+                              <p>
+                                {evento.encerradoComPendencias
+                                  ? `Encerrado com pendências (${evento.quantidadePendencias}).`
+                                  : `Encerrado sem pendências (${evento.quantidadePendencias}).`}
+                              </p>
+                            ) : (
+                              <>
+                                <p>
+                                  Autor: {evento.autorNome} (matrícula {evento.autorMatricula})
+                                </p>
+                                <p>
+                                  {evento.tipo === "correcao-periodo"
+                                    ? "Justificativa"
+                                    : "Motivo"}
+                                  : {evento.tipo === "correcao-periodo"
+                                    ? evento.justificativa
+                                    : evento.motivo}
+                                </p>
+                              </>
+                            )}
+
+                            {evento.tipo === "correcao-periodo" && (
+                              <>
+                                <p>
+                                  Período anterior: {formatarPeriodoCiclo(
+                                    evento.periodoAnterior.dataInicio,
+                                    evento.periodoAnterior.dataFim
+                                  )}
+                                </p>
+                                <p>
+                                  Novo período: {formatarPeriodoCiclo(
+                                    evento.novoPeriodo.dataInicio,
+                                    evento.novoPeriodo.dataFim
+                                  )}
+                                </p>
+                                <p>
+                                  Impacto: {evento.impacto.avaliacoes.quantidade} avaliação(ões), {evento.impacto.metas.quantidade} meta(s), {evento.impacto.observacoes.quantidade} observação(ões) — total {evento.impacto.total}.
+                                </p>
+                              </>
+                            )}
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                  </div>
+                </details>
               </article>
             );
           })

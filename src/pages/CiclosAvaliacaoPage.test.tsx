@@ -29,20 +29,12 @@ const coordenador: Colaborador = {
   funcao: "COORDENADOR",
 };
 
-function renderizar(
-  status: StatusCicloAvaliacao,
+function renderizarCiclos(
+  ciclos: CicloAvaliacao[],
   mostrarCanceladosInicial = false,
   usuario: Colaborador = gerente
 ): string {
-  const ciclo: CicloAvaliacao = {
-    id: "ciclo-ui",
-    ano: 2026,
-    ciclo: 1,
-    status,
-    dataCriacao: "2026-01-01T00:00:00.000Z",
-    dataUltimaAtualizacao: "2026-01-01T00:00:00.000Z",
-  };
-  localStorage.setItem("feedback-control-ciclos", JSON.stringify([ciclo]));
+  localStorage.setItem("feedback-control-ciclos", JSON.stringify(ciclos));
 
   return renderToStaticMarkup(
     <UsuarioAtualContext.Provider
@@ -61,6 +53,24 @@ function renderizar(
   );
 }
 
+function renderizar(
+  status: StatusCicloAvaliacao,
+  mostrarCanceladosInicial = false,
+  usuario: Colaborador = gerente,
+  dadosCiclo: Partial<CicloAvaliacao> = {}
+): string {
+  const ciclo: CicloAvaliacao = {
+    id: "ciclo-ui",
+    ano: 2026,
+    ciclo: 1,
+    status,
+    dataCriacao: "2026-01-01T00:00:00.000Z",
+    dataUltimaAtualizacao: "2026-01-01T00:00:00.000Z",
+    ...dadosCiclo,
+  };
+  return renderizarCiclos([ciclo], mostrarCanceladosInicial, usuario);
+}
+
 describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
   beforeEach(() => instalarLocalStorageEmMemoria());
 
@@ -71,6 +81,7 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     expect(html).not.toContain("Encerrar ciclo");
     expect(html).not.toContain("Editar status");
     expect(html).toContain("Editar período");
+    expect(html).not.toContain("Corrigir período");
     expect(html).toContain("Excluir ciclo");
     expect(html).not.toContain("Cancelar ciclo");
     expect(html).not.toContain("Reabrir ciclo");
@@ -83,6 +94,7 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     expect(html).not.toContain("Ativar ciclo");
     expect(html).not.toContain("Editar status");
     expect(html).not.toContain("Editar período");
+    expect(html).toContain("Corrigir período");
     expect(html).not.toContain("Excluir ciclo");
     expect(html).toContain("Cancelar ciclo");
     expect(html).not.toContain("Reabrir ciclo");
@@ -96,6 +108,7 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     expect(html).not.toContain("Editar status");
     expect(html).toContain("Ciclo encerrado");
     expect(html).not.toContain("Editar período");
+    expect(html).not.toContain("Corrigir período");
     expect(html).not.toContain("Excluir ciclo");
     expect(html).not.toContain("Cancelar ciclo");
     expect(html).toContain("Reabrir ciclo");
@@ -117,6 +130,7 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     expect(html).not.toContain("Ativar ciclo");
     expect(html).not.toContain("Encerrar ciclo");
     expect(html).not.toContain("Editar período");
+    expect(html).not.toContain("Corrigir período");
     expect(html).not.toContain("Excluir ciclo");
     expect(html).not.toContain("Cancelar ciclo");
     expect(html).not.toContain("Reabrir ciclo");
@@ -141,5 +155,227 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     expect(confirmado).toBe(false);
     expect(mensagem).toContain("Excluir 2026 • Ciclo 2?");
     expect(mensagem).toContain("Avaliações vazias");
+  });
+});
+
+describe("histórico administrativo em CiclosAvaliacaoPage", () => {
+  beforeEach(() => instalarLocalStorageEmMemoria());
+
+  it("mostra estado vazio sem ampliar ações de mutação", () => {
+    const html = renderizar("ENCERRADO");
+    const cicloPersistidoAntes = localStorage.getItem("feedback-control-ciclos");
+    renderizar("ENCERRADO");
+
+    expect(html).toContain("Ver histórico");
+    expect(html).toContain("Nenhuma alteração auditada registrada.");
+    expect(html).not.toContain("Corrigir período");
+    expect(html).not.toContain("Cancelar ciclo");
+    expect(localStorage.getItem("feedback-control-ciclos")).toBe(
+      cicloPersistidoAntes
+    );
+  });
+
+  it("exibe encerramento, reabertura e cancelamento persistidos", () => {
+    const html = renderizar("CANCELADO", true, gerente, {
+      encerramentos: [
+        {
+          data: "2026-03-01T10:00:00.000Z",
+          encerradoComPendencias: true,
+          quantidadePendencias: 3,
+        },
+      ],
+      reaberturas: [
+        {
+          data: "2026-03-02T10:00:00.000Z",
+          motivo: "Revisão administrativa",
+          autorNome: "Gerente Fictício",
+          autorMatricula: 1,
+        },
+      ],
+      cancelamento: {
+        data: "2026-03-03T10:00:00.000Z",
+        motivo: "Mudança de planejamento",
+        autorNome: "Gerente Fictício",
+        autorMatricula: 1,
+      },
+    });
+
+    expect(html).toContain("Encerramento");
+    expect(html).toContain("Encerrado com pendências (3).");
+    expect(html).toContain("Reabertura");
+    expect(html).toContain("Revisão administrativa");
+    expect(html).toContain("Cancelamento");
+    expect(html).toContain("Mudança de planejamento");
+  });
+
+  it("exibe correção de período com auditoria e resumo de impacto", () => {
+    const html = renderizar("ATIVO", false, gerente, {
+      correcoesPeriodo: [
+        {
+          data: "2026-04-10T14:30:00.000Z",
+          autorNome: "Gerente Fictício",
+          autorMatricula: 1,
+          justificativa: "Adequação ao calendário oficial",
+          periodoAnterior: {
+            dataInicio: "2026-01-01",
+            dataFim: "2026-06-30",
+          },
+          novoPeriodo: {
+            dataInicio: "2026-01-15",
+            dataFim: "2026-06-15",
+          },
+          impacto: {
+            avaliacoes: { quantidade: 2, ids: ["feedback-1", "feedback-2"] },
+            metas: { quantidade: 1, ids: ["meta-1"] },
+            observacoes: { quantidade: 3, ids: ["obs-1", "obs-2", "obs-3"] },
+            total: 6,
+          },
+        },
+      ],
+    });
+
+    expect(html).toContain("Correção de período");
+    expect(html).toContain("Gerente Fictício (matrícula 1)");
+    expect(html).toContain("Adequação ao calendário oficial");
+    expect(html).toContain("Período anterior:");
+    expect(html).toContain("Novo período:");
+    expect(html).toContain("2 avaliação(ões), 1 meta(s), 3 observação(ões) — total 6.");
+    expect(html).not.toContain("feedback-1");
+  });
+
+  it("ordena tipos diferentes do evento mais recente para o mais antigo", () => {
+    const html = renderizar("ENCERRADO", false, gerente, {
+      encerramentos: [
+        {
+          data: "2026-05-01T10:00:00.000Z",
+          encerradoComPendencias: false,
+          quantidadePendencias: 0,
+        },
+      ],
+      reaberturas: [
+        {
+          data: "2026-05-02T10:00:00.000Z",
+          motivo: "Evento mais recente",
+          autorNome: "Gerente Fictício",
+          autorMatricula: 1,
+        },
+      ],
+      correcoesPeriodo: [
+        {
+          data: "2026-04-30T10:00:00.000Z",
+          autorNome: "Gerente Fictício",
+          autorMatricula: 1,
+          justificativa: "Evento mais antigo",
+          periodoAnterior: {},
+          novoPeriodo: { dataInicio: "2026-01-01", dataFim: "2026-06-30" },
+          impacto: {
+            avaliacoes: { quantidade: 0, ids: [] },
+            metas: { quantidade: 0, ids: [] },
+            observacoes: { quantidade: 0, ids: [] },
+            total: 0,
+          },
+        },
+      ],
+    });
+
+    expect(html.indexOf("Evento mais recente")).toBeLessThan(
+      html.indexOf("Encerramento")
+    );
+    expect(html.indexOf("Encerramento")).toBeLessThan(
+      html.indexOf("Evento mais antigo")
+    );
+  });
+
+  it.each<[StatusCicloAvaliacao, boolean]>([
+    ["ENCERRADO", false],
+    ["CANCELADO", true],
+  ])("mantém histórico consultável no estado %s", (status, mostrarCancelados) => {
+    const cicloAntes: Partial<CicloAvaliacao> = {
+      reaberturas: [
+        {
+          data: "2026-02-01T10:00:00.000Z",
+          motivo: "Consulta histórica",
+          autorNome: "Gerente Fictício",
+          autorMatricula: 1,
+        },
+      ],
+    };
+    const html = renderizar(status, mostrarCancelados, gerente, cicloAntes);
+
+    expect(html).toContain("Ver histórico");
+    expect(html).toContain("Consulta histórica");
+    expect(cicloAntes.reaberturas).toHaveLength(1);
+  });
+});
+
+describe("ordenação de ciclos em CiclosAvaliacaoPage", () => {
+  beforeEach(() => instalarLocalStorageEmMemoria());
+
+  const ciclosMisturados: CicloAvaliacao[] = [
+    {
+      id: "ativo-2027-3",
+      ano: 2027,
+      ciclo: 3,
+      status: "ATIVO",
+      dataCriacao: "2027-01-01T00:00:00.000Z",
+      dataUltimaAtualizacao: "2027-01-01T00:00:00.000Z",
+    },
+    {
+      id: "encerrado-2026-2",
+      ano: 2026,
+      ciclo: 2,
+      status: "ENCERRADO",
+      dataCriacao: "2026-01-01T00:00:00.000Z",
+      dataUltimaAtualizacao: "2026-01-01T00:00:00.000Z",
+    },
+    {
+      id: "planejado-2028-1",
+      ano: 2028,
+      ciclo: 1,
+      status: "PLANEJADO",
+      dataCriacao: "2028-01-01T00:00:00.000Z",
+      dataUltimaAtualizacao: "2028-01-01T00:00:00.000Z",
+    },
+    {
+      id: "cancelado-2027-2",
+      ano: 2027,
+      ciclo: 2,
+      status: "CANCELADO",
+      dataCriacao: "2027-01-01T00:00:00.000Z",
+      dataUltimaAtualizacao: "2027-01-01T00:00:00.000Z",
+    },
+    {
+      id: "encerrado-2026-3",
+      ano: 2026,
+      ciclo: 3,
+      status: "ENCERRADO",
+      dataCriacao: "2026-01-01T00:00:00.000Z",
+      dataUltimaAtualizacao: "2026-01-01T00:00:00.000Z",
+    },
+  ];
+
+  it("ordena exclusivamente por ano e ciclo, sem prioridade por status", () => {
+    const html = renderizarCiclos(ciclosMisturados);
+
+    const planejadoFuturo = html.indexOf("2028 <span>•</span> Ciclo 1");
+    const ativoAtual = html.indexOf("2027 <span>•</span> Ciclo 3");
+    const ciclo2026Tres = html.indexOf("2026 <span>•</span> Ciclo 3");
+    const ciclo2026Dois = html.indexOf("2026 <span>•</span> Ciclo 2");
+
+    expect(planejadoFuturo).toBeLessThan(ativoAtual);
+    expect(ativoAtual).toBeLessThan(ciclo2026Tres);
+    expect(ciclo2026Tres).toBeLessThan(ciclo2026Dois);
+    expect(html).not.toContain("2027 <span>•</span> Ciclo 2");
+  });
+
+  it("inclui cancelados na mesma ordem cronológica quando exibidos", () => {
+    const html = renderizarCiclos(ciclosMisturados, true);
+    const ciclo2027Tres = html.indexOf("2027 <span>•</span> Ciclo 3");
+    const ciclo2027Dois = html.indexOf("2027 <span>•</span> Ciclo 2");
+    const ciclo2026Tres = html.indexOf("2026 <span>•</span> Ciclo 3");
+
+    expect(ciclo2027Tres).toBeLessThan(ciclo2027Dois);
+    expect(ciclo2027Dois).toBeLessThan(ciclo2026Tres);
+    expect(html).toContain("Cancelado");
   });
 });

@@ -80,6 +80,14 @@ function decidir(
     );
   }
 
+  if (capability === "cycle.period.correct.manager") {
+    return (
+      resource.kind === "cycle" &&
+      resource.cycle.status === "ATIVO" &&
+      actor.funcao === "GERENTE"
+    );
+  }
+
   if (capability === "cycle.coordinator.list") {
     return resource.kind === "global" && actor.funcao === "COORDENADOR";
   }

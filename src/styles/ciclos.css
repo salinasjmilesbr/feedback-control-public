@@ -397,6 +397,20 @@
   min-width: 116px;
 }
 
+.cycle-period-correction-form {
+  display: grid;
+  gap: 7px;
+}
+
+.cycle-period-correction-form textarea {
+  min-height: 58px;
+  padding: 8px;
+  border: 1px solid #d8d2dc;
+  border-radius: 7px;
+  resize: vertical;
+  font: inherit;
+}
+
 .cycle-link-button {
   padding: 0;
   border: 0;
@@ -410,6 +424,62 @@
 
 .cycle-link-button--danger {
   color: #a3262d;
+}
+
+.cycle-history {
+  border-top: 1px solid #f0edf2;
+  background: #fff;
+}
+
+.cycle-history summary {
+  width: fit-content;
+  margin: 0 20px;
+  padding: 10px 0;
+  color: var(--brand-primary);
+  font-size: 11.5px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.cycle-history__content {
+  padding: 0 20px 16px;
+}
+
+.cycle-history__content > .cycle-muted {
+  margin: 2px 0 0;
+}
+
+.cycle-history__timeline {
+  display: grid;
+  gap: 10px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cycle-history__timeline li {
+  padding: 10px 12px;
+  border-left: 3px solid #d8d2dc;
+  border-radius: 0 8px 8px 0;
+  background: #f8f7f9;
+}
+
+.cycle-history__heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #4f4855;
+  font-size: 12px;
+}
+
+.cycle-history__heading time,
+.cycle-history__timeline p {
+  color: var(--brand-text-muted);
+  font-size: 11.5px;
+}
+
+.cycle-history__timeline p {
+  margin: 5px 0 0;
 }
 
 .cycle-muted {
