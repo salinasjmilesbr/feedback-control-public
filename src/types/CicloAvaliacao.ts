@@ -24,6 +24,29 @@ export interface ReaberturaCiclo {
   data: string;
 }
 
+export interface ImpactoTemporalPeriodoCiclo {
+  avaliacoes: { quantidade: number; ids: string[] };
+  metas: { quantidade: number; ids: string[] };
+  observacoes: { quantidade: number; ids: string[] };
+  total: number;
+}
+
+export interface CorrecaoPeriodoCiclo {
+  periodoAnterior: {
+    dataInicio?: string;
+    dataFim?: string;
+  };
+  novoPeriodo: {
+    dataInicio: string;
+    dataFim: string;
+  };
+  justificativa: string;
+  autorMatricula: number;
+  autorNome: string;
+  data: string;
+  impacto: ImpactoTemporalPeriodoCiclo;
+}
+
 export interface CicloAvaliacao {
   id: string;
   ano: number;
@@ -45,4 +68,5 @@ export interface CicloAvaliacao {
   cancelamento?: CancelamentoCiclo;
   encerramentos?: EncerramentoCiclo[];
   reaberturas?: ReaberturaCiclo[];
+  correcoesPeriodo?: CorrecaoPeriodoCiclo[];
 }

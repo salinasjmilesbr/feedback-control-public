@@ -71,6 +71,7 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     expect(html).not.toContain("Encerrar ciclo");
     expect(html).not.toContain("Editar status");
     expect(html).toContain("Editar período");
+    expect(html).not.toContain("Corrigir período");
     expect(html).toContain("Excluir ciclo");
     expect(html).not.toContain("Cancelar ciclo");
     expect(html).not.toContain("Reabrir ciclo");
@@ -83,6 +84,7 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     expect(html).not.toContain("Ativar ciclo");
     expect(html).not.toContain("Editar status");
     expect(html).not.toContain("Editar período");
+    expect(html).toContain("Corrigir período");
     expect(html).not.toContain("Excluir ciclo");
     expect(html).toContain("Cancelar ciclo");
     expect(html).not.toContain("Reabrir ciclo");
@@ -96,6 +98,7 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     expect(html).not.toContain("Editar status");
     expect(html).toContain("Ciclo encerrado");
     expect(html).not.toContain("Editar período");
+    expect(html).not.toContain("Corrigir período");
     expect(html).not.toContain("Excluir ciclo");
     expect(html).not.toContain("Cancelar ciclo");
     expect(html).toContain("Reabrir ciclo");
@@ -117,6 +120,7 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     expect(html).not.toContain("Ativar ciclo");
     expect(html).not.toContain("Encerrar ciclo");
     expect(html).not.toContain("Editar período");
+    expect(html).not.toContain("Corrigir período");
     expect(html).not.toContain("Excluir ciclo");
     expect(html).not.toContain("Cancelar ciclo");
     expect(html).not.toContain("Reabrir ciclo");

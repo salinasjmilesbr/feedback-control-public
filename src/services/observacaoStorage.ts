@@ -78,6 +78,23 @@ export function getObservacoesComunicadasByCiclo(
   );
 }
 
+export function getObservacoesByCiclo(
+  ano: number,
+  ciclo: 1 | 2 | 3,
+  incluirExcluidas = false
+): Observacao[] {
+  return ordenarPorAnoECiclo(
+    getTodasObservacoes().filter(
+      (observacao) =>
+        observacao.ano === ano &&
+        observacao.ciclo === ciclo &&
+        (incluirExcluidas || !observacao.excluida)
+    ),
+    "RECENTES",
+    (observacao) => observacao.dataCriacao
+  );
+}
+
 export function criarObservacao(
   colaboradorMatricula: number,
   tipo: TipoObservacao,

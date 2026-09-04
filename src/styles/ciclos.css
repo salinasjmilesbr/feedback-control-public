@@ -397,6 +397,20 @@
   min-width: 116px;
 }
 
+.cycle-period-correction-form {
+  display: grid;
+  gap: 7px;
+}
+
+.cycle-period-correction-form textarea {
+  min-height: 58px;
+  padding: 8px;
+  border: 1px solid #d8d2dc;
+  border-radius: 7px;
+  resize: vertical;
+  font: inherit;
+}
+
 .cycle-link-button {
   padding: 0;
   border: 0;

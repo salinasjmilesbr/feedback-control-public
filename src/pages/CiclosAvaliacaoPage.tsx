@@ -22,6 +22,11 @@ import {
 import { confirmarExclusaoCiclo } from "./confirmarExclusaoCiclo";
 import { cancelarCiclo } from "../services/cancelamentoCicloService";
 import { reabrirCiclo } from "../services/reaberturaCicloService";
+import {
+  analisarImpactoCorrecaoPeriodoCicloAtivo,
+  corrigirPeriodoCicloAtivo,
+} from "../services/correcaoPeriodoCicloService";
+import { confirmarCorrecaoPeriodoComImpacto } from "./confirmarCorrecaoPeriodoCiclo";
 import "../styles/ciclos.css";
 
 type CiclosAvaliacaoPageProps = {
@@ -49,6 +54,10 @@ function CiclosAvaliacaoPage({
   const [editandoPeriodoId, setEditandoPeriodoId] = useState<string | null>(null);
   const [periodoInicioEdicao, setPeriodoInicioEdicao] = useState("");
   const [periodoFimEdicao, setPeriodoFimEdicao] = useState("");
+  const [corrigindoPeriodoId, setCorrigindoPeriodoId] = useState<string | null>(null);
+  const [periodoInicioCorrecao, setPeriodoInicioCorrecao] = useState("");
+  const [periodoFimCorrecao, setPeriodoFimCorrecao] = useState("");
+  const [justificativaCorrecao, setJustificativaCorrecao] = useState("");
   const [editandoMetasId, setEditandoMetasId] = useState<string | null>(null);
   const [metasNegocioEdicao, setMetasNegocioEdicao] =
     useState<0 | 1 | 2 | 3>(0);
@@ -252,6 +261,42 @@ function CiclosAvaliacaoPage({
     }
   }
 
+  function corrigirPeriodoComAuditoria(
+    item: ReturnType<typeof getCiclosAvaliacao>[number]
+  ) {
+    setErro("");
+    if (!justificativaCorrecao.trim()) {
+      setErro("Informe a justificativa da correção do período.");
+      return;
+    }
+
+    try {
+      const impacto = analisarImpactoCorrecaoPeriodoCicloAtivo(
+        item.id,
+        periodoInicioCorrecao,
+        periodoFimCorrecao
+      );
+      if (!confirmarCorrecaoPeriodoComImpacto(impacto)) return;
+
+      corrigirPeriodoCicloAtivo(
+        item.id,
+        periodoInicioCorrecao,
+        periodoFimCorrecao,
+        justificativaCorrecao,
+        usuarioAtual!
+      );
+      setCorrigindoPeriodoId(null);
+      setJustificativaCorrecao("");
+      setVersao((valor) => valor + 1);
+    } catch (error) {
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível corrigir o período."
+      );
+    }
+  }
+
   return (
     <main className="virtus-page cycle-page">
       <section className="cycle-page-header">
@@ -416,6 +461,17 @@ function CiclosAvaliacaoPage({
           </div>
         ) : (
           ciclos.map((item) => {
+            const podeCorrigirPeriodo = can(
+              {
+                actor: {
+                  matricula: usuarioAtual.matricula,
+                  funcao: usuarioAtual.funcao,
+                  status: usuarioAtual.status,
+                },
+              },
+              "cycle.period.correct.manager",
+              { kind: "cycle", cycle: item }
+            );
             const statusLabel =
               item.status === "ATIVO"
                 ? "Ativo"
@@ -549,6 +605,68 @@ function CiclosAvaliacaoPage({
                           }}
                         >
                           Editar período
+                        </button>
+                      )
+                    ) : podeCorrigirPeriodo ? (
+                      corrigindoPeriodoId === item.id ? (
+                        <div className="cycle-period-correction-form">
+                          <div className="cycle-inline-form cycle-inline-form--period">
+                            <input
+                              type="date"
+                              aria-label="Nova data inicial"
+                              value={periodoInicioCorrecao}
+                              onChange={(event) =>
+                                setPeriodoInicioCorrecao(event.target.value)
+                              }
+                            />
+                            <input
+                              type="date"
+                              aria-label="Nova data final"
+                              value={periodoFimCorrecao}
+                              onChange={(event) =>
+                                setPeriodoFimCorrecao(event.target.value)
+                              }
+                            />
+                          </div>
+                          <textarea
+                            aria-label="Justificativa da correção"
+                            placeholder="Justificativa obrigatória"
+                            value={justificativaCorrecao}
+                            onChange={(event) =>
+                              setJustificativaCorrecao(event.target.value)
+                            }
+                          />
+                          <div className="cycle-inline-form">
+                            <button
+                              className="cycle-btn cycle-btn--small cycle-btn--primary"
+                              onClick={() => corrigirPeriodoComAuditoria(item)}
+                            >
+                              Confirmar correção
+                            </button>
+                            <button
+                              className="cycle-btn cycle-btn--small cycle-btn--secondary"
+                              onClick={() => {
+                                setCorrigindoPeriodoId(null);
+                                setJustificativaCorrecao("");
+                                setErro("");
+                              }}
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          className="cycle-link-button"
+                          onClick={() => {
+                            setCorrigindoPeriodoId(item.id);
+                            setPeriodoInicioCorrecao(item.dataInicio ?? "");
+                            setPeriodoFimCorrecao(item.dataFim ?? "");
+                            setJustificativaCorrecao("");
+                            setErro("");
+                          }}
+                        >
+                          Corrigir período
                         </button>
                       )
                     ) : (

@@ -11,6 +11,7 @@ import {
   encerrarCiclo,
   excluirCiclo,
   getCiclosAvaliacao,
+  persistirCorrecaoPeriodoCicloAtivoInterno,
 } from "./cicloAvaliacaoStorage";
 
 const STORAGE_KEY = "feedback-control-ciclos";
@@ -150,6 +151,60 @@ describe("edição normal do período do ciclo", () => {
       atualizarPeriodoCiclo("planejado", "2026-08-01", "2026-07-31")
     ).toThrow("A data de início não pode ser posterior à data de fim.");
     expect(getCiclosAvaliacao()).toEqual([original]);
+  });
+});
+
+describe("persistência interna da correção excepcional do período", () => {
+  beforeEach(() => instalarLocalStorageEmMemoria());
+
+  const impactoVazio = {
+    avaliacoes: { quantidade: 0, ids: [] },
+    metas: { quantidade: 0, ids: [] },
+    observacoes: { quantidade: 0, ids: [] },
+    total: 0,
+  };
+
+  it.each(["PLANEJADO", "ENCERRADO", "CANCELADO"] as const)(
+    "rejeita gravação direta em ciclo %s sem modificar dados",
+    (statusAtual) => {
+      const original = ciclo("alvo", statusAtual);
+      persistir(original);
+      const antes = localStorage.getItem(STORAGE_KEY);
+
+      expect(() =>
+        persistirCorrecaoPeriodoCicloAtivoInterno(
+          original.id,
+          "2026-02-01",
+          "2026-06-30",
+          "Motivo",
+          1,
+          "Gerente Fictício",
+          "2026-02-01T10:00:00.000Z",
+          impactoVazio
+        )
+      ).toThrow("Somente ciclos ativos podem ter o período corrigido.");
+      expect(localStorage.getItem(STORAGE_KEY)).toBe(antes);
+    }
+  );
+
+  it("rejeita gravação direta sem alteração real", () => {
+    const original = ciclo("ativo", "ATIVO");
+    persistir(original);
+    const antes = localStorage.getItem(STORAGE_KEY);
+
+    expect(() =>
+      persistirCorrecaoPeriodoCicloAtivoInterno(
+        original.id,
+        original.dataInicio!,
+        original.dataFim!,
+        "Motivo",
+        1,
+        "Gerente Fictício",
+        "2026-02-01T10:00:00.000Z",
+        impactoVazio
+      )
+    ).toThrow("Informe um período diferente do período atual.");
+    expect(localStorage.getItem(STORAGE_KEY)).toBe(antes);
   });
 });
 
