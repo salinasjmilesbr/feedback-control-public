@@ -10,6 +10,7 @@ import type {
   CollaboratorScopeInput,
 } from "./ResourceContext";
 import { AuthorizationError } from "./authorizationError";
+import { perfilPossuiFluxosPropriosAtuais } from "./perfisOperacionaisAtuais";
 
 function resolverAtor(
   context: AuthorizationContext,
@@ -191,16 +192,30 @@ function decidir(
       return podeAprovar;
     }
 
+    if (
+      capability === "goal.create.own" ||
+      capability === "goal.edit.own" ||
+      capability === "goal.delete.own" ||
+      capability === "goal.progress.own" ||
+      capability === "goal.finalize.own"
+    ) {
+      return (
+        resource.cycle.status === "ATIVO" &&
+        actor.matricula === resource.owner.matricula &&
+        perfilPossuiFluxosPropriosAtuais(actor.funcao)
+      );
+    }
+
     if (capability === "goal.approve.manager") {
       return (
-        resource.cycle.status !== "CANCELADO" &&
+        resource.cycle.status === "ATIVO" &&
         actor.funcao === "GERENTE" &&
         podeAprovar
       );
     }
     if (capability === "goal.approve.coordinator") {
       return (
-        resource.cycle.status !== "CANCELADO" &&
+        resource.cycle.status === "ATIVO" &&
         actor.funcao === "COORDENADOR" &&
         podeAprovar
       );

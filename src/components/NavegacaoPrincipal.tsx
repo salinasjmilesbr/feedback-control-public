@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { can } from "../authorization/authorizationPolicy";
+import { perfilPossuiFluxosPropriosAtuais } from "../authorization/perfisOperacionaisAtuais";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 
 function IconHome() {
@@ -78,11 +79,7 @@ function NavegacaoPrincipal() {
   const { usuarioAtual } = useUsuarioAtual();
   if (!usuarioAtual) return null;
 
-  const coordenador = usuarioAtual.funcao === "COORDENADOR";
-  const avaliado =
-    coordenador ||
-    usuarioAtual.funcao === "ANALISTA" ||
-    usuarioAtual.funcao === "CONSULTOR";
+  const avaliado = perfilPossuiFluxosPropriosAtuais(usuarioAtual.funcao);
   const podeVerRelatorios = can(
     {
       actor: {

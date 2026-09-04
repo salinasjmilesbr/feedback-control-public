@@ -21,6 +21,7 @@ import {
   getTextoNotaAvaliacao,
   possuiNotaAvaliacao,
 } from "../services/apresentacaoNota";
+import { funcaoUsaEstruturaAvaliacaoAnalista } from "../types/Colaborador";
 import "../styles/avaliacoes.css";
 
 const criterioIcons = Array.from({ length: 8 }, (_, index) => (
@@ -51,6 +52,9 @@ function MinhaAvaliacaoDetalhePage() {
       </main>
     );
   }
+
+  const usaEstruturaAvaliacaoAnalista =
+    funcaoUsaEstruturaAvaliacaoAnalista(usuarioAtual.funcao);
 
   const feedback = getFeedbacksByColaborador(
     usuarioAtual.matricula
@@ -458,7 +462,7 @@ function MinhaAvaliacaoDetalhePage() {
                 </article>
               )}
 
-              {usuarioAtual.funcao === "ANALISTA" &&
+              {usaEstruturaAvaliacaoAnalista &&
                 coordenadorAvaliador && (
                   <article className="evaluation-evaluator-card is-coordinator">
                     <small>Avaliador (Coordenador)</small>
@@ -491,7 +495,7 @@ function MinhaAvaliacaoDetalhePage() {
             const criterioParcial =
               feedback.encerradaComPendencias &&
               criterio.subcriterios.some((subcriterio) =>
-                usuarioAtual.funcao === "ANALISTA"
+                usaEstruturaAvaliacaoAnalista
                   ? subcriterio.notaGerente <= 0 ||
                     subcriterio.notaCoordenador <= 0 ||
                     subcriterio.notaColegiado <= 0
@@ -569,7 +573,7 @@ function MinhaAvaliacaoDetalhePage() {
                           </strong>
                         </div>
 
-                        {usuarioAtual.funcao === "ANALISTA" && (
+                        {usaEstruturaAvaliacaoAnalista && (
                           <>
                             <div>
                               <span>Coordenador</span>
@@ -610,7 +614,7 @@ function MinhaAvaliacaoDetalhePage() {
                       </div>
                     )}
 
-                    {usuarioAtual.funcao === "ANALISTA" &&
+                    {usaEstruturaAvaliacaoAnalista &&
                       criterio.observacaoCoordenador && (
                         <div className="evaluation-comment">
                           <strong>Observação do Coordenador</strong>
@@ -783,7 +787,7 @@ function MinhaAvaliacaoDetalhePage() {
               </div>
             )}
 
-            {usuarioAtual.funcao === "ANALISTA" &&
+            {usaEstruturaAvaliacaoAnalista &&
               feedback.feedbackFinalCoordenador && (
                 <div className="evaluation-feedback-box">
                   <strong>Coordenador</strong>
@@ -795,7 +799,7 @@ function MinhaAvaliacaoDetalhePage() {
       )}
 
       <section className="evaluation-info-note">
-        {usuarioAtual.funcao === "ANALISTA"
+        {usaEstruturaAvaliacaoAnalista
           ? "Nesta visão aparecem as notas do gerente, coordenador e a média do colegiado, sem revelar os votos individuais."
           : "Nesta visão aparecem apenas as notas, observações e feedbacks do gerente responsável pela avaliação."}
       </section>

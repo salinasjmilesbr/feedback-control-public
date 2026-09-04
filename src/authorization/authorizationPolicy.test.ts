@@ -859,6 +859,68 @@ describe("authorizationPolicy", () => {
     }
   );
 
+  const capabilitiesMetasProprias = [
+    "goal.create.own",
+    "goal.edit.own",
+    "goal.delete.own",
+    "goal.progress.own",
+    "goal.finalize.own",
+  ] as const;
+
+  it.each([
+    ["COORDENADOR", coordenador, true],
+    ["CONSULTOR", pessoa(70, "CONSULTOR"), true],
+    ["ANALISTA", direto, true],
+    ["ESTAGIARIO", pessoa(71, "ESTAGIARIO"), true],
+    ["GERENTE", gerente, false],
+  ] as const)(
+    "aplica capabilities de metas próprias à configuração atual para %s",
+    (_perfil, actor, esperado) => {
+      const resource: GoalResource = {
+        ...goalResource,
+        owner: actor,
+        collaborators: [...collaborators, actor],
+      };
+
+      capabilitiesMetasProprias.forEach((capability) =>
+        expect(can(contexto(actor), capability, resource)).toBe(esperado)
+      );
+    }
+  );
+
+  it("nega todas as mutações próprias sobre meta de outro colaborador", () => {
+    capabilitiesMetasProprias.forEach((capability) =>
+      expect(can(contexto(coordenador), capability, goalResource)).toBe(false)
+    );
+  });
+
+  it.each(["PLANEJADO", "ENCERRADO", "CANCELADO"] as const)(
+    "nega mutações de metas próprias em ciclo %s",
+    (status) => {
+      const resource: GoalResource = {
+        ...goalResource,
+        owner: direto,
+        cycle: { ...ciclo, status },
+      };
+
+      capabilitiesMetasProprias.forEach((capability) =>
+        expect(can(contexto(direto), capability, resource)).toBe(false)
+      );
+    }
+  );
+
+  it("volta a permitir metas próprias quando o ciclo retorna a ativo", () => {
+    const resource: GoalResource = {
+      ...goalResource,
+      owner: direto,
+      cycle: { ...ciclo, status: "ATIVO" },
+    };
+
+    capabilitiesMetasProprias.forEach((capability) =>
+      expect(can(contexto(direto), capability, resource)).toBe(true)
+    );
+  });
+
   it("nega as capabilities de aprovação de meta fora da cadeia", () => {
     expect(
       can(contexto(externo), "goal.approve.manager", goalResource)
@@ -1042,21 +1104,26 @@ describe("authorizationPolicy", () => {
     ).toBe(false);
   });
 
-  it("mantém o estado do ciclo separado das capabilities de aprovação", () => {
-    const cicloEncerrado: CicloAvaliacao = {
-      ...ciclo,
-      status: "ENCERRADO",
-    };
-    const resource: GoalResource = {
-      ...goalResource,
-      cycle: cicloEncerrado,
-    };
+  it.each(["ENCERRADO", "CANCELADO"] as const)(
+    "restringe aprovação em ciclo %s e preserva visualização histórica",
+    (status) => {
+      const resource: GoalResource = {
+        ...goalResource,
+        cycle: { ...ciclo, status },
+      };
 
-    expect(can(contexto(gerente), "goal.approve.manager", resource)).toBe(true);
-    expect(
-      can(contexto(coordenador), "goal.approve.coordinator", resource)
-    ).toBe(true);
-  });
+      expect(can(contexto(gerente), "goal.approve.manager", resource)).toBe(
+        false
+      );
+      expect(
+        can(contexto(coordenador), "goal.approve.coordinator", resource)
+      ).toBe(false);
+      expect(can(contexto(gerente), "goal.view.admin", resource)).toBe(true);
+      expect(can(contexto(coordenador), "goal.view.admin", resource)).toBe(
+        true
+      );
+    }
+  );
 
   it("mantém OPERATIONAL_TEAM equivalente a getColaboradoresVisiveis", () => {
     expect(

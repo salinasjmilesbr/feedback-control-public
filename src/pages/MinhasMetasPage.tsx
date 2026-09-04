@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
+import { authorize, can } from "../authorization/authorizationPolicy";
+import type { Capability } from "../authorization/Capability";
 import CollaboratorIdentity from "../components/CollaboratorIdentity";
 import { getCicloAtivo } from "../services/cicloAvaliacaoStorage";
 import {
@@ -17,6 +19,8 @@ import { getColaboradores } from "../services/colaboradorStorage";
 import type { Meta, TipoMeta } from "../types/Meta";
 import "../styles/ciclos.css";
 import "../styles/minhas-metas.css";
+
+type GoalOwnCapability = Extract<Capability, `goal.${string}.own`>;
 
 function MinhasMetasPage() {
   const navigate = useNavigate();
@@ -49,20 +53,6 @@ function MinhasMetasPage() {
     );
   }
 
-  if (usuarioAtual.funcao === "GERENTE") {
-    return (
-      <main className="virtus-page">
-        <section className="goals-empty">
-          <h1>Minhas Metas</h1>
-          <p>O cadastro de metas próprias ainda não está habilitado para o perfil de Gerente.</p>
-          <button type="button" className="cycle-btn cycle-btn--secondary" onClick={() => navigate("/")}>
-            Voltar ao início
-          </button>
-        </section>
-      </main>
-    );
-  }
-
   const usuario = usuarioAtual;
   const cicloEncontrado = getCicloAtivo();
 
@@ -88,6 +78,69 @@ function MinhasMetasPage() {
 
   const cicloAtivo = cicloEncontrado;
   const colaboradores = getColaboradores();
+  const authorizationContext = {
+    actor: {
+      matricula: usuario.matricula,
+      funcao: usuario.funcao,
+      status: usuario.status,
+    },
+  };
+  const goalResource = {
+    kind: "goal" as const,
+    owner: usuario,
+    collaborators: colaboradores,
+    cycle: cicloAtivo,
+  };
+  const podeCriarMeta = can(
+    authorizationContext,
+    "goal.create.own",
+    goalResource
+  );
+  const podeEditarMeta = can(
+    authorizationContext,
+    "goal.edit.own",
+    goalResource
+  );
+  const podeExcluirMeta = can(
+    authorizationContext,
+    "goal.delete.own",
+    goalResource
+  );
+  const podeAtualizarProgresso = can(
+    authorizationContext,
+    "goal.progress.own",
+    goalResource
+  );
+  const podeFinalizarMeta = can(
+    authorizationContext,
+    "goal.finalize.own",
+    goalResource
+  );
+  const possuiOperacaoPropria =
+    podeCriarMeta ||
+    podeEditarMeta ||
+    podeExcluirMeta ||
+    podeAtualizarProgresso ||
+    podeFinalizarMeta;
+
+  if (!possuiOperacaoPropria) {
+    return (
+      <main className="virtus-page">
+        <section className="goals-empty">
+          <h1>Minhas Metas</h1>
+          <p>O cadastro de metas próprias não está habilitado para este perfil.</p>
+          <button type="button" className="cycle-btn cycle-btn--secondary" onClick={() => navigate("/")}>
+            Voltar ao início
+          </button>
+        </section>
+      </main>
+    );
+  }
+
+  function autorizarOperacaoPropria(capability: GoalOwnCapability) {
+    authorize(authorizationContext, capability, goalResource);
+  }
+
   const metas = getMetasDoColaboradorNoCiclo(usuario.matricula, cicloAtivo.id);
   const metasNegocio = metas.filter((meta) => meta.tipo === "NEGOCIO_PROJETO");
   const metasIndividuais = metas.filter((meta) => meta.tipo === "INDIVIDUAL");
@@ -96,7 +149,7 @@ function MinhasMetasPage() {
   const limiteIndividuais = cicloAtivo.quantidadeMetasIndividuais ?? 0;
   const limiteAtual = tipo === "NEGOCIO_PROJETO" ? limiteNegocio : limiteIndividuais;
   const quantidadeAtual = tipo === "NEGOCIO_PROJETO" ? metasNegocio.length : metasIndividuais.length;
-  const podeAdicionar = editandoId !== null || quantidadeAtual < limiteAtual;
+  const podeAdicionar = quantidadeAtual < limiteAtual;
 
   const totalConfigurado = limiteNegocio + limiteIndividuais;
   const totalCadastrado = metas.length;
@@ -130,6 +183,7 @@ function MinhasMetasPage() {
     setErro("");
 
     try {
+      autorizarOperacaoPropria("goal.progress.own");
       atualizarAcompanhamentoMeta(
         acompanhandoId,
         usuario,
@@ -175,6 +229,7 @@ function MinhasMetasPage() {
     setErro("");
 
     try {
+      autorizarOperacaoPropria("goal.finalize.own");
       finalizarMeta(
         fechandoId,
         usuario,
@@ -206,6 +261,7 @@ function MinhasMetasPage() {
 
     try {
       if (editandoId) {
+        autorizarOperacaoPropria("goal.edit.own");
         atualizarMeta(
           editandoId,
           usuario,
@@ -215,6 +271,7 @@ function MinhasMetasPage() {
           valorAlvo
         );
       } else {
+        autorizarOperacaoPropria("goal.create.own");
         criarMeta(
           usuario,
           cicloAtivo,
@@ -254,6 +311,7 @@ function MinhasMetasPage() {
     if (!confirmar) return;
 
     try {
+      autorizarOperacaoPropria("goal.delete.own");
       excluirMeta(meta.id, usuario, cicloAtivo);
       if (editandoId === meta.id) limparFormulario();
       if (acompanhandoId === meta.id) limparAcompanhamento();
@@ -469,7 +527,8 @@ function MinhasMetasPage() {
                   </div>
 
                   <div className="goal-card__actions">
-                    {meta.status === "EM_ANDAMENTO" && (
+                    {meta.status === "EM_ANDAMENTO" &&
+                      podeAtualizarProgresso && (
                       <button
                         type="button"
                         className="goal-action-btn goal-action-btn--primary"
@@ -482,15 +541,21 @@ function MinhasMetasPage() {
                         Atualizar andamento
                       </button>
                     )}
-                    <button
-                      type="button"
-                      className="goal-action-btn goal-action-btn--success"
-                      onClick={() => iniciarFechamento(meta)}
-                    >
-                      {meta.status === "EM_ANDAMENTO" ? "Fechar meta" : "Revisar fechamento"}
-                    </button>
-                    <button type="button" className="goal-action-btn" onClick={() => editar(meta)}>Editar</button>
-                    <button type="button" className="goal-action-btn goal-action-btn--danger" onClick={() => excluir(meta)}>Excluir</button>
+                    {podeFinalizarMeta && (
+                      <button
+                        type="button"
+                        className="goal-action-btn goal-action-btn--success"
+                        onClick={() => iniciarFechamento(meta)}
+                      >
+                        {meta.status === "EM_ANDAMENTO" ? "Fechar meta" : "Revisar fechamento"}
+                      </button>
+                    )}
+                    {podeEditarMeta && (
+                      <button type="button" className="goal-action-btn" onClick={() => editar(meta)}>Editar</button>
+                    )}
+                    {podeExcluirMeta && (
+                      <button type="button" className="goal-action-btn goal-action-btn--danger" onClick={() => excluir(meta)}>Excluir</button>
+                    )}
                   </div>
                 </div>
 
@@ -563,7 +628,11 @@ function MinhasMetasPage() {
           </div>
         )}
 
-        {itens.length < limite && !editandoId && !acompanhandoId && !fechandoId && (
+        {podeCriarMeta &&
+          itens.length < limite &&
+          !editandoId &&
+          !acompanhandoId &&
+          !fechandoId && (
           <button
             type="button"
             className="goals-add-btn"
@@ -640,6 +709,7 @@ function MinhasMetasPage() {
       {!fechandoId &&
         !acompanhandoId &&
         !editandoId &&
+        podeCriarMeta &&
         podeAdicionar &&
         (limiteNegocio > 0 || limiteIndividuais > 0) && (
           <section className="goals-editor">
@@ -709,7 +779,7 @@ function MinhasMetasPage() {
                 type="button"
                 className="cycle-btn cycle-btn--primary"
                 onClick={salvar}
-                disabled={!podeAdicionar}
+                disabled={!podeCriarMeta || !podeAdicionar}
               >
                 Salvar meta
               </button>
