@@ -29,22 +29,12 @@ const coordenador: Colaborador = {
   funcao: "COORDENADOR",
 };
 
-function renderizar(
-  status: StatusCicloAvaliacao,
+function renderizarCiclos(
+  ciclos: CicloAvaliacao[],
   mostrarCanceladosInicial = false,
-  usuario: Colaborador = gerente,
-  dadosCiclo: Partial<CicloAvaliacao> = {}
+  usuario: Colaborador = gerente
 ): string {
-  const ciclo: CicloAvaliacao = {
-    id: "ciclo-ui",
-    ano: 2026,
-    ciclo: 1,
-    status,
-    dataCriacao: "2026-01-01T00:00:00.000Z",
-    dataUltimaAtualizacao: "2026-01-01T00:00:00.000Z",
-    ...dadosCiclo,
-  };
-  localStorage.setItem("feedback-control-ciclos", JSON.stringify([ciclo]));
+  localStorage.setItem("feedback-control-ciclos", JSON.stringify(ciclos));
 
   return renderToStaticMarkup(
     <UsuarioAtualContext.Provider
@@ -61,6 +51,24 @@ function renderizar(
       </MemoryRouter>
     </UsuarioAtualContext.Provider>
   );
+}
+
+function renderizar(
+  status: StatusCicloAvaliacao,
+  mostrarCanceladosInicial = false,
+  usuario: Colaborador = gerente,
+  dadosCiclo: Partial<CicloAvaliacao> = {}
+): string {
+  const ciclo: CicloAvaliacao = {
+    id: "ciclo-ui",
+    ano: 2026,
+    ciclo: 1,
+    status,
+    dataCriacao: "2026-01-01T00:00:00.000Z",
+    dataUltimaAtualizacao: "2026-01-01T00:00:00.000Z",
+    ...dadosCiclo,
+  };
+  return renderizarCiclos([ciclo], mostrarCanceladosInicial, usuario);
 }
 
 describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
@@ -297,5 +305,77 @@ describe("histórico administrativo em CiclosAvaliacaoPage", () => {
     expect(html).toContain("Ver histórico");
     expect(html).toContain("Consulta histórica");
     expect(cicloAntes.reaberturas).toHaveLength(1);
+  });
+});
+
+describe("ordenação de ciclos em CiclosAvaliacaoPage", () => {
+  beforeEach(() => instalarLocalStorageEmMemoria());
+
+  const ciclosMisturados: CicloAvaliacao[] = [
+    {
+      id: "ativo-2027-3",
+      ano: 2027,
+      ciclo: 3,
+      status: "ATIVO",
+      dataCriacao: "2027-01-01T00:00:00.000Z",
+      dataUltimaAtualizacao: "2027-01-01T00:00:00.000Z",
+    },
+    {
+      id: "encerrado-2026-2",
+      ano: 2026,
+      ciclo: 2,
+      status: "ENCERRADO",
+      dataCriacao: "2026-01-01T00:00:00.000Z",
+      dataUltimaAtualizacao: "2026-01-01T00:00:00.000Z",
+    },
+    {
+      id: "planejado-2028-1",
+      ano: 2028,
+      ciclo: 1,
+      status: "PLANEJADO",
+      dataCriacao: "2028-01-01T00:00:00.000Z",
+      dataUltimaAtualizacao: "2028-01-01T00:00:00.000Z",
+    },
+    {
+      id: "cancelado-2027-2",
+      ano: 2027,
+      ciclo: 2,
+      status: "CANCELADO",
+      dataCriacao: "2027-01-01T00:00:00.000Z",
+      dataUltimaAtualizacao: "2027-01-01T00:00:00.000Z",
+    },
+    {
+      id: "encerrado-2026-3",
+      ano: 2026,
+      ciclo: 3,
+      status: "ENCERRADO",
+      dataCriacao: "2026-01-01T00:00:00.000Z",
+      dataUltimaAtualizacao: "2026-01-01T00:00:00.000Z",
+    },
+  ];
+
+  it("ordena exclusivamente por ano e ciclo, sem prioridade por status", () => {
+    const html = renderizarCiclos(ciclosMisturados);
+
+    const planejadoFuturo = html.indexOf("2028 <span>•</span> Ciclo 1");
+    const ativoAtual = html.indexOf("2027 <span>•</span> Ciclo 3");
+    const ciclo2026Tres = html.indexOf("2026 <span>•</span> Ciclo 3");
+    const ciclo2026Dois = html.indexOf("2026 <span>•</span> Ciclo 2");
+
+    expect(planejadoFuturo).toBeLessThan(ativoAtual);
+    expect(ativoAtual).toBeLessThan(ciclo2026Tres);
+    expect(ciclo2026Tres).toBeLessThan(ciclo2026Dois);
+    expect(html).not.toContain("2027 <span>•</span> Ciclo 2");
+  });
+
+  it("inclui cancelados na mesma ordem cronológica quando exibidos", () => {
+    const html = renderizarCiclos(ciclosMisturados, true);
+    const ciclo2027Tres = html.indexOf("2027 <span>•</span> Ciclo 3");
+    const ciclo2027Dois = html.indexOf("2027 <span>•</span> Ciclo 2");
+    const ciclo2026Tres = html.indexOf("2026 <span>•</span> Ciclo 3");
+
+    expect(ciclo2027Tres).toBeLessThan(ciclo2027Dois);
+    expect(ciclo2027Dois).toBeLessThan(ciclo2026Tres);
+    expect(html).toContain("Cancelado");
   });
 });

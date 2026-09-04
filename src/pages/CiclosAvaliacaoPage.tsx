@@ -172,17 +172,7 @@ function CiclosAvaliacaoPage({
     );
   }
 
-  const ciclos = getCiclosAdministrativos(mostrarCancelados)
-    .sort((a, b) => {
-    if (a.status !== b.status) {
-      if (a.status === "ATIVO") return -1;
-      if (b.status === "ATIVO") return 1;
-      if (a.status === "PLANEJADO") return -1;
-      if (b.status === "PLANEJADO") return 1;
-    }
-    if (a.ano !== b.ano) return b.ano - a.ano;
-    return b.ciclo - a.ciclo;
-    });
+  const ciclos = getCiclosAdministrativos(mostrarCancelados);
 
   const totalAtivos = ciclos.filter((item) => item.status === "ATIVO").length;
   const totalPlanejados = ciclos.filter((item) => item.status === "PLANEJADO").length;
