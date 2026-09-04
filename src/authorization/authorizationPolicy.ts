@@ -97,7 +97,7 @@ function decidir(
   if (capability === "observation.create") {
     return (
       resource.kind === "observation" &&
-      resource.cycle?.status !== "CANCELADO" &&
+      resource.cycle?.status === "ATIVO" &&
       resource.collaborator.status !== "DESLIGADO" &&
       (actor.funcao === "GERENTE" || actor.funcao === "COORDENADOR")
     );
@@ -109,7 +109,7 @@ function decidir(
   ) {
     return (
       resource.kind === "observation" &&
-      resource.cycle?.status !== "CANCELADO" &&
+      resource.cycle?.status === "ATIVO" &&
       (actor.funcao === "GERENTE" || actor.funcao === "COORDENADOR")
     );
   }

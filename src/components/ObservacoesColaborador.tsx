@@ -18,10 +18,21 @@ import {
   getCiclosAvaliacao,
   formatarPeriodoCiclo,
 } from "../services/cicloAvaliacaoStorage";
+import {
+  filtrarObservacoesPorCiclo,
+  getChaveCicloObservacoes,
+  ordenarCiclosParaFiltro,
+  type FiltroCicloObservacoes,
+} from "./filtroObservacoesPorCiclo";
 
 type Props = {
   colaborador: Colaborador;
   abrirNovaObservacaoToken?: number;
+  filtroCiclo: FiltroCicloObservacoes;
+  onFiltroCicloChange: (filtro: FiltroCicloObservacoes) => void;
+  mostrarExcluidas: boolean;
+  onMostrarExcluidasChange: (mostrar: boolean) => void;
+  onObservacoesChange: () => void;
 };
 
 const labelsTipo: Record<TipoObservacao, string> = {
@@ -58,10 +69,19 @@ function formatarData(data: string) {
 function ObservacoesColaborador({
   colaborador,
   abrirNovaObservacaoToken,
+  filtroCiclo,
+  onFiltroCicloChange,
+  mostrarExcluidas,
+  onMostrarExcluidasChange,
+  onObservacoesChange,
 }: Props) {
   const { usuarioAtual } = useUsuarioAtual();
   const cicloAtivo = getCicloAtivo();
   const ciclosDisponiveis = getCiclosAvaliacao();
+  const ciclosAtivos = ciclosDisponiveis.filter(
+    (item) => item.status === "ATIVO"
+  );
+  const ciclosDoFiltro = ordenarCiclosParaFiltro(ciclosDisponiveis);
 
   const [versao, setVersao] = useState(0);
   const [formAberto, setFormAberto] = useState(false);
@@ -75,7 +95,6 @@ function ObservacoesColaborador({
   const [ciclo, setCiclo] = useState<1 | 2 | 3>(
     cicloAtivo?.ciclo ?? 1
   );
-  const [mostrarExcluidas, setMostrarExcluidas] = useState(false);
   const [historicoAberto, setHistoricoAberto] = useState<string | null>(
     null
   );
@@ -100,9 +119,12 @@ function ObservacoesColaborador({
 
   void versao;
 
-  const observacoes = getObservacoesByColaborador(
-    colaborador.matricula,
-    mostrarExcluidas
+  const observacoes = filtrarObservacoesPorCiclo(
+    getObservacoesByColaborador(
+      colaborador.matricula,
+      mostrarExcluidas
+    ),
+    filtroCiclo
   );
 
   const authorizationContext = usuarioAtual
@@ -114,14 +136,17 @@ function ObservacoesColaborador({
         },
       }
     : undefined;
-  const cicloSelecionado = ciclosDisponiveis.find(
+  const cicloDoFormulario = ciclosDisponiveis.find(
     (item) => item.ano === ano && item.ciclo === ciclo
+  );
+  const cicloFiltrado = ciclosDisponiveis.find(
+    (item) => getChaveCicloObservacoes(item) === filtroCiclo
   );
   const podeCriarObservacao = authorizationContext
     ? can(authorizationContext, "observation.create", {
         kind: "observation",
         collaborator: colaborador,
-        cycle: cicloSelecionado,
+        cycle: cicloFiltrado,
       })
     : false;
 
@@ -206,7 +231,7 @@ function ObservacoesColaborador({
         authorize(authorizationContext, "observation.create", {
           kind: "observation",
           collaborator: colaborador,
-          cycle: cicloSelecionado,
+          cycle: cicloDoFormulario,
         });
         criarObservacao(
           colaborador.matricula,
@@ -221,6 +246,7 @@ function ObservacoesColaborador({
 
       limparFormulario();
       setVersao((valor) => valor + 1);
+      onObservacoesChange();
     } catch (error) {
       setErro(
         error instanceof Error
@@ -241,6 +267,7 @@ function ObservacoesColaborador({
 
     excluirObservacao(observacao.id, usuarioAtual);
     setVersao((valor) => valor + 1);
+    onObservacoesChange();
   }
 
   return (
@@ -253,19 +280,40 @@ function ObservacoesColaborador({
           </p>
         </div>
 
-        {podeCriarObservacao && (
-          <div className="observation-panel__actions">
-            <label className="observation-toggle">
+        <div className="observation-panel__actions">
+          <label className="observation-cycle-filter">
+            <span>Ciclo:</span>
+            <select
+              value={filtroCiclo}
+              onChange={(event) => {
+                limparFormulario();
+                onFiltroCicloChange(
+                  event.target.value as FiltroCicloObservacoes
+                );
+              }}
+            >
+              {ciclosDoFiltro.map((item) => (
+                <option key={item.id} value={getChaveCicloObservacoes(item)}>
+                  {item.ano} · Ciclo {item.ciclo}
+                  {item.status === "ATIVO" ? " (Atual)" : ""}
+                </option>
+              ))}
+              <option value="TODOS">Todos os ciclos</option>
+            </select>
+          </label>
+
+          <label className="observation-toggle">
               <input
                 type="checkbox"
                 checked={mostrarExcluidas}
                 onChange={(event) =>
-                  setMostrarExcluidas(event.target.checked)
+                  onMostrarExcluidasChange(event.target.checked)
                 }
               />
               Mostrar excluídas
-            </label>
+          </label>
 
+          {podeCriarObservacao && (
             <button
               type="button"
               onClick={() => {
@@ -286,8 +334,8 @@ function ObservacoesColaborador({
             >
               + Nova observação
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {formAberto &&
@@ -317,6 +365,7 @@ function ObservacoesColaborador({
               <strong>Ciclo da observação</strong>
               <select
                 value={`${ano}-${ciclo}`}
+                disabled={Boolean(editandoId)}
                 onChange={(event) => {
                   const [anoSelecionado, cicloSelecionado] =
                     event.target.value.split("-");
@@ -326,7 +375,12 @@ function ObservacoesColaborador({
                 }}
                 className="observation-control"
               >
-                {ciclosDisponiveis.map((item) => (
+                {(editandoId
+                  ? ciclosDisponiveis.filter(
+                      (item) => item.ano === ano && item.ciclo === ciclo
+                    )
+                  : ciclosAtivos
+                ).map((item) => (
                   <option
                     key={item.id}
                     value={`${item.ano}-${item.ciclo}`}

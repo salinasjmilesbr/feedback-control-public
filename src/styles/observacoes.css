@@ -36,6 +36,23 @@
   flex-wrap: wrap;
 }
 
+.observation-cycle-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #5f5664;
+  font-size: 13px;
+}
+
+.observation-cycle-filter select {
+  padding: 8px 10px;
+  border: 1px solid #d9d2dd;
+  border-radius: 8px;
+  background: #fff;
+  color: #2d2431;
+  font: inherit;
+}
+
 .observation-toggle,
 .observation-checkbox {
   display: inline-flex;

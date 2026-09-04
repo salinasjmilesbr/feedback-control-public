@@ -12,7 +12,11 @@ import {
   getCiclosAvaliacao,
 } from "./cicloAvaliacaoStorage";
 import { atualizarAcompanhamentoMeta } from "./metaStorage";
-import { criarObservacao } from "./observacaoStorage";
+import {
+  atualizarObservacao,
+  criarObservacao,
+  excluirObservacao,
+} from "./observacaoStorage";
 import { reabrirCiclo } from "./reaberturaCicloService";
 
 const gerente: Colaborador = { matricula: 1, status: "ATIVO", nome: "Gerente Fictício", email: "gerente@example.com", cargo: "Gerente", area: "Área fictícia", funcao: "GERENTE", respondePara: "" };
@@ -129,6 +133,16 @@ describe("reabrirCiclo", () => {
 
     const colaborador = { ...coordenador, matricula: 3, funcao: "ANALISTA" as const };
     atualizarAcompanhamentoMeta(meta.id, colaborador, reaberto, "Em evolução", 50);
+    atualizarObservacao(
+      observacao.id,
+      "POSITIVA",
+      "Atualizada após reabertura",
+      true,
+      2026,
+      1,
+      gerente
+    );
+    excluirObservacao(observacao.id, gerente);
     criarObservacao(3, "POSITIVA", "Nova observação", false, 2026, 1, gerente);
     expect(JSON.parse(localStorage.getItem("feedback-control-feedbacks")!)[0]).toEqual(feedback);
     expect(JSON.parse(localStorage.getItem("feedback-control-metas")!)[0]).toMatchObject({
@@ -136,7 +150,20 @@ describe("reabrirCiclo", () => {
       aprovacaoGerente: meta.aprovacaoGerente,
       resultadoAtual: "Em evolução",
     });
-    expect(JSON.parse(localStorage.getItem("feedback-control-observacoes")!)).toHaveLength(2);
+    const observacoes = JSON.parse(
+      localStorage.getItem("feedback-control-observacoes")!
+    ) as Observacao[];
+    expect(observacoes).toHaveLength(2);
+    expect(observacoes[0]).toMatchObject({
+      id: observacao.id,
+      texto: "Atualizada após reabertura",
+      excluida: true,
+      dataCriacao: observacao.dataCriacao,
+    });
+    expect(observacoes[0].historico.map((evento) => evento.acao)).toEqual([
+      "EDICAO",
+      "EXCLUSAO",
+    ]);
   });
 
   it("mantém regressão bloqueada pela atualização genérica", () => {

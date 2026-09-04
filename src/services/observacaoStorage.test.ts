@@ -84,12 +84,193 @@ describe("observações de ciclo cancelado", () => {
 
     operacoes.forEach((operacao) =>
       expect(operacao).toThrow(
-        "Observações de ciclo cancelado não podem ser alteradas."
+        "Observações só podem ser alteradas enquanto o ciclo estiver ativo."
       )
     );
     expect(
       JSON.parse(localStorage.getItem("feedback-control-observacoes")!)
     ).toEqual([observacao]);
+  });
+});
+
+describe("mutações de observações vinculadas a ciclos", () => {
+  function cicloComStatus(
+    status: CicloAvaliacao["status"]
+  ): CicloAvaliacao {
+    return {
+      ...cicloCancelado,
+      id: `ciclo-${status.toLowerCase()}`,
+      status,
+    };
+  }
+
+  function preparar(
+    status: CicloAvaliacao["status"],
+    observacoes: Observacao[] = []
+  ) {
+    instalarLocalStorageEmMemoria();
+    localStorage.setItem(
+      "feedback-control-ciclos",
+      JSON.stringify([cicloComStatus(status)])
+    );
+    localStorage.setItem(
+      "feedback-control-observacoes",
+      JSON.stringify(observacoes)
+    );
+  }
+
+  it("permite criação somente em ciclo ativo", () => {
+    preparar("ATIVO");
+
+    const criada = criarObservacao(2, "POSITIVA", "Nova", true, 2026, 1, autor);
+
+    expect(criada).toMatchObject({
+      colaboradorMatricula: 2,
+      ano: 2026,
+      ciclo: 1,
+      texto: "Nova",
+    });
+    expect(getObservacoesByColaborador(2)).toHaveLength(1);
+  });
+
+  it.each(["PLANEJADO", "ENCERRADO", "CANCELADO"] as const)(
+    "rejeita criação em ciclo %s sem persistir dados",
+    (status) => {
+      preparar(status);
+
+      expect(() =>
+        criarObservacao(2, "POSITIVA", "Nova", false, 2026, 1, autor)
+      ).toThrow(
+        "Observações só podem ser alteradas enquanto o ciclo estiver ativo."
+      );
+      expect(getObservacoesByColaborador(2)).toEqual([]);
+    }
+  );
+
+  it("permite edição e exclusão lógica em ciclo ativo", () => {
+    preparar("ATIVO", [observacao]);
+
+    atualizarObservacao(
+      observacao.id,
+      "POSITIVA",
+      "Conteúdo atualizado",
+      true,
+      2026,
+      1,
+      autor
+    );
+    let atual = getObservacoesByColaborador(2)[0];
+    expect(atual).toMatchObject({
+      tipo: "POSITIVA",
+      texto: "Conteúdo atualizado",
+      comunicado: true,
+      dataCriacao: observacao.dataCriacao,
+    });
+    expect(atual.historico.at(-1)?.acao).toBe("EDICAO");
+
+    excluirObservacao(observacao.id, autor);
+    atual = getObservacoesByColaborador(2, true)[0];
+    expect(atual.excluida).toBe(true);
+    expect(atual.historico.at(-1)?.acao).toBe("EXCLUSAO");
+  });
+
+  it.each(["ENCERRADO", "CANCELADO"] as const)(
+    "rejeita edição e exclusão em ciclo %s sem modificar dados",
+    (status) => {
+      preparar(status, [observacao]);
+      const antes = localStorage.getItem("feedback-control-observacoes");
+
+      expect(() =>
+        atualizarObservacao(
+          observacao.id,
+          "NEGATIVA",
+          "Alterada",
+          true,
+          2026,
+          1,
+          autor
+        )
+      ).toThrow(
+        "Observações só podem ser alteradas enquanto o ciclo estiver ativo."
+      );
+      expect(() => excluirObservacao(observacao.id, autor)).toThrow(
+        "Observações só podem ser alteradas enquanto o ciclo estiver ativo."
+      );
+      expect(localStorage.getItem("feedback-control-observacoes")).toBe(antes);
+    }
+  );
+
+  it("rejeita mudança do vínculo histórico para outro ciclo", () => {
+    preparar("ATIVO", [observacao]);
+    const antes = localStorage.getItem("feedback-control-observacoes");
+
+    expect(() =>
+      atualizarObservacao(
+        observacao.id,
+        "POSITIVA",
+        "Alterada",
+        false,
+        2026,
+        2,
+        autor
+      )
+    ).toThrow("O ciclo de uma observação existente não pode ser alterado.");
+    expect(localStorage.getItem("feedback-control-observacoes")).toBe(antes);
+  });
+
+  it("volta a permitir mutação quando o ciclo encerrado retorna a ativo", () => {
+    preparar("ENCERRADO", [observacao]);
+    expect(() => excluirObservacao(observacao.id, autor)).toThrow();
+
+    localStorage.setItem(
+      "feedback-control-ciclos",
+      JSON.stringify([cicloComStatus("ATIVO")])
+    );
+    atualizarObservacao(
+      observacao.id,
+      "POSITIVA",
+      "Editável após reabertura",
+      false,
+      2026,
+      1,
+      autor
+    );
+
+    expect(getObservacoesByColaborador(2)[0]).toMatchObject({
+      id: observacao.id,
+      texto: "Editável após reabertura",
+      dataCriacao: observacao.dataCriacao,
+    });
+  });
+
+  it("preserva data de criação e ordenação original após edição", () => {
+    const antiga = {
+      ...observacao,
+      id: "antiga",
+      dataCriacao: "2026-01-01T00:00:00.000Z",
+      dataUltimaAtualizacao: "2026-01-01T00:00:00.000Z",
+    };
+    const nova = {
+      ...observacao,
+      id: "nova",
+      dataCriacao: "2026-02-01T00:00:00.000Z",
+      dataUltimaAtualizacao: "2026-02-01T00:00:00.000Z",
+    };
+    preparar("ATIVO", [antiga, nova]);
+
+    atualizarObservacao(
+      antiga.id,
+      "NEGATIVA",
+      "Observação antiga editada",
+      false,
+      2026,
+      1,
+      autor
+    );
+
+    const ordenadas = getObservacoesByColaborador(2);
+    expect(ordenadas.map((item) => item.id)).toEqual(["nova", "antiga"]);
+    expect(ordenadas[1].dataCriacao).toBe(antiga.dataCriacao);
   });
 });
 
