@@ -4,9 +4,14 @@ import './index.css'
 import './styles/virtus-foundation.css'
 import './styles/virtus-audit.css'
 import App from './App.tsx'
-import { executarResetBaseDesenvolvimento } from './services/resetBaseDesenvolvimento'
+import {
+  executarResetBaseDesenvolvimento,
+  resetBaseDesenvolvimentoHabilitado,
+} from './services/resetBaseDesenvolvimento'
 
-executarResetBaseDesenvolvimento()
+if (resetBaseDesenvolvimentoHabilitado) {
+  executarResetBaseDesenvolvimento()
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
