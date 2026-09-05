@@ -1,3 +1,6 @@
+// Decisão restrita a este mecanismo DEV; não configura os demais ambientes.
+export const resetBaseDesenvolvimentoHabilitado = import.meta.env.DEV;
+
 const RESET_VERSION = "2026-08-26-base-enxuta-v1";
 const RESET_MARKER_KEY = `feedback-control-reset-${RESET_VERSION}`;
 
@@ -11,6 +14,9 @@ const CHAVES_PARA_LIMPAR = [
 ];
 
 export function executarResetBaseDesenvolvimento(): void {
+  // Protege também chamadas diretas fora do bootstrap, antes de acessar dados.
+  if (!resetBaseDesenvolvimentoHabilitado) return;
+
   if (localStorage.getItem(RESET_MARKER_KEY) === "ok") {
     return;
   }
