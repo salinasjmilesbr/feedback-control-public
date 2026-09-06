@@ -9,6 +9,8 @@ export type AuthContextValue = {
   solicitarRecuperacaoDeSenha: (email: string) => Promise<void>;
   /** F2-05: define a nova senha na sessão de recuperação corrente. */
   redefinirSenha: (novaSenha: string) => Promise<void>;
+  /** F2-06: convida um usuário por e-mail via Edge Function (server-side). */
+  convidarUsuario: (email: string, organizationId: string) => Promise<{ userId: string }>;
 };
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined);

@@ -28,6 +28,15 @@
   width: 100%;
 }
 
+.auth-form .branding-field select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d8d8e6;
+  border-radius: 6px;
+  font: inherit;
+  background: #ffffff;
+}
+
 .auth-message {
   color: #b3261e;
   font-size: 14px;

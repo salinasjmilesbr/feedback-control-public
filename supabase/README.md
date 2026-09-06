@@ -1,4 +1,4 @@
-# Supabase local — desenvolvimento (F1-01 a F2-05)
+# Supabase local — desenvolvimento (F1-01 a F2-06)
 
 Infraestrutura local do Supabase para o Virtus Team, versionada e reconstruível
 integralmente a partir do repositório — sem configuração manual no dashboard,
@@ -18,10 +18,11 @@ F2-01 habilitou o serviço Auth local e criou as primeiras entidades funcionais 
 a F2-02 adicionou `user_organization_memberships` (membership usuário-organização
 por UUID, sem exigir colaborador), a F2-03 introduziu login/logout reais com
 Supabase Auth (policies mínimas de leitura via `auth.uid()`), a F2-04 protegeu as
-rotas funcionais e a F2-05 adicionou recuperação/redefinição de senha com captura
-local de e-mail. O auto-cadastro público permanece desabilitado; o seed segue sem
-inserir dados funcionais, e o frontend mantém o localStorage como persistência
-funcional dos domínios (as F2-03/F2-04/F2-05 alteram somente identidade/sessão).
+rotas funcionais, a F2-05 adicionou recuperação/redefinição de senha e a F2-06
+adicionou o convite administrativo via Edge Function (Auth Admin server-side).
+O auto-cadastro público permanece desabilitado; o seed segue sem inserir dados
+funcionais, e o frontend mantém o localStorage como persistência funcional dos
+domínios (as F2-03/F2-04/F2-05/F2-06 alteram somente identidade/sessão).
 
 ## Pré-requisitos (onboarding técnico)
 
@@ -73,21 +74,25 @@ docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -X \
   -c "select proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='set_updated_at'"
 ```
 
-Estado esperado ao final da F2-05:
+Estado esperado ao final da F2-06:
 
-- quatro migrations registradas (`20260906185540`, `20260906201856`,
-  `20260906203358` e `20260906205425`); nenhuma migration nova na F2-04/F2-05;
+- cinco migrations registradas (`20260906185540`, `20260906201856`,
+  `20260906203358`, `20260906205425` e `20260906230400`);
 - no schema `public`, somente as tabelas da F2-01/F2-02 — `organizations`,
   `user_profiles` e `user_organization_memberships` — com RLS habilitado e com
   as três policies mínimas de leitura da F2-03 (`user_profiles_select_own`,
   `user_organization_memberships_select_own`,
   `organizations_select_via_membership`); nenhuma policy de escrita;
-- a função técnica `set_updated_at` presente (foundation da F1-03);
+- a função técnica `set_updated_at` (F1-03) e a RPC `criar_perfil_membership`
+  (F2-06, SECURITY DEFINER, EXECUTE só para `service_role`) presentes;
 - o serviço Auth local habilitado com auto-cadastro público desabilitado
   (`enable_signup = false`) e provedor de e-mail ativo: `auth.users` existe e é
   referenciado por `user_profiles` (FK `fk_user_profiles_auth_users`);
 - captura local de e-mail habilitada (`[local_smtp] enabled = true`, mailpit na
-  porta 54324) para o fluxo de recuperação de senha;
+  porta 54324) para recuperação de senha e convites;
+- Edge Runtime habilitado (`[edge_runtime] enabled = true`) com a função
+  `convidar-usuario` (Auth Admin server-side; `service_role` só no runtime da
+  função, nunca no frontend);
 - `user_organization_memberships` relaciona `user_profiles` e `organizations`
   por UUID (FKs `ON DELETE RESTRICT`) com unique por par usuário/organização.
 
@@ -222,6 +227,28 @@ sem duplicar o sistema de autenticação nem armazenar tokens/senhas no Virtus:
   mantém o auto-cadastro público desligado sem quebrar login/recuperação;
 - `additional_redirect_urls` inclui a origem local do app (Vite, porta 5173)
   para os links de redefinição.
+
+## Convite administrativo (F2-06)
+
+A F2-06 implementa o fluxo inicial de criação/convite de usuários por e-mail
+sem signup público, com Supabase Auth Admin exclusivamente server-side:
+
+- Edge Function `supabase/functions/convidar-usuario` (Edge Runtime habilitado)
+  é a única fronteira privilegiada: usa `SUPABASE_SERVICE_ROLE_KEY` do runtime
+  (nunca versionada, nunca no frontend) para `inviteUserByEmail`;
+- autorização server-side mínima: JWT válido (`auth.getUser`) + `auth.uid()` no
+  allowlist `INVITE_ADMIN_USER_IDS` (fail-closed) + `user_profiles` ativo; a
+  Fase 4 substituirá esse "seam" por capabilities;
+- consistência: perfil + membership criados atomicamente pela RPC
+  `criar_perfil_membership` (SECURITY DEFINER, EXECUTE só para `service_role`);
+  em falha, a função compensa removendo o usuário recém-criado no Auth;
+- `user_profile` continua 1:1 com `auth.users`; ADMIN pode existir sem
+  colaborador (nenhum collaborator artificial); duplicidade de membership é
+  rejeitada pela constraint unique;
+- formulário mínimo em `/convidar-usuario` (rota protegida) apenas invoca a
+  função com o JWT do usuário; a autorização real é server-side;
+- auditoria: a infraestrutura de auditoria ainda não existe — contrato/pendência
+  explícito para a etapa correspondente (nenhum log local/pseudo-auditoria).
 
 ## Aplicação independente
 
