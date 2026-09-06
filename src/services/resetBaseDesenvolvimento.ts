@@ -1,5 +1,6 @@
-// Decisão restrita a este mecanismo DEV; não configura os demais ambientes.
-export const resetBaseDesenvolvimentoHabilitado = import.meta.env.DEV;
+import { resetDesenvolvimentoPermitido } from "../config/ambiente";
+
+export const resetBaseDesenvolvimentoHabilitado = resetDesenvolvimentoPermitido;
 
 const RESET_VERSION = "2026-08-26-base-enxuta-v1";
 const RESET_MARKER_KEY = `feedback-control-reset-${RESET_VERSION}`;

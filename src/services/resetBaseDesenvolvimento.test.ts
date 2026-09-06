@@ -14,6 +14,8 @@ const chavesDoReset = [
 describe("reset exclusivo de desenvolvimento", () => {
   beforeEach(() => {
     vi.resetModules();
+    vi.stubEnv("VITE_APP_ENV", undefined);
+    vi.stubEnv("VITE_PUBLIC_API_URL", undefined);
     instalarLocalStorageEmMemoria();
     chavesDoReset.forEach((chave) => localStorage.setItem(chave, "dados fictícios"));
   });
@@ -85,4 +87,15 @@ describe("reset exclusivo de desenvolvimento", () => {
       expect(localStorage.getItem(marcador)).toBe(valorMarcador);
     }
   );
+
+  it.each(["homologation", "production"])("ambiente %s bloqueia chamada direta mesmo no servidor DEV", async (ambiente) => {
+    vi.stubEnv("DEV", true);
+    vi.stubEnv("VITE_APP_ENV", ambiente);
+    const { executarResetBaseDesenvolvimento } = await import("./resetBaseDesenvolvimento");
+
+    executarResetBaseDesenvolvimento();
+
+    chavesDoReset.forEach((chave) => expect(localStorage.getItem(chave)).toBe("dados fictícios"));
+    expect(localStorage.getItem(marcador)).toBeNull();
+  });
 });
