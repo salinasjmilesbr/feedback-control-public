@@ -18,10 +18,11 @@ major_version = 17
 enabled = true
 schema_paths = []
 
-# Nenhum seed ou migration funcional nesta etapa.
+# Seed sintético de desenvolvimento (F1-05), reaplicado a cada db reset/rebuild.
+# Sem dados funcionais: o schema técnico ainda não possui tabelas de domínio.
 [db.seed]
-enabled = false
-sql_paths = []
+enabled = true
+sql_paths = ["./seed.sql"]
 
 [studio]
 enabled = true

@@ -1,12 +1,15 @@
 # Supabase local — F1-01
 
-Estrutura inicial gerada com `npx --yes supabase@2.116.0 init`. A configuração
-foi reduzida aos serviços locais necessários: PostgreSQL 17, API e Studio.
-Auth, Realtime, Storage, SMTP, Edge Runtime, Analytics e seed estão desabilitados.
-Não há migrations ou seed funcionais. Os arquivos SQL serão criados pelas etapas
-posteriores (F1-03 em diante); o diretório migrations/ contém apenas a
-documentação de convenções (F1-02) e esta versão da CLI gera somente config.toml
-e .gitignore. As convenções estão em [migrations/README.md](migrations/README.md).
+Estrutura inicial gerada com `npx --yes supabase@2.116.0 init` (F1-01), reduzida
+aos serviços locais necessários: PostgreSQL 17, API e Studio. Auth, Realtime,
+Storage, SMTP, Edge Runtime e Analytics permanecem desabilitados. As convenções
+de migrations estão em [migrations/README.md](migrations/README.md).
+
+A F1-03 adicionou a primeira migration de foundation (sem entidades funcionais)
+e a F1-05 habilitou o seed sintético de desenvolvimento (`seed.sql`), reaplicado
+a cada rebuild local (`supabase db reset`). O schema técnico ainda não possui
+tabelas do domínio Virtus: migrations e seed não criam entidades funcionais, e o
+frontend permanece independente (localStorage segue como persistência ativa).
 
 ## Pré-requisitos
 
@@ -46,6 +49,21 @@ Para parar sem solicitar descarte dos dados locais:
 ```sh
 npx --yes supabase@2.116.0 stop
 ```
+
+## Seed de desenvolvimento (F1-05)
+
+O seed sintético (`supabase/seed.sql`) é reaplicado automaticamente a cada
+rebuild do banco local:
+
+```sh
+npx --yes supabase@2.116.0 db reset
+```
+
+O `db reset` recria o banco do zero: aplica as migrations em ordem e depois o
+seed. O resultado é determinístico — reconstruções sucessivas produzem o mesmo
+estado técnico. O seed atual não insere dados funcionais (o schema técnico ainda
+não possui tabelas de domínio) e não cria entidades apenas para conter dados;
+contém somente um invariante técnico que confirma a aplicação das migrations.
 
 Não use login, link, db push, deploy ou integração GitHub ↔ Supabase nesta etapa.
 Não há vínculo com virtus-team-dev. O project_id é apenas um identificador local
