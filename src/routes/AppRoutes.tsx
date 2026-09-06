@@ -5,6 +5,7 @@ import NavegacaoPrincipal from "../components/NavegacaoPrincipal";
 import AppFooter from "../components/AppFooter";
 
 import InicioPage from "../pages/InicioPage";
+import LoginPage from "../auth/LoginPage";
 import MinhaAvaliacaoPage from "../pages/MinhaAvaliacaoPage";
 import MinhaAvaliacaoDetalhePage from "../pages/MinhaAvaliacaoDetalhePage";
 import CiclosAvaliacaoPage from "../pages/CiclosAvaliacaoPage";
@@ -44,6 +45,8 @@ function AppRoutes() {
       <main className="app-main">
         <Routes>
           <Route path="/" element={<InicioPage />} />
+
+          <Route path="/login" element={<LoginPage />} />
 
           <Route
             path="/minha-avaliacao"

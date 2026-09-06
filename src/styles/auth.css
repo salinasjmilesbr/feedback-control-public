@@ -1,0 +1,65 @@
+/* Superfície mínima de autenticação (F2-03). */
+
+.auth-page {
+  max-width: 560px;
+}
+
+.auth-card {
+  background: #ffffff;
+  border: 1px solid #e6e6ef;
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-card__email {
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.auth-card__orgs {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.auth-form .branding-field {
+  width: 100%;
+}
+
+.auth-message {
+  color: #b3261e;
+  font-size: 14px;
+}
+
+.auth-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.auth-status__email {
+  color: #444;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-status__entrar {
+  color: var(--cor-primaria, #660099);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.auth-status__sair {
+  background: none;
+  border: 1px solid #d8d8e6;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font: inherit;
+  color: #444;
+}

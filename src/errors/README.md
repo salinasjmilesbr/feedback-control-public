@@ -8,7 +8,9 @@ segunda classe de autorização e a policy continua usando o caminho anterior.
 | Classe | code | category |
 | --- | --- | --- |
 | ValidationError | VALIDATION_ERROR | validation |
+| InvalidCredentialsError | INVALID_CREDENTIALS | authentication |
 | AuthorizationError | FORBIDDEN | authorization |
+| ForbiddenError | FORBIDDEN | authorization |
 | ConflictError | CONFLICT | conflict |
 | NotFoundError | NOT_FOUND | not_found |
 | TechnicalError | TECHNICAL_ERROR | technical |
@@ -32,3 +34,7 @@ para a UI. Nenhuma observabilidade, retry ou integração externa é implementad
 As novas classes têm mensagens públicas fixas e aceitam apenas contexto interno
 opcional. A única adoção em produção nesta etapa é a base do AuthorizationError;
 demais erros legados permanecem intactos, sem reinterpretar regras de domínio.
+
+A F2-03 (autenticação real) adota `InvalidCredentialsError` para credenciais
+inválidas e `ForbiddenError` para acesso negado sem capability (ex.: auth user
+sem perfil interno válido), sempre projetados por `toPublicError`.

@@ -1,5 +1,6 @@
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import { useBranding } from "../contexts/BrandingContext";
+import AuthStatus from "../auth/AuthStatus";
 
 function obterIniciais(nome: string) {
   const partes = nome.trim().split(/\s+/).filter(Boolean);
@@ -44,6 +45,8 @@ function UsuarioAtualBar() {
       </div>
 
       <div className="app-header__user">
+        <AuthStatus />
+
         <div className="app-header__user-control">
           <label htmlFor="usuario-atual">Usuário atual</label>
           <select
