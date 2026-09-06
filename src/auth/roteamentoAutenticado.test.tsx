@@ -14,7 +14,13 @@ import LoginPage from "./LoginPage";
 const CONTEUDO = "CONTEUDO FUNCIONAL PROTEGIDO";
 
 function contexto(estado: EstadoSessao): AuthContextValue {
-  return { estado, entrar: async () => {}, sair: async () => {} };
+  return {
+    estado,
+    entrar: async () => {},
+    sair: async () => {},
+    solicitarRecuperacaoDeSenha: async () => {},
+    redefinirSenha: async () => {},
+  };
 }
 
 /**

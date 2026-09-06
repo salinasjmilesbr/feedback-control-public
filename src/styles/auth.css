@@ -33,6 +33,10 @@
   font-size: 14px;
 }
 
+.auth-message--neutral {
+  color: #2e7d32;
+}
+
 .auth-status {
   display: flex;
   align-items: center;

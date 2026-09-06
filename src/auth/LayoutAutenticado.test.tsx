@@ -9,7 +9,13 @@ const CONTEUDO = "CONTEUDO FUNCIONAL PROTEGIDO";
 const CARREGANDO = "Verificando sessão";
 
 function contexto(estado: EstadoSessao): AuthContextValue {
-  return { estado, entrar: async () => {}, sair: async () => {} };
+  return {
+    estado,
+    entrar: async () => {},
+    sair: async () => {},
+    solicitarRecuperacaoDeSenha: async () => {},
+    redefinirSenha: async () => {},
+  };
 }
 
 function renderizar(

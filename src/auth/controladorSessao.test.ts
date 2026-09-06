@@ -34,6 +34,8 @@ function criarAutenticadorFalso(opcoes: {
       aoMudar = callback;
       return unsubscribe;
     }),
+    solicitarRecuperacaoDeSenha: vi.fn(async () => ({ data: null, error: null })),
+    definirNovaSenha: vi.fn(async () => ({ data: null, error: null })),
   };
 
   return {
