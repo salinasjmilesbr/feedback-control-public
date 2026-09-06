@@ -29,9 +29,12 @@ enabled = true
 port = 54323
 api_url = "http://127.0.0.1"
 
-# Serviços fora do escopo F1-01 permanecem desabilitados.
+# Auth local habilitado a partir da F2-01 (Issue #68): fornece o schema auth e
+# a tabela auth.users, fonte de identidade para o perfil interno (user_profiles)
+# e para RLS em fases posteriores. Demais opções usam os padrões da CLI; nada de
+# signup/login de aplicação é implementado nesta Issue.
 [auth]
-enabled = false
+enabled = true
 
 [realtime]
 enabled = false
