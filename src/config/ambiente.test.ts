@@ -30,6 +30,22 @@ describe("configuração central de ambiente", () => {
     expect(Object.isFrozen(modulo.configuracaoAmbiente)).toBe(true);
   });
 
+  it.each([
+    [true, undefined, true],
+    [true, "development", true],
+    [false, undefined, false],
+    [false, "production", false],
+    [true, "homologation", false],
+    [true, "production", false],
+  ] as const)("simulação DEV (F2-04): DEV=%s, ambiente=%s => %s", async (dev, informado, simulacao) => {
+    vi.stubEnv("DEV", dev);
+    vi.stubEnv("VITE_APP_ENV", informado);
+    const modulo = await import("./ambiente");
+
+    expect(modulo.simulacaoDevPermitida).toBe(simulacao);
+    expect(modulo.simulacaoDevPermitida).toBe(modulo.resetDesenvolvimentoPermitido);
+  });
+
   it("sem contexto confiável resolve produção, inclusive com flags contraditórias", async () => {
     const { resolverConfiguracaoAmbiente } = await import("./ambiente");
     expect(resolverConfiguracaoAmbiente({}).ambiente).toBe("production");

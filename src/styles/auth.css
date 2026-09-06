@@ -63,3 +63,25 @@
   font: inherit;
   color: #444;
 }
+
+/* Estado neutro durante a verificação/restauração da sessão (F2-04): nenhum
+   conteúdo protegido é renderizado antes da resolução. */
+.auth-loading {
+  min-height: 60vh;
+  display: grid;
+  place-items: center;
+  color: #555;
+  font-size: 15px;
+  text-align: center;
+}
+
+.auth-card__actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.auth-card__actions a {
+  text-decoration: none;
+}
