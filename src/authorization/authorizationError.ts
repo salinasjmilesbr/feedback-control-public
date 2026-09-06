@@ -1,11 +1,12 @@
 import type { Capability } from "./Capability";
+import { ApplicationError } from "../errors/applicationErrors";
+import type { ApplicationErrorOptions } from "../errors/applicationErrors";
 
-export class AuthorizationError extends Error {
-  readonly code = "FORBIDDEN";
+export class AuthorizationError extends ApplicationError<"FORBIDDEN"> {
   readonly capability: Capability;
 
-  constructor(capability: Capability) {
-    super(`Operação não permitida: ${capability}`);
+  constructor(capability: Capability, options?: ApplicationErrorOptions) {
+    super("FORBIDDEN", options, `Operação não permitida: ${capability}`);
     this.name = "AuthorizationError";
     this.capability = capability;
   }
