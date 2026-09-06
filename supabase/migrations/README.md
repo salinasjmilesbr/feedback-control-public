@@ -7,6 +7,12 @@ padrões técnicos que serão aplicados pela F1-03 (foundation) e pelas fases
 seguintes. Nenhuma regra aqui substitui a Especificação v1.0 nem as regras de
 negócio, autorização, workflow, persistência e auditoria da aplicação.
 
+## Migrations atuais
+
+| Migration | Propósito |
+| --- | --- |
+| `20260906185540_foundation.sql` | Foundation técnica (F1-03): helper de trigger `set_updated_at` e padrões documentados de UUID, timestamps e versionamento; sem entidades funcionais. |
+
 ## Plataforma e ferramentas
 
 - Banco alvo: PostgreSQL 17 via Supabase (local primeiro, hospedado depois),
