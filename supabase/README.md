@@ -3,8 +3,10 @@
 Estrutura inicial gerada com `npx --yes supabase@2.116.0 init`. A configuração
 foi reduzida aos serviços locais necessários: PostgreSQL 17, API e Studio.
 Auth, Realtime, Storage, SMTP, Edge Runtime, Analytics e seed estão desabilitados.
-Não há migrations ou seed funcionais. Os diretórios e arquivos SQL serão criados
-pelas etapas posteriores; esta versão da CLI gera somente config.toml e .gitignore.
+Não há migrations ou seed funcionais. Os arquivos SQL serão criados pelas etapas
+posteriores (F1-03 em diante); o diretório migrations/ contém apenas a
+documentação de convenções (F1-02) e esta versão da CLI gera somente config.toml
+e .gitignore. As convenções estão em [migrations/README.md](migrations/README.md).
 
 ## Pré-requisitos
 
