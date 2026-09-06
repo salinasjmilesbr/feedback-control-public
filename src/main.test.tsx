@@ -16,6 +16,8 @@ const marcador = "feedback-control-reset-2026-08-26-base-enxuta-v1";
 describe("reset DEV no bootstrap", () => {
   beforeEach(() => {
     vi.resetModules();
+    vi.stubEnv("VITE_APP_ENV", undefined);
+    vi.stubEnv("VITE_PUBLIC_API_URL", undefined);
     vi.clearAllMocks();
     instalarLocalStorageEmMemoria();
     localStorage.setItem(chave, "cadastro fictício preservado");
@@ -29,8 +31,15 @@ describe("reset DEV no bootstrap", () => {
     render.mockReset();
   });
 
-  it("produção importa e renderiza sem chamar o reset nem modificar dados", async () => {
-    vi.stubEnv("DEV", false);
+  it.each([
+    [false, undefined],
+    [false, "production"],
+    [false, "homologation"],
+    [true, "production"],
+    [true, "homologation"],
+  ] as const)("DEV=%s, ambiente=%s importa sem reset nem alteração de dados", async (dev, ambiente) => {
+    vi.stubEnv("DEV", dev);
+    vi.stubEnv("VITE_APP_ENV", ambiente);
     const reset = await import("./services/resetBaseDesenvolvimento");
     const executar = vi.spyOn(reset, "executarResetBaseDesenvolvimento");
     const remover = vi.spyOn(localStorage, "removeItem");
@@ -47,6 +56,20 @@ describe("reset DEV no bootstrap", () => {
     expect(localStorage.getItem(marcador)).toBeNull();
     expect(createRoot).toHaveBeenCalledOnce();
     expect(render).toHaveBeenCalledOnce();
+  });
+
+  it.each(["invalido", "development"])("configuração insegura em produção (%s) falha antes do reset", async (ambiente) => {
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("VITE_APP_ENV", ambiente);
+    const remover = vi.spyOn(localStorage, "removeItem");
+    const gravar = vi.spyOn(localStorage, "setItem");
+
+    await expect(import("./main")).rejects.toThrow("VITE_APP_ENV");
+
+    expect(remover).not.toHaveBeenCalled();
+    expect(gravar).not.toHaveBeenCalled();
+    expect(localStorage.getItem(chave)).toBe("cadastro fictício preservado");
+    expect(render).not.toHaveBeenCalled();
   });
 
   it.each([false, true])("DEV preserva a ordem reset/render e o marcador existente: %s", async (jaExecutado) => {
