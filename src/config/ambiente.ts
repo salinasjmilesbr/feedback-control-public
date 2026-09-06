@@ -5,11 +5,15 @@ interface VariaveisAmbiente {
   PROD?: boolean;
   VITE_APP_ENV?: string;
   VITE_PUBLIC_API_URL?: string;
+  VITE_SUPABASE_URL?: string;
+  VITE_SUPABASE_ANON_KEY?: string;
 }
 
 export interface ConfiguracaoAmbiente {
   readonly ambiente: Ambiente;
   readonly urlApiPublica?: string;
+  readonly supabaseUrl?: string;
+  readonly supabaseAnonKey?: string;
 }
 
 export function resolverConfiguracaoAmbiente(
@@ -39,7 +43,28 @@ export function resolverConfiguracaoAmbiente(
     }
   }
 
-  return Object.freeze({ ambiente, urlApiPublica });
+  const supabaseUrl = variaveis.VITE_SUPABASE_URL?.trim() || undefined;
+  const supabaseAnonKey = variaveis.VITE_SUPABASE_ANON_KEY?.trim() || undefined;
+
+  if (Boolean(supabaseUrl) !== Boolean(supabaseAnonKey)) {
+    throw new Error("VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY devem ser definidas juntas.");
+  }
+  if (supabaseUrl) {
+    let url: URL;
+    try {
+      url = new URL(supabaseUrl);
+    } catch {
+      throw new Error("VITE_SUPABASE_URL deve ser uma URL pública HTTP(S) absoluta.");
+    }
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) {
+      throw new Error("VITE_SUPABASE_URL deve usar HTTP(S), sem credenciais na URL.");
+    }
+  }
+  if (supabaseAnonKey && !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(supabaseAnonKey)) {
+    throw new Error("VITE_SUPABASE_ANON_KEY deve ser uma chave anônima pública no formato JWT.");
+  }
+
+  return Object.freeze({ ambiente, urlApiPublica, supabaseUrl, supabaseAnonKey });
 }
 
 // Único ponto de leitura: variáveis VITE_* são públicas e incorporadas ao frontend.
@@ -48,6 +73,8 @@ export const configuracaoAmbiente = resolverConfiguracaoAmbiente({
   PROD: import.meta.env.PROD,
   VITE_APP_ENV: import.meta.env.VITE_APP_ENV,
   VITE_PUBLIC_API_URL: import.meta.env.VITE_PUBLIC_API_URL,
+  VITE_SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL,
+  VITE_SUPABASE_ANON_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY,
 });
 
 // A condição estática também permite eliminar o reset do bundle de produção.

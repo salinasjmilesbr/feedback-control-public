@@ -60,4 +60,54 @@ describe("configuração central de ambiente", () => {
       await expect(import("./ambiente")).rejects.not.toThrow(url);
     }
   );
+
+  it("Supabase ausente permanece opcional e sem efeito", async () => {
+    const { resolverConfiguracaoAmbiente } = await import("./ambiente");
+    const configuracao = resolverConfiguracaoAmbiente({ VITE_APP_ENV: "production" });
+    expect(configuracao.supabaseUrl).toBeUndefined();
+    expect(configuracao.supabaseAnonKey).toBeUndefined();
+  });
+
+  it("resolve configuração Supabase pública válida", async () => {
+    const { resolverConfiguracaoAmbiente } = await import("./ambiente");
+    const url = "https://projeto-ficticio.supabase.co";
+    const chave = "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYW5vbiJ9.assinatura_fake-AA11";
+    const configuracao = resolverConfiguracaoAmbiente({
+      VITE_APP_ENV: "production",
+      VITE_SUPABASE_URL: `  ${url}  `,
+      VITE_SUPABASE_ANON_KEY: `  ${chave}  `,
+    });
+    expect(configuracao.supabaseUrl).toBe(url);
+    expect(configuracao.supabaseAnonKey).toBe(chave);
+  });
+
+  it.each([
+    { rotulo: "somente URL", variaveis: { VITE_SUPABASE_URL: "https://projeto-ficticio.supabase.co" } },
+    { rotulo: "somente chave", variaveis: { VITE_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYW5vbiJ9.fake" } },
+  ] as const)("Supabase parcial ($rotulo) exige URL e chave juntas", async ({ variaveis }) => {
+    const { resolverConfiguracaoAmbiente } = await import("./ambiente");
+    expect(() => resolverConfiguracaoAmbiente(variaveis)).toThrow("devem ser definidas juntas");
+  });
+
+  it.each(["supabase.local", "ftp://projeto.supabase.co", "https://usuario:senha@projeto.supabase.co"])(
+    "Supabase rejeita URL inválida ou com credenciais: %s", async (url) => {
+      const { resolverConfiguracaoAmbiente } = await import("./ambiente");
+      const chave = "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYW5vbiJ9.fake";
+      expect(() => resolverConfiguracaoAmbiente({ VITE_SUPABASE_URL: url, VITE_SUPABASE_ANON_KEY: chave })).toThrow(
+        "VITE_SUPABASE_URL"
+      );
+    }
+  );
+
+  it.each(["chave", "abc.def", "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYW5vbiJ9.chave com espaco"])(
+    "Supabase rejeita chave anônima fora do formato JWT: %s", async (chave) => {
+      const { resolverConfiguracaoAmbiente } = await import("./ambiente");
+      expect(() =>
+        resolverConfiguracaoAmbiente({
+          VITE_SUPABASE_URL: "https://projeto-ficticio.supabase.co",
+          VITE_SUPABASE_ANON_KEY: chave,
+        })
+      ).toThrow("VITE_SUPABASE_ANON_KEY");
+    }
+  );
 });

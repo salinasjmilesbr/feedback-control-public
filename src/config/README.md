@@ -33,3 +33,11 @@ credenciais em URLs ou outros segredos nesses campos. Segredos server-side
 pertencerão exclusivamente à infraestrutura de servidor futura e não devem ser
 adicionados a este módulo nem ao arquivo exemplo. Nenhuma infraestrutura de
 ambientes ou integração externa é implementada nesta etapa.
+
+`VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` (F1-04) reservam a configuração
+pública do cliente Supabase: devem ser definidas juntas; a URL precisa ser
+HTTP(S) absoluta sem credenciais e a chave precisa ser a anônima pública no
+formato JWT. O cliente encapsulado vive em `src/infrastructure/supabase` e
+retorna `null` sem essa configuração; nenhum consumidor da aplicação o importa
+nesta fase, e o `localStorage` permanece a persistência funcional ativa.
+Nenhuma credencial privilegiada pertence a essas variáveis públicas.
