@@ -14,6 +14,7 @@ import LayoutAutenticado from "../auth/LayoutAutenticado";
 import LoginPage from "../auth/LoginPage";
 import RecuperarSenhaPage from "../auth/RecuperarSenhaPage";
 import RedefinirSenhaPage from "../auth/RedefinirSenhaPage";
+import ConvidarUsuarioPage from "../auth/ConvidarUsuarioPage";
 
 import InicioPage from "../pages/InicioPage";
 import MinhaAvaliacaoPage from "../pages/MinhaAvaliacaoPage";
@@ -86,6 +87,11 @@ function AppRoutes() {
         <Route element={<LayoutAutenticado />}>
           <Route element={<LayoutFuncional />}>
             <Route index element={<InicioPage />} />
+
+            <Route
+              path="/convidar-usuario"
+              element={<ConvidarUsuarioPage />}
+            />
 
             <Route
               path="/minha-avaliacao"

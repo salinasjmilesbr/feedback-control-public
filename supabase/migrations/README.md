@@ -15,6 +15,7 @@ negócio, autorização, workflow, persistência e auditoria da aplicação.
 | `20260906201856_organizations_user_profiles.sql` | F2-01 (Issue #68): entidades-base de identidade `organizations` e `user_profiles` (perfil interno ligado 1:1 a `auth.users`), timestamps/version conforme F1-02, RLS habilitado e deny-by-default, sem policies nesta etapa. |
 | `20260906203358_user_organization_memberships.sql` | F2-02 (Issue #69): membership usuário-organização (`user_organization_memberships`) por UUID, status e unique por par usuário/organização; sem `collaborator_id` nesta etapa (tabela de colaboradores ainda não existe); RLS habilitado e deny-by-default, sem policies. |
 | `20260906205425_auth_read_policies.sql` | F2-03 (Issue #70): policies mínimas de leitura para o usuário autenticado resolver o próprio perfil, as próprias memberships e as organizações de membership ativa (`auth.uid()`), com grants de SELECT somente a `authenticated`; sem policies de escrita. |
+| `20260906230400_criar_perfil_membership_rpc.sql` | F2-06 (Issue #73): RPC `criar_perfil_membership` (SECURITY DEFINER, EXECUTE só para `service_role`) que cria perfil interno + membership em uma única transação — fronteira server-side do convite administrativo. |
 
 ## Plataforma e ferramentas
 

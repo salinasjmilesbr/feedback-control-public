@@ -9,6 +9,7 @@ import { TechnicalError } from "../errors/applicationErrors";
 import { criarAutenticador, criarRepositorioIdentidade } from "./adaptadores";
 import { AuthContext } from "./AuthContext";
 import { criarClienteAuthSupabase } from "./cliente";
+import { mapearErroConvite } from "./conviteAdministrativo";
 import { criarControladorSessao, type EstadoSessao } from "./controladorSessao";
 import {
   redefinirSenha as redefinirSenhaServico,
@@ -74,6 +75,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [autenticador]
   );
 
+  const convidarUsuario = useCallback(
+    async (email: string, organizationId: string) => {
+      if (!cliente) throw new TechnicalError();
+      try {
+        const { data, error } = await cliente.functions.invoke("convidar-usuario", {
+          body: { email, organization_id: organizationId },
+        });
+        if (error) throw error;
+        if (!data || typeof data.userId !== "string") throw new TechnicalError();
+        return { userId: data.userId };
+      } catch (erro) {
+        throw mapearErroConvite(erro);
+      }
+    },
+    [cliente]
+  );
+
   return (
     <AuthContext.Provider
       value={{
@@ -82,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sair,
         solicitarRecuperacaoDeSenha,
         redefinirSenha,
+        convidarUsuario,
       }}
     >
       {children}

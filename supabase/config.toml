@@ -54,8 +54,21 @@ enabled = false
 [local_smtp]
 enabled = true
 
+# Edge Functions habilitadas na F2-06 (Issue #73): fronteira server-side para
+# o convite administrativo (Auth Admin, chave de serviço). Valores locais abaixo
+# são apenas de desenvolvimento; em produção use o dashboard (hosted secrets).
 [edge_runtime]
-enabled = false
+enabled = true
+
+[edge_runtime.secrets]
+# Allowlist local de administradores autorizados a convidar (UUIDs separados
+# por vírgula). Não é credencial; é identificador. Fail-closed na função.
+INVITE_ADMIN_USER_IDS = "b0000000-0000-0000-0000-000000000001"
 
 [analytics]
 enabled = false
+
+[functions.convidar-usuario]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/convidar-usuario/index.ts"
