@@ -1,5 +1,8 @@
 # React + TypeScript + Vite
 
+Infraestrutura opcional: veja [Supabase local — F1-01](supabase/README.md).
+O frontend continua funcionando com `localStorage`, sem depender do Supabase.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
