@@ -1,11 +1,19 @@
 import { useEffect } from "react";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import {
+  BrowserRouter,
+  Navigate,
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+} from "react-router-dom";
 import UsuarioAtualBar from "../components/UsuarioAtualBar";
 import NavegacaoPrincipal from "../components/NavegacaoPrincipal";
 import AppFooter from "../components/AppFooter";
+import LayoutAutenticado from "../auth/LayoutAutenticado";
+import LoginPage from "../auth/LoginPage";
 
 import InicioPage from "../pages/InicioPage";
-import LoginPage from "../auth/LoginPage";
 import MinhaAvaliacaoPage from "../pages/MinhaAvaliacaoPage";
 import MinhaAvaliacaoDetalhePage from "../pages/MinhaAvaliacaoDetalhePage";
 import CiclosAvaliacaoPage from "../pages/CiclosAvaliacaoPage";
@@ -36,86 +44,115 @@ function ScrollToTop() {
   return null;
 }
 
+/** Rota pública do fluxo de autenticação (somente o necessário). */
+function LayoutPublico() {
+  return (
+    <main className="app-main">
+      <Outlet />
+    </main>
+  );
+}
+
+/**
+ * Shell das rotas funcionais: cabeçalho, navegação, conteúdo e rodapé. Só é
+ * renderizado quando o `LayoutAutenticado` (guard) permitir o acesso.
+ */
+function LayoutFuncional() {
+  return (
+    <>
+      <UsuarioAtualBar />
+      <NavegacaoPrincipal />
+      <main className="app-main">
+        <Outlet />
+      </main>
+      <AppFooter />
+    </>
+  );
+}
+
 function AppRoutes() {
   return (
     <BrowserRouter>
       <ScrollToTop />
-      <UsuarioAtualBar />
-      <NavegacaoPrincipal />
-      <main className="app-main">
-        <Routes>
-          <Route path="/" element={<InicioPage />} />
-
+      <Routes>
+        <Route element={<LayoutPublico />}>
           <Route path="/login" element={<LoginPage />} />
+        </Route>
 
-          <Route
-            path="/minha-avaliacao"
-            element={<MinhaAvaliacaoPage />}
-          />
+        <Route element={<LayoutAutenticado />}>
+          <Route element={<LayoutFuncional />}>
+            <Route index element={<InicioPage />} />
 
-          <Route
-            path="/minha-avaliacao/:feedbackId"
-            element={<MinhaAvaliacaoDetalhePage />}
-          />
+            <Route
+              path="/minha-avaliacao"
+              element={<MinhaAvaliacaoPage />}
+            />
 
-          <Route path="/ciclos" element={<CiclosAvaliacaoPage />} />
+            <Route
+              path="/minha-avaliacao/:feedbackId"
+              element={<MinhaAvaliacaoDetalhePage />}
+            />
 
-          <Route
-            path="/ciclos/:cicloId"
-            element={<PainelCicloPage />}
-          />
+            <Route path="/ciclos" element={<CiclosAvaliacaoPage />} />
 
-          <Route
-            path="/ciclos/:cicloId/colaborador/:id/metas"
-            element={<AcompanhamentoMetasPage />}
-          />
+            <Route
+              path="/ciclos/:cicloId"
+              element={<PainelCicloPage />}
+            />
 
-          <Route
-            path="/painel-ciclos"
-            element={<PainelCiclosCoordenadorPage />}
-          />
+            <Route
+              path="/ciclos/:cicloId/colaborador/:id/metas"
+              element={<AcompanhamentoMetasPage />}
+            />
 
-          <Route path="/minhas-metas" element={<MinhasMetasPage />} />
+            <Route
+              path="/painel-ciclos"
+              element={<PainelCiclosCoordenadorPage />}
+            />
 
-          <Route path="/relatorios" element={<RelatoriosPage />} />
+            <Route path="/minhas-metas" element={<MinhasMetasPage />} />
 
-          <Route
-            path="/configuracoes/aparencia"
-            element={<ConfiguracoesAparenciaPage />}
-          />
+            <Route path="/relatorios" element={<RelatoriosPage />} />
 
-          <Route
-            path="/colaboradores/novo"
-            element={<NovoColaboradorPage />}
-          />
+            <Route
+              path="/configuracoes/aparencia"
+              element={<ConfiguracoesAparenciaPage />}
+            />
 
-          <Route
-            path="/colaborador/:id"
-            element={<ColaboradorDetalhePage />}
-          />
+            <Route
+              path="/colaboradores/novo"
+              element={<NovoColaboradorPage />}
+            />
 
-          <Route
-            path="/colaborador/:id/editar"
-            element={<EditarColaboradorPage />}
-          />
+            <Route
+              path="/colaborador/:id"
+              element={<ColaboradorDetalhePage />}
+            />
 
-          <Route
-            path="/colaborador/:id/novo-feedback"
-            element={<NovoFeedbackPage />}
-          />
+            <Route
+              path="/colaborador/:id/editar"
+              element={<EditarColaboradorPage />}
+            />
 
-          <Route
-            path="/colaborador/:id/feedback/:feedbackId"
-            element={<FeedbackDetalhePage />}
-          />
+            <Route
+              path="/colaborador/:id/novo-feedback"
+              element={<NovoFeedbackPage />}
+            />
 
-          <Route
-            path="/colaborador/:id/feedback/:feedbackId/editar"
-            element={<EditarFeedbackPage />}
-          />
-        </Routes>
-      </main>
-      <AppFooter />
+            <Route
+              path="/colaborador/:id/feedback/:feedbackId"
+              element={<FeedbackDetalhePage />}
+            />
+
+            <Route
+              path="/colaborador/:id/feedback/:feedbackId/editar"
+              element={<EditarFeedbackPage />}
+            />
+
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Route>
+      </Routes>
     </BrowserRouter>
   );
 }

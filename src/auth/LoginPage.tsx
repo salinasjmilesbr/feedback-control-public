@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { toPublicError } from "../errors/applicationErrors";
 import { useAuth } from "./AuthContext";
 import "../styles/auth.css";
@@ -77,13 +78,18 @@ function LoginPage() {
               ))}
             </ul>
           )}
-          <button
-            type="button"
-            className="brand-button brand-button--secondary"
-            onClick={() => void sair()}
-          >
-            Sair
-          </button>
+          <div className="auth-card__actions">
+            <Link to="/" className="brand-button brand-button--primary">
+              Acessar o Virtus
+            </Link>
+            <button
+              type="button"
+              className="brand-button brand-button--secondary"
+              onClick={() => void sair()}
+            >
+              Sair
+            </button>
+          </div>
         </section>
       </div>
     );

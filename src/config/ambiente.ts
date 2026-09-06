@@ -81,6 +81,15 @@ export const configuracaoAmbiente = resolverConfiguracaoAmbiente({
 export const resetDesenvolvimentoPermitido =
   import.meta.env.DEV && !import.meta.env.PROD && configuracaoAmbiente.ambiente === "development";
 
+/**
+ * Gate de DEV para a simulação de identidade (seletor atual) e demais
+ * conveniências de desenvolvimento. É sempre false fora do contexto DEV do
+ * Vite com ambiente development (F0-04): em HOMOLOG/PROD nenhuma identidade
+ * simulada substitui autenticação real (F2-04; refinado pela F2-09).
+ */
+export const simulacaoDevPermitida =
+  import.meta.env.DEV && !import.meta.env.PROD && configuracaoAmbiente.ambiente === "development";
+
 /** Uso futuro: só exigir a URL quando o consumidor realmente precisar dela. */
 export function exigirUrlApiPublica(
   configuracao: ConfiguracaoAmbiente = configuracaoAmbiente
