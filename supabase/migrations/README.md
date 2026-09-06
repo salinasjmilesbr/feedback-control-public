@@ -12,6 +12,7 @@ negócio, autorização, workflow, persistência e auditoria da aplicação.
 | Migration | Propósito |
 | --- | --- |
 | `20260906185540_foundation.sql` | Foundation técnica (F1-03): helper de trigger `set_updated_at` e padrões documentados de UUID, timestamps e versionamento; sem entidades funcionais. |
+| `20260906201856_organizations_user_profiles.sql` | F2-01 (Issue #68): entidades-base de identidade `organizations` e `user_profiles` (perfil interno ligado 1:1 a `auth.users`), timestamps/version conforme F1-02, RLS habilitado e deny-by-default, sem policies nesta etapa. |
 
 ## Plataforma e ferramentas
 

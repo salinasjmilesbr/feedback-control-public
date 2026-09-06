@@ -1,19 +1,22 @@
-# Supabase local — desenvolvimento (F1-01 a F1-06)
+# Supabase local — desenvolvimento (F1-01 a F2-01)
 
 Infraestrutura local do Supabase para o Virtus Team, versionada e reconstruível
 integralmente a partir do repositório — sem configuração manual no dashboard,
 sem projeto remoto, sem credenciais e sem dados reais.
 
 Estrutura inicial gerada com `npx --yes supabase@2.116.0 init` (F1-01), reduzida
-aos serviços locais necessários: PostgreSQL 17, API e Studio. Auth, Realtime,
-Storage, SMTP, Edge Runtime e Analytics permanecem desabilitados. As convenções
-de migrations estão em [migrations/README.md](migrations/README.md).
+aos serviços locais necessários: PostgreSQL 17, API, Studio e Auth (Auth
+habilitado na F2-01). Realtime, Storage, SMTP, Edge Runtime e Analytics
+permanecem desabilitados. As convenções de migrations estão em
+[migrations/README.md](migrations/README.md).
 
 A F1-03 adicionou a primeira migration de foundation (sem entidades funcionais);
 a F1-05 habilitou o seed sintético de desenvolvimento (`seed.sql`); a F1-06
-validou o rebuild completo e a reprodutibilidade a partir de estado limpo. O
-schema `public` ainda não possui tabelas do domínio Virtus: migrations e seed não
-criam entidades funcionais, e o frontend permanece independente (localStorage
+validou o rebuild completo e a reprodutibilidade a partir de estado limpo. A
+F2-01 habilitou o serviço Auth local e criou as primeiras entidades funcionais —
+`organizations` e `user_profiles` (perfil interno ligado 1:1 a `auth.users`) —
+com RLS habilitado e deny-by-default (nenhuma policy nesta etapa). O seed segue
+sem inserir dados funcionais, e o frontend permanece independente (localStorage
 segue como persistência funcional ativa).
 
 ## Pré-requisitos (onboarding técnico)
@@ -66,11 +69,14 @@ docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -X \
   -c "select proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='set_updated_at'"
 ```
 
-Estado esperado ao final da Fase 1:
+Estado esperado ao final da F2-01:
 
-- uma migration registrada (`20260906185540`);
-- nenhuma tabela no schema `public`;
-- a função técnica `set_updated_at` presente (foundation da F1-03).
+- duas migrations registradas (`20260906185540` e `20260906201856`);
+- no schema `public`, somente as tabelas da F2-01 — `organizations` e
+  `user_profiles` — ambas com RLS habilitado e sem policies (deny-by-default);
+- a função técnica `set_updated_at` presente (foundation da F1-03);
+- o serviço Auth local habilitado: `auth.users` existe e é referenciado por
+  `user_profiles` (FK `fk_user_profiles_auth_users`, `ON DELETE RESTRICT`).
 
 O nome do container deriva do `project_id` (`supabase_db_<project_id>`); para
 descobri-lo, use `docker ps --format '{{.Names}}'`.
@@ -105,9 +111,10 @@ segredos.
 O seed sintético (`supabase/seed.sql`) é reaplicado automaticamente a cada
 rebuild do banco local (`start` a partir de estado limpo ou `db reset`). O
 resultado é determinístico — reconstruções sucessivas produzem o mesmo estado
-técnico. O seed atual não insere dados funcionais (o schema técnico ainda não
-possui tabelas de domínio) e não cria entidades apenas para conter dados;
-contém somente um invariante técnico que confirma a aplicação das migrations.
+técnico. O seed atual não insere dados funcionais (a F2-01 não cria dados;
+memberships, colaboradores e demais entidades pertencem a fases posteriores) e
+não cria entidades apenas para conter dados; contém somente um invariante
+técnico que confirma a aplicação das migrations.
 
 Para parar sem solicitar descarte dos dados locais:
 
@@ -118,6 +125,27 @@ npx --yes supabase@2.116.0 stop
 Não use login, link, db push, deploy ou integração GitHub ↔ Supabase. Não há
 vínculo com virtus-team-dev. O `project_id` é apenas um identificador local para
 distinguir containers, não uma referência a projeto hospedado.
+
+## Organizations e perfis de usuário (F2-01)
+
+A F2-01 (Issue #68) criou as primeiras entidades funcionais do domínio sobre a
+foundation da F1-03:
+
+- `public.organizations` — organização, raiz do requisito multi-organização; UUID
+  imutável, metadados mínimos (`name`) e colunas técnicas (`created_at`,
+  `updated_at`, `version`); sem `organization_id` (é a própria raiz) e sem
+  unicidade de negócio nesta etapa (decisão de domínio futura);
+- `public.user_profiles` — perfil interno do usuário, ligado 1:1 a `auth.users`
+  (`id` = mesmo uuid da identidade de autenticação); nenhuma senha/credencial é
+  duplicada (permanecem no Supabase Auth); `status` interno (`active`/`disabled`)
+  preparado para a evolução da F2-07, sem fluxo de desativação nesta etapa; sem
+  `organization_id` (a participação em organizações virá via memberships, F2-02);
+- RLS habilitado nas duas tabelas, deny-by-default: nenhuma policy é criada nesta
+  etapa (não há fluxo autenticado nem membership que a justifique; policies
+  restritivas entrarão em fases posteriores como novas migrations aditivas);
+- Auth local habilitado no `config.toml` apenas para fornecer `auth.users`. O
+  frontend permanece intacto: nenhum fluxo foi migrado e o localStorage segue
+  como persistência funcional.
 
 ## Aplicação independente
 
@@ -153,6 +181,30 @@ Rebuild completo e reprodutibilidade validados em 2026-09-06 nesta máquina
 - Ambiente parado e removido ao final; nenhuma conexão remota, credencial ou
   dado real envolvido. A limitação de runtime registrada na F1-01 (Docker
   ausente no ambiente daquele agente) foi superada por estas validações.
+
+## Validação executada (F2-01)
+
+Migration e rebuild validados em 2026-09-06 nesta máquina (Docker Desktop
+29.7.2; CLI Supabase 2.116.0 via npx; PostgreSQL 17.6):
+
+- rebuild do zero (`stop --no-backup` + `start`) e `db reset`: migrations
+  aplicadas em ordem — `20260906185540_foundation.sql` e depois
+  `20260906201856_organizations_user_profiles.sql` — e seed reaplicado
+  automaticamente, sem intervenção (duas reconstruções limpas);
+- schema verificado: somente `organizations` e `user_profiles` no schema
+  `public`; colunas, tipos e defaults conforme F1-02 (`uuid`, `timestamptz`,
+  `version integer`); função `set_updated_at` e triggers presentes;
+- vínculo com Auth: FK `fk_user_profiles_auth_users` → `auth.users(id)` com
+  `ON DELETE RESTRICT`; perfil só é criado para uuid existente em `auth.users`
+  (violação de FK rejeitada; delete de `auth.users` com perfil referenciando é
+  bloqueado);
+- RLS habilitado nas duas tabelas e zero policies; deny-by-default comprovado
+  com privilégios concedidos a `authenticated`: SELECT retorna 0 linhas e INSERT
+  é negado (`new row violates row-level security policy`);
+- ausência de colunas de senha/secret/token confirmada por varredura; nenhuma
+  entidade fora do escopo (memberships, colaboradores etc.) criada; dados
+  sintéticos de validação removidos ao final; nenhuma conexão remota,
+  credencial ou dado real envolvido.
 
 Referências: [CLI oficial](https://supabase.com/docs/guides/local-development/cli/getting-started),
 [configuração](https://supabase.com/docs/guides/local-development/cli/config) e
