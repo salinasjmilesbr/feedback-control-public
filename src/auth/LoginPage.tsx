@@ -162,6 +162,10 @@ function LoginPage() {
         >
           {enviando ? "Entrando…" : "Entrar"}
         </button>
+
+        <Link to="/recuperar-senha" className="auth-status__entrar">
+          Esqueci minha senha
+        </Link>
       </form>
     </div>
   );

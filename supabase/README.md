@@ -1,4 +1,4 @@
-# Supabase local — desenvolvimento (F1-01 a F2-03)
+# Supabase local — desenvolvimento (F1-01 a F2-05)
 
 Infraestrutura local do Supabase para o Virtus Team, versionada e reconstruível
 integralmente a partir do repositório — sem configuração manual no dashboard,
@@ -16,11 +16,12 @@ validou o rebuild completo e a reprodutibilidade a partir de estado limpo. A
 F2-01 habilitou o serviço Auth local e criou as primeiras entidades funcionais —
 `organizations` e `user_profiles` (perfil interno ligado 1:1 a `auth.users`) — e
 a F2-02 adicionou `user_organization_memberships` (membership usuário-organização
-por UUID, sem exigir colaborador), e a F2-03 introduziu login/logout reais com
-Supabase Auth, com policies mínimas de leitura (`auth.uid()`) e auto-cadastro
-público desabilitado. O seed segue sem inserir dados funcionais, e o frontend
-mantém o localStorage como persistência funcional dos domínios (a F2-03 altera
-somente identidade/sessão).
+por UUID, sem exigir colaborador), a F2-03 introduziu login/logout reais com
+Supabase Auth (policies mínimas de leitura via `auth.uid()`), a F2-04 protegeu as
+rotas funcionais e a F2-05 adicionou recuperação/redefinição de senha com captura
+local de e-mail. O auto-cadastro público permanece desabilitado; o seed segue sem
+inserir dados funcionais, e o frontend mantém o localStorage como persistência
+funcional dos domínios (as F2-03/F2-04/F2-05 alteram somente identidade/sessão).
 
 ## Pré-requisitos (onboarding técnico)
 
@@ -72,10 +73,10 @@ docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -X \
   -c "select proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='set_updated_at'"
 ```
 
-Estado esperado ao final da F2-03:
+Estado esperado ao final da F2-05:
 
 - quatro migrations registradas (`20260906185540`, `20260906201856`,
-  `20260906203358` e `20260906205425`);
+  `20260906203358` e `20260906205425`); nenhuma migration nova na F2-04/F2-05;
 - no schema `public`, somente as tabelas da F2-01/F2-02 — `organizations`,
   `user_profiles` e `user_organization_memberships` — com RLS habilitado e com
   as três policies mínimas de leitura da F2-03 (`user_profiles_select_own`,
@@ -83,8 +84,10 @@ Estado esperado ao final da F2-03:
   `organizations_select_via_membership`); nenhuma policy de escrita;
 - a função técnica `set_updated_at` presente (foundation da F1-03);
 - o serviço Auth local habilitado com auto-cadastro público desabilitado
-  (`enable_signup = false`): `auth.users` existe e é referenciado por
-  `user_profiles` (FK `fk_user_profiles_auth_users`, `ON DELETE RESTRICT`);
+  (`enable_signup = false`) e provedor de e-mail ativo: `auth.users` existe e é
+  referenciado por `user_profiles` (FK `fk_user_profiles_auth_users`);
+- captura local de e-mail habilitada (`[local_smtp] enabled = true`, mailpit na
+  porta 54324) para o fluxo de recuperação de senha;
 - `user_organization_memberships` relaciona `user_profiles` e `organizations`
   por UUID (FKs `ON DELETE RESTRICT`) com unique por par usuário/organização.
 
@@ -200,6 +203,25 @@ os domínios do localStorage:
 - a simulação DEV existente NÃO é removida nesta etapa; fora de DEV não há
   fallback silencioso para identidade simulada. Configuração Supabase ausente
   deixa a autenticação indisponível (em DEV a simulação segue funcionando).
+
+## Recuperação de senha (F2-05)
+
+A F2-05 adiciona recuperação/redefinição de senha com o mecanismo oficial do
+Supabase Auth (`resetPasswordForEmail` + `getSessionFromUrl` + `updateUser`),
+sem duplicar o sistema de autenticação nem armazenar tokens/senhas no Virtus:
+
+- rotas públicas `/recuperar-senha` (solicitação) e `/redefinir-senha`
+  (processamento do link e definição da nova senha), fora do guard F2-04;
+- mensagem de solicitação sempre neutra (não revela se o e-mail possui conta);
+- token de recuperação processado exclusivamente pelo SDK (`getSessionFromUrl`),
+  nunca persistido ou logado;
+- captura local de e-mail habilitada via `[local_smtp] enabled = true`
+  (mailpit/inbucket na porta 54324) para validar o fluxo real;
+- correção de configuração: o provedor de e-mail NÃO é desabilitado (removido
+  `[auth.email] enable_signup = false`); apenas `enable_signup = false` global
+  mantém o auto-cadastro público desligado sem quebrar login/recuperação;
+- `additional_redirect_urls` inclui a origem local do app (Vite, porta 5173)
+  para os links de redefinição.
 
 ## Aplicação independente
 

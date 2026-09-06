@@ -12,6 +12,8 @@ import NavegacaoPrincipal from "../components/NavegacaoPrincipal";
 import AppFooter from "../components/AppFooter";
 import LayoutAutenticado from "../auth/LayoutAutenticado";
 import LoginPage from "../auth/LoginPage";
+import RecuperarSenhaPage from "../auth/RecuperarSenhaPage";
+import RedefinirSenhaPage from "../auth/RedefinirSenhaPage";
 
 import InicioPage from "../pages/InicioPage";
 import MinhaAvaliacaoPage from "../pages/MinhaAvaliacaoPage";
@@ -77,6 +79,8 @@ function AppRoutes() {
       <Routes>
         <Route element={<LayoutPublico />}>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/recuperar-senha" element={<RecuperarSenhaPage />} />
+          <Route path="/redefinir-senha" element={<RedefinirSenhaPage />} />
         </Route>
 
         <Route element={<LayoutAutenticado />}>

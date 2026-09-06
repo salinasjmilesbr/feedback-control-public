@@ -29,6 +29,13 @@ export interface Autenticador {
    * chamada e permitir `unsubscribe` sem efeitos colaterais.
    */
   observarAutenticacao(aoMudar: (sessao: SessaoAuth | null) => void): () => void;
+  /**
+   * Solicita a recuperação de senha (F2-05). O resultado NÃO deve ser usado
+   * para revelar se o e-mail possui conta: a camada de serviço ignora `error`.
+   */
+  solicitarRecuperacaoDeSenha(email: string, redirectTo: string): Promise<ResultadoAuth<null>>;
+  /** Define a nova senha na sessão de recuperação corrente (`updateUser`). */
+  definirNovaSenha(senha: string): Promise<ResultadoAuth<null>>;
 }
 
 export interface RepositorioIdentidade {

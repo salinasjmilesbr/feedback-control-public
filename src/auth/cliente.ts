@@ -5,11 +5,12 @@ import {
 } from "../config/ambiente";
 
 /**
- * Cliente Supabase específico de autenticação (F2-03).
+ * Cliente Supabase específico de autenticação (F2-03/F2-05).
  *
  * - Usa o mecanismo oficial de sessão do Supabase Auth: `persistSession` e
- *   `autoRefreshToken` habilitados; `detectSessionInUrl` desabilitado porque não
- *   há fluxo de magic link/confirmação nesta etapa.
+ *   `autoRefreshToken` habilitados; `detectSessionInUrl` habilitado a partir da
+ *   F2-05 para que o link de recuperação de senha (implicit flow, tokens no
+ *   hash) seja processado pelo SDK — sem parsing manual de token.
  * - Retorna `null` quando a configuração pública (URL + chave anônima) está
  *   ausente, preservando a regra da F0-04/F1-04: nenhuma operação é iniciada e
  *   o estado de autenticação fica "indisponível".
@@ -30,7 +31,7 @@ export function criarClienteAuthSupabase(
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: false,
+        detectSessionInUrl: true,
       },
     }
   );

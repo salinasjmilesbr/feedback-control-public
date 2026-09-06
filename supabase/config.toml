@@ -31,15 +31,17 @@ api_url = "http://127.0.0.1"
 
 # Auth local habilitado a partir da F2-01 (Issue #68): fornece o schema auth e
 # a tabela auth.users, fonte de identidade para o perfil interno (user_profiles)
-# e para RLS. A F2-03 (Issue #70) desabilita o auto-cadastro público: contas são
-# criadas apenas por fluxos administrativos futuros (F2-06); o login usa e-mail
-# e senha via Supabase Auth.
+# e para RLS. O auto-cadastro público permanece desabilitado (F2-03/F2-05).
+# NOTA (F2-05): NÃO usar [auth.email].enable_signup = false — isso desliga o
+# provedor de e-mail por completo (login e recuperação de senha). Para manter
+# login/recuperação por e-mail, apenas o enable_signup global é false.
 [auth]
 enabled = true
 enable_signup = false
-
-[auth.email]
-enable_signup = false
+# Origem do app em desenvolvimento local (Vite) para os links de recuperação de
+# senha (F2-05). O redirectTo do fluxo usa window.location.origin da aplicação.
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["http://localhost:5173/**", "http://127.0.0.1:5173/**"]
 
 [realtime]
 enabled = false
@@ -47,8 +49,10 @@ enabled = false
 [storage]
 enabled = false
 
+# Captura local de e-mails de desenvolvimento (mailpit/inbucket), necessária
+# para validar o fluxo real de recuperação de senha (F2-05). Apenas local.
 [local_smtp]
-enabled = false
+enabled = true
 
 [edge_runtime]
 enabled = false

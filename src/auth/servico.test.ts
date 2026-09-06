@@ -5,7 +5,15 @@ import {
   TechnicalError,
 } from "../errors/applicationErrors";
 import type { Autenticador, RepositorioIdentidade } from "./contratos";
-import { entrar, obterSessaoInicial, resolverIdentidade, sair } from "./servico";
+import {
+  entrar,
+  obterSessaoInicial,
+  redefinirSenha,
+  resolverIdentidade,
+  sair,
+  solicitarRecuperacaoDeSenha,
+  validarNovaSenha,
+} from "./servico";
 
 function autenticadorFalso(parcial: Partial<Autenticador> = {}): Autenticador {
   return {
@@ -13,6 +21,8 @@ function autenticadorFalso(parcial: Partial<Autenticador> = {}): Autenticador {
     sair: vi.fn(async () => ({ data: null, error: null })),
     obterSessao: vi.fn(async () => ({ data: null, error: null })),
     observarAutenticacao: vi.fn(() => () => {}),
+    solicitarRecuperacaoDeSenha: vi.fn(async () => ({ data: null, error: null })),
+    definirNovaSenha: vi.fn(async () => ({ data: null, error: null })),
     ...parcial,
   };
 }
@@ -160,5 +170,74 @@ describe("serviço de autenticação (F2-03)", () => {
 
     expect(identidade.memberships.map((m) => m.organizationId)).toEqual(["org-1", "org-2"]);
     expect(identidade.organizacoes.map((o) => o.id)).toEqual(["org-1", "org-2"]);
+  });
+});
+
+describe("recuperação e redefinição de senha (F2-05)", () => {
+  it("solicitação dispara a chamada correta com e-mail e redirectTo", async () => {
+    const autenticador = autenticadorFalso();
+
+    await solicitarRecuperacaoDeSenha(
+      "pessoa@example.invalid",
+      "http://localhost:5173/redefinir-senha",
+      autenticador
+    );
+
+    expect(autenticador.solicitarRecuperacaoDeSenha).toHaveBeenCalledWith(
+      "pessoa@example.invalid",
+      "http://localhost:5173/redefinir-senha"
+    );
+  });
+
+  it("conta existente e inexistente produzem resultado indistinguível (sempre resolve)", async () => {
+    const contaExistente = autenticadorFalso();
+    const contaInexistente = autenticadorFalso({
+      solicitarRecuperacaoDeSenha: vi.fn(async () => ({
+        data: null,
+        error: { code: "user_not_found", message: "User not found" },
+      })),
+    });
+
+    await expect(
+      solicitarRecuperacaoDeSenha("existe@example.invalid", "/x", contaExistente)
+    ).resolves.toBeUndefined();
+    await expect(
+      solicitarRecuperacaoDeSenha("naoexiste@example.invalid", "/x", contaInexistente)
+    ).resolves.toBeUndefined();
+  });
+
+  it("erro interno na solicitação não vaza (não lança mensagem técnica)", async () => {
+    const autenticador = autenticadorFalso({
+      solicitarRecuperacaoDeSenha: vi.fn(async () => ({
+        data: null,
+        error: new Error("detalhe interno fictício"),
+      })),
+    });
+
+    await expect(
+      solicitarRecuperacaoDeSenha("pessoa@example.invalid", "/x", autenticador)
+    ).resolves.toBeUndefined();
+  });
+
+  it("redefinição chama o método correto e não vaza erro interno", async () => {
+    const autenticador = autenticadorFalso();
+    await redefinirSenha("SenhaNova1!", autenticador);
+    expect(autenticador.definirNovaSenha).toHaveBeenCalledWith("SenhaNova1!");
+
+    const comErro = autenticadorFalso({
+      definirNovaSenha: vi.fn(async () => ({ data: null, error: new Error("interno") })),
+    });
+    await expect(redefinirSenha("SenhaNova1!", comErro)).rejects.toBeInstanceOf(TechnicalError);
+  });
+
+  it("validação local rejeita vazio, confirmação divergente e senha curta", () => {
+    expect(validarNovaSenha("", "")).toBe("Informe e confirme a nova senha.");
+    expect(validarNovaSenha("SenhaNova1!", "OutraSenha!")).toBe(
+      "As senhas informadas não coincidem."
+    );
+    expect(validarNovaSenha("abc12", "abc12")).toBe(
+      "A nova senha deve ter pelo menos 6 caracteres."
+    );
+    expect(validarNovaSenha("SenhaNova1!", "SenhaNova1!")).toBeNull();
   });
 });

@@ -59,6 +59,18 @@ export function criarAutenticador(cliente: SupabaseClient): Autenticador {
       });
       return () => data.subscription.unsubscribe();
     },
+
+    async solicitarRecuperacaoDeSenha(email, redirectTo) {
+      const { error } = await cliente.auth.resetPasswordForEmail(email, {
+        redirectTo,
+      });
+      return { data: null, error };
+    },
+
+    async definirNovaSenha(senha) {
+      const { error } = await cliente.auth.updateUser({ password: senha });
+      return { data: null, error };
+    },
   };
 }
 
