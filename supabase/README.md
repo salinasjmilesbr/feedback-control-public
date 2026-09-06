@@ -1,4 +1,4 @@
-# Supabase local — desenvolvimento (F1-01 a F2-02)
+# Supabase local — desenvolvimento (F1-01 a F2-03)
 
 Infraestrutura local do Supabase para o Virtus Team, versionada e reconstruível
 integralmente a partir do repositório — sem configuração manual no dashboard,
@@ -16,10 +16,11 @@ validou o rebuild completo e a reprodutibilidade a partir de estado limpo. A
 F2-01 habilitou o serviço Auth local e criou as primeiras entidades funcionais —
 `organizations` e `user_profiles` (perfil interno ligado 1:1 a `auth.users`) — e
 a F2-02 adicionou `user_organization_memberships` (membership usuário-organização
-por UUID, sem exigir colaborador). Todas as tabelas têm RLS habilitado e
-deny-by-default (nenhuma policy nesta etapa). O seed segue sem inserir dados
-funcionais, e o frontend permanece independente (localStorage segue como
-persistência funcional ativa).
+por UUID, sem exigir colaborador), e a F2-03 introduziu login/logout reais com
+Supabase Auth, com policies mínimas de leitura (`auth.uid()`) e auto-cadastro
+público desabilitado. O seed segue sem inserir dados funcionais, e o frontend
+mantém o localStorage como persistência funcional dos domínios (a F2-03 altera
+somente identidade/sessão).
 
 ## Pré-requisitos (onboarding técnico)
 
@@ -71,15 +72,18 @@ docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -X \
   -c "select proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='set_updated_at'"
 ```
 
-Estado esperado ao final da F2-02:
+Estado esperado ao final da F2-03:
 
-- três migrations registradas (`20260906185540`, `20260906201856` e
-  `20260906203358`);
+- quatro migrations registradas (`20260906185540`, `20260906201856`,
+  `20260906203358` e `20260906205425`);
 - no schema `public`, somente as tabelas da F2-01/F2-02 — `organizations`,
-  `user_profiles` e `user_organization_memberships` — todas com RLS habilitado e
-  sem policies (deny-by-default);
+  `user_profiles` e `user_organization_memberships` — com RLS habilitado e com
+  as três policies mínimas de leitura da F2-03 (`user_profiles_select_own`,
+  `user_organization_memberships_select_own`,
+  `organizations_select_via_membership`); nenhuma policy de escrita;
 - a função técnica `set_updated_at` presente (foundation da F1-03);
-- o serviço Auth local habilitado: `auth.users` existe e é referenciado por
+- o serviço Auth local habilitado com auto-cadastro público desabilitado
+  (`enable_signup = false`): `auth.users` existe e é referenciado por
   `user_profiles` (FK `fk_user_profiles_auth_users`, `ON DELETE RESTRICT`);
 - `user_organization_memberships` relaciona `user_profiles` e `organizations`
   por UUID (FKs `ON DELETE RESTRICT`) com unique por par usuário/organização.
@@ -171,6 +175,32 @@ exigir colaborador:
 - RLS habilitado e deny-by-default, sem policies — mesmo padrão da F2-01;
   nenhuma role/capability, estrutura organizacional ou fluxo de login/UI.
 
+## Autenticação real (F2-03)
+
+A F2-03 (Issue #70) introduz login/logout reais com Supabase Auth, sem migrar
+os domínios do localStorage:
+
+- login por e-mail e senha via `signInWithPassword` e logout explícito via
+  `signOut`; sessão centralizada no contexto `AuthProvider` (bootstrap/
+  restauração/assinatura de `onAuthStateChange` em um único ponto);
+- resolução de identidade estritamente por `auth.uid()`: `user_profiles` → o
+  próprio perfil; `user_organization_memberships` → as próprias memberships
+  ativas; `organizations` → somente as alcançáveis por membership ativa;
+- auth user sem perfil interno válido é erro de acesso seguro (F0-05); sem
+  membership ativa, o usuário autentica mas fica sem acesso organizacional;
+  múltiplas memberships são preservadas sem seleção arbitrária;
+- credencial inválida é convertida para `INVALID_CREDENTIALS` (taxonomia
+  F0-05), sem expor mensagens internas do Supabase; nenhuma senha é persistida
+  ou logada pelo Virtus;
+- policies mínimas de leitura (`user_profiles_select_own`,
+  `user_organization_memberships_select_own`,
+  `organizations_select_via_membership`) com grants de SELECT apenas a
+  `authenticated`; nenhuma escrita via RLS nesta etapa; auto-cadastro público
+  desabilitado (`enable_signup = false`);
+- a simulação DEV existente NÃO é removida nesta etapa; fora de DEV não há
+  fallback silencioso para identidade simulada. Configuração Supabase ausente
+  deixa a autenticação indisponível (em DEV a simulação segue funcionando).
+
 ## Aplicação independente
 
 O frontend continua iniciando com `npm run dev`, mesmo sem Docker ou Supabase.
@@ -260,6 +290,31 @@ Migration e rebuild validados em 2026-09-06 nesta máquina (Docker Desktop
   existe — decisão registrada na migration); varredura sem colunas
   secret-like; dados sintéticos de validação removidos ao final; nenhuma
   conexão remota, credencial ou dado real envolvido.
+
+## Validação executada (F2-03)
+
+Autenticação, resolução de identidade e RLS validados em 2026-09-06 nesta
+máquina (Docker Desktop 29.7.2; CLI Supabase 2.116.0 via npx; PostgreSQL 17.6;
+Node 24):
+
+- rebuild do zero (`stop --no-backup` + `start`) e `db reset`: quatro migrations
+  aplicadas em ordem — foundation, F2-01, F2-02 e F2-03
+  (`20260906205425_auth_read_policies.sql`) — e seed reaplicado automaticamente
+  (duas reconstruções limpas);
+- RLS: três policies SELECT restritas a `authenticated`
+  (`user_profiles_select_own`, `user_organization_memberships_select_own`,
+  `organizations_select_via_membership`); comprovado com `request.jwt.claims`:
+  o usuário lê somente o próprio perfil, as próprias memberships e as
+  organizações de membership ativa; membership de outro usuário e organização
+  sem membership ficam invisíveis; sem claims nada é visível; INSERT é rejeitado
+  e UPDATE/DELETE afetam zero linhas (nenhuma policy de escrita);
+- auto-cadastro público desabilitado: `GOTRUE_DISABLE_SIGNUP=true` no serviço
+  local e chamada real a `/auth/v1/signup` retorna 422 `signup_disabled`;
+- suíte local: `npm test` (470 testes em 40 arquivos, incluindo os 26 testes
+  novos do módulo de auth), `npm run build` e `npm run lint` aprovados;
+  `git diff --check` aprovado;
+- nenhuma senha/secret/service_role no código do frontend; dados sintéticos
+  removidos ao final; nenhuma conexão remota, credencial ou dado real envolvido.
 
 Referências: [CLI oficial](https://supabase.com/docs/guides/local-development/cli/getting-started),
 [configuração](https://supabase.com/docs/guides/local-development/cli/config) e

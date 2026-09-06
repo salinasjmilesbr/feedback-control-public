@@ -31,10 +31,15 @@ api_url = "http://127.0.0.1"
 
 # Auth local habilitado a partir da F2-01 (Issue #68): fornece o schema auth e
 # a tabela auth.users, fonte de identidade para o perfil interno (user_profiles)
-# e para RLS em fases posteriores. Demais opções usam os padrões da CLI; nada de
-# signup/login de aplicação é implementado nesta Issue.
+# e para RLS. A F2-03 (Issue #70) desabilita o auto-cadastro público: contas são
+# criadas apenas por fluxos administrativos futuros (F2-06); o login usa e-mail
+# e senha via Supabase Auth.
 [auth]
 enabled = true
+enable_signup = false
+
+[auth.email]
+enable_signup = false
 
 [realtime]
 enabled = false

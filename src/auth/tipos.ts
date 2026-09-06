@@ -1,0 +1,47 @@
+/**
+ * Tipos do domínio de autenticação (F2-03).
+ *
+ * Mantêm o estado mínimo necessário para identidade/sessão: o usuário de
+ * autenticação (auth.users), o perfil interno (user_profiles) e as memberships
+ * ativas (user_organization_memberships). Nenhum dado de colaborador, papel ou
+ * credencial é representado aqui.
+ */
+
+export type StatusPerfil = "active" | "disabled";
+export type StatusMembership = "active" | "disabled";
+
+export interface UsuarioAuth {
+  /** `auth.uid()` — identidade de autenticação. */
+  id: string;
+  /** Exibição opcional; nunca usado para autorização ou vínculo. */
+  email?: string | null;
+}
+
+export interface SessaoAuth {
+  usuario: UsuarioAuth;
+}
+
+export interface PerfilAutenticado {
+  id: string;
+  status: StatusPerfil;
+}
+
+export interface MembershipAutenticada {
+  id: string;
+  organizationId: string;
+  status: StatusMembership;
+}
+
+export interface OrganizacaoResolvida {
+  id: string;
+  name: string;
+}
+
+export interface IdentidadeResolvida {
+  authUserId: string;
+  perfil: PerfilAutenticado;
+  /** Somente memberships ativas; nenhuma seleção arbitrária é feita. */
+  memberships: MembershipAutenticada[];
+  /** Organizações alcançáveis pelas memberships ativas. */
+  organizacoes: OrganizacaoResolvida[];
+}

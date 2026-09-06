@@ -1,5 +1,6 @@
 const publicErrors = {
   VALIDATION_ERROR: { category: "validation", message: "Verifique os dados informados e tente novamente." },
+  INVALID_CREDENTIALS: { category: "authentication", message: "E-mail ou senha inválidos." },
   FORBIDDEN: { category: "authorization", message: "Você não tem permissão para realizar esta operação." },
   CONFLICT: { category: "conflict", message: "Não foi possível concluir a operação devido a um conflito." },
   NOT_FOUND: { category: "not_found", message: "O item solicitado não foi encontrado." },
@@ -41,6 +42,20 @@ export class ValidationError extends ApplicationError<"VALIDATION_ERROR"> {
   constructor(options?: ApplicationErrorOptions) {
     super("VALIDATION_ERROR", options);
     this.name = "ValidationError";
+  }
+}
+
+export class InvalidCredentialsError extends ApplicationError<"INVALID_CREDENTIALS"> {
+  constructor(options?: ApplicationErrorOptions) {
+    super("INVALID_CREDENTIALS", options);
+    this.name = "InvalidCredentialsError";
+  }
+}
+
+export class ForbiddenError extends ApplicationError<"FORBIDDEN"> {
+  constructor(options?: ApplicationErrorOptions) {
+    super("FORBIDDEN", options);
+    this.name = "ForbiddenError";
   }
 }
 
