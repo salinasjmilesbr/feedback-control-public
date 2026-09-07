@@ -1,9 +1,9 @@
 # F4-02 — Desenho técnico: escopos de autorização (Issue #89)
 
-> **Status:** desenho técnico da F4-02 **aguardando revisão**. Decisões
-> **D1–D18 abertas** (recomendação indicada em cada uma). Nenhuma migration,
-> schema, código funcional, teste final ou PR de implementação é criado nesta
-> entrega — somente este documento, em branch exclusiva de docs.
+> **Status:** revisão arquitetural **concluída**; decisões D1–D18 **fechadas**
+> na seção 20 (D5, D6, D9, D13 e D14 com ajustes registrados). Nenhuma
+> migration, schema, código funcional, teste final ou PR de implementação é
+> criado nesta entrega — somente este documento, em branch exclusiva de docs.
 > Conteúdo 100% conceitual e sintético (sem dados reais).
 
 ## 1. Objetivo e escopo
@@ -26,7 +26,7 @@ escopo temporário derivado de substituição (F3-06), sem duplicar hierarquia.
   F4-01 de forma aditiva (sem colunas mortas);
 - cardinalidade/composição, temporalidade, tenant isolation e baseline de RLS;
 - análise do vínculo `user_profile → collaborator` (necessário aos scopes
-  estruturais) **sem assumir silenciosamente**;
+  estruturais), com decisão registrada (D1 = A — tabela própria);
 - preparação conceitual para o scope derivado de `temporary_responsibilities`
   (implementação funcional completa na F4-05) e para o ASSIGNED de colegiado/
   responsabilidades avaliativas (F3-08/F3-09).
@@ -159,7 +159,7 @@ membership (usuário na organização)
 | `SELF` | Somente o próprio colaborador vinculado | Vínculo membership→collaborator (seção 5) | O collaborator do ator (todas as posições ocupadas) | Vínculo e occupations na data de contexto | Sem vínculo/occupation ⇒ conjunto vazio (fail-closed) | SELF cobre o collaborator inteiro, com suas N posições | Tentar agir sobre terceiro |
 | `DIRECT_REPORTS` | Subordinados diretos (reporting line imediata) | occupations + position_reporting_lines + resolvers F3-07 | Colaboradores responsáveis das posições subordinadas diretas | Resolvido na data de contexto (reporting/occupation vigentes) | Ator sem position ⇒ vazio | União por cada position ocupada | Coordenador par não entra (não é subordinado) |
 | `DESCENDANTS` | Toda a árvore abaixo de cada position autorizadora | `organizacao_resolver_descendentes`/`_escopo_posicoes` | Posições e colaboradores descendentes transitivos | Resolvido na data; ciclo bloqueado pela F3-04 | Ator sem position ⇒ vazio | União das árvores de cada position ocupada | Posição de outra árvore; gestor não-descendente de mim |
-| `ORGANIZATIONAL_UNIT` | Unidade (e, conforme D5, subunidades) | `organizational_units` + parent_periods; ou unit das positions | Colaboradores/posições da unidade alvo | Unidade na data de contexto | Unidade vazia ⇒ vazio | Define-se por unit target (derivado ou explícito) | Unidade de outra org (cross-tenant) |
+| `ORGANIZATIONAL_UNIT` | **Somente a unidade explicitamente atribuída** (sem subunidades na F4-02 — D5) | `organizational_units` + target `unit_id` explícito (FK composta de tenant) | Colaboradores/posições da unidade alvo | Unidade na data de contexto | Unidade sem colaboradores ⇒ vazio | Alvo é a unidade (independente de positions do ator) | Unidade de outra org (cross-tenant) |
 | `ORGANIZATION` | Todo o tenant (alcance, não permissão) | `organization_id` da membership | Todos os colaboradores/recursos da organização | N/A (tenant fixo) | Válido mesmo sem collaborator (ex.: ADMIN) | N/A | Só é alcance: capability decide o conteúdo |
 | `ASSIGNED` | Alvos explícitos (pontuais ou derivados de F3-08/09) | Atribuição explícita; ou `collegiate_*`/F3-09 | Collaborator, position, unit ou recurso (seção 10) | Por ciclo/quando materializado; ou vigência do alvo | Alvo sem sentido ⇒ sem linha | Alvos múltiplos por scope | Colegiado só sobre o avaliado atribuído |
 
@@ -172,6 +172,22 @@ membership (usuário na organização)
 - **Data**: todo scope estrutural é resolvido na **data de contexto** — nunca
   com "estrutura de hoje" quando se avalia algo do passado (ciclo), nem
   congelado no passado para o presente (estado vivo usa a data atual).
+
+### 4.2 Contexto organizacional vivo × contexto histórico de ciclo (D9)
+
+Separação **obrigatória** registrada na revisão (D9 = A ajustada):
+
+- **Contexto vivo/operacional** (decisões sobre o presente, sem ciclo
+  envolvido): DIRECT_REPORTS e DESCENDANTS usam o **responsável efetivo** da
+  posição na data — incluindo o **substituto operacional vigente**
+  (`operational`/`operational_evaluative`), coerente com os resolvers F3-07;
+- **Contexto histórico de ciclo/avaliação**: os **snapshots e responsabilidades
+  congeladas** da F3-08/F3-09 permanecem **soberanos** — uma substituição
+  atual **nunca reescreve retrospectivamente** quem era o responsável
+  histórico; o acesso avaliativo segue a F3-08/09 materializada.
+
+Essa separação evita que a operação corrente contamine decisões históricas e
+vice-versa.
 
 ## 5. SELF — vínculo membership → collaborator
 
@@ -191,18 +207,19 @@ derivados), a resolução precisa saber **qual colaborador é "o próprio"** do
 usuário na organização. Sem esse vínculo não há como responder "minhas
 avaliações", "meus subordinados".
 
-### 5.3 Onde deve viver o vínculo (proposta — decisão D1)
+### 5.3 Onde deve viver o vínculo (D1 = A — fechada)
 
-Recomendação preliminar: **tabela própria** (ex.: `membership_collaborator_links`
-ou `user_collaborator_bindings`) ligando `user_profile` + `organization`
-(colunas ancoradas) ao `collaborator` (FK composta `(collaborator_id,
-organization_id)`), com `valid_from`/`valid_to` se histórico de vínculo for
-necessário, e no máximo **um vínculo ativo por (usuário, organização)**.
-Alternativas: coluna em `user_organization_memberships` (menos histórica e
-acopla membership a estrutura) ou derivar "self" de occupation única (inseguro:
-colaborador pode ter N positions e não é derivável do usuário). **Não**
-assumimos o vínculo como parte da F4-01; ele entra quando os scopes estruturais
-forem efetivos (F4-02 ou a etapa que implementar SELF).
+**Decisão (D1 = A):** o vínculo membership → collaborator vive em uma **tabela
+própria** (ex.: `membership_collaborator_links` ou
+`user_collaborator_bindings`) ligando `user_profile` + `organization` (colunas
+ancoradas) ao `collaborator` (FK composta `(collaborator_id, organization_id)`),
+com `valid_from`/`valid_to` se histórico de vínculo for necessário, e no máximo
+**um vínculo ativo por (usuário, organização)**. Rejeitadas as alternativas de
+coluna em `user_organization_memberships` (acopla membership a estrutura) e de
+derivar "self" de occupation única (inseguro: o colaborador pode ter N
+positions e não é derivável do usuário). O vínculo não faz parte da F4-01; ele
+entra quando os scopes estruturais forem efetivos (implementação dos scopes),
+sem exigir vínculo para ADMIN/usuários sem collaborator.
 
 ## 6. DIRECT_REPORTS
 
@@ -212,9 +229,11 @@ forem efetivos (F4-02 ou a etapa que implementar SELF).
   1. occupations vigentes do ator na data ⇒ positions "autorizadoras";
   2. `position_reporting_lines` vigentes com `manager_position_id` = position
      autorizadora;
-  3. para cada posição subordinada, o **responsável efetivo** na data
-     (`organizacao_resolver_responsavel_posicao` — titular, ou substituto
-     operacional quando ativo; decidir titular vs responsável no D9);
+  3. para cada posição subordinada, no **contexto vivo/operacional**, o
+     **responsável efetivo** na data (`organizacao_resolver_responsavel_posicao`
+     — titular, ou substituto operacional vigente; D9 = A ajustada, ver
+     seção 4.2); no **contexto histórico de ciclo/avaliação**, a F3-08/F3-09
+     congelada permanece soberana (nenhuma reescrita retroativa);
 - **Alvo**: os colaboradores (responsáveis) das posições subordinadas diretas;
   a posição em si também pode ser alvo para ações estruturais.
 - **Regra temporal**: reporting line e occupation vigentes na data de contexto.
@@ -246,21 +265,28 @@ forem efetivos (F4-02 ou a etapa que implementar SELF).
   contexto**; um colaborador promovido depois da data não altera o escopo
   daquele contexto (o mesmo vale para o uso vivo com a data atual).
 
-## 8. ORGANIZATIONAL_UNIT
+## 8. ORGANIZATIONAL_UNIT (D5 = ajustada — fechada)
 
-- **Significado**: escopo restrito a uma **unidade organizacional**.
-- **Questões a decidir (D5)**:
-  - alcança **apenas a unidade** ou **unidade + subunidades** (a F3-03 tem
-    `organizational_unit_parent_periods`; "unidade + descendentes de unidade" é
-    uma recursão própria — **registrar como decisão, não assumir**);
-  - é **derivado** (unidade(s) das positions do ator/do escopo estrutural) ou
-    **explícito** (target `unit_id` atribuído na atribuição do scope).
-- **Alvo**: colaboradores cujas positions pertencem à unidade alvo (e
-  subunidades se aprovado) na data.
-- **Comportamento temporal**: hierarquia de unidades é temporal
-  (`parent_periods`); resolve-se na data de contexto.
-- **Caso "UNIT + descendentes"**: se aprovado, requer a recursão sobre
-  `organizational_unit_parent_periods` na data — registrar separadamente (D5).
+- **Significado**: escopo restrito a **uma unidade organizacional
+  explicitamente atribuída**.
+- **Decisão (D5 = A ajustada):** na F4-02, ORGANIZATIONAL_UNIT alcança
+  **somente a unidade** atribuída — **não inclui subunidades** automaticamente.
+  Motivos registrados:
+  - menor privilégio por padrão (não amplia alcance implicitamente);
+  - semântica simples e previsível;
+  - "unidade + subunidades" poderá ser adicionada futuramente como
+    **comportamento explícito** ou como **novo tipo de scope**, se surgir
+    necessidade concreta.
+- **Target principal**: explícito por `unit_id` (alvo na atribuição do scope),
+  protegido por **integridade de tenant** (FK composta `(unit_id,
+  organization_id)` → `organizational_units`).
+- **Alvo**: colaboradores cujas positions pertencem à unidade alvo (sem
+  subunidades) na data de contexto.
+- **Comportamento temporal**: a unidade e a composição de positions são
+  temporais (F3-03); resolve-se na data de contexto.
+- **Casos negativos**: unidade de outra organização (cross-tenant, bloqueado
+  por FK), unidade sem colaboradores ⇒ conjunto vazio, subunidade da unidade
+  alvo **não** alcançada automaticamente (D5).
 
 ## 9. ORGANIZATION
 
@@ -277,6 +303,10 @@ forem efetivos (F4-02 ou a etapa que implementar SELF).
 
 - **Válido sem collaborator**: ADMIN com ORGANIZATION não precisa de
   collaborator/occupation (coerente com F2-10/F4-01).
+- **Scope EXPLÍCITO (D14 = A ajustada)**: o ORGANIZATION do ADMIN — e de
+  qualquer atribuição — é uma linha de scope **explícita** criada na
+  atribuição/bootstrap; **não existe default implícito** do tipo "role admin
+  sem scope = ORGANIZATION" (regra geral: assignment sem scope = fail-closed).
 - **Casos negativos**: ORGANIZATION fora do próprio tenant (impossível: a
   âncora é a membership); ORGANIZATION sem capability ⇒ nada; ORGANIZATION +
   capability de conteúdo ⇒ só se a capability existir (nunca automático).
@@ -291,26 +321,27 @@ forem efetivos (F4-02 ou a etapa que implementar SELF).
     posição cuja responsabilidade lhe é atribuída;
   - outras atribuições futuras (F4-05+), sempre com alvo tipado.
 
-- **O que é o alvo** (D6): candidatos — `collaborator`, `position`,
-  `organizational_unit` ou recurso específico (avaliação/ciclo). Recomendação:
-  em F4-02, suportar alvo **collaborator** (o avaliado) e **position** (para
-  responsabilidades por posição/estrutura), evoluindo para mais tipos quando
-  houver consumidor concreto — **sem polimorfismo genérico inseguro**.
+- **O que é o alvo** (D6 = híbrida ajustada — fechada): candidatos —
+  `collaborator`, `position`, `organizational_unit` ou recurso específico
+  (avaliação/ciclo). **Decisão:** em F4-02, alvos **tipados** por entidade
+  (FK composta de tenant), abrindo tabelas de target **somente quando houver
+  consumidor concreto** dos casos da Issue #89 — **sem polimorfismo genérico
+  `target_type` + `target_id` sem integridade referencial**.
 
-- **Relação com colegiado/snapshots (não duplicar)**: quem é membro do
-  colegiado do avaliado X em um ciclo já está materializado em
-  `collegiate_cycle_snapshot_members` (F3-08); quem é avaliador responsável já
-  está em `cycle_evaluation_responsibilities`/eventos (F3-09). Recomendação:
-  o **ASSIGNED de colegiado/avaliação é derivado** dessas estruturas na
+- **Relação com colegiado/snapshots (não duplicar — D6)**: quando já existe
+  **fonte soberana de atribuição no domínio**, NÃO duplicar:
+  - **colegiado**: derivar de `collegiate_cycle_snapshot_members` (F3-08);
+  - **responsabilidade avaliativa**: derivar das estruturas F3-09
+    (`cycle_evaluation_responsibilities`/eventos).
+  O **ASSIGNED de colegiado/avaliação é derivado** dessas estruturas na
   resolução (join capability/scope × snapshot), e **não** copiado para uma
   tabela de targets — evita duplicação e mantém a F3-08/09 como fonte
-  (imutável por ciclo). O modelo de ASSIGNED **explícito** (targets gravados)
-  fica para atribuições ad hoc que não têm estrutura própria (D6).
-  *(Registrar como decisão D6 — não assumir.)*
+  (imutável por ciclo). Targets **explícitos gravados** ficam para atribuições
+  ad hoc **sem fonte própria**, e somente quando houver consumidor concreto.
 
-- **Integridade**: qualquer target persistido deve ser tipado e referenciar a
-  mesma organização (seção 15); alvo derivado herda a integridade da estrutura
-  de origem.
+- **Integridade**: qualquer target persistido deve ser **tipado** e referenciar
+  a mesma organização (seção 15); alvo derivado herda a integridade da
+  estrutura de origem.
 
 ## 11. Substituição temporária (preparação para F4-05)
 
@@ -329,19 +360,21 @@ forem efetivos (F4-02 ou a etapa que implementar SELF).
     pelo substituto **sem estado novo**;
   - **acesso expira junto com `valid_to`** (resolução por data; sem registro
     persistido, nada a expirar).
-- **Tipos operational/evaluative limitam capabilities**: o tipo define quais
-  domínios o substituto exerce sobre a posição/titular:
-  - `operational` ⇒ capabilities de gestão/operação da posição (estrutura,
-    ciclo operacional, colaboradores subordinados...);
-  - `evaluative` ⇒ capabilities avaliativas sobre o avaliado da posição
-    (F3-09 já distingue substituto avaliativo);
-  - `operational_evaluative` ⇒ ambos.
-  A materialização desse mapeamento (tipo × domínio de capability) e a
-  validação de que o substituto também possui as capabilities necessárias é
-  implementação da **F4-05** (o desenho aqui só fixa as regras e deixa o mapa
-  explícito como decisão D13).
+- **Tipos operational/evaluative limitam capabilities** (D13 = A ajustada —
+  fechada): a F4-02 apenas **prepara a resolução** para que a F4-05 aplique a
+  regra:
+  - `operational` afeta somente capabilities **operacionalmente elegíveis**;
+  - `evaluative` afeta somente capabilities **avaliativas elegíveis**;
+  - `operational_evaluative` combina ambas.
+  O **mapa exato capability/domínio** (e a validação de que o substituto também
+  possui as capabilities necessárias) pertence à **F4-05** — **não** se define
+  agora uma lista ampla e definitiva de capabilities "operacionais".
 - **Caso negativo**: sem `temporary_responsibilities` vigente o substituto não
   herda nada; após `valid_to` o titular reassume (resolvers já reverteram).
+- **Histórico × vivo (D9)**: no contexto de ciclo/avaliação, uma substituição
+  vigente **não** altera snapshots/responsabilidades congelados da F3-08/09
+  (seção 4.2) — o efeito de substituição é apenas no contexto
+  vivo/operacional.
 
 ## 12. Modelo de dados proposto
 
@@ -355,8 +388,8 @@ Alternativas analisadas:
 | (C) assignment role+scope (linhas repetidas) | cada linha da atribuição carrega role+scope (par composto) | alvos por linha | muda o unique da F4-01; repetição de role; revogação por linha; histórico mais ruidoso |
 | (D) target tables auxiliares | tabelas de targets por tipo (collaborator/position/unit/...) | integridade referencial tipada; tenant por FK composta | mais tabelas; sobrespecifica antes do consumidor |
 
-**Recomendação preliminar (D2/D6):** (B) como **âncora de scopes**, com target
-tipado apenas quando necessário:
+**Decisão (D2 = B):** (B) como **âncora de scopes**, com target tipado apenas
+quando necessário (D6 = híbrida ajustada):
 
 ```
 membership_access_role_assignments  (F4-01 — inalterada; âncora membership→role)
@@ -414,8 +447,8 @@ aditivamente (D12 da F4-01).
 - **Regra fixa**: a hierarquia/estrutura é sempre resolvida na **data de
   contexto** (F3 é temporal); nenhum scope estrutural usa "estrutura de hoje"
   para decisões sobre outro contexto.
-- **Scopes atribuídos precisam de valid_from/valid_to?** Recomendação: **não
-  na F4-02** — a atribuição já tem ciclo de vida por status (F4-01); vigência
+- **Scopes atribuídos precisam de valid_from/valid_to?** **Não na F4-02**
+  (D7 = A) — a atribuição já tem ciclo de vida por status (F4-01); vigência
   explícita com janela/motivo pertence ao **acesso excepcional auditado**
   (F4-06). Exceção conceitual: o scope **derivado de substituição** é temporal
   por natureza, mas **não é gravado** — expira com `valid_to` da F3-06
@@ -448,8 +481,8 @@ Constraints/FKs para impedir:
   membership `active` (+ perfil ativo) — mesma porta da F4-01
   (`resolver_capabilities_efetivas`); escopos de atribuição `revoked` ou de
   role/capability `disabled` não produzem efeito.
-- Onde FK composta não cobrir (alvos polimórficos, se aprovado), usar **função/
-  trigger de validação** documentada (precedente F3/F4-01) — decisão D12.
+- Onde FK composta não cobrir (alvos tipados por scope/ASSIGNED), usar
+  **função/trigger de validação** documentada (precedente F3/F4-01) — D12 = A.
 
 ## 16. RLS baseline
 
@@ -457,9 +490,10 @@ Constraints/FKs para impedir:
   (zero policies, zero grants a `authenticated`/`anon`);
 - **sem policy ampla** e **sem service_role no frontend** (inalterado);
 - **sem bypass**: funções de resolução de escopo `SECURITY INVOKER`
-  (consumindo o que a RLS permitir quando houver policies) ou `SECURITY
-  DEFINER` **apenas** se estritamente necessário e restritas a `service_role`
-  (decisão D18); o bootstrap/atribuição permanece no padrão F4-01;
+  (consumindo o que a RLS permitir quando houver policies); `SECURITY
+  DEFINER` **apenas** no caminho server-side de atribuição/bootstrap,
+  restrito a `service_role` (D18 = A); o bootstrap/atribuição permanece no
+  padrão F4-01;
 - a exposição ao `authenticated` fica para a etapa que autorizar leitura
   (F4-08+), nunca nesta etapa.
 
@@ -505,35 +539,40 @@ sintéticos):
 
 ## 19. Riscos e invariantes
 
-Invariantes de segurança:
+Invariantes de segurança **reforçadas na revisão arquitetural**:
 
-1. **Capability define o quê; scope define sobre quem/onde** — nunca o
-   contrário; ter scope sem capability não autoriza nada.
-2. **Cargo/seniority/position/occupation não concedem scope por si só** —
-   scope nasce de atribuição (membership→role→scope), não da estrutura;
-   a estrutura só alimenta a **resolução de alvos** de scopes já atribuídos.
-3. **A hierarquia vem das positions/occupations/reporting lines (F3)** —
-   nenhum scope estrutural usa `job_role`.
-4. **Membership ativa continua a âncora** de autorização no tenant; perfil
-   desabilitado também barra.
-5. **ADMIN + ORGANIZATION não recebe conteúdo confidencial sem capability
-   específica** (e as capabilities confidenciais separáveis por domínio só
-   existirão quando necessárias — F4-01/D18).
-6. **Colegiado não cria hierarquia**: ASSIGNED derivado de F3-08/09 é
-   atribuição de escopo, não reporting line.
-7. **Substituição temporária não altera reporting line nem occupation**; seus
-   efeitos são resolvidos na data e expiram em `valid_to`.
-8. **Cross-tenant impossível por construção** (FKs compostas/colunas de
-   tenant), nunca por convenção.
-9. **RLS deny-by-default** nesta etapa; sem policy ampla; sem service_role no
-   frontend; sem bypass (funções INVOKER; DEFINER só bootstrap restrito).
-10. **Sem exclusão física** de atribuições/scopes (revogação por estado;
-    histórico preservado).
-11. **Estado de domínio soberano**: scope válido não autoriza mutação em estado
-    inválido (ciclo encerrado, avaliação concluída...).
-12. **União sem precedência**: nenhum scope sobrepõe outro; o conjunto é a
-    união deduplicada dos alvos.
-13. **Sem SUPER_ADMIN**: ORGANIZATION é alcance; capabilities decidem o resto.
+1. **Capability define a ação; scope define alcance** — nunca o contrário;
+   ter scope sem capability não autoriza nada.
+2. **job_role/cargo nunca concede scope** — scope nasce de atribuição
+   (membership→role→scope); cargo/senioridade não participa da concessão.
+3. **Scopes estruturais partem de collaborator/positions, nunca do nome do
+   cargo** — a raiz é o collaborator vinculado e as positions ocupadas
+   (resolução F3-07); nenhum scope estrutural usa `job_role`.
+4. **Membership ativa é obrigatória** — âncora da autorização no tenant;
+   perfil desabilitado também barra; membership/atribuição desabilitadas não
+   produzem escopo efetivo.
+5. **ADMIN sem collaborator usa ORGANIZATION, não scopes estruturais** — sem
+   vínculo/positions não há alvos estruturais; ADMIN opera pelo alcance
+   **explícito** de ORGANIZATION (D14).
+6. **ORGANIZATION não concede nenhuma capability por si só** — é alcance;
+   conteúdo (inclusive confidencial) exige a capability específica.
+7. **Colegiado nunca cria hierarquia** — ASSIGNED derivado de F3-08/09 é
+   escopo sobre o avaliado atribuído, não reporting line.
+8. **ASSIGNED derivado não duplica snapshots/responsabilidades existentes** —
+   a F3-08/09 materializada é a fonte (D6).
+9. **Estrutura viva usa o responsável efetivo na data** — inclusive substituto
+   operacional vigente (D9).
+10. **Histórico de ciclo usa snapshot/responsabilidade congelada** — a
+    F3-08/09 é soberana; nada é reescrito retroativamente (D9).
+11. **Substituição nunca reescreve reporting line/occupation** — efeitos
+    resolvidos na data e expiram em `valid_to` (F3-06; D13).
+12. **Sem scope explícito = fail-closed** — assignment sem linha de scope não
+    produz alvo efetivo; nenhum default implícito amplo (D14/D15).
+13. **Cross-tenant impossível por construção** — colunas de tenant + FKs
+    compostas (scopes e targets), nunca por convenção.
+14. **RLS continua deny-by-default** — sem policy ampla, sem service_role no
+    frontend, sem bypass (funções INVOKER; DEFINER só no bootstrap restrito —
+    D18).
 
 Riscos a vigiar:
 
@@ -541,15 +580,22 @@ Riscos a vigiar:
   derivar onde há estrutura própria — D6/D13);
 - polimorfismo de alvo sem integridade (mitigação: targets tipados — D6/D12);
 - antecipar temporalidade/policies (mitigação: seções 14/16);
-- romper o unique/âncora da F4-01 (mitigação: modelo B da seção 12);
-- vínculo user↔collaborator "inventado" sem decisão (mitigação: D1 e seção 5).
+- romper o unique/âncora da F4-01 (mitigação: modelo B da seção 12 — D2);
+- vínculo user↔collaborator inconsistente com D1 (mitigação: tabela própria,
+  sem heurística — seção 5).
 
-## 20. Decisões pendentes (D1–D18)
+## 20. Decisões fechadas (D1–D18)
 
-Para cada decisão: pergunta objetiva, alternativas, recomendação e impacto.
-Todas **abertas** para revisão do desenho.
+Registro final da revisão arquitetural: cada decisão indica a alternativa
+**fechada** e o impacto correspondente. **D5, D6, D9, D13 e D14 incorporam
+ajustes obrigatórios** da revisão.
 
-### D1 — Onde vive o vínculo membership → collaborator (SELF)
+**Resumo dos fechamentos:** D1 = A · D2 = B · D3 = A · D4 = A · D5 = **A
+ajustada** · D6 = **híbrida ajustada** · D7 = A · D8 = A · D9 = **A ajustada** ·
+D10 = A · D11 = A · D12 = A · D13 = **A ajustada** · D14 = **A ajustada** ·
+D15 = A · D16 = A · D17 = A · D18 = A.
+
+### D1 — Onde vive o vínculo membership → collaborator (SELF) — **FECHADA (A)**
 
 - **Pergunta:** onde modelar "qual colaborador é o próprio usuário na
   organização" (necessário a SELF e à raiz dos scopes estruturais)?
@@ -558,211 +604,226 @@ Todas **abertas** para revisão do desenho.
   com validade temporal se necessário; (B) coluna `collaborator_id` em
   `user_organization_memberships` (com FK composta para `collaborators`); (C)
   sem vínculo (SELF derivado por heurística/occupation única).
-- **Recomendação:** (A) — tabela própria mantém membership e estrutura
-  desacopladas, admite histórico e permite que ADMIN exista sem vínculo.
-- **Impacto:** (A) mais uma tabela, porém limpa e extensível; (B) acopla e
-  muda a F2-02; (C) inseguro (multi-position, ambiguidade) — rejeitado.
+- **Decisão (fechada): A** — vínculo em **tabela própria** ligando
+  `user_profile` + `organization` ao `collaborator` (FK composta), 1 vínculo
+  ativo por (usuário, organização), mantendo membership e estrutura
+  desacopladas e permitindo ADMIN sem vínculo.
+- **Impacto:** mais uma tabela, porém limpa e extensível; ADMIN/usuários sem
+  collaborator seguem sem vínculo (D17).
 
-### D2 — Shape dos scope assignments
+### D2 — Shape dos scope assignments — **FECHADA (B)**
 
 - **Pergunta:** como evoluir `membership_access_role_assignments` para carregar
   scopes?
 - **Alternativas:** (A) coluna `scope_type` na própria atribuição; (B) tabela
   filha 1:N (linhas de scope por atribuição); (C) linhas repetidas de
   atribuição com role+scope (alterando o unique F4-01).
-- **Recomendação:** (B) — âncora (membership, role) preservada; N scopes;
-  revogação em bloco no pai; sem colunas mortas.
-- **Impacto:** (A) limita a 1 scope e quebra extensibilidade; (C) muda o unique
-  e duplica role; (B) aditiva e compatível com F4-01/D12.
+- **Decisão (fechada): B** — **tabela filha de scopes** por atribuição:
+  preserva a âncora (membership, role) e o unique da F4-01, admite N scopes
+  por atribuição e revogação em bloco no pai (seção 12).
+- **Impacto:** evolução aditiva (F4-01/D12), sem colunas mortas; sem mudar o
+  unique da F4-01.
 
-### D3 — Scope fixo na role vs por atribuição
+### D3 — Scope fixo na role vs por atribuição — **FECHADA (A)**
 
 - **Pergunta:** a role pode declarar um scope padrão no catálogo, ou todo scope
   é definido por atribuição?
 - **Alternativas:** (A) somente por atribuição; (B) role declara "scope típico"
   como conveniência/documentação (não efetivo); (C) role declara scope efetivo
   herdado por toda atribuição.
-- **Recomendação:** (A) — scope é propriedade da atribuição (a mesma role em
-  pessoas/contextos diferentes exige alcances diferentes); (B) opcional como
-  documentação.
-- **Impacto:** (A) explícito e sem surpresa; (C) herdaria alcance indevidamente
-  para todas as atribuições da role.
+- **Decisão (fechada): A** — **scope é propriedade da atribuição** (a mesma
+  role em pessoas/contextos diferentes exige alcances diferentes); (B) só como
+  documentação, nunca efetivo.
+- **Impacto:** explícito e sem surpresa; nenhuma herança automática de alcance
+  por role.
 
-### D4 — Mesma role repetida com scopes diferentes
+### D4 — Mesma role repetida com scopes diferentes — **FECHADA (A)**
 
 - **Pergunta:** uma membership pode ter a **mesma role** com scopes diferentes
   simultaneamente?
 - **Alternativas:** (A) sim, via múltiplas linhas de scope na mesma atribuição;
   (B) não (uma combinação por role); (C) sim, duplicando a linha de atribuição.
-- **Recomendação:** (A) — role única na âncora + N scopes (união).
-- **Impacto:** (A) expressa "colaborador + ASSIGNED pontual" sem repetir a
-  role; (C) duplica e confunde revogação.
+- **Decisão (fechada): A** — role **única na âncora** + **N linhas de scope**
+  (união de alcances) — ex.: role com SELF **e** ASSIGNED ao avaliado X.
+- **Impacto:** expressa composição sem duplicar role; revogação coerente.
 
-### D5 — ORGANIZATIONAL_UNIT: subunidades e origem do alvo
+### D5 — ORGANIZATIONAL_UNIT: somente a unidade atribuída — **FECHADA (A ajustada)**
 
-- **Pergunta:** (i) o UNIT alcança só a unidade ou também subunidades? (ii) o
-  alvo é derivado (unidades do ator) ou explícito (unit_id atribuído)?
-- **Alternativas:** (i.a) só a unidade; (i.b) unidade + subunidades
-  (recursão em `organizational_unit_parent_periods`); (ii.a) derivado;
-  (ii.b) explícito.
-- **Recomendação:** (i) registrar como **decisão**: recomenda-se começar com
-  "unidade + subunidades" **somente se houver consumidor**; caso contrário, só a
-  unidade e evoluir aditivamente; (ii) **explícito** (target unit_id) como
-  modelo primário, com o derivado disponível via F3-07 quando fizer sentido.
-- **Impacto:** (i.b) exige nova recursão e define semântica mais ampla;
-  (i.a) mais simples e segura; (ii.b) dá controle administrativo pontual;
-  (ii.a) automático porém acoplado às positions do ator.
+- **Pergunta:** o UNIT alcança só a unidade ou também subunidades; o alvo é
+  derivado ou explícito?
+- **Alternativas:** (i.a) só a unidade; (i.b) unidade + subunidades; (ii.a)
+  alvo derivado; (ii.b) alvo explícito (`unit_id`).
+- **Decisão (fechada): A ajustada** — na F4-02, ORGANIZATIONAL_UNIT alcança
+  **somente a unidade explicitamente atribuída**, **sem subunidades
+  automáticas**, por menor privilégio, sem ampliação implícita de alcance e
+  com semântica simples; "unidade + subunidades" poderá entrar futuramente
+  como **comportamento explícito ou novo scope** se houver necessidade
+  concreta. Target principal **explícito por `unit_id`**, protegido por
+  integridade de tenant (FK composta). Refletido nas seções 4 e 8.
+- **Impacto:** controle administrativo pontual; alcance previsível e
+  verificável; subunidades exigiriam nova decisão explícita no futuro.
 
-### D6 — Formato do ASSIGNED (alvo) e relação com colegiado
+### D6 — Formato do ASSIGNED e relação com colegiado — **FECHADA (híbrida ajustada)**
 
-- **Pergunta:** como modelar o alvo do ASSIGNED (collaborator/position/unit/
-  recurso) sem polimorfismo inseguro, e quando derivar de F3-08/09?
+- **Pergunta:** como modelar o alvo do ASSIGNED sem polimorfismo inseguro e sem
+  duplicar fontes existentes?
 - **Alternativas:** (A) targets tipados por tabela (FK composta por entidade);
-  (B) polimorfismo controlado (tabela genérica + CHECK + função de validação);
-  (C) ASSIGNED exclusivamente derivado de F3-08/09 (sem targets próprios).
-- **Recomendação:** híbrido: **derivar** o ASSIGNED de colegiado/responsabili-
-  dade avaliativa das estruturas F3-08/09 (sem duplicar) e **tipar** os alvos
-  explícitos ad hoc (A), abrindo tabelas de target somente para os tipos com
-  consumidor concreto.
-- **Impacto:** (A) integridade referencial e tenant por construção; (B) flexível
-  porém exige validação cuidadosa; (C) não cobre atribuições ad hoc futuras.
+  (B) polimorfismo controlado; (C) ASSIGNED exclusivamente derivado.
+- **Decisão (fechada): híbrida ajustada** —
+  1. quando existe **fonte soberana de atribuição no domínio**, NÃO duplicar:
+     **colegiado** deriva de `collegiate_cycle_snapshot_members` (F3-08);
+     **responsabilidade avaliativa** deriva das estruturas F3-09;
+  2. para atribuições ad hoc **sem fonte própria**, usar **targets tipados**,
+     criando tabelas de target **somente quando houver consumidor concreto** —
+     sem polimorfismo genérico `target_type` + `target_id` sem integridade
+     referencial.
+  Na F4-02, implementar **apenas o mínimo exigido pelos casos concretos da
+  Issue #89** (seções 4 e 10).
+- **Impacto:** sem duplicação de snapshots/responsabilidades; integridade e
+  tenant por construção nos alvos persistidos; sem abstração prematura.
 
-### D7 — Temporalidade dos scopes atribuídos
+### D7 — Temporalidade dos scopes atribuídos — **FECHADA (A)**
 
 - **Pergunta:** linhas de scope precisam de `valid_from`/`valid_to` na F4-02?
 - **Alternativas:** (A) sem vigência (revogação por status), como F4-01;
   (B) com vigência desde já.
-- **Recomendação:** (A) — vigência com janela/motivo é acesso excepcional
-  (F4-06); o derivado de substituição é temporal **sem ser gravado**.
-- **Impacto:** (A) mantém o modelo enxuto e aditivo; (B) antecipa exclusão/
-  sobreposição sem consumidor.
+- **Decisão (fechada): A** — **sem vigência na F4-02** (revogação por status);
+  vigência com janela/motivo pertence ao acesso excepcional (F4-06); o efeito
+  derivado de substituição é temporal **sem ser gravado** (F3-06).
+- **Impacto:** modelo enxuto e aditivo; sem exclusion/sobreposição prematura.
 
-### D8 — Múltiplas positions do colaborador (raiz dos scopes estruturais)
+### D8 — Múltiplas positions do colaborador — **FECHADA (A)**
 
 - **Pergunta:** como os scopes estruturais tratam colaborador com N positions?
 - **Alternativas:** (A) união sobre todas as positions ocupadas na data
   (padrão F3-07); (B) position "principal" configurada.
-- **Recomendação:** (A) — os resolvers F3-07 já unem por position; sem campo
-  "principal".
-- **Impacto:** (A) consistente com a F3 e sem dado novo; (B) inventaria
-  hierarquia/ordem que a F3 rejeitou.
+- **Decisão (fechada): A** — **união** sobre todas as positions ocupadas na
+  data, como os resolvers F3-07 já fazem; sem campo "principal".
+- **Impacto:** consistente com a F3, sem dado novo nem hierarquia implícita.
 
-### D9 — Alvo de DIRECT_REPORTS/DESCENDANTS: titular ou responsável efetivo
+### D9 — Alvo de DIRECT_REPORTS/DESCENDANTS: responsável efetivo × histórico — **FECHADA (A ajustada)**
 
-- **Pergunta:** ao resolver "sobre quem" vale a capability, usamos o titular da
-  posição ou o responsável efetivo (incluindo substituto operacional ativo)?
-- **Alternativas:** (A) responsável efetivo (`responsible_collaborator_id` da
-  F3-07), consistente com os resolvers; (B) titular estrito.
-- **Recomendação:** (A) — substituto temporário assume a operação da posição
-  (F3-06) e a F3-07 já prioriza substituto; manter coerência entre resolução e
-  autorização.
-- **Impacto:** (A) gestão continua fluindo com substituto ativo e reverte
-  sozinha; (B) descontinuaria a gestão durante substituições (decisão de
-  domínio se algum caso exigir).
+- **Pergunta:** "sobre quem" vale a capability: titular ou responsável efetivo
+  da posição?
+- **Alternativas:** (A) responsável efetivo (F3-07); (B) titular estrito.
+- **Decisão (fechada): A ajustada** — separação registrada (seção 4.2):
+  - **contexto vivo/operacional**: DIRECT_REPORTS e DESCENDANTS usam o
+    **responsável efetivo** na data, incluindo o **substituto operacional
+    vigente** (F3-07);
+  - **contexto histórico de ciclo/avaliação**: snapshots e responsabilidades
+    congeladas da **F3-08/F3-09 permanecem soberanos** — uma substituição atual
+    **nunca reescreve retrospectivamente** quem era o responsável histórico.
+- **Impacto:** gestão flui com substituto ativo e reverte sozinha; histórico
+  de ciclo imutável e consistente.
 
-### D10 — União e precedência de scopes
+### D10 — União e precedência de scopes — **FECHADA (A)**
 
 - **Pergunta:** como compor scopes de múltiplas atribuições/roles?
 - **Alternativas:** (A) união sem precedência + deduplicação de alvos; (B)
   precedência (ex.: escopo mais específico vence).
-- **Recomendação:** (A) — união deduplicada; precedência só com necessidade
-  real documentada (nenhuma até aqui).
-- **Impacto:** (A) previsível; (B) complexidade sem caso concreto na F4-02.
+- **Decisão (fechada): A** — **união deduplicada, sem precedência** entre
+  scopes.
+- **Impacto:** previsível; precedência só entraria com caso concreto
+  documentado (nenhum hoje).
 
-### D11 — Revogação (granularidade)
+### D11 — Revogação (granularidade) — **FECHADA (A)**
 
 - **Pergunta:** a revogação opera na atribuição inteira ou por scope?
 - **Alternativas:** (A) revogar a atribuição inativa todos os scopes filhos e
-  cada scope tem status próprio para revogação granular; (B) só em bloco.
-- **Recomendação:** (A) — status em ambos os níveis (pai herdado ao filho),
-  sem exclusão física.
-- **Impacto:** (A) permite tirar um escopo pontual (ex.: ASSIGNED) sem perder a
-  role; (B) exigiria nova atribuição.
+  cada scope tem status próprio; (B) só em bloco.
+- **Decisão (fechada): A** — **status em ambos os níveis**: revogar a
+  atribuição inativa os scopes filhos; cada scope pode ser revogado
+  individualmente; sem exclusão física.
+- **Impacto:** permite remover um escopo pontual (ex.: ASSIGNED) sem perder a
+  role; histórico preservado.
 
-### D12 — Integridade cross-tenant dos targets/scopes
+### D12 — Integridade cross-tenant dos targets/scopes — **FECHADA (A)**
 
 - **Pergunta:** como garantir tenant nos scopes e targets?
 - **Alternativas:** (A) coluna `organization_id` em tudo + FKs compostas para
-  membership e alvos (padrão F3/F4-01); (B) triggers/funções de validação como
-  mecanismo primário.
-- **Recomendação:** (A) com (B) apenas onde FK composta não cobre (padrão já
-  usado no F4-01 para a role).
-- **Impacto:** (A) cross-tenant impossível por construção; (B) defensivo.
+  membership e alvos (padrão F3/F4-01); (B) triggers/funções como mecanismo
+  primário.
+- **Decisão (fechada): A** — **FKs compostas** com coluna de tenant (padrão
+  F3/F4-01); trigger/função de validação apenas onde a FK composta não cobre
+  (precedente F4-01).
+- **Impacto:** cross-tenant impossível por construção; sem bypass.
 
-### D13 — Scope derivado de substituição (tipos × domínios)
+### D13 — Scope derivado de substituição — **FECHADA (A ajustada)**
 
-- **Pergunta:** como mapear `responsibility_type` da F3-06 em capacidades/
-  domínios do substituto, e onde vive a regra?
-- **Alternativas:** (A) mapa explícito tipo×domínio (operational ⇒ domínios
-  operacionais; evaluative ⇒ domínios avaliativos; operacional_evaluative ⇒
-  ambos) avaliado na resolução por data, sem persistir escopo; (B) persistir
-  linhas de escopo com vigência = período da substituição.
-- **Recomendação:** (A) — resolvido de F3-06 em tempo de decisão (expira com
-  `valid_to`), validando também que o substituto possui a capability.
-- **Impacto:** (A) sem duplicação e sem estado a expirar; (B) duplicaria o
-  período e arriscaria dessincronia.
+- **Pergunta:** como tratar o efeito de `temporary_responsibilities` nos
+  escopos?
+- **Alternativas:** (A) derivado, resolvido por data, nunca persistido como
+  scope; (B) persistir linhas de scope com vigência = período da substituição.
+- **Decisão (fechada): A ajustada** — scope de substituição **derivado de
+  `temporary_responsibilities`, nunca persistido como scope permanente**. A
+  F4-02 apenas **prepara a resolução** para que a F4-05 aplique a regra:
+  `operational` afeta somente capabilities operacionalmente elegíveis;
+  `evaluative` afeta somente avaliativas elegíveis; `operational_evaluative`
+  combina ambas. O **mapa exato capability/domínio pertence à F4-05** — não se
+  define agora uma lista ampla e definitiva de capabilities "operacionais".
+  Acesso expira com `valid_to` (seção 11).
+- **Impacto:** sem duplicação e sem estado a expirar; nenhuma lista ampla
+  prematura.
 
-### D14 — ORGANIZATION para ADMIN (bootstrap e conteúdo)
+### D14 — ORGANIZATION para ADMIN (scope explícito) — **FECHADA (A ajustada)**
 
 - **Pergunta:** qual o tratamento de ORGANIZATION nas atribuições de ADMIN?
-- **Alternativas:** (A) ADMIN recebe ORGANIZATION como scope padrão, mas sem
-  capabilities de conteúdo (confidencial segue exigindo capability específica);
-  (B) ADMIN sem scope (fail-closed até atribuir escopo por operação).
-- **Recomendação:** (A) — ORGANIZATION é alcance do tenant; o bundle `admin` da
-  F4-01 não contém capabilities de conteúdo, então não há vazamento; evita
-  atribuições "vazias" sem sentido.
-- **Impacto:** (A) simples e seguro enquanto o bundle não tiver conteúdo;
-  (B) administrativamente custoso.
+- **Alternativas:** (A) ADMIN recebe ORGANIZATION como scope padrão; (B) ADMIN
+  sem scope.
+- **Decisão (fechada): A ajustada** — ADMIN recebe **ORGANIZATION como scope
+  EXPLÍCITO** da sua assignment/bootstrap (o bootstrap/migration pode criar
+  explicitamente `admin` + ORGANIZATION). **Não existe default implícito** do
+  tipo "role admin sem scope = ORGANIZATION"; a **regra geral continua:
+  assignment sem scope = fail-closed** (D15). Isso preserva auditabilidade e
+  evita defaults amplos escondidos.
+- **Impacto:** auditável e seguro; o bundle `admin` da F4-01 segue sem
+  capabilities de conteúdo (invariantes 5/6/12).
 
-### D15 — Assignment sem linhas de scope (transição com F4-01)
+### D15 — Assignment sem linhas de scope (transição com F4-01) — **FECHADA (A)**
 
 - **Pergunta:** o que significa uma atribuição F4-01 sem nenhuma linha de scope
   quando a F4-02 entra em vigor?
-- **Alternativas:** (A) fail-closed: sem scope não há alvo efetivo em recursos
-  escopados (bootstrap exige adicionar scope); (B) herdar ORGANIZATION como
-  default implícito.
-- **Recomendação:** (A) fail-closed, com a F4-02 migrando as atribuições
-  existentes para scope explícito (ex.: ADMIN→ORGANIZATION) de forma
-  determinística e validada.
-- **Impacto:** (A) seguro; exige backfill explícito documentado; (B) default
-  amplo e implícito — rejeitado.
+- **Alternativas:** (A) fail-closed: sem scope não há alvo efetivo; (B) herdar
+  ORGANIZATION como default implícito.
+- **Decisão (fechada): A** — **fail-closed**, com a F4-02 migrando as
+  atribuições existentes para scope **explícito** (ex.: ADMIN→ORGANIZATION) de
+  forma determinística e validada.
+- **Impacto:** sem defaults amplos; backfill explícito e documentado.
 
-### D16 — Resolução na data de contexto (viva × ciclo)
+### D16 — Resolução na data de contexto (viva × ciclo) — **FECHADA (A)**
 
 - **Pergunta:** a resolução estrutural usa sempre data explícita; para decisões
   do "agora" usa-se a data atual, e para contexto de ciclo usa-se o snapshot
-  F3-08/09 ou a estrutura reconstruída na data do ciclo?
-- **Alternativas:** (A) sempre resolver na data pedida (hoje ⇒ now();
-  ciclo ⇒ reference_date do snapshot/do ciclo), preferindo os snapshots já
-  materializados quando existirem (imutáveis); (B) misturar estruturas vivas
-  com snapshots.
-- **Recomendação:** (A) — snapshots F3-08/09 são a fonte para o contexto de
-  ciclo (congelado); estrutura viva na data para o contexto corrente.
-- **Impacto:** (A) histórico imutável e consistente; (B) inconsistência
-  retroativa (rejeitado).
+  F3-08/09?
+- **Alternativas:** (A) sempre resolver na data pedida (hoje ⇒ now(); ciclo ⇒
+  reference_date do snapshot/do ciclo), preferindo snapshots materializados
+  (imutáveis); (B) misturar estruturas vivas com snapshots.
+- **Decisão (fechada): A** — **resolução sempre na data pedida**: snapshots
+  F3-08/09 para contexto de ciclo; estrutura viva na data para o contexto
+  corrente (seção 14).
+- **Impacto:** histórico imutável e consistente; sem inconsistência retroativa.
 
-### D17 — Vínculo × ADMIN/usuários sem collaborator
+### D17 — Vínculo × ADMIN/usuários sem collaborator — **FECHADA (A)**
 
 - **Pergunta:** usuários sem colaborator (ADMIN de acesso, usuário
   administrativo) usam scopes estruturais?
 - **Alternativas:** (A) scopes SELF/DR/DESCENDANTS/UNIT exigem vínculo e
-  positions; sem vínculo resolvem vazio; ADMIN usa ORGANIZATION; (B) permitir
-  scopes estruturais "virtuais" sem colaborator.
-- **Recomendação:** (A) — estrutura exige colaborator; quem não tem usa
-  ORGANIZATION (alcance) com capabilities apropriadas.
-- **Impacto:** (A) semântica limpa; (B) inventaria colaborador virtual —
-  rejeitado.
+  positions; sem vínculo resolvem vazio; ADMIN usa ORGANIZATION; (B) scopes
+  estruturais "virtuais" sem colaborator.
+- **Decisão (fechada): A** — scopes estruturais **exigem collaborator
+  vinculado**; sem vínculo resolvem vazio; ADMIN/usuários sem collaborator
+  usam **ORGANIZATION** (invariante 5).
+- **Impacto:** semântica limpa; sem colaborador virtual.
 
-### D18 — Funções/grants: INVOKER × DEFINER
+### D18 — Funções/grants: INVOKER × DEFINER — **FECHADA (A)**
 
 - **Pergunta:** como expor as resoluções de escopo e onde usar DEFINER?
 - **Alternativas:** (A) resolvers `SECURITY INVOKER` (consumirão o que a RLS
   permitir quando houver policies); atribuição/bootstrap DEFINER restrito a
   `service_role` (padrão F4-01); (B) DEFINER generalizado.
-- **Recomendação:** (A) — sem bypass; DEFINER apenas para o caminho
-  server-side de atribuição/bootstrap, `EXECUTE` só `service_role`.
-- **Impacto:** (A) alinha com F3-07/F4-01 e com o deny-by-default; (B)
-  superfície privilegiada ampla — rejeitado.
+- **Decisão (fechada): A** — resolvers **INVOKER**; **DEFINER somente** no
+  caminho server-side de atribuição/bootstrap, `EXECUTE` só `service_role`.
+- **Impacto:** sem bypass; alinhado a F3-07/F4-01 e ao deny-by-default.
 
 ## 21. Proposta de validação futura
 
@@ -787,10 +848,15 @@ Como a implementação da F4-02 poderá provar os critérios da Issue #89
 - **cross-tenant**: tentativa de scope/target da Org A em B falha por
   constraint (assert negativo);
 - **substituição temporária**: durante `[valid_from, valid_to)` o substituto
-  resolve o alcance da posição (conforme tipo) e após `valid_to` não resolve
-  mais — sem linha persistida de scope;
-- **ADMIN + ORGANIZATION**: resolve administração em todo o tenant e **não**
-  resolve leitura de conteúdo confidencial;
+  resolve o alcance da posição (conforme tipo, no contexto vivo — D9/D13) e
+  após `valid_to` não resolve mais — sem linha persistida de scope; no
+  histórico de ciclo, a F3-08/09 congelada permanece inalterada;
+- **ADMIN + ORGANIZATION (scope explícito)**: a atribuição de `admin` carrega
+  uma linha de scope ORGANIZATION **explícita** (D14); resolve administração
+  em todo o tenant e **não** resolve leitura de conteúdo confidencial;
+  atribuição **sem** linha de scope resolve vazio (fail-closed — D15);
+- **ORGANIZATIONAL_UNIT**: alcance somente da unidade atribuída, sem
+  subunidades (D5), com target `unit_id` validado por tenant;
 - **união/deduplicação**: dois scopes sobrepostos produzem alvos únicos;
 - **revogação**: revogar a atribuição inativa os scopes filhos (linhas
   preservadas, `status` coerente);
