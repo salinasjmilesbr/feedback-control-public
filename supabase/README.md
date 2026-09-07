@@ -278,6 +278,37 @@ sessão/JWT emitida antes da desativação:
 - usuário ≠ colaborador: a desativação do usuário NÃO desativa o colaborador
   vinculado (lifecycles independentes).
 
+## Regras de sessão e expiração (F2-08)
+
+A F2-08 aplica as regras iniciais de sessão do Virtus sem criar um segundo
+sistema de autenticação — o Supabase Auth permanece o gestor da sessão
+(persistência, refresh e `signOut` oficiais):
+
+- timeout por inatividade de 60 minutos: o `AuthProvider` observa atividade
+  real do usuário na janela (teclado, ponteiro, toque, rolagem) e, na cadência
+  da revalidação da F2-07 (~60s) ou ao focar a janela, encerra a sessão quando
+  o usuário fica inativo além do limite — exige nova autenticação;
+- duração máxima persistente de 1 dia: o início da sessão deste dispositivo é
+  marcado por usuário (chave `virtus.auth.inicioSessao` no `localStorage` —
+  metadado de política, NUNCA credencial). Na restauração (refresh/reabertura)
+  e durante o uso, sessões com mais de 1 dia não são restauradas: o
+  `AuthProvider` encerra e o guard direciona ao login;
+- o marcador é gravado na primeira vez que a sessão aparece no dispositivo e
+  removido no logout/expiração; um novo login (ou link de recuperação) reinicia
+  a janela; sem `localStorage` (modo privado/falha) a política segue em memória;
+- logout explícito continua disponível (botão "Sair") e a expiração automática
+  usa o mesmo `signOut` global do Supabase, de forma tolerante: se a revogação
+  remota falhar (offline), o estado local ainda cai para a tela de login;
+- UX: a sessão expirada vira o estado `sessaoExpirada` (motivo inatividade ou
+  duração máxima), o guard redireciona a `/login` e a tela explica o motivo;
+  a primeira interação no formulário reconhece o aviso e volta ao login comum;
+- barreiras da F2-07 preservadas: a política roda ANTES da revalidação do
+  servidor, mas nunca substitui o `getUser`/RLS — uma sessão tecnicamente
+  válida continua sem contornar `user_profiles.status`/membership desabilitados;
+- nenhuma senha é armazenada e não existe mecanismo próprio de
+  remember-password; o `auth.jwt_expiry` local permanece o padrão (1h) e o
+  refresh de token do SDK segue responsável pela renovação dentro dos limites.
+
 ## Aplicação independente
 
 O frontend continua iniciando com `npm run dev`, mesmo sem Docker ou Supabase.

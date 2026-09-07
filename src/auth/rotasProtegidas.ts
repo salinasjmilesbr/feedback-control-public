@@ -9,8 +9,9 @@ import type { EstadoSessao } from "./controladorSessao";
  *   protegido é renderizado (sem flicker);
  * - `permitir`: sessão real autenticada, ou DEV com simulação preservada
  *   (Supabase ausente e ambiente de desenvolvimento);
- * - `redirecionarLogin`: usuário sem sessão, acesso negado ou HOMOLOG/PROD sem
- *   autenticação configurada (falha segura, sem fallback simulado).
+ * - `redirecionarLogin`: usuário sem sessão, sessão expirada (F2-08), acesso
+ *   negado ou HOMOLOG/PROD sem autenticação configurada (falha segura, sem
+ *   fallback simulado).
  */
 export type DecisaoRotaFuncional =
   | { tipo: "carregando" }
@@ -38,6 +39,7 @@ export function decidirAcessoARotasFuncionais(
 
     case "naoAutenticado":
     case "acessoNegado":
+    case "sessaoExpirada":
       return { tipo: "redirecionarLogin" };
   }
 }

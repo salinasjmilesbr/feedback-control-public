@@ -11,6 +11,8 @@ export type AuthContextValue = {
   redefinirSenha: (novaSenha: string) => Promise<void>;
   /** F2-06: convida um usuário por e-mail via Edge Function (server-side). */
   convidarUsuario: (email: string, organizationId: string) => Promise<{ userId: string }>;
+  /** F2-08: reconhece o aviso de sessão expirada e volta à tela de login comum. */
+  reconhecerExpiracao: () => void;
 };
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined);

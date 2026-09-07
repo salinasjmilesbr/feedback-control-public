@@ -13,6 +13,7 @@ function contexto(estado: EstadoSessao): AuthContextValue {
     solicitarRecuperacaoDeSenha: async () => {},
     redefinirSenha: async () => {},
     convidarUsuario: async () => ({ userId: "uuid-1" }),
+    reconhecerExpiracao: () => {},
   };
 }
 

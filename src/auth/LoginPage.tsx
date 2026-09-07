@@ -2,10 +2,11 @@ import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { toPublicError } from "../errors/applicationErrors";
 import { useAuth } from "./AuthContext";
+import { mensagemDeExpiracao } from "./politicaSessao";
 import "../styles/auth.css";
 
 function LoginPage() {
-  const { estado, entrar, sair } = useAuth();
+  const { estado, entrar, sair, reconhecerExpiracao } = useAuth();
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [mensagem, setMensagem] = useState("");
@@ -117,12 +118,26 @@ function LoginPage() {
     );
   }
 
+  // F2-08: sessão expirada por inatividade/duração máxima — explica o motivo e
+  // oferece o login comum; a primeira interação reconhece o aviso.
+  const sessaoExpirada = estado.status === "sessaoExpirada";
+  const titulo = sessaoExpirada ? "Sessão expirada" : "Entrar";
+  const descricao =
+    estado.status === "sessaoExpirada"
+      ? mensagemDeExpiracao(estado.motivo)
+      : "Acesse o Virtus com sua conta.";
+
+  function aoEditar(alterar: (valor: string) => void, valor: string) {
+    alterar(valor);
+    if (sessaoExpirada) reconhecerExpiracao();
+  }
+
   return (
     <div className="virtus-page auth-page">
       <section className="virtus-page-header">
         <div className="virtus-page-header__copy">
-          <h1>Entrar</h1>
-          <p>Acesse o Virtus com sua conta.</p>
+          <h1>{titulo}</h1>
+          <p>{descricao}</p>
         </div>
       </section>
 
@@ -133,7 +148,7 @@ function LoginPage() {
             type="email"
             autoComplete="username"
             value={email}
-            onChange={(evento) => setEmail(evento.target.value)}
+            onChange={(evento) => aoEditar(setEmail, evento.target.value)}
             required
           />
         </label>
@@ -144,7 +159,7 @@ function LoginPage() {
             type="password"
             autoComplete="current-password"
             value={senha}
-            onChange={(evento) => setSenha(evento.target.value)}
+            onChange={(evento) => aoEditar(setSenha, evento.target.value)}
             required
           />
         </label>
