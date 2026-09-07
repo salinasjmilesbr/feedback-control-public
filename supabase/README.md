@@ -793,6 +793,39 @@ o estado da F3-08, sem migrar avaliações/ciclos):
   sem carência/tempo mínimo; leave/inactive/desligamento reusam F3-05/F3-07;
   ciclos do localStorage intactos (chave de negócio alinhada — D14).
 
+## Capabilities e roles de acesso (F4-01)
+
+Modelo explícito de autorização (Issue #88), sem derivar permissões de cargo.
+Contrato arquitetural em `docs/F4-01-desenho-tecnico.md` (D1–D18 fechadas).
+
+- **`capabilities`** — catálogo **global** da unidade explícita de permissão:
+  `code` único em notação `domínio.verbo` (espelho de `src/authorization/
+  Capability.ts`), `name`/`description`, `status` `active`/`disabled`; sem
+  `organization_id` (vocabulário único do produto, D1 = A/D15 = A).
+- **`access_roles`** — papel de **acesso** (jamais cargo): roles de sistema
+  (`is_system = true`, `organization_id NULL`) + customizadas por organização
+  (`organization_id NOT NULL`), com `status` e sem exclusão física (D2 = C,
+  D5/D6, D14).
+- **`access_role_capabilities`** — associação N:N role → capability (D11).
+- **`membership_access_role_assignments`** — atribuição membership → role,
+  uma linha por par (reativação no lugar), `status` `active`/`revoked` e
+  `created_by` (autor mínimo, D13); roles são a única via (D3 = A), múltiplas
+  roles por membership (D4 = A).
+- **Catálogo de sistema determinístico** (migration `20260908000001_*`): 21
+  capabilities globais + o access_role de sistema `admin` com bundle de 9
+  capabilities de administração — **sem** conteúdo confidencial (D18). Nenhuma
+  role `manager`/`collaborator` baseada em cargo (D14).
+- **Mecanismo server-side mínimo** (D16 = A ajustada): `conceder_acesso_role`,
+  `revogar_acesso_role` e `resolver_capabilities_efetivas` — `SECURITY
+  DEFINER`, `EXECUTE` somente `service_role` (sem bypass para `authenticated`);
+  validam membership ativa, perfil ativo, role ativa e tenant.
+- **Integridade**: FK composta aditiva `(id, organization_id)` em memberships +
+  FK composta de tenant + trigger `enforce_membership_role_within_organization`
+  (role customizada de outra org bloqueada); FKs `ON DELETE RESTRICT`.
+- **RLS deny-by-default** nas quatro tabelas novas (zero policies, zero grants);
+  escopos (SELF/DIRECT_REPORTS/DESCENDANTS/…) ficam para a F4-02; allowlists
+  provisórias das F2 permanecem até substituto seguro.
+
 ## Aplicação independente
 
 O frontend continua iniciando com `npm run dev`, mesmo sem Docker ou Supabase.
@@ -1412,3 +1445,31 @@ Node 24) — **sem migration nem alteração de schema**:
   `git diff --check` aprovados; varredura sem secrets/credenciais/dados reais;
   cenário sintético removido ao final;
 - nenhuma conexão ao Supabase remoto, credencial ou dado real envolvido.
+
+## Validação executada (F4-01)
+
+Validação estrutural do modelo de autorização executada em 2026-09-08 nesta
+máquina (Docker Desktop 29.7.2; CLI Supabase 2.116.0 via npx; PostgreSQL 17.6;
+Node 24) — **somente banco local**:
+
+- rebuild limpo (`supabase db reset` **duas vezes**): 18 migrations em ordem +
+  seed, sem intervenção (as duas migrations F4-01 aplicam de forma
+  determinística);
+- cenário + runner em `supabase/validacao/01-cenario-f4-01.sql` e
+  `02-validar-f4-01.sql`: 100% sintético (prefixo `d0`), com duas organizações,
+  cinco perfis (ADMIN_A/ADMIN_B/COLLAB_USER/SEM_ROLE/ACTOR), roles customizadas
+  e atribuições via `conceder_acesso_role`;
+- **39 verificações [PASS], 0 falhas** — resultado idêntico nas duas execuções:
+  independência de cargo/collaborator, role agrupa capability, ADMIN sem
+  collaborator, união de múltiplas roles, cross-tenant bloqueado (conceder +
+  FK composta), membership/perfil desabilitados sem autorização efetiva, ADMIN
+  sem capability confidencial, revogação sem exclusão física, FK RESTRICT,
+  RLS deny-by-default como `authenticated` (0 linhas/INSERT negado/UPDATE e
+  DELETE 0 linhas; resolver não executável por authenticated), 3 policies F2
+  intactas e catálogo de sistema preservado após a limpeza;
+- `npm test` (556 testes em 50 arquivos), `npm run build`, `npm run lint` e
+  `git diff --check` aprovados; nenhuma conexão ao Supabase remoto, credencial
+  ou dado real envolvido;
+- fora do escopo (não entregue nesta issue): escopos hierárquicos (F4-02),
+  policies por tabela/leitura ampla (etapas posteriores), UI de administração,
+  migração das allowlists provisórias e dados reais.
