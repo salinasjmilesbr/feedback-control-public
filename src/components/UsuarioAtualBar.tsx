@@ -16,8 +16,14 @@ function UsuarioAtualBar() {
     usuarioAtual,
     usuariosDisponiveis,
     selecionarUsuario,
+    simulacaoDevAtiva,
   } = useUsuarioAtual();
   const { branding } = useBranding();
+
+  // F2-09: o seletor de identidade é impersonação DEV (colaboradores sintéticos
+  // do seed local). Fora de DEV explícito não é renderizado — a identidade real
+  // vem do Supabase Auth (AuthStatus) e nunca há fallback simulado.
+  const impersonacaoDevVisivel = simulacaoDevAtiva === true && usuariosDisponiveis.length > 0;
 
   return (
     <header className="app-header">
@@ -47,36 +53,41 @@ function UsuarioAtualBar() {
       <div className="app-header__user">
         <AuthStatus />
 
-        <div className="app-header__user-control">
-          <label htmlFor="usuario-atual">Usuário atual</label>
-          <select
-            id="usuario-atual"
-            value={usuarioAtual?.matricula ?? ""}
-            onChange={(event) =>
-              selecionarUsuario(Number(event.target.value))
-            }
-          >
-            {usuariosDisponiveis.map((usuario) => (
-              <option
-                key={usuario.matricula}
-                value={usuario.matricula}
-              >
-                {usuario.nome} -{" "}
-                {usuario.funcao === "GERENTE"
-                  ? "Gerente"
-                  : usuario.funcao === "COORDENADOR"
-                  ? "Coordenador"
-                  : usuario.funcao === "CONSULTOR"
-                  ? "Consultor"
-                  : usuario.funcao === "ESTAGIARIO"
-                  ? "Estagiário"
-                  : "Analista"}
-              </option>
-            ))}
-          </select>
-        </div>
+        {impersonacaoDevVisivel && (
+          <div className="app-header__user-control">
+            <label htmlFor="usuario-atual">
+              Usuário atual — simulação DEV
+            </label>
+            <select
+              id="usuario-atual"
+              aria-label="Usuário atual — simulação DEV"
+              value={usuarioAtual?.matricula ?? ""}
+              onChange={(event) =>
+                selecionarUsuario(Number(event.target.value))
+              }
+            >
+              {usuariosDisponiveis.map((usuario) => (
+                <option
+                  key={usuario.matricula}
+                  value={usuario.matricula}
+                >
+                  {usuario.nome} -{" "}
+                  {usuario.funcao === "GERENTE"
+                    ? "Gerente"
+                    : usuario.funcao === "COORDENADOR"
+                    ? "Coordenador"
+                    : usuario.funcao === "CONSULTOR"
+                    ? "Consultor"
+                    : usuario.funcao === "ESTAGIARIO"
+                    ? "Estagiário"
+                    : "Analista"}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
-        {usuarioAtual && (
+        {impersonacaoDevVisivel && usuarioAtual && (
           <div className="app-header__profile">
             <div
               className="app-header__avatar"

@@ -82,10 +82,11 @@ export const resetDesenvolvimentoPermitido =
   import.meta.env.DEV && !import.meta.env.PROD && configuracaoAmbiente.ambiente === "development";
 
 /**
- * Gate de DEV para a simulação de identidade (seletor atual) e demais
- * conveniências de desenvolvimento. É sempre false fora do contexto DEV do
- * Vite com ambiente development (F0-04): em HOMOLOG/PROD nenhuma identidade
- * simulada substitui autenticação real (F2-04; refinado pela F2-09).
+ * Gate de DEV para a impersonação/simulação de desenvolvimento (F2-09 —
+ * `UsuarioAtualProvider`/seletor) e demais conveniências de DEV (guard F2-04).
+ * É sempre false fora do contexto DEV do Vite com ambiente development: em
+ * HOMOLOG/PROD nenhuma identidade simulada substitui autenticação real e o
+ * seletor de impersonação não é exibido nem aceita troca local.
  */
 export const simulacaoDevPermitida =
   import.meta.env.DEV && !import.meta.env.PROD && configuracaoAmbiente.ambiente === "development";

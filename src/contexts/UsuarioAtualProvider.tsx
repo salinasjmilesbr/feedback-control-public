@@ -1,87 +1,71 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { simulacaoDevPermitida } from "../config/ambiente";
 import { getColaboradores } from "../services/colaboradorStorage";
-import type { Colaborador } from "../types/Colaborador";
 import { UsuarioAtualContext } from "./UsuarioAtualContext";
+import {
+  candidatosImpersonacaoDev,
+  CHAVE_USUARIO_ATUAL_DEV,
+  resolverMatriculaInicialDev,
+  selecionarMatriculaDev,
+} from "./impersonacaoDev";
 
-const STORAGE_KEY = "feedback-control-usuario-atual";
-
-function obterMatriculaInicial(usuarios: Colaborador[]): number | undefined {
-  const matriculaSalva = Number(localStorage.getItem(STORAGE_KEY));
-
-  if (
-    Number.isFinite(matriculaSalva) &&
-    usuarios.some((usuario) => usuario.matricula === matriculaSalva)
-  ) {
-    return matriculaSalva;
-  }
-
-  return (
-    usuarios.find(
-      (usuario) =>
-        usuario.status === "ATIVO" && usuario.funcao === "GERENTE"
-    )?.matricula ?? usuarios[0]?.matricula
-  );
-}
-
-export function UsuarioAtualProvider({ children }: { children: ReactNode }) {
+/**
+ * Contexto de impersonação de desenvolvimento (F2-09).
+ *
+ * Este provider NÃO representa autenticação: ele mantém o contexto local de
+ * qual colaborador sintético a aplicação está "vendo" durante o
+ * desenvolvimento (funcionalidades simuladas sobre o seed sintético do
+ * localStorage). O Supabase Auth permanece soberano e separado — nada aqui
+ * altera `auth.uid()`, JWT, sessão do Supabase nem participa de chamadas
+ * server-side como autorização.
+ *
+ * Fora de DEV explícito (`simulacaoDev`/`simulacaoDevPermitida` === false):
+ * - nenhum colaborador sintético é carregado como identidade;
+ * - o marcador local de identidade não é lido nem escrito;
+ * - a troca de identidade é bloqueada (fail-closed) — HOMOLOG/PROD não expõem
+ *   o seletor nem aceitam impersonação local.
+ */
+export function UsuarioAtualProvider({
+  children,
+  simulacaoDev = simulacaoDevPermitida,
+}: {
+  children: ReactNode;
+  /** F2-09: permite injetar o gate nos testes; em runtime usa a config central. */
+  simulacaoDev?: boolean;
+}) {
   const usuariosDisponiveis = useMemo(
-    () =>
-      getColaboradores()
-        .filter((usuario) => usuario.status === "ATIVO")
-        .sort((a, b) => {
-          const ordemFuncao = (usuario: Colaborador): number => {
-            if (usuario.funcao === "GERENTE") return 0;
-            if (usuario.funcao === "COORDENADOR") return 1;
-            if (usuario.funcao === "CONSULTOR") return 2;
-            if (
-              usuario.funcao === "ANALISTA" &&
-              usuario.senioridade === "SENIOR"
-            ) {
-              return 3;
-            }
-            if (
-              usuario.funcao === "ANALISTA" &&
-              usuario.senioridade === "PLENO"
-            ) {
-              return 4;
-            }
-            if (
-              usuario.funcao === "ANALISTA" &&
-              usuario.senioridade === "JUNIOR"
-            ) {
-              return 5;
-            }
-            if (usuario.funcao === "ANALISTA") return 6;
-            if (usuario.funcao === "ESTAGIARIO") return 7;
-            return 8;
-          };
-
-          const ordemA = ordemFuncao(a);
-          const ordemB = ordemFuncao(b);
-
-          if (ordemA !== ordemB) return ordemA - ordemB;
-
-          return a.nome.localeCompare(b.nome, "pt-BR");
-        }),
-    []
+    () => candidatosImpersonacaoDev(simulacaoDev, getColaboradores()),
+    [simulacaoDev]
   );
 
-  const [matriculaAtual, setMatriculaAtual] = useState<number | undefined>(() =>
-    obterMatriculaInicial(usuariosDisponiveis)
-  );
+  const [matriculaAtual, setMatriculaAtual] = useState<number | undefined>(() => {
+    if (!simulacaoDev) return undefined;
+    const salva = Number(localStorage.getItem(CHAVE_USUARIO_ATUAL_DEV) ?? "");
+    return resolverMatriculaInicialDev(
+      Number.isFinite(salva) ? salva : undefined,
+      usuariosDisponiveis
+    );
+  });
 
   const usuarioAtual = usuariosDisponiveis.find(
     (usuario) => usuario.matricula === matriculaAtual
   );
 
   function selecionarUsuario(matricula: number) {
-    setMatriculaAtual(matricula);
-    localStorage.setItem(STORAGE_KEY, String(matricula));
+    const proxima = selecionarMatriculaDev(simulacaoDev, matricula);
+    if (proxima === undefined) return;
+    setMatriculaAtual(proxima);
+    localStorage.setItem(CHAVE_USUARIO_ATUAL_DEV, String(proxima));
   }
 
   return (
     <UsuarioAtualContext.Provider
-      value={{ usuarioAtual, usuariosDisponiveis, selecionarUsuario }}
+      value={{
+        usuarioAtual,
+        usuariosDisponiveis,
+        selecionarUsuario,
+        simulacaoDevAtiva: simulacaoDev,
+      }}
     >
       {children}
     </UsuarioAtualContext.Provider>
