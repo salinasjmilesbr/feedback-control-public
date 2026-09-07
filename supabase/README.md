@@ -1,4 +1,4 @@
-# Supabase local — desenvolvimento (F1-01 a F3-01)
+# Supabase local — desenvolvimento (F1-01 a F3-02)
 
 Infraestrutura local do Supabase para o Virtus Team, versionada e reconstruível
 integralmente a partir do repositório — sem configuração manual no dashboard,
@@ -24,6 +24,9 @@ a F2-07 adicionou desativação/reativação de usuário com revogação de sess
 A F3-01 criou o núcleo persistente de colaboradores (`collaborators`) com
 identificadores de negócio temporais (`collaborator_identifiers`) e lifecycle de
 status (`collaborator_status_periods`), sem estrutura hierárquica nem posições.
+A F3-02 criou os catálogos configuráveis por organização de funções
+(`job_roles`) e senioridades (`seniority_levels`), independentes entre si, da
+hierarquia e da autorização.
 O auto-cadastro público permanece desabilitado; o seed segue sem inserir dados
 funcionais, e o frontend mantém o localStorage como persistência funcional dos
 domínios (as F2-03 a F2-07 alteram somente identidade/sessão).
@@ -78,17 +81,18 @@ docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -X \
   -c "select proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='set_updated_at'"
 ```
 
-Estado esperado ao final da F3-01 (após rebuild limpo):
+Estado esperado ao final da F3-02 (após rebuild limpo):
 
-- oito migrations registradas (`20260906185540`, `20260906201856`,
+- nove migrations registradas (`20260906185540`, `20260906201856`,
   `20260906203358`, `20260906205425`, `20260906230400`, `20260907000250`,
-  `20260907103000` e `20260907103100`);
+  `20260907103000`, `20260907103100` e `20260907120000`);
 - no schema `public`, as tabelas de identidade/membership da Fase 2 —
-  `organizations`, `user_profiles` e `user_organization_memberships` — mais as
-  três tabelas de colaboradores da F3-01 — `collaborators`,
-  `collaborator_identifiers` e `collaborator_status_periods` — todas com RLS
+  `organizations`, `user_profiles` e `user_organization_memberships` — as três
+  tabelas de colaboradores da F3-01 — `collaborators`,
+  `collaborator_identifiers` e `collaborator_status_periods` — e os dois
+  catálogos da F3-02 — `job_roles` e `seniority_levels` — todas com RLS
   habilitado; policies apenas nas tabelas de identidade (F2-03/F2-07), nenhuma
-  policy nas tabelas F3-01 (deny-by-default); nenhuma policy de escrita;
+  policy nas tabelas F3-01/F3-02 (deny-by-default); nenhuma policy de escrita;
 - a função técnica `set_updated_at` (F1-03) e a RPC `criar_perfil_membership`
   (F2-06, SECURITY DEFINER, EXECUTE só para `service_role`) presentes;
 - a extensão `btree_gist` habilitada (F3-01) e as exclusion constraints
@@ -107,7 +111,11 @@ Estado esperado ao final da F3-01 (após rebuild limpo):
 - `collaborators` referencia `organizations` (`ON DELETE RESTRICT`);
   `collaborator_identifiers` referencia o par (id, organization_id) de
   `collaborators` via FK composta e `collaborator_status_periods` referencia
-  `collaborators`; nenhuma FK para posição/ocupação/estrutura (inexistentes).
+  `collaborators`; nenhuma FK para posição/ocupação/estrutura (inexistentes);
+- `job_roles` e `seniority_levels` referenciam apenas `organizations` (`ON
+  DELETE RESTRICT`) com unique por `(organization_id, name)`, `status`
+  `active`/`disabled`, sem coluna de ordenação/rank e sem FKs cruzadas entre
+  catálogos nem para colaboradores/posições.
 
 O nome do container deriva do `project_id` (`supabase_db_<project_id>`); para
 descobri-lo, use `docker ps --format '{{.Names}}'`.
@@ -410,6 +418,43 @@ pessoa (duas migrations aditivas sobre o estado da Fase 2):
   dados funcionais); rebuild e validação descritos no README de `validacao/` e
   registrados na seção "Validação executada (F3-01)".
 
+## Catálogos de funções e senioridades (F3-02)
+
+A F3-02 (Issue #79) criou os catálogos organizacionais configuráveis de
+função/cargo e senioridade, mantendo esses conceitos independentes entre si, da
+posição organizacional, da hierarquia e da autorização (uma migration aditiva
+sobre o estado da F3-01):
+
+- `public.job_roles` e `public.seniority_levels` — catálogos pertencentes à
+  organização (`organization_id` com FK `ON DELETE RESTRICT` para
+  `organizations`), identidade técnica UUID (`gen_random_uuid()`), `name`
+  (atributo mínimo de identificação/configuração; check de trim) único por
+  organização (`unique (organization_id, name)`), `status`
+  `active`/`disabled` (padrão F2; desativação/evolução no lugar, sem exclusão
+  física), timestamps/version e trigger `set_updated_at` conforme
+  F1-02/F1-03;
+- separação função × senioridade: catálogos independentes, sem tabela de
+  junção/restrição e sem FKs cruzadas entre eles; senioridade não é obrigatória
+  e não é embutida em `job_role`; a validade de combinações (ex.: Analista +
+  Pleno) será definida quando posições (F3-03) usarem os conceitos;
+- ausência de hierarquia implícita: nenhuma coluna de ordenação/rank
+  (`order`/`display_order`), nenhuma auto-referência/parent e nenhuma sequência
+  Vivo (C-Level → VP → Diretor → Gerente Sênior etc.) codificada; Especialista
+  não implica equipe/liderança e Estagiário é função válida mesmo sem
+  ocorrência nos dados do piloto;
+- independência de autorização: função/senioridade não concedem capability e
+  não há vínculo com Auth/membership (capabilities/scopes são da Fase 4);
+- multi-organização: cada organização configura seus próprios catálogos
+  (subconjuntos e combinações diferentes); o mesmo nome pode existir em
+  organizações diferentes;
+- RLS habilitado e deny-by-default nas duas tabelas, sem policies e sem grants
+  (mesmo padrão F2-01/F2-02/F3-01); nenhuma policy existente foi alterada;
+- dados: somente sintéticos, via cenário de validação
+  `supabase/validacao/01-cenario-f3-02.sql` (os oito conceitos do piloto entram
+  apenas como categorias sintéticas de validação; o `seed.sql` continua sem
+  inserir dados funcionais); rebuild e validação descritos no README de
+  `validacao/` e registrados na seção "Validação executada (F3-02)".
+
 ## Aplicação independente
 
 O frontend continua iniciando com `npm run dev`, mesmo sem Docker ou Supabase.
@@ -577,6 +622,59 @@ Node 24):
   gestor/área/posição/ocupação/hierarquia/função/senioridade); dados
   sintéticos do cenário removidos ao final (banco local limpo); varredura sem
   colunas secret-like e sem credenciais novas;
+- suíte completa local: `npm test` (556 testes em 50 arquivos — aprovados),
+  `npm run build` (tsc + vite) aprovado, `npm run lint` aprovado e
+  `git diff --check` aprovado;
+- nenhuma conexão ao Supabase remoto, credencial ou dado real envolvido.
+
+## Validação executada (F3-02)
+
+Migrations, schema, constraints, triggers e RLS validados em 2026-09-06 nesta
+máquina (Docker Desktop 29.7.2; CLI Supabase 2.116.0 via npx; PostgreSQL 17.6;
+Node 24):
+
+- rebuild limpo: `supabase start` a partir de estado limpo e duas execuções
+  adicionais de `db reset` — as nove migrations aplicadas em ordem (foundation,
+  F2-01, F2-02, F2-03, F2-06, F2-07, `20260907103000_enable_btree_gist`,
+  `20260907103100_collaborators_identifiers_status_periods` e
+  `20260907120000_job_roles_seniority_levels`) e o seed reaplicado
+  automaticamente, sem intervenção (três reconstruções limpas);
+- schema verificado: somente as oito tabelas esperadas no schema `public`
+  (identidade/membership da F2 + F3-01 + `job_roles` e `seniority_levels`);
+  colunas, tipos e defaults conforme F1-02; triggers `trg_*_updated_at`
+  presentes;
+- constraints verificadas: PKs por `id` (uuid com `gen_random_uuid()`), uniques
+  `uq_job_roles_organization_name` e `uq_seniority_levels_organization_name`
+  (nome único por organização), checks de trim e de status
+  (`active`/`disabled`), FKs `fk_job_roles_organizations` e
+  `fk_seniority_levels_organizations` com `ON DELETE RESTRICT`, zero FKs
+  referenciando os catálogos e zero FKs cruzadas entre eles;
+- comportamento comprovado (cenário + asserts em
+  `supabase/validacao/01-cenario-f3-02.sql` e `02-validar-f3-02.sql`):
+  job_role e senioridade são entidades distintas; catálogos pertencem à
+  organização correta com configurações independentes (Alfa: oito conceitos do
+  piloto + item desativado e senioridades Junior/Pleno/Senior; Beta: subconjunto
+  diferente e somente Senior); mesmo nome permitido entre organizações e
+  duplicidade na mesma organização rejeitada; Analista + Junior/Pleno/Senior
+  representável como função + senioridades independentes (sem degraus/nomes
+  compostos); Especialista sem equipe/liderança; Estagiário representável sem
+  ocorrência piloto; desativação (`disabled`) preserva registro; nome com
+  espaços, status fora do domínio, organização inexistente e exclusão física de
+  org com catálogos rejeitados no banco; `version`/`updated_at` mantidos pelo
+  trigger técnico; **43 verificações [PASS], 0 falhas** (execução repetida após
+  o segundo `db reset`, mesmo resultado);
+- ausência de hierarquia implícita confirmada: nenhuma coluna de
+  ordenação/rank/code/parent nos catálogos, nenhuma auto-referência, nenhuma
+  sequência Vivo codificada e nenhum vínculo com Auth/membership/autorização;
+- RLS: habilitado em `job_roles` e `seniority_levels` com zero policies e zero
+  grants; deny-by-default comprovado como `authenticated` (leituras retornam 0
+  linhas, INSERT negado por row-level security, UPDATE/DELETE afetam zero
+  linhas); RLS das tabelas F2/F3-01 e policies existentes (3) inalterados;
+- F3-01 intacta: `collaborators` preservada (núcleo mínimo), constraints de
+  lifecycle/identificadores presentes e nenhuma tabela/coluna de posição/
+  reporting line/capability antecipada; dados sintéticos do cenário removidos
+  ao final (banco local limpo); varredura sem colunas secret-like e sem
+  credenciais novas;
 - suíte completa local: `npm test` (556 testes em 50 arquivos — aprovados),
   `npm run build` (tsc + vite) aprovado, `npm run lint` aprovado e
   `git diff --check` aprovado;

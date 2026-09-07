@@ -172,6 +172,80 @@ local, CLI 2.116.0, PostgreSQL 17.6; repetida após um segundo `db reset`, com o
 mesmo resultado). Detalhes na seção "Validação executada (F3-01)" do
 `supabase/README.md`.
 
+## F3-02 — Catálogos de funções e senioridades (Issue #79)
+
+Validação estrutural contra o **Supabase local** da migration
+`20260907120000_job_roles_seniority_levels.sql`: catálogos configuráveis por
+organização (`job_roles` e `seniority_levels`) independentes entre si, da
+hierarquia e da autorização.
+
+### Como reproduzir
+
+Requisitos: Docker Desktop em execução e o CLI Supabase da raiz
+(`npx --yes supabase@2.116.0`).
+
+```powershell
+# 1) subir a stack local (rebuild limpo: migrations em ordem + seed)
+npx --yes supabase@2.116.0 start
+
+# 2) aplicar o cenário sintético no banco local (idempotente)
+Get-Content supabase/validacao/01-cenario-f3-02.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+
+# 3) executar a validação (exit code 0 = todas as verificações passaram)
+Get-Content supabase/validacao/02-validar-f3-02.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+```
+
+Observações:
+
+- os scripts **não tocam projeto remoto**, **não alteram nenhuma policy RLS** e
+  removem ao final os dados sintéticos do cenário (banco local limpo);
+- `01-cenario-f3-02.sql` insere via superuser local (equivalente a service_role)
+  apenas UUIDs fixos com prefixo `f4`, sem colidir com os cenários anteriores;
+- o deny-by-default é comprovado pelo passo 6 de `02-validar-f3-02.sql`
+  (`set role authenticated`: leituras retornam 0 linhas, INSERT é negado e
+  UPDATE/DELETE afetam zero linhas).
+
+### O que é verificado (02-validar-f3-02.sql)
+
+1. **Estrutura**: schema `public` contém somente as tabelas esperadas (F2 +
+   F3-01 + F3-02); nenhuma tabela de posição/reporting line/capability/junção
+   antecipada.
+2. **Colunas exatas** dos catálogos (núcleo mínimo: id/organization_id/name/
+   status/created_at/updated_at/version); nenhuma coluna de
+   ordem/rank/hierarquia/code/capability.
+3. **UUID técnico** com `gen_random_uuid()`; PKs somente por `id`; `name` não é
+   identidade técnica.
+4. **Constraints/triggers**: PKs, uniques por `(organization_id, name)`, checks
+   de trim/status, FKs somente para `organizations` com `ON DELETE RESTRICT`,
+   zero FKs referenciando os catálogos e triggers de `updated_at` presentes.
+5. **Isolamento por organização**: configurações independentes (Alfa com os oito
+   conceitos do piloto + item desativado; Beta com subconjunto diferente);
+   mesmo nome permitido em organizações diferentes; duplicidade na mesma org
+   rejeitada.
+6. **Função × senioridade**: catálogos independentes; Analista + Junior/Pleno/
+   Senior representável sem degraus/nomes compostos; Especialista e Estagiário
+   representáveis sem liderança/ocorrência piloto.
+7. **Ausência de hierarquia implícita**: nenhuma coluna/tabela de ancoragem,
+   rank ou auto-referência; nada de Auth/membership vinculado.
+8. **Rejeições no banco**: nome duplicado na mesma org, nome com espaços,
+   status fora do domínio, organização inexistente e exclusão física de org com
+   catálogos (RESTRICT).
+9. **Timestamps/version**: trigger `set_updated_at` redefine `updated_at`;
+   `version` default 0 e incrementável.
+10. **RLS deny-by-default**: habilitado nos dois catálogos, zero policies, RLS
+    das tabelas F2/F3-01 intacto e comportamento negado comprovado como
+    `authenticated`.
+11. **F3-01 intacta**: `collaborators` preservada; constraints de lifecycle/
+    identificadores presentes; 3 policies inalteradas.
+12. **Limpeza**: cenário sintético removido ao final.
+
+Execução registrada nesta Issue: **43 verificações [PASS], 0 falhas** (Supabase
+local, CLI 2.116.0, PostgreSQL 17.6; repetida após um segundo `db reset`, com o
+mesmo resultado). Detalhes na seção "Validação executada (F3-02)" do
+`supabase/README.md`.
+
 ## Limitações e notas registradas
 
 - **JWT é stateless**: após logout, o refresh token é revogado, mas um access

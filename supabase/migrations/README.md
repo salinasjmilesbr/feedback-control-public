@@ -19,6 +19,7 @@ negócio, autorização, workflow, persistência e auditoria da aplicação.
 | `20260907000250_desativacao_perfil_policy.sql` | F2-07 (Issue #74): reforça a policy `user_profiles_select_own` para exigir `status = 'active'` — um perfil desabilitado deixa de ser resolvido pelo próprio usuário (enforcement server-side). |
 | `20260907103000_enable_btree_gist.sql` | F3-01 (Issue #78): extensão `btree_gist` habilitada em migration dedicada (convenção F1-02), necessária para as exclusion constraints temporais das tabelas de lifecycle. |
 | `20260907103100_collaborators_identifiers_status_periods.sql` | F3-01 (Issue #78): `collaborators` (identidade técnica UUID por organização), `collaborator_identifiers` (códigos de negócio com validade temporal, unique por organização) e `collaborator_status_periods` (lifecycle `active`/`leave`/`inactive` com linha do tempo única); FKs `ON DELETE RESTRICT`, checks de validade temporal, exclusion constraints de não-sobreposição, triggers `set_updated_at` e RLS deny-by-default sem policies. |
+| `20260907120000_job_roles_seniority_levels.sql` | F3-02 (Issue #79): catálogos configuráveis por organização `job_roles` e `seniority_levels` — conceitos independentes entre si, da hierarquia e da autorização; `name` único por organização (check de trim), `status` `active`/`disabled` (desativação sem exclusão física), sem coluna de ordenação/rank, sem FKs cruzadas entre catálogos, FKs `ON DELETE RESTRICT` para `organizations`, triggers `set_updated_at` e RLS deny-by-default sem policies. |
 
 ## Plataforma e ferramentas
 
