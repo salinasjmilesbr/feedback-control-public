@@ -18,6 +18,8 @@ export type Capability =
   | "goal.view.admin"
   | "goal.approve.manager"
   | "goal.approve.coordinator"
+  | "goal.approve"
+  | "goal.write"
   | "goal.create.own"
   | "goal.edit.own"
   | "goal.delete.own"

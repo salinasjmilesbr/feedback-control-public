@@ -4,6 +4,10 @@ import type { Colaborador } from "../types/Colaborador";
 import type { Meta } from "../types/Meta";
 import { instalarLocalStorageEmMemoria } from "../test/localStorageMock";
 import {
+  ConflictError,
+  ForbiddenError,
+} from "../errors/applicationErrors";
+import {
   aprovarMeta,
   atualizarAcompanhamentoMeta,
   atualizarMeta,
@@ -88,22 +92,37 @@ describe("podeAprovarMetaNoCiclo", () => {
     );
     localStorage.setItem("feedback-control-metas", JSON.stringify([meta]));
 
-    const operacoes = [
+    // Fluxo-piloto migrado (F4-03): mutações próprias passam pelo engine e,
+    // com estado de domínio inválido (ciclo não ATIVO), negam como CONFLICT.
+    const operacoesProprias = [
       () => criarMeta(colaborador, ciclo, "INDIVIDUAL", "Nova", "KPI", "1"),
       () => atualizarMeta(meta.id, colaborador, ciclo, "Nova", "KPI", "1"),
-      () => aprovarMeta(meta.id, gerente, colaborador, ciclo),
       () => excluirMeta(meta.id, colaborador, ciclo),
       () => atualizarAcompanhamentoMeta(meta.id, colaborador, ciclo, "Atual", 50),
       () => finalizarMeta(meta.id, colaborador, ciclo, "Final", true),
     ];
-
-    operacoes.forEach((operacao) =>
-      expect(operacao).toThrow(
-        "As metas só podem ser cadastradas ou alteradas enquanto o ciclo estiver Ativo."
-      )
+    operacoesProprias.forEach((operacao) =>
+      expect(operacao).toThrow(ConflictError)
     );
+
+    // Fluxo de aprovação ainda não migrado (F4-04): mantém a mensagem de domínio.
+    expect(() => aprovarMeta(meta.id, gerente, colaborador, ciclo)).toThrow(
+      "As metas só podem ser cadastradas ou alteradas enquanto o ciclo estiver Ativo."
+    );
+
     expect(JSON.parse(localStorage.getItem("feedback-control-metas")!)).toEqual([
       meta,
     ]);
+  });
+
+  it("mutação própria nega colaborador desligado (authorize na camada de serviço)", () => {
+    const desligado: Colaborador = {
+      ...colaborador,
+      status: "DESLIGADO",
+    };
+    localStorage.setItem("feedback-control-ciclos", JSON.stringify([ciclo]));
+    expect(() =>
+      criarMeta(desligado, ciclo, "INDIVIDUAL", "Nova", "KPI", "1")
+    ).toThrow(ForbiddenError);
   });
 });

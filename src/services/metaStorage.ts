@@ -4,6 +4,11 @@ import type { Meta, TipoMeta } from "../types/Meta";
 import { getCiclosAvaliacao } from "./cicloAvaliacaoStorage";
 import { getColaboradorEfetivoNoCiclo } from "./historicoOrganizacionalStorage";
 import { getColaboradores } from "./colaboradorStorage";
+import { authorize } from "../authorization/policyEngine/policyEngine";
+import {
+  criarProvidersMundoLocal,
+  LOCAL_ORGANIZATION_ID,
+} from "../authorization/providers/localWorld";
 
 const STORAGE_KEY = "feedback-control-metas";
 
@@ -79,6 +84,35 @@ function validarCicloAtivo(ciclo: CicloAvaliacao) {
       "As metas só podem ser cadastradas ou alteradas enquanto o ciclo estiver Ativo."
     );
   }
+}
+
+/**
+ * F4-03 (fluxo-piloto, D9 = A ajustada): autorização na camada de serviço,
+ * imediatamente antes da mutação de meta própria. A decisão vem somente do
+ * policy engine (capability `goal.write` + scope SELF + relação "alvo = self"
+ * + estado do domínio via probe), sem cargo/job_role.
+ */
+function autorizarMetaPropria(
+  colaborador: Colaborador,
+  ciclo: CicloAvaliacao
+): void {
+  authorize(
+    {
+      actor: {
+        actorId: String(colaborador.matricula),
+        organizationId: LOCAL_ORGANIZATION_ID,
+      },
+      capability: "goal.write",
+      target: { type: "collaborator", id: String(colaborador.matricula) },
+      context: { date: new Date(), cycleId: ciclo.id },
+      domainState: {
+        allows: () =>
+          getCiclosAvaliacao().find((item) => item.id === ciclo.id)?.status ===
+          "ATIVO",
+      },
+    },
+    criarProvidersMundoLocal(colaborador, getColaboradores())
+  );
 }
 
 function getCicloDaMeta(meta: Meta): CicloAvaliacao | undefined {
@@ -206,7 +240,7 @@ export function criarMeta(
   kpi: string,
   valorAlvo: string
 ): Meta {
-  validarCicloAtivo(ciclo);
+  autorizarMetaPropria(colaborador, ciclo);
 
   const limite = limiteDoTipo(ciclo, tipo);
   const quantidadeAtual = contarMetasPorTipo(
@@ -265,7 +299,7 @@ export function atualizarMeta(
   kpi: string,
   valorAlvo: string
 ): void {
-  validarCicloAtivo(ciclo);
+  autorizarMetaPropria(colaborador, ciclo);
 
   if (!descricao.trim() || !kpi.trim() || !valorAlvo.trim()) {
     throw new Error("Preencha a descrição, o KPI e o valor-alvo da meta.");
@@ -444,7 +478,7 @@ export function excluirMeta(
   colaborador: Colaborador,
   ciclo: CicloAvaliacao
 ): void {
-  validarCicloAtivo(ciclo);
+  autorizarMetaPropria(colaborador, ciclo);
   const metas = getTodasMetas();
   const atual = metas.find((meta) => meta.id === id);
 
@@ -493,7 +527,7 @@ export function atualizarAcompanhamentoMeta(
   resultadoAtual: string,
   progressoPercentual: number
 ): void {
-  validarCicloAtivo(ciclo);
+  autorizarMetaPropria(colaborador, ciclo);
 
   if (!resultadoAtual.trim()) {
     throw new Error("Informe o resultado atual da meta.");
@@ -554,7 +588,7 @@ export function finalizarMeta(
   resultadoFinal: string,
   atingida: boolean
 ): void {
-  validarCicloAtivo(ciclo);
+  autorizarMetaPropria(colaborador, ciclo);
 
   if (!resultadoFinal.trim()) {
     throw new Error("Informe o resultado final da meta.");
