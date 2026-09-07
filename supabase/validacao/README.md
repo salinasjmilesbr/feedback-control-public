@@ -388,6 +388,75 @@ local, CLI 2.116.0, PostgreSQL 17.6; repetida após um segundo `db reset`, com o
 mesmo resultado). Detalhes na seção "Validação executada (F3-04)" do
 `supabase/README.md`.
 
+## F3-05 — Occupations: ocupações temporais de colaboradores em posições (Issue #82)
+
+Validação estrutural contra o **Supabase local** da migration
+`20260907150000_occupations.sql`: vínculo temporal colaborador ↔ posição
+formal, com um ocupante por posição por instante, múltiplas posições
+simultâneas por colaborador, transferências, vacância, licença independente e
+desligamento com fechamento explícito.
+
+### Como reproduzir
+
+Requisitos: Docker Desktop em execução e o CLI Supabase da raiz
+(`npx --yes supabase@2.116.0`).
+
+```powershell
+# 1) subir a stack local (rebuild limpo: migrations em ordem + seed)
+npx --yes supabase@2.116.0 start
+
+# 2) aplicar o cenário sintético no banco local (idempotente)
+Get-Content supabase/validacao/01-cenario-f3-05.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+
+# 3) executar a validação (exit code 0 = todas as verificações passaram)
+Get-Content supabase/validacao/02-validar-f3-05.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+```
+
+Observações:
+
+- os scripts **não tocam projeto remoto**, **não alteram nenhuma policy RLS** e
+  removem ao final os dados sintéticos do cenário (banco local limpo);
+- `01-cenario-f3-05.sql` insere via superuser local (equivalente a service_role)
+  apenas UUIDs fixos com prefixo `f7`, sem colidir com os cenários anteriores;
+- o deny-by-default é comprovado pelo passo 5 de `02-validar-f3-05.sql`
+  (`set role authenticated`: leituras retornam 0 linhas, INSERT é negado e
+  UPDATE/DELETE afetam zero linhas).
+
+### O que é verificado (02-validar-f3-05.sql)
+
+1. **Estrutura**: schema `public` contém somente as tabelas esperadas (F2 +
+   F3-01/02/03/04 + F3-05); colunas exatas de `occupations` (sem
+   author/substituição/reporting); `collaborator_id`/`organizational_position_id`/
+   `reason`/`valid_from` NOT NULL (vacância = ausência; sem occupation com NULL).
+2. **Constraints/triggers**: PK, FKs compostas + RESTRICT, checks (reason,
+   valid_to), exclusion por posição (um ocupante por instante); funções/triggers
+   de validade na posição e de desligamento (inactive) fail-closed presentes.
+3. **Cenário**: posição ocupada e posição vaga por data; troca de ocupante na
+   mesma posição (histórico preservado, posição não recriada); colaborador com
+   duas occupations simultâneas; licença (leave) sem encerrar/recriar
+   occupation; histórico consultável por data; reporting line P2→P1
+   independente do ocupante; `reason` não vazio.
+4. **Rejeições/integridade**: dois ocupantes simultâneos na mesma posição,
+   occupation antes/`além` da validade da posição, cross-organization
+   (collaborator e posição), `reason` vazio, período inválido e desligamento
+   com occupation vigente (bloqueado — fail-closed; nenhum estado persistido).
+5. **Desligamento coerente**: sem occupations vigentes, o desligamento é
+   permitido após fechamento explícito (validado e revertido para manter o
+   cenário).
+6. **RLS deny-by-default**: habilitado na tabela nova, zero policies, RLS das
+   tabelas F2/F3-01/02/03/04 intacto e comportamento negado comprovado como
+   `authenticated`.
+7. **F3-01/F3-02/F3-03/F3-04 intactas**: colunas preservadas, constraints
+   anteriores presentes e 3 policies inalteradas.
+8. **Limpeza**: cenário sintético removido ao final.
+
+Execução registrada nesta Issue: **42 verificações [PASS], 0 falhas** (Supabase
+local, CLI 2.116.0, PostgreSQL 17.6; repetida após um segundo `db reset`, com o
+mesmo resultado). Detalhes na seção "Validação executada (F3-05)" do
+`supabase/README.md`.
+
 ## Limitações e notas registradas
 
 - **JWT é stateless**: após logout, o refresh token é revogado, mas um access

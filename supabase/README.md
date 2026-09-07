@@ -1,4 +1,4 @@
-# Supabase local — desenvolvimento (F1-01 a F3-04)
+# Supabase local — desenvolvimento (F1-01 a F3-05)
 
 Infraestrutura local do Supabase para o Virtus Team, versionada e reconstruível
 integralmente a partir do repositório — sem configuração manual no dashboard,
@@ -35,6 +35,10 @@ A F3-04 criou a hierarquia formal temporal — `position_reporting_lines` — co
 relações temporais entre posições (superior formal único por instante, histórico
 reconstruível por data, motivo obrigatório, sem ocupante e sem inferir
 hierarquia por cargo/senioridade/unidade).
+A F3-05 criou as ocupações temporais — `occupations` — vinculando
+`collaborators` a `organizational_positions` (um ocupante por posição por
+instante; múltiplas posições simultâneas por colaborador; transferências,
+posições vagas, licença independente e desligamento com fechamento explícito).
 O auto-cadastro público permanece desabilitado; o seed segue sem inserir dados
 funcionais, e o frontend mantém o localStorage como persistência funcional dos
 domínios (as F2-03 a F2-07 alteram somente identidade/sessão).
@@ -89,33 +93,36 @@ docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -X \
   -c "select proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='set_updated_at'"
 ```
 
-Estado esperado ao final da F3-04 (após rebuild limpo):
+Estado esperado ao final da F3-05 (após rebuild limpo):
 
-- onze migrations registradas (`20260906185540`, `20260906201856`,
+- doze migrations registradas (`20260906185540`, `20260906201856`,
   `20260906203358`, `20260906205425`, `20260906230400`, `20260907000250`,
-  `20260907103000`, `20260907103100`, `20260907120000`, `20260907130000` e
-  `20260907140000`);
+  `20260907103000`, `20260907103100`, `20260907120000`, `20260907130000`,
+  `20260907140000` e `20260907150000`);
 - no schema `public`, as tabelas de identidade/membership da Fase 2 —
   `organizations`, `user_profiles` e `user_organization_memberships` — as três
   tabelas de colaboradores da F3-01 — `collaborators`,
   `collaborator_identifiers` e `collaborator_status_periods` — os dois
   catálogos da F3-02 — `job_roles` e `seniority_levels` — as três tabelas da
   F3-03 — `organizational_units`, `organizational_unit_parent_periods` e
-  `organizational_positions` — e a tabela da F3-04 —
-  `position_reporting_lines` — todas com RLS habilitado; policies apenas nas
-  tabelas de identidade (F2-03/F2-07), nenhuma policy nas demais
-  (deny-by-default); nenhuma policy de escrita;
+  `organizational_positions` — a tabela da F3-04 —
+  `position_reporting_lines` — e a tabela da F3-05 — `occupations` — todas com
+  RLS habilitado; policies apenas nas tabelas de identidade (F2-03/F2-07),
+  nenhuma policy nas demais (deny-by-default); nenhuma policy de escrita;
 - a função técnica `set_updated_at` (F1-03), a RPC `criar_perfil_membership`
   (F2-06, SECURITY DEFINER, EXECUTE só para `service_role`) e as funções de
-  integridade da F3-04
+  integridade das F3-04/F3-05
   (`enforce_position_reporting_lines_within_positions`,
-  `enforce_position_reporting_lines_no_cycle` e
-  `enforce_positions_close_without_open_reporting_lines`) presentes;
+  `enforce_position_reporting_lines_no_cycle`,
+  `enforce_positions_close_without_open_reporting_lines`,
+  `enforce_occupation_within_position` e
+  `enforce_collaborator_inactive_requires_closed_occupations`) presentes;
 - a extensão `btree_gist` habilitada (F3-01) e as exclusion constraints
   `ex_collaborator_status_periods_no_overlap`,
   `ex_collaborator_identifiers_no_overlap`,
-  `ex_organizational_unit_parent_periods_no_overlap` e
-  `ex_position_reporting_lines_no_overlap` presentes;
+  `ex_organizational_unit_parent_periods_no_overlap`,
+  `ex_position_reporting_lines_no_overlap` e
+  `ex_occupations_position_no_overlap` presentes;
 - o serviço Auth local habilitado com auto-cadastro público desabilitado
   (`enable_signup = false`) e provedor de e-mail ativo: `auth.users` existe e é
   referenciado por `user_profiles` (FK `fk_user_profiles_auth_users`);
@@ -147,8 +154,13 @@ Estado esperado ao final da F3-04 (após rebuild limpo):
   ausência de linha); `reason` obrigatório; período meio-aberto com exclusion
   de um superior vigente por subordinado; self-reporting proibido; triggers de
   validade das posições, de ciclos multi-nível (temporal, com advisory lock por
-  org) e de fechamento de posição fail-closed — nenhuma FK para colaboradores/
-  ocupação/reporting line futura (inexistentes).
+  org) e de fechamento de posição fail-closed;
+- `occupations` referencia `organizations`, `collaborators` e
+  `organizational_positions` via FKs compostas `ON DELETE RESTRICT`; `reason`
+  obrigatório; exclusion de um ocupante por instante por posição (múltiplas
+  posições simultâneas por colaborador livres); triggers de validade na posição
+  e de desligamento (inactive) fail-closed — nenhuma FK para substituição/
+  reporting derivada de ocupante (inexistentes).
 
 O nome do container deriva do `project_id` (`supabase_db_<project_id>`); para
 descobri-lo, use `docker ps --format '{{.Names}}'`.
@@ -564,6 +576,42 @@ migration aditiva sobre o estado da F3-03):
   dados funcionais); rebuild e validação descritos no README de `validacao/` e
   registrados na seção "Validação executada (F3-04)".
 
+## Occupations — ocupações temporais de colaboradores em posições (F3-05)
+
+A F3-05 (Issue #82) criou o modelo temporal canônico de quem ocupa cada
+`organizational_position` ao longo do tempo, mantendo rigorosamente separados
+collaborator, posição, occupation, status do colaborador e reporting line (uma
+migration aditiva sobre o estado da F3-04):
+
+- `public.occupations` — vínculo temporal colaborador ↔ posição formal da MESMA
+  organização (`reason` obrigatório — baseline F3-04; `valid_from`/`valid_to`
+  meio-aberto; `valid_to null` = vigente; `valid_to > valid_from`);
+- um ocupante por posição por instante: exclusion constraint por posição (linha
+  do tempo única; troca de ocupante fecha + abre, sem recriar a posição);
+  posição vaga = ausência de occupation válida; NENHUMA constraint limita
+  múltiplas posições simultâneas de um colaborador (sem exclusion por
+  collaborator); sem occupation artificial com `collaborator_id NULL`;
+- transferência: encerra a occupation anterior e cria nova (histórico
+  preservado), sem alterar/recriar collaborator, posição ou reporting lines;
+- licença independente: `leave` não encerra nem invalida occupation e o retorno
+  não a recria; desligamento (`inactive`) é fail-closed — o banco rejeita
+  iniciar o período com occupations vigentes (fechamento explícito antes; sem
+  auto-cascade);
+- integridade temporal: trigger valida que a occupation está contida na
+  validade da posição (write-time); para o collaborator não há validade própria
+  (F3-01) — garantia por FK composta e mesma organização;
+- tenant integrity declarativa: FKs compostas
+  `(colaborador/posição, organization_id)` (uniques de referência já
+  existentes) — cross-organization impossível no banco;
+- auditoria/autor: sem coluna de autor (baseline F3-04; auditoria transversal
+  futura — limitação documentada);
+- RLS habilitado e deny-by-default na tabela nova, sem policies e sem grants;
+  nenhuma policy existente alterada;
+- dados: somente sintéticos, via cenário de validação
+  `supabase/validacao/01-cenario-f3-05.sql` (o `seed.sql` continua sem inserir
+  dados funcionais); rebuild e validação descritos no README de `validacao/` e
+  registrados na seção "Validação executada (F3-05)".
+
 ## Aplicação independente
 
 O frontend continua iniciando com `npm run dev`, mesmo sem Docker ou Supabase.
@@ -903,4 +951,64 @@ Node 24):
   temporal com advisory lock por organização — o caminho de escrita futuro deve
   manter o mesmo lock ou isolamento SERIALIZABLE; (c) correção retroativa
   excepcional de histórico não é implementada nesta issue;
+- nenhuma conexão ao Supabase remoto, credencial ou dado real envolvido.
+
+## Validação executada (F3-05)
+
+Migrations, schema, constraints, triggers e RLS validados em 2026-09-07 nesta
+máquina (Docker Desktop 29.7.2; CLI Supabase 2.116.0 via npx; PostgreSQL 17.6;
+Node 24):
+
+- rebuild limpo: `supabase start` a partir de estado limpo e duas execuções
+  adicionais de `db reset` — as doze migrations aplicadas em ordem (foundation,
+  F2-01, F2-02, F2-03, F2-06, F2-07, `20260907103000_enable_btree_gist`,
+  `20260907103100_collaborators_identifiers_status_periods`,
+  `20260907120000_job_roles_seniority_levels`,
+  `20260907130000_organizational_units_positions`,
+  `20260907140000_position_reporting_lines` e
+  `20260907150000_occupations`) e o seed reaplicado automaticamente, sem
+  intervenção (três reconstruções limpas);
+- schema verificado: somente as treze tabelas esperadas no schema `public`
+  (identidade/membership da F2 + F3-01 + F3-02 + F3-03 + F3-04 + F3-05);
+  colunas de `occupations` exatas (collaborator/posição/org/reason/validade/
+  técnicas; sem author/substituição/reporting);
+- constraints verificadas: PK por UUID, FKs compostas `ON DELETE RESTRICT`
+  (organizations, collaborators, organizational_positions), checks de `reason`
+  e `valid_to`, exclusion `ex_occupations_position_no_overlap` (um ocupante por
+  instante por posição); uniques de referência de `collaborators` e
+  `organizational_positions` presentes; zero dependências referenciando
+  `occupations`;
+- triggers/funções: `set_updated_at`, `enforce_occupation_within_position`
+  (occupation contida na validade da posição) e
+  `enforce_collaborator_inactive_requires_closed_occupations` (desligamento
+  fail-closed) presentes e exercitados;
+- comportamento comprovado (cenário + asserts em
+  `supabase/validacao/01-cenario-f3-05.sql` e `02-validar-f3-05.sql`): posição
+  ocupada e posição vaga por data; troca de ocupante na mesma posição (histórico
+  preservado; posição não recriada); colaborador com duas occupations
+  simultâneas; licença (leave) sem encerrar/recriar occupation; histórico
+  consultável por data; reporting line P2→P1 independente do ocupante; `reason`
+  não vazio; **42 verificações [PASS], 0 falhas** (execução repetida após o
+  segundo `db reset`, mesmo resultado);
+- rejeições comprovadas: dois ocupantes simultâneos na mesma posição, occupation
+  antes/além da validade da posição, cross-organization (collaborator e
+  posição), `reason` vazio, período inválido e desligamento com occupation
+  vigente (bloqueado — fail-closed, nenhum estado persistido); desligamento sem
+  occupations vigentes permitido após fechamento explícito (validado e
+  revertido);
+- RLS: habilitado em `occupations` com zero policies e zero grants;
+  deny-by-default comprovado como `authenticated` (leituras retornam 0 linhas,
+  INSERT negado, UPDATE/DELETE afetam zero linhas); RLS das tabelas
+  F2/F3-01/02/03/04 e policies existentes (3) inalterados;
+- F3-01/F3-02/F3-03/F3-04 intactas (colunas preservadas; alterações apenas
+  aditivas); nenhuma tabela/coluna de substituição/colegiado/avaliação/snapshot
+  antecipada; dados sintéticos do cenário removidos ao final (banco local
+  limpo); varredura sem colunas secret-like e sem credenciais novas;
+- suíte completa local: `npm test` (556 testes em 50 arquivos — aprovados),
+  `npm run build` (tsc + vite) aprovado, `npm run lint` aprovado e
+  `git diff --check` aprovado;
+- limitações documentadas: sem coluna de autor nesta fase (auditoria transversal
+  futura); correção retroativa excepcional de histórico não é implementada;
+  occupation × status são independentes (regra específica apenas para o
+  desligamento);
 - nenhuma conexão ao Supabase remoto, credencial ou dado real envolvido.
