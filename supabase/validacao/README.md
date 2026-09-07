@@ -101,6 +101,77 @@ v2.196.0): **36 verificações, 0 falhas**.
 | F2-09 impersonação DEV | #76 | gate `simulacaoDevPermitida` | unit DEV/HOMOLOG/PROD |
 | F2-10 validação integrada | #77 | este diretório | runner integrado (36/36) |
 
+## F3-01 — Colaboradores e lifecycle temporal (Issue #78)
+
+Validação estrutural contra o **Supabase local** das migrations da F3-01
+(`20260907103000_enable_btree_gist.sql` e
+`20260907103100_collaborators_identifiers_status_periods.sql`): identidade
+técnica UUID, identificadores de negócio com validade temporal e períodos de
+status sem sobreposição.
+
+### Como reproduzir
+
+Requisitos: Docker Desktop em execução e o CLI Supabase da raiz
+(`npx --yes supabase@2.116.0`).
+
+```powershell
+# 1) subir a stack local (rebuild limpo: migrations em ordem + seed)
+npx --yes supabase@2.116.0 start
+
+# 2) aplicar o cenário sintético no banco local (idempotente)
+Get-Content supabase/validacao/01-cenario-f3-01.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+
+# 3) executar a validação (exit code 0 = todas as verificações passaram)
+Get-Content supabase/validacao/02-validar-f3-01.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+```
+
+Observações:
+
+- os scripts **não tocam projeto remoto**, **não alteram nenhuma policy RLS** e
+  removem ao final os dados sintéticos do cenário (banco local limpo);
+- `01-cenario-f3-01.sql` insere via superuser local (equivalente a service_role)
+  apenas UUIDs fixos com prefixo `f3`, sem colidir com os cenários anteriores;
+- o deny-by-default é comprovado pelo passo 6 de `02-validar-f3-01.sql`
+  (`set role authenticated`: leituras retornam 0 linhas, INSERT é negado e
+  UPDATE/DELETE afetam zero linhas).
+
+### O que é verificado (02-validar-f3-01.sql)
+
+1. **Estrutura**: schema `public` contém somente as tabelas esperadas
+   (identidade/membership da F2 + F3-01); nenhuma tabela/coluna de
+   gestor/área/posição/ocupação/hierarquia/função/senioridade antecipada.
+2. **Colunas exatas** das tabelas F3-01 (núcleo mínimo; sem nome/e-mail).
+3. **UUID técnico**: `id` com default `gen_random_uuid()`; PKs compostas apenas
+   por `id`; `business_code` (matrícula/código) **não** compõe PK.
+4. **Constraints/triggers**: PKs, unique `(organization_id, business_code)`,
+   checks de domínio/validade, exclusion constraints de não-sobreposição
+   (btree_gist/tstzrange), FKs todas `ON DELETE RESTRICT` e triggers de
+   `updated_at` presentes.
+5. **Isolamento por organização**: contagem por org; mesmo `business_code`
+   permitido em organizações diferentes; duplicidade na mesma org rejeitada.
+6. **Identificadores**: troca histórica de código não troca `collaborator.id`
+   (2 linhas, vigente correto).
+7. **Lifecycle**: histórico ACTIVE → LEAVE → ACTIVE preservado; um único período
+   aberto por colaborador; LEAVE vigente não remove vínculo/identificador e não
+   cria/encerra ocupação.
+8. **Rejeições no banco**: período inválido (`valid_to <= valid_from`), status
+   fora do domínio, sobreposição de período, código duplicado na mesma org,
+   código com espaços, FK composta com org inconsistente e exclusão física de
+   org/colaborador com histórico (RESTRICT).
+9. **Timestamps/version**: trigger `set_updated_at` redefine `updated_at`;
+   `version` default 0 e incrementável.
+10. **RLS deny-by-default**: habilitado nas três tabelas, zero policies,
+    RLS das tabelas F2 intacto e comportamento negado comprovado como
+    `authenticated`.
+11. **Limpeza**: cenário sintético removido ao final.
+
+Execução registrada nesta Issue: **45 verificações [PASS], 0 falhas** (Supabase
+local, CLI 2.116.0, PostgreSQL 17.6; repetida após um segundo `db reset`, com o
+mesmo resultado). Detalhes na seção "Validação executada (F3-01)" do
+`supabase/README.md`.
+
 ## Limitações e notas registradas
 
 - **JWT é stateless**: após logout, o refresh token é revogado, mas um access

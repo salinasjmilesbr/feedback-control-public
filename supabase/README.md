@@ -1,4 +1,4 @@
-# Supabase local — desenvolvimento (F1-01 a F2-10)
+# Supabase local — desenvolvimento (F1-01 a F3-01)
 
 Infraestrutura local do Supabase para o Virtus Team, versionada e reconstruível
 integralmente a partir do repositório — sem configuração manual no dashboard,
@@ -21,6 +21,9 @@ Supabase Auth (policies mínimas de leitura via `auth.uid()`), a F2-04 protegeu 
 rotas funcionais, a F2-05 adicionou recuperação/redefinição de senha, a F2-06
 adicionou o convite administrativo via Edge Function (Auth Admin server-side) e
 a F2-07 adicionou desativação/reativação de usuário com revogação de sessão.
+A F3-01 criou o núcleo persistente de colaboradores (`collaborators`) com
+identificadores de negócio temporais (`collaborator_identifiers`) e lifecycle de
+status (`collaborator_status_periods`), sem estrutura hierárquica nem posições.
 O auto-cadastro público permanece desabilitado; o seed segue sem inserir dados
 funcionais, e o frontend mantém o localStorage como persistência funcional dos
 domínios (as F2-03 a F2-07 alteram somente identidade/sessão).
@@ -75,17 +78,22 @@ docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -X \
   -c "select proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='set_updated_at'"
 ```
 
-Estado esperado ao final da F2-07:
+Estado esperado ao final da F3-01 (após rebuild limpo):
 
-- seis migrations registradas (`20260906185540`, `20260906201856`,
-  `20260906203358`, `20260906205425`, `20260906230400` e `20260907000250`);
-- no schema `public`, somente as tabelas da F2-01/F2-02 — `organizations`,
-  `user_profiles` e `user_organization_memberships` — com RLS habilitado; as
-  policies de leitura da F2-03 (`user_organization_memberships_select_own`,
-  `organizations_select_via_membership`) e `user_profiles_select_own` agora
-  exigindo `status = 'active'` (F2-07); nenhuma policy de escrita;
+- oito migrations registradas (`20260906185540`, `20260906201856`,
+  `20260906203358`, `20260906205425`, `20260906230400`, `20260907000250`,
+  `20260907103000` e `20260907103100`);
+- no schema `public`, as tabelas de identidade/membership da Fase 2 —
+  `organizations`, `user_profiles` e `user_organization_memberships` — mais as
+  três tabelas de colaboradores da F3-01 — `collaborators`,
+  `collaborator_identifiers` e `collaborator_status_periods` — todas com RLS
+  habilitado; policies apenas nas tabelas de identidade (F2-03/F2-07), nenhuma
+  policy nas tabelas F3-01 (deny-by-default); nenhuma policy de escrita;
 - a função técnica `set_updated_at` (F1-03) e a RPC `criar_perfil_membership`
   (F2-06, SECURITY DEFINER, EXECUTE só para `service_role`) presentes;
+- a extensão `btree_gist` habilitada (F3-01) e as exclusion constraints
+  `ex_collaborator_status_periods_no_overlap` e
+  `ex_collaborator_identifiers_no_overlap` presentes nas tabelas de lifecycle;
 - o serviço Auth local habilitado com auto-cadastro público desabilitado
   (`enable_signup = false`) e provedor de e-mail ativo: `auth.users` existe e é
   referenciado por `user_profiles` (FK `fk_user_profiles_auth_users`);
@@ -95,7 +103,11 @@ Estado esperado ao final da F2-07:
   `convidar-usuario` (F2-06) e `gerenciar-usuario` (F2-07) — Auth Admin
   server-side; `service_role` só no runtime das funções, nunca no frontend;
 - `user_organization_memberships` relaciona `user_profiles` e `organizations`
-  por UUID (FKs `ON DELETE RESTRICT`) com unique por par usuário/organização.
+  por UUID (FKs `ON DELETE RESTRICT`) com unique por par usuário/organização;
+- `collaborators` referencia `organizations` (`ON DELETE RESTRICT`);
+  `collaborator_identifiers` referencia o par (id, organization_id) de
+  `collaborators` via FK composta e `collaborator_status_periods` referencia
+  `collaborators`; nenhuma FK para posição/ocupação/estrutura (inexistentes).
 
 O nome do container deriva do `project_id` (`supabase_db_<project_id>`); para
 descobri-lo, use `docker ps --format '{{.Names}}'`.
@@ -349,6 +361,55 @@ revogação e isolamento de identidade funcionam em conjunto. Artefatos em
 - execução registrada nesta Issue: 36 verificações, 0 falhas (instruções e
   matriz completas no README da pasta de validação).
 
+## Colaboradores e lifecycle temporal (F3-01)
+
+A F3-01 (Issue #78) criou o núcleo persistente de colaboradores da organização
+sem embutir hierarquia, área, gestor direto, posição ou ocupação no cadastro da
+pessoa (duas migrations aditivas sobre o estado da Fase 2):
+
+- `public.collaborators` — identidade técnica do colaborador: UUID interno
+  imutável (`gen_random_uuid()`) e `organization_id` (FK `ON DELETE RESTRICT`
+  para `organizations`); núcleo mínimo (sem nome/e-mail/CPF e sem
+  gestor/área/função/posição — atributos de pessoa e estrutura pertencem a
+  issues futuras); timestamps/version e trigger `set_updated_at` conforme
+  F1-02/F1-03;
+- `public.collaborator_identifiers` — identificadores de negócio (ex.:
+  matrícula/código, `business_code text`) com `valid_from`/`valid_to` (null =
+  vigente). O código atual é a linha aberta; trocar código = fechar a linha e
+  abrir outra, preservando histórico **sem trocar `collaborators.id`**.
+  `business_code` nunca é PK; é único por organização
+  (`unique (organization_id, business_code)`, sem reutilização na mesma
+  organização; reuso entre organizações permitido) e não pode ter espaços nas
+  bordas; a consistência entre o `organization_id` do identificador e o do
+  colaborador é garantida por FK composta
+  `(collaborator_id, organization_id) → collaborators(id, organization_id)`;
+- `public.collaborator_status_periods` — lifecycle temporal do colaborador com
+  `status text + check` (`active`/`leave`/`inactive`, mapeando
+  ATIVO/LICENCA/DESLIGADO do domínio; `terminated` não usado e ESTAGIARIO é
+  função da F3-02, não status), `valid_from`/`valid_to` (meio-aberto
+  `[valid_from, valid_to)`, null = vigente) e check `valid_to > valid_from`;
+  uma **linha do tempo única por colaborador** é garantida no banco por
+  exclusion constraints (`tstzrange` + `btree_gist`): nenhuma sobreposição de
+  períodos do mesmo colaborador (um único status por instante; no máximo um
+  período aberto), o que torna impossíveis estados simultâneos incompatíveis
+  (ex.: `active` + `leave`) e mantém o histórico não destrutivo;
+- licença (`leave`) é estado do colaborador e **não** encerra posição/ocupação:
+  não existe tabela de posição/ocupação nesta issue e nenhuma FK aponta para
+  estrutura organizacional (F3-02/F3-03 criarão funções/senioridades e
+  unidades/posições formais em issues próprias);
+- exclusão física: todas as FKs com `ON DELETE RESTRICT` (padrão F1-02) —
+  mudanças de lifecycle ocorrem por novos períodos/status, nunca por exclusão
+  de histórico; nenhuma política de escrita existe;
+- RLS habilitado e deny-by-default nas três tabelas, sem policies e sem grants
+  nesta etapa (mesmo padrão das F2-01/F2-02); nenhuma policy existente foi
+  alterada e Auth/membership não foram tocados (o vínculo opcional
+  `collaborator_id` em `user_organization_memberships` permanece para migration
+  aditiva futura);
+- dados: somente sintéticos, via cenário de validação
+  `supabase/validacao/01-cenario-f3-01.sql` (o `seed.sql` continua sem inserir
+  dados funcionais); rebuild e validação descritos no README de `validacao/` e
+  registrados na seção "Validação executada (F3-01)".
+
 ## Aplicação independente
 
 O frontend continua iniciando com `npm run dev`, mesmo sem Docker ou Supabase.
@@ -467,3 +528,56 @@ Node 24):
 Referências: [CLI oficial](https://supabase.com/docs/guides/local-development/cli/getting-started),
 [configuração](https://supabase.com/docs/guides/local-development/cli/config) e
 [Docker Desktop no Windows](https://docs.docker.com/desktop/setup/install/windows-install/).
+
+## Validação executada (F3-01)
+
+Migrations, schema, constraints, triggers e RLS validados em 2026-09-06 nesta
+máquina (Docker Desktop 29.7.2; CLI Supabase 2.116.0 via npx; PostgreSQL 17.6;
+Node 24):
+
+- rebuild limpo: `supabase start` a partir de estado limpo e duas execuções
+  adicionais de `db reset` — as oito migrations aplicadas em ordem (foundation,
+  F2-01, F2-02, F2-03, F2-06, F2-07, `20260907103000_enable_btree_gist` e
+  `20260907103100_collaborators_identifiers_status_periods`) e o seed
+  reaplicado automaticamente, sem intervenção (três reconstruções limpas);
+- schema verificado: somente as seis tabelas esperadas no schema `public`
+  (`organizations`, `user_profiles`, `user_organization_memberships`,
+  `collaborators`, `collaborator_identifiers`, `collaborator_status_periods`);
+  extensão `btree_gist` presente; colunas, tipos e defaults conforme F1-02;
+  triggers `trg_*_updated_at` presentes;
+- constraints verificadas: PKs por `id` (uuid com `gen_random_uuid()`),
+  `uq_collaborators_id_organization` (alvo da FK composta),
+  `uq_collaborator_identifiers_organization_code` (código de negócio único por
+  organização), checks de domínio (`active`/`leave`/`inactive`) e de validade
+  temporal (`valid_to > valid_from`), exclusion constraints
+  `ex_collaborator_status_periods_no_overlap` e
+  `ex_collaborator_identifiers_no_overlap` (gist/`tstzrange`), FKs todas
+  `ON DELETE RESTRICT` (incluindo a FK composta
+  `(collaborator_id, organization_id) → collaborators(id, organization_id)`
+  que garante consistência de organização entre identificador e colaborador);
+- comportamento comprovado (cenário + asserts em
+  `supabase/validacao/01-cenario-f3-01.sql` e `02-validar-f3-01.sql`): UUID
+  interno recebido; `business_code` não é PK; troca histórica de código não
+  troca `collaborator.id`; isolamento por `organization_id`; mesmo código em
+  organizações diferentes permitido e duplicidade na mesma organização
+  rejeitada; histórico ACTIVE → LEAVE → ACTIVE preservado; um único período
+  aberto por colaborador; licença (`leave`) sem efeito sobre posição/ocupação
+  (inexistentes); períodos inválidos, status fora do domínio, sobreposições,
+  código com espaços e inconsistência de organização rejeitados no banco;
+  exclusão física de org/colaborador com histórico bloqueada (RESTRICT);
+  `version`/`updated_at` mantidos pelo trigger técnico; **45 verificações
+  [PASS], 0 falhas** (execução repetida após o segundo `db reset`, mesmo
+  resultado);
+- RLS: habilitado nas três tabelas F3-01 com zero policies e zero grants;
+  deny-by-default comprovado como `authenticated` (leituras retornam 0 linhas,
+  INSERT negado por row-level security, UPDATE/DELETE afetam zero linhas); RLS
+  das tabelas F2 e policies existentes (3) inalterados; nenhuma policy de
+  escrita adicionada;
+- ausência de entidades/campos antecipados confirmada (nada de
+  gestor/área/posição/ocupação/hierarquia/função/senioridade); dados
+  sintéticos do cenário removidos ao final (banco local limpo); varredura sem
+  colunas secret-like e sem credenciais novas;
+- suíte completa local: `npm test` (556 testes em 50 arquivos — aprovados),
+  `npm run build` (tsc + vite) aprovado, `npm run lint` aprovado e
+  `git diff --check` aprovado;
+- nenhuma conexão ao Supabase remoto, credencial ou dado real envolvido.

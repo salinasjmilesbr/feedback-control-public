@@ -17,6 +17,8 @@ negócio, autorização, workflow, persistência e auditoria da aplicação.
 | `20260906205425_auth_read_policies.sql` | F2-03 (Issue #70): policies mínimas de leitura para o usuário autenticado resolver o próprio perfil, as próprias memberships e as organizações de membership ativa (`auth.uid()`), com grants de SELECT somente a `authenticated`; sem policies de escrita. |
 | `20260906230400_criar_perfil_membership_rpc.sql` | F2-06 (Issue #73): RPC `criar_perfil_membership` (SECURITY DEFINER, EXECUTE só para `service_role`) que cria perfil interno + membership em uma única transação — fronteira server-side do convite administrativo. |
 | `20260907000250_desativacao_perfil_policy.sql` | F2-07 (Issue #74): reforça a policy `user_profiles_select_own` para exigir `status = 'active'` — um perfil desabilitado deixa de ser resolvido pelo próprio usuário (enforcement server-side). |
+| `20260907103000_enable_btree_gist.sql` | F3-01 (Issue #78): extensão `btree_gist` habilitada em migration dedicada (convenção F1-02), necessária para as exclusion constraints temporais das tabelas de lifecycle. |
+| `20260907103100_collaborators_identifiers_status_periods.sql` | F3-01 (Issue #78): `collaborators` (identidade técnica UUID por organização), `collaborator_identifiers` (códigos de negócio com validade temporal, unique por organização) e `collaborator_status_periods` (lifecycle `active`/`leave`/`inactive` com linha do tempo única); FKs `ON DELETE RESTRICT`, checks de validade temporal, exclusion constraints de não-sobreposição, triggers `set_updated_at` e RLS deny-by-default sem policies. |
 
 ## Plataforma e ferramentas
 
