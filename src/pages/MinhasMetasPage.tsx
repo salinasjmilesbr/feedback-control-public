@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
-import { authorize, can } from "../authorization/authorizationPolicy";
-import type { Capability } from "../authorization/Capability";
+import { can } from "../authorization/policyEngine/policyEngine";
+import {
+  criarProvidersMundoLocal,
+  LOCAL_ORGANIZATION_ID,
+} from "../authorization/providers/localWorld";
 import CollaboratorIdentity from "../components/CollaboratorIdentity";
 import { getCicloAtivo } from "../services/cicloAvaliacaoStorage";
 import {
@@ -19,8 +22,6 @@ import { getColaboradores } from "../services/colaboradorStorage";
 import type { Meta, TipoMeta } from "../types/Meta";
 import "../styles/ciclos.css";
 import "../styles/minhas-metas.css";
-
-type GoalOwnCapability = Extract<Capability, `goal.${string}.own`>;
 
 function MinhasMetasPage() {
   const navigate = useNavigate();
@@ -46,8 +47,8 @@ function MinhasMetasPage() {
     return (
       <main className="virtus-page">
         <section className="goals-empty">
-          <h1>Usuário atual não definido</h1>
-          <p>Selecione um usuário para acessar suas metas.</p>
+          <h1>UsuÃ¡rio atual nÃ£o definido</h1>
+          <p>Selecione um usuÃ¡rio para acessar suas metas.</p>
         </section>
       </main>
     );
@@ -62,15 +63,15 @@ function MinhasMetasPage() {
         <section className="cycle-page-header goals-page-header">
           <div>
             <h1>Minhas Metas</h1>
-            <p>Acompanhe seus objetivos de negócio e desenvolvimento individual.</p>
+            <p>Acompanhe seus objetivos de negÃ³cio e desenvolvimento individual.</p>
           </div>
           <button type="button" className="cycle-btn cycle-btn--secondary" onClick={() => navigate(-1)}>
-            ← Voltar
+            â† Voltar
           </button>
         </section>
         <section className="goals-empty">
           <h2>Nenhum ciclo ativo</h2>
-          <p>Não existe um ciclo ativo para cadastro ou acompanhamento de metas.</p>
+          <p>NÃ£o existe um ciclo ativo para cadastro ou acompanhamento de metas.</p>
         </section>
       </main>
     );
@@ -78,44 +79,23 @@ function MinhasMetasPage() {
 
   const cicloAtivo = cicloEncontrado;
   const colaboradores = getColaboradores();
-  const authorizationContext = {
+  const providers = criarProvidersMundoLocal(usuario, colaboradores);
+  const requisicaoMetaPropria = {
     actor: {
-      matricula: usuario.matricula,
-      funcao: usuario.funcao,
-      status: usuario.status,
+      actorId: String(usuario.matricula),
+      organizationId: LOCAL_ORGANIZATION_ID,
     },
+    capability: "goal.write" as const,
+    target: { type: "collaborator" as const, id: String(usuario.matricula) },
+    context: { date: new Date(), cycleId: cicloAtivo.id },
+    domainState: { allows: () => cicloAtivo.status === "ATIVO" },
   };
-  const goalResource = {
-    kind: "goal" as const,
-    owner: usuario,
-    collaborators: colaboradores,
-    cycle: cicloAtivo,
-  };
-  const podeCriarMeta = can(
-    authorizationContext,
-    "goal.create.own",
-    goalResource
-  );
-  const podeEditarMeta = can(
-    authorizationContext,
-    "goal.edit.own",
-    goalResource
-  );
-  const podeExcluirMeta = can(
-    authorizationContext,
-    "goal.delete.own",
-    goalResource
-  );
-  const podeAtualizarProgresso = can(
-    authorizationContext,
-    "goal.progress.own",
-    goalResource
-  );
-  const podeFinalizarMeta = can(
-    authorizationContext,
-    "goal.finalize.own",
-    goalResource
-  );
+  const podeGerenciarMetaPropria = can(requisicaoMetaPropria, providers).allowed;
+  const podeCriarMeta = podeGerenciarMetaPropria;
+  const podeEditarMeta = podeGerenciarMetaPropria;
+  const podeExcluirMeta = podeGerenciarMetaPropria;
+  const podeAtualizarProgresso = podeGerenciarMetaPropria;
+  const podeFinalizarMeta = podeGerenciarMetaPropria;
   const possuiOperacaoPropria =
     podeCriarMeta ||
     podeEditarMeta ||
@@ -128,17 +108,13 @@ function MinhasMetasPage() {
       <main className="virtus-page">
         <section className="goals-empty">
           <h1>Minhas Metas</h1>
-          <p>O cadastro de metas próprias não está habilitado para este perfil.</p>
+          <p>O cadastro de metas prÃ³prias nÃ£o estÃ¡ habilitado para este perfil.</p>
           <button type="button" className="cycle-btn cycle-btn--secondary" onClick={() => navigate("/")}>
-            Voltar ao início
+            Voltar ao inÃ­cio
           </button>
         </section>
       </main>
     );
-  }
-
-  function autorizarOperacaoPropria(capability: GoalOwnCapability) {
-    authorize(authorizationContext, capability, goalResource);
   }
 
   const metas = getMetasDoColaboradorNoCiclo(usuario.matricula, cicloAtivo.id);
@@ -183,7 +159,6 @@ function MinhasMetasPage() {
     setErro("");
 
     try {
-      autorizarOperacaoPropria("goal.progress.own");
       atualizarAcompanhamentoMeta(
         acompanhandoId,
         usuario,
@@ -197,7 +172,7 @@ function MinhasMetasPage() {
       setErro(
         error instanceof Error
           ? error.message
-          : "Não foi possível atualizar o andamento da meta."
+          : "NÃ£o foi possÃ­vel atualizar o andamento da meta."
       );
     }
   }
@@ -222,14 +197,13 @@ function MinhasMetasPage() {
     if (!fechandoId) return;
 
     if (atingida === null) {
-      setErro("Informe se a meta foi atingida ou não.");
+      setErro("Informe se a meta foi atingida ou nÃ£o.");
       return;
     }
 
     setErro("");
 
     try {
-      autorizarOperacaoPropria("goal.finalize.own");
       finalizarMeta(
         fechandoId,
         usuario,
@@ -243,13 +217,13 @@ function MinhasMetasPage() {
       setErro(
         error instanceof Error
           ? error.message
-          : "Não foi possível finalizar a meta."
+          : "NÃ£o foi possÃ­vel finalizar a meta."
       );
     }
   }
 
   function formatarDataHora(data?: string) {
-    if (!data) return "Ainda não atualizado";
+    if (!data) return "Ainda nÃ£o atualizado";
     return new Date(data).toLocaleString("pt-BR", {
       dateStyle: "short",
       timeStyle: "short",
@@ -261,7 +235,6 @@ function MinhasMetasPage() {
 
     try {
       if (editandoId) {
-        autorizarOperacaoPropria("goal.edit.own");
         atualizarMeta(
           editandoId,
           usuario,
@@ -271,7 +244,6 @@ function MinhasMetasPage() {
           valorAlvo
         );
       } else {
-        autorizarOperacaoPropria("goal.create.own");
         criarMeta(
           usuario,
           cicloAtivo,
@@ -288,7 +260,7 @@ function MinhasMetasPage() {
       setErro(
         error instanceof Error
           ? error.message
-          : "Não foi possível salvar a meta."
+          : "NÃ£o foi possÃ­vel salvar a meta."
       );
     }
   }
@@ -306,12 +278,11 @@ function MinhasMetasPage() {
 
   function excluir(meta: Meta) {
     const confirmar = window.confirm(
-      "Deseja excluir esta meta? O registro será mantido no histórico."
+      "Deseja excluir esta meta? O registro serÃ¡ mantido no histÃ³rico."
     );
     if (!confirmar) return;
 
     try {
-      autorizarOperacaoPropria("goal.delete.own");
       excluirMeta(meta.id, usuario, cicloAtivo);
       if (editandoId === meta.id) limparFormulario();
       if (acompanhandoId === meta.id) limparAcompanhamento();
@@ -321,14 +292,14 @@ function MinhasMetasPage() {
       setErro(
         error instanceof Error
           ? error.message
-          : "Não foi possível excluir a meta."
+          : "NÃ£o foi possÃ­vel excluir a meta."
       );
     }
   }
 
   function statusLabel(meta: Meta) {
     if (meta.status === "ATINGIDA") return "Atingida";
-    if (meta.status === "NAO_ATINGIDA") return "Não atingida";
+    if (meta.status === "NAO_ATINGIDA") return "NÃ£o atingida";
     return "Em andamento";
   }
 
@@ -356,7 +327,7 @@ function MinhasMetasPage() {
           <textarea
             value={resultadoAtual}
             onChange={(event) => setResultadoAtual(event.target.value)}
-            placeholder="Ex.: O tempo médio atual caiu para 5,1 horas."
+            placeholder="Ex.: O tempo mÃ©dio atual caiu para 5,1 horas."
           />
         </label>
 
@@ -406,9 +377,9 @@ function MinhasMetasPage() {
       <div className="goal-inline-editor">
         <div className="goal-inline-editor__header">
           <div>
-            <span className="cycle-eyebrow">Conclusão</span>
+            <span className="cycle-eyebrow">ConclusÃ£o</span>
             <h4>{meta.status === "EM_ANDAMENTO" ? "Fechar meta" : "Revisar fechamento"}</h4>
-            <p>Registre o resultado alcançado e indique se a meta foi atingida.</p>
+            <p>Registre o resultado alcanÃ§ado e indique se a meta foi atingida.</p>
           </div>
         </div>
 
@@ -424,7 +395,7 @@ function MinhasMetasPage() {
         <fieldset className="goals-radio-group">
           <legend>Meta atingida?</legend>
           <label><input type="radio" checked={atingida === true} onChange={() => setAtingida(true)} /> Sim</label>
-          <label><input type="radio" checked={atingida === false} onChange={() => setAtingida(false)} /> Não</label>
+          <label><input type="radio" checked={atingida === false} onChange={() => setAtingida(false)} /> NÃ£o</label>
         </fieldset>
 
         {erro && <div className="goals-error">{erro}</div>}
@@ -444,28 +415,28 @@ function MinhasMetasPage() {
       <div className="goal-inline-editor">
         <div className="goal-inline-editor__header">
           <div>
-            <span className="cycle-eyebrow">Edição</span>
+            <span className="cycle-eyebrow">EdiÃ§Ã£o</span>
             <h4>Editar meta</h4>
-            <p>Atualize a descrição, o KPI mensurável ou o valor-alvo desta meta.</p>
+            <p>Atualize a descriÃ§Ã£o, o KPI mensurÃ¡vel ou o valor-alvo desta meta.</p>
           </div>
         </div>
 
         <label className="goals-field">
-          <span>Descrição da meta</span>
+          <span>DescriÃ§Ã£o da meta</span>
           <textarea
             value={descricao}
             onChange={(event) => setDescricao(event.target.value)}
-            placeholder="Ex.: Reduzir o tempo médio de publicação"
+            placeholder="Ex.: Reduzir o tempo mÃ©dio de publicaÃ§Ã£o"
           />
         </label>
 
         <div className="goals-editor__grid">
           <label className="goals-field">
-            <span>KPI mensurável</span>
+            <span>KPI mensurÃ¡vel</span>
             <input
               value={kpi}
               onChange={(event) => setKpi(event.target.value)}
-              placeholder="Ex.: Tempo médio entre aprovação e publicação"
+              placeholder="Ex.: Tempo mÃ©dio entre aprovaÃ§Ã£o e publicaÃ§Ã£o"
             />
           </label>
 
@@ -474,7 +445,7 @@ function MinhasMetasPage() {
             <input
               value={valorAlvo}
               onChange={(event) => setValorAlvo(event.target.value)}
-              placeholder="Ex.: ≤ 4 horas, 95%, R$ 1 milhão"
+              placeholder="Ex.: â‰¤ 4 horas, 95%, R$ 1 milhÃ£o"
             />
           </label>
         </div>
@@ -483,7 +454,7 @@ function MinhasMetasPage() {
 
         <div className="goals-editor__actions">
           <button type="button" className="cycle-btn cycle-btn--secondary" onClick={limparFormulario}>Cancelar</button>
-          <button type="button" className="cycle-btn cycle-btn--primary" onClick={salvar}>Salvar alterações</button>
+          <button type="button" className="cycle-btn cycle-btn--primary" onClick={salvar}>Salvar alteraÃ§Ãµes</button>
         </div>
       </div>
     );
@@ -510,7 +481,7 @@ function MinhasMetasPage() {
         </div>
 
         {limite === 0 ? (
-          <div className="goals-group__empty">Esta categoria não foi habilitada para este ciclo.</div>
+          <div className="goals-group__empty">Esta categoria nÃ£o foi habilitada para este ciclo.</div>
         ) : itens.length === 0 ? (
           <div className="goals-group__empty">Nenhuma meta cadastrada nesta categoria.</div>
         ) : (
@@ -569,26 +540,26 @@ function MinhasMetasPage() {
                     <strong>{meta.valorAlvo}</strong>
                   </div>
                   <div>
-                    <span>Última atualização</span>
+                    <span>Ãšltima atualizaÃ§Ã£o</span>
                     <strong>{formatarDataHora(meta.dataUltimoAcompanhamento)}</strong>
                   </div>
                 </div>
 
                 <div className={`goal-approval ${metaEstaAprovada(meta, usuario, colaboradores) ? "is-approved" : "is-pending"}`}>
                   <div className="goal-approval__title">
-                    <strong>{metaEstaAprovada(meta, usuario, colaboradores) ? "Meta aprovada" : "Aguardando aprovação"}</strong>
-                    <span>Aprovação formal</span>
+                    <strong>{metaEstaAprovada(meta, usuario, colaboradores) ? "Meta aprovada" : "Aguardando aprovaÃ§Ã£o"}</strong>
+                    <span>AprovaÃ§Ã£o formal</span>
                   </div>
                   <div className="goal-approval__checks">
                     {metaExigeAprovacaoCoordenador(usuario, colaboradores) && (
                       <span className={meta.aprovacaoCoordenador ? "is-ok" : ""}>
-                        {meta.aprovacaoCoordenador ? "✓" : "○"} Coordenador direto
-                        {meta.aprovacaoCoordenador && <small> • {formatarDataHora(meta.aprovacaoCoordenador.data)}</small>}
+                        {meta.aprovacaoCoordenador ? "âœ“" : "â—‹"} Coordenador direto
+                        {meta.aprovacaoCoordenador && <small> â€¢ {formatarDataHora(meta.aprovacaoCoordenador.data)}</small>}
                       </span>
                     )}
                     <span className={meta.aprovacaoGerente ? "is-ok" : ""}>
-                      {meta.aprovacaoGerente ? "✓" : "○"} Gerente
-                      {meta.aprovacaoGerente && <small> • {formatarDataHora(meta.aprovacaoGerente.data)}</small>}
+                      {meta.aprovacaoGerente ? "âœ“" : "â—‹"} Gerente
+                      {meta.aprovacaoGerente && <small> â€¢ {formatarDataHora(meta.aprovacaoGerente.data)}</small>}
                     </span>
                   </div>
                 </div>
@@ -606,7 +577,7 @@ function MinhasMetasPage() {
                 <div className="goal-result">
                   <span>Resultado atual</span>
                   <strong className={!meta.resultadoAtual?.trim() ? "is-muted" : ""}>
-                    {meta.resultadoAtual?.trim() ? meta.resultadoAtual : "Ainda não informado"}
+                    {meta.resultadoAtual?.trim() ? meta.resultadoAtual : "Ainda nÃ£o informado"}
                   </strong>
                 </div>
 
@@ -656,10 +627,10 @@ function MinhasMetasPage() {
       <section className="cycle-page-header goals-page-header">
         <div>
           <h1>Minhas Metas</h1>
-          <p>Acompanhe seus objetivos de negócio e desenvolvimento individual no ciclo atual.</p>
+          <p>Acompanhe seus objetivos de negÃ³cio e desenvolvimento individual no ciclo atual.</p>
         </div>
         <button type="button" className="cycle-btn cycle-btn--secondary" onClick={() => navigate(-1)}>
-          ← Voltar
+          â† Voltar
         </button>
       </section>
 
@@ -673,9 +644,9 @@ function MinhasMetasPage() {
       <section className="goals-cycle-card">
         <div>
           <span className="cycle-eyebrow">Ciclo atual</span>
-          <h2>{cicloAtivo.ano} • Ciclo {cicloAtivo.ciclo}</h2>
+          <h2>{cicloAtivo.ano} â€¢ Ciclo {cicloAtivo.ciclo}</h2>
           <p>
-            Até <strong>{limiteNegocio}</strong> meta{limiteNegocio === 1 ? "" : "s"} de Negócio/Projetos e{" "}
+            AtÃ© <strong>{limiteNegocio}</strong> meta{limiteNegocio === 1 ? "" : "s"} de NegÃ³cio/Projetos e{" "}
             <strong>{limiteIndividuais}</strong> meta{limiteIndividuais === 1 ? "" : "s"} individual
             {limiteIndividuais === 1 ? "" : "is"}.
           </p>
@@ -684,22 +655,22 @@ function MinhasMetasPage() {
 
       <section className="goals-kpis" aria-label="Resumo das metas">
         <article><span>Metas cadastradas</span><strong>{totalCadastrado}<small>/{totalConfigurado}</small></strong></article>
-        <article><span>Aguardando aprovação</span><strong>{totalCadastrado - aprovadas}</strong></article>
+        <article><span>Aguardando aprovaÃ§Ã£o</span><strong>{totalCadastrado - aprovadas}</strong></article>
         <article><span>Em andamento</span><strong>{emAndamento}</strong></article>
-        <article><span>Progresso médio</span><strong>{metas.length ? Math.round(metas.reduce((s, m) => s + (m.progressoPercentual ?? 0), 0) / metas.length) : 0}<small>%</small></strong></article>
+        <article><span>Progresso mÃ©dio</span><strong>{metas.length ? Math.round(metas.reduce((s, m) => s + (m.progressoPercentual ?? 0), 0) / metas.length) : 0}<small>%</small></strong></article>
       </section>
 
       <div className="goals-groups">
         {renderGrupo(
-          "Metas de Negócio / Projetos",
-          "Resultados ligados às prioridades, entregas e indicadores do negócio.",
+          "Metas de NegÃ³cio / Projetos",
+          "Resultados ligados Ã s prioridades, entregas e indicadores do negÃ³cio.",
           "NEGOCIO_PROJETO",
           metasNegocio,
           limiteNegocio
         )}
         {renderGrupo(
           "Metas Individuais",
-          "Objetivos voltados ao desenvolvimento e à evolução profissional.",
+          "Objetivos voltados ao desenvolvimento e Ã  evoluÃ§Ã£o profissional.",
           "INDIVIDUAL",
           metasIndividuais,
           limiteIndividuais
@@ -717,7 +688,7 @@ function MinhasMetasPage() {
               <div>
                 <span className="cycle-eyebrow">Cadastro</span>
                 <h2>Nova meta</h2>
-                <p>Defina a descrição, o KPI mensurável e o valor-alvo.</p>
+                <p>Defina a descriÃ§Ã£o, o KPI mensurÃ¡vel e o valor-alvo.</p>
               </div>
             </div>
 
@@ -732,7 +703,7 @@ function MinhasMetasPage() {
                 >
                   {limiteNegocio > 0 && (
                     <option value="NEGOCIO_PROJETO" disabled={metasNegocio.length >= limiteNegocio}>
-                      Negócio / Projetos
+                      NegÃ³cio / Projetos
                     </option>
                   )}
                   {limiteIndividuais > 0 && (
@@ -744,21 +715,21 @@ function MinhasMetasPage() {
               </label>
 
             <label className="goals-field">
-              <span>Descrição da meta</span>
+              <span>DescriÃ§Ã£o da meta</span>
               <textarea
                 value={descricao}
                 onChange={(event) => setDescricao(event.target.value)}
-                placeholder="Ex.: Reduzir o tempo médio de publicação"
+                placeholder="Ex.: Reduzir o tempo mÃ©dio de publicaÃ§Ã£o"
               />
             </label>
 
             <div className="goals-editor__grid">
               <label className="goals-field">
-                <span>KPI mensurável</span>
+                <span>KPI mensurÃ¡vel</span>
                 <input
                   value={kpi}
                   onChange={(event) => setKpi(event.target.value)}
-                  placeholder="Ex.: Tempo médio entre aprovação e publicação"
+                  placeholder="Ex.: Tempo mÃ©dio entre aprovaÃ§Ã£o e publicaÃ§Ã£o"
                 />
               </label>
 
@@ -767,7 +738,7 @@ function MinhasMetasPage() {
                 <input
                   value={valorAlvo}
                   onChange={(event) => setValorAlvo(event.target.value)}
-                  placeholder="Ex.: ≤ 4 horas, 95%, R$ 1 milhão"
+                  placeholder="Ex.: â‰¤ 4 horas, 95%, R$ 1 milhÃ£o"
                 />
               </label>
             </div>
