@@ -576,6 +576,66 @@ local, CLI 2.116.0, PostgreSQL 17.6; repetida após um segundo `db reset`, com o
 mesmo resultado). Detalhes na seção "Validação executada (F3-07)" do
 `supabase/README.md`.
 
+## F3-08 — Colegiado padrão e snapshot por ciclo (Issue #85)
+
+Validação estrutural contra o **Supabase local** da migration
+`20260907180000_collegiate_configuration_snapshot.sql`: configuração temporal
+do colegiado por avaliado (0..N) e snapshot imutável por ciclo.
+
+### Como reproduzir
+
+Requisitos: Docker Desktop em execução e o CLI Supabase da raiz
+(`npx --yes supabase@2.116.0`).
+
+```powershell
+# 1) subir a stack local (rebuild limpo: migrations em ordem + seed)
+npx --yes supabase@2.116.0 start
+
+# 2) aplicar o cenário sintético no banco local (idempotente)
+Get-Content supabase/validacao/01-cenario-f3-08.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+
+# 3) executar a validação (exit code 0 = todas as verificações passaram)
+Get-Content supabase/validacao/02-validar-f3-08.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+```
+
+Observações:
+
+- os scripts **não tocam projeto remoto**, **não alteram nenhuma policy RLS** e
+  removem ao final os dados sintéticos do cenário (banco local limpo);
+- `01-cenario-f3-08.sql` insere via superuser local (equivalente a service_role)
+  apenas UUIDs fixos com prefixo `fa`, sem colidir com os cenários anteriores;
+- o deny-by-default é comprovado pelo passo 8 de `02-validar-f3-08.sql`
+  (`set role authenticated`).
+
+### O que é verificado (02-validar-f3-08.sql)
+
+1. **Estrutura**: schema `public` com 19 tabelas (5 novas da F3-08); 28
+   constraints esperadas; FKs `ON DELETE RESTRICT`; RLS habilitado nas 5
+   tabelas com zero policies; funções `materializar_colegiado_ciclo` e
+   `enforce_collegiate_configuration_member_not_self` (SECURITY INVOKER).
+2. **Configuração padrão**: multi-membros (EVAL1 = {M1,M2}); configuração
+   explicitamente vazia (EVAL3); self bloqueado; membro duplicado bloqueado;
+   cross-organization bloqueado; mudança fecha v1 e abre v2 preservando
+   histórico.
+3. **Snapshot por ciclo**: um snapshot por avaliado; membros e superior
+   resolvidos congelados (EVAL1 = {M1,M2} e C_GER no ciclo 1; {M1} no ciclo 2
+   com v2 vigente); EVAL2/EVAL3 com 0 membros; EVAL4 (sem posição) com 0
+   posições; EVAL5 (2 posições) com 2 posições e superiores por posição;
+   posição sem superior com superior null.
+4. **Idempotência**: repetição da materialização não duplica/substitui.
+5. **Imutabilidade**: mudança posterior de occupation não altera snapshots;
+   reexecução do ciclo não re-materializa.
+6. **RPC**: rejeita avaliado de outra organização (sem snapshot criado).
+7. **RLS deny-by-default** comprovado como `authenticated`.
+8. **F3-01..F3-07 intactas** e **limpeza** do cenário.
+
+Execução registrada nesta Issue: **29 verificações [PASS], 0 falhas** (Supabase
+local, CLI 2.116.0, PostgreSQL 17.6; repetida após um segundo `db reset`, com o
+mesmo resultado). Detalhes na seção "Validação executada (F3-08)" do
+`supabase/README.md`.
+
 ## Limitações e notas registradas
 
 - **JWT é stateless**: após logout, o refresh token é revogado, mas um access

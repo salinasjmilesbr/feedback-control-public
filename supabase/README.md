@@ -1,4 +1,4 @@
-# Supabase local — desenvolvimento (F1-01 a F3-07)
+# Supabase local — desenvolvimento (F1-01 a F3-08)
 
 Infraestrutura local do Supabase para o Virtus Team, versionada e reconstruível
 integralmente a partir do repositório — sem configuração manual no dashboard,
@@ -46,6 +46,10 @@ A F3-07 criou a camada de resolução organizacional — funções SQL
 `SECURITY INVOKER` — que derivam, por data, gestor direto, subordinados,
 descendentes, cadeia hierárquica e escopo estrutural, sem campos redundantes de
 gestor e sem inferir hierarquia por cargo.
+A F3-08 modelou o colegiado padrão de avaliação (configuração temporal por
+colaborador avaliado, 0..N explícito) e o snapshot imutável por ciclo
+(posições ocupadas, superior direto resolvido e membros congelados na data de
+ativação), mantendo ciclos atuais no localStorage.
 O auto-cadastro público permanece desabilitado; o seed segue sem inserir dados
 funcionais, e o frontend mantém o localStorage como persistência funcional dos
 domínios (as F2-03 a F2-07 alteram somente identidade/sessão).
@@ -100,13 +104,13 @@ docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -X \
   -c "select proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='set_updated_at'"
 ```
 
-Estado esperado ao final da F3-07 (após rebuild limpo):
+Estado esperado ao final da F3-08 (após rebuild limpo):
 
-- quatorze migrations registradas (`20260906185540`, `20260906201856`,
+- quinze migrations registradas (`20260906185540`, `20260906201856`,
   `20260906203358`, `20260906205425`, `20260906230400`, `20260907000250`,
   `20260907103000`, `20260907103100`, `20260907120000`, `20260907130000`,
-  `20260907140000`, `20260907150000`, `20260907160000` e
-  `20260907170000`);
+  `20260907140000`, `20260907150000`, `20260907160000`, `20260907170000` e
+  `20260907180000`);
 - no schema `public`, as tabelas de identidade/membership da Fase 2 —
   `organizations`, `user_profiles` e `user_organization_memberships` — as três
   tabelas de colaboradores da F3-01 — `collaborators`,
@@ -114,8 +118,11 @@ Estado esperado ao final da F3-07 (após rebuild limpo):
   catálogos da F3-02 — `job_roles` e `seniority_levels` — as três tabelas da
   F3-03 — `organizational_units`, `organizational_unit_parent_periods` e
   `organizational_positions` — a tabela da F3-04 —
-  `position_reporting_lines` — a tabela da F3-05 — `occupations` — e a tabela
-  da F3-06 — `temporary_responsibilities` — todas com RLS habilitado; policies
+  `position_reporting_lines` — a tabela da F3-05 — `occupations` — a tabela
+  da F3-06 — `temporary_responsibilities` — e as cinco tabelas da F3-08 —
+  `collegiate_configurations`, `collegiate_configuration_members`,
+  `collegiate_cycle_snapshots`, `collegiate_cycle_snapshot_positions` e
+  `collegiate_cycle_snapshot_members` — todas com RLS habilitado; policies
   apenas nas tabelas de identidade (F2-03/F2-07), nenhuma policy nas demais
   (deny-by-default); nenhuma policy de escrita;
 - a função técnica `set_updated_at` (F1-03), a RPC `criar_perfil_membership`
@@ -139,7 +146,18 @@ Estado esperado ao final da F3-07 (após rebuild limpo):
   `ex_organizational_unit_parent_periods_no_overlap`,
   `ex_position_reporting_lines_no_overlap`,
   `ex_occupations_position_no_overlap` e
-  `ex_temporary_responsibilities_position_no_overlap` presentes;
+  `ex_temporary_responsibilities_position_no_overlap` e
+  `ex_collegiate_configurations_no_overlap` presentes;
+- as funções da F3-08 (`materializar_colegiado_ciclo` — RPC explícita,
+  transacional e idempotente, SECURITY INVOKER — e
+  `enforce_collegiate_configuration_member_not_self`) presentes;
+- `collegiate_configurations` (+`_members`) guardam versões temporais do
+  colegiado padrão por colaborador avaliado (0..N explícito, sem
+  self/duplicados/cross-org); `collegiate_cycle_snapshots` (+`_positions`/
+  +`_members`) congelam por `(organization_id, ano, ciclo, collaborator_id)`
+  posições ocupadas, superior direto resolvido e membros na data de ativação —
+  snapshots imutáveis no fluxo normal; FKs compostas `ON DELETE RESTRICT`,
+  RLS deny-by-default sem policies;
 - o serviço Auth local habilitado com auto-cadastro público desabilitado
   (`enable_signup = false`) e provedor de e-mail ativo: `auth.users` existe e é
   referenciado por `user_profiles` (FK `fk_user_profiles_auth_users`);
@@ -699,6 +717,39 @@ gestor direto:
   `supabase/validacao/01-cenario-f3-07.sql`; rebuild e validação descritos no
   README de `validacao/` e registrados na seção "Validação executada (F3-07)".
 
+## Colegiado padrão e snapshot por ciclo (F3-08)
+
+A F3-08 (Issue #85) separou as relações avaliativas transversais da hierarquia
+formal — colegiado opcional (0..N) com histórico por ciclo (uma migration
+aditiva sobre o estado da F3-07):
+
+- `collegiate_configurations` + `collegiate_configuration_members` — versões
+  temporais (`valid_from`/`valid_to` meio-aberto; uma vigente por avaliado) da
+  configuração padrão do colegiado ancorada no **colaborador avaliado**, com
+  lista **explícita** de membros 0..N (mesma organização, sem self e sem
+  duplicados; sem derivação por cargo/estrutura); mudança normal fecha a
+  versão e cria outra (histórico preservado); zero membros = "sem colegiado";
+- `collegiate_cycle_snapshots` + `collegiate_cycle_snapshot_positions` +
+  `collegiate_cycle_snapshot_members` — snapshot **imutável** por ciclo,
+  identificado por `(organization_id, ano, ciclo, collaborator_id)` (sem tabela
+  de ciclos; alinhado à chave de negócio do `CicloAvaliacao`), congelando na
+  data de referência as posições ocupadas, o superior formal direto resolvido
+  por posição (F3-07: substituto > titular > NULL) e os membros do colegiado;
+- RPC `materializar_colegiado_ciclo` — materialização explícita, transacional e
+  idempotente, chamada na ativação do ciclo (PLANEJADO → ATIVO) com a lista de
+  avaliados fornecida pelo chamador (um snapshot por avaliado; avaliado sem
+  posição na data gera snapshot com posições vazias); repetição não duplica nem
+  substitui;
+- mudanças posteriores de configuração/occupation/reporting NÃO alteram
+  snapshots materializados; reabertura excepcional de ciclo não refaz snapshot;
+- integridade multi-organização por FKs compostas `ON DELETE RESTRICT`; RLS
+  deny-by-default nas 5 tabelas novas, sem policies/grants (funções
+  `SECURITY INVOKER`, sem bypass); ciclos atuais do localStorage permanecem
+  intactos (sem migração — D14).
+- dados: somente sintéticos, via cenário de validação
+  `supabase/validacao/01-cenario-f3-08.sql`; rebuild e validação descritos no
+  README de `validacao/` e registrados na seção "Validação executada (F3-08)".
+
 ## Aplicação independente
 
 O frontend continua iniciando com `npm run dev`, mesmo sem Docker ou Supabase.
@@ -1196,4 +1247,52 @@ Migrations, funções de resolução e RLS validados em 2026-09-07 nesta máquin
 - limitações documentadas: a camada não implementa autorização/capability, RLS
   final de recursos, colegiado nem snapshot de ciclo; resolução avaliativa
   definitiva permanece para a camada futura de avaliações;
+- nenhuma conexão ao Supabase remoto, credencial ou dado real envolvido.
+
+## Validação executada (F3-08)
+
+Migrations, schema, constraints, triggers, RPC e RLS validados em 2026-09-07
+nesta máquina (Docker Desktop 29.7.2; CLI Supabase 2.116.0 via npx;
+PostgreSQL 17.6; Node 24):
+
+- rebuild limpo: `supabase start` a partir de estado limpo e duas execuções
+  adicionais de `db reset` — as quinze migrations aplicadas em ordem
+  (foundation, F2-01, F2-02, F2-03, F2-06, F2-07,
+  `20260907103000_enable_btree_gist`,
+  `20260907103100_collaborators_identifiers_status_periods`,
+  `20260907120000_job_roles_seniority_levels`,
+  `20260907130000_organizational_units_positions`,
+  `20260907140000_position_reporting_lines`,
+  `20260907150000_occupations`, `20260907160000_temporary_responsibilities`,
+  `20260907170000_organization_resolution` e
+  `20260907180000_collegiate_configuration_snapshot`) e o seed reaplicado
+  automaticamente, sem intervenção (três reconstruções limpas);
+- schema verificado: 19 tabelas no schema `public` (5 novas da F3-08);
+  28 constraints esperadas; FKs compostas `ON DELETE RESTRICT`; RLS habilitado
+  nas 5 tabelas novas com zero policies; funções `materializar_colegiado_ciclo`
+  e `enforce_collegiate_configuration_member_not_self` (plpgsql, SECURITY
+  INVOKER);
+- comportamento comprovado (cenário + asserts em
+  `supabase/validacao/01-cenario-f3-08.sql` e `02-validar-f3-08.sql`):
+  configuração padrão multi-membros e explicitamente vazia; self, duplicado e
+  cross-organization bloqueados; mudança de configuração preservando histórico
+  (v1 {M1,M2} → v2 {M1}); snapshot por avaliado com membros e superior
+  resolvidos congelados (ciclo 1 {M1,M2}; ciclo 2 {M1}); avaliado sem
+  configuração/posição e com múltiplas posições; posição sem superior;
+  idempotência da materialização; mudança posterior de occupation não altera
+  snapshots; RPC rejeita avaliado de outra organização; **29 verificações
+  [PASS], 0 falhas** (execução repetida após o segundo `db reset`, mesmo
+  resultado);
+- RLS deny-by-default comprovado como `authenticated` (leituras vazias, INSERT
+  negado, UPDATE/DELETE zero linhas); policies existentes (3) e RLS das tabelas
+  F2/F3-01..07 inalterados;
+- F3-01..F3-07 intactas (funções de resolução presentes); dados sintéticos do
+  cenário removidos ao final (banco local limpo); varredura sem colunas
+  secret-like e sem credenciais novas;
+- suíte completa local: `npm test` (556 testes em 50 arquivos — aprovados),
+  `npm run build` (tsc + vite) aprovado, `npm run lint` aprovado e
+  `git diff --check` aprovado;
+- limitações documentadas: sem capabilities/RLS finais, notas/votos/pesos,
+  UI final, migração do domínio de ciclos nem correção retroativa excepcional;
+  ciclos do localStorage permanecem intactos (chave de negócio alinhada);
 - nenhuma conexão ao Supabase remoto, credencial ou dado real envolvido.
