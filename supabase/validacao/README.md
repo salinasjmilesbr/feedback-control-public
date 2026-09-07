@@ -520,6 +520,62 @@ local, CLI 2.116.0, PostgreSQL 17.6; repetida após um segundo `db reset`, com o
 mesmo resultado). Detalhes na seção "Validação executada (F3-06)" do
 `supabase/README.md`.
 
+## F3-07 — Resolução organizacional por data (Issue #84)
+
+Validação estrutural contra o **Supabase local** da migration
+`20260907170000_organization_resolution.sql`: funções SQL que resolvem, por
+data, gestor direto, subordinados, descendentes, cadeia e escopo estrutural,
+sem campos redundantes de gestor.
+
+### Como reproduzir
+
+Requisitos: Docker Desktop em execução e o CLI Supabase da raiz
+(`npx --yes supabase@2.116.0`).
+
+```powershell
+# 1) subir a stack local (rebuild limpo: migrations em ordem + seed)
+npx --yes supabase@2.116.0 start
+
+# 2) aplicar o cenário sintético no banco local (idempotente)
+Get-Content supabase/validacao/01-cenario-f3-07.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+
+# 3) executar a validação (exit code 0 = todas as verificações passaram)
+Get-Content supabase/validacao/02-validar-f3-07.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+```
+
+Observações:
+
+- os scripts **não tocam projeto remoto**, **não alteram nenhuma policy RLS** e
+  removem ao final os dados sintéticos do cenário (banco local limpo);
+- `01-cenario-f3-07.sql` insere via superuser local (equivalente a service_role)
+  apenas UUIDs fixos com prefixo `f9`, sem colidir com os cenários anteriores;
+- o deny-by-default é comprovado pelo passo 7 de `02-validar-f3-07.sql`
+  (`set role authenticated`: a resolução retorna responsável NULL).
+
+### O que é verificado (02-validar-f3-07.sql)
+
+1. **Estrutura**: schema `public` inalterado (14 tabelas; F3-07 adiciona apenas
+   funções); 7 funções presentes, SQL/STABLE/SECURITY INVOKER, sem grants
+   explícitos; 3 policies inalteradas.
+2. **Responsável por posição**: titular/substituto/efetivo (vaga com substituto;
+   ocupada sem substituto; vaga sem substituto → NULL).
+3. **Gestor direto**: derivado da reporting line + occupation; gerência sem
+   Coordenador (Consultor/Analista resolvem o Gerente); multi-positions com dois
+   gestores; licença não exclui.
+4. **Subordinados/descendentes**: conjuntos e profundidades corretos.
+5. **Cadeia**: ascendente com posições vagas preservadas (responsável NULL antes
+   do substituto; C_SUB durante).
+6. **Escopo**: união coerente de múltiplas positions (posições + unidades).
+7. **RLS deny-by-default**: authenticated não resolve ocupante.
+8. **F3-01..F3-06 intactas** e **limpeza** do cenário.
+
+Execução registrada nesta Issue: **20 verificações [PASS], 0 falhas** (Supabase
+local, CLI 2.116.0, PostgreSQL 17.6; repetida após um segundo `db reset`, com o
+mesmo resultado). Detalhes na seção "Validação executada (F3-07)" do
+`supabase/README.md`.
+
 ## Limitações e notas registradas
 
 - **JWT é stateless**: após logout, o refresh token é revogado, mas um access

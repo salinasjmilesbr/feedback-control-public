@@ -1,4 +1,4 @@
-# Supabase local — desenvolvimento (F1-01 a F3-06)
+# Supabase local — desenvolvimento (F1-01 a F3-07)
 
 Infraestrutura local do Supabase para o Virtus Team, versionada e reconstruível
 integralmente a partir do repositório — sem configuração manual no dashboard,
@@ -42,6 +42,10 @@ posições vagas, licença independente e desligamento com fechamento explícito
 A F3-06 criou as responsabilidades temporárias — `temporary_responsibilities` —
 como substituições com período fechado sobre uma posição, sem alterar
 occupation, reporting line, status ou estrutura formal.
+A F3-07 criou a camada de resolução organizacional — funções SQL
+`SECURITY INVOKER` — que derivam, por data, gestor direto, subordinados,
+descendentes, cadeia hierárquica e escopo estrutural, sem campos redundantes de
+gestor e sem inferir hierarquia por cargo.
 O auto-cadastro público permanece desabilitado; o seed segue sem inserir dados
 funcionais, e o frontend mantém o localStorage como persistência funcional dos
 domínios (as F2-03 a F2-07 alteram somente identidade/sessão).
@@ -96,12 +100,13 @@ docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -X \
   -c "select proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='set_updated_at'"
 ```
 
-Estado esperado ao final da F3-06 (após rebuild limpo):
+Estado esperado ao final da F3-07 (após rebuild limpo):
 
-- treze migrations registradas (`20260906185540`, `20260906201856`,
+- quatorze migrations registradas (`20260906185540`, `20260906201856`,
   `20260906203358`, `20260906205425`, `20260906230400`, `20260907000250`,
   `20260907103000`, `20260907103100`, `20260907120000`, `20260907130000`,
-  `20260907140000`, `20260907150000` e `20260907160000`);
+  `20260907140000`, `20260907150000`, `20260907160000` e
+  `20260907170000`);
 - no schema `public`, as tabelas de identidade/membership da Fase 2 —
   `organizations`, `user_profiles` e `user_organization_memberships` — as três
   tabelas de colaboradores da F3-01 — `collaborators`,
@@ -123,6 +128,11 @@ Estado esperado ao final da F3-06 (após rebuild limpo):
   `enforce_collaborator_inactive_requires_closed_occupations`,
   `enforce_temporary_responsibility_within_position` e
   `enforce_temporary_responsibility_not_self`) presentes;
+- as funções de resolução da F3-07 (`organizacao_resolver_responsavel_posicao`,
+  `organizacao_resolver_gestor_direto`, `organizacao_resolver_subordinados_diretos`,
+  `organizacao_resolver_descendentes`, `organizacao_resolver_cadeia`,
+  `organizacao_resolver_escopo_posicoes` e `organizacao_resolver_escopo_unidades`)
+  presentes — SQL, `STABLE`, `SECURITY INVOKER`, sem grants adicionais;
 - a extensão `btree_gist` habilitada (F3-01) e as exclusion constraints
   `ex_collaborator_status_periods_no_overlap`,
   `ex_collaborator_identifiers_no_overlap`,
@@ -661,6 +671,34 @@ estado da F3-05):
   dados funcionais); rebuild e validação descritos no README de `validacao/` e
   registrados na seção "Validação executada (F3-06)".
 
+## Resolução organizacional por data (F3-07)
+
+A F3-07 (Issue #84) criou a camada canônica de resolução estrutural — funções
+SQL `SECURITY INVOKER`/`STABLE` (sem grants, sem bypass de tenant isolation)
+que derivam, para uma data, a estrutura vigente sem campos redundantes de
+gestor direto:
+
+- `organizacao_resolver_responsavel_posicao(position_id, data)` — titular
+  (occupation vigente) + substituto operacional (`operational`/
+  `operational_evaluative`) + responsável efetivo (substituto > titular > NULL);
+- `organizacao_resolver_gestor_direto(collaborator_id, data)` — gestor formal
+  derivado da reporting line + occupation (por posição ocupada; raiz sem
+  superior não produz linha);
+- `organizacao_resolver_subordinados_diretos` e `organizacao_resolver_
+  descendentes` — subordinados diretos e descendentes estruturais (transitivos);
+- `organizacao_resolver_cadeia` — cadeia ascendente incluindo posições vagas
+  (não corrompida; responsável NULL quando vaga sem substituto);
+- `organizacao_resolver_escopo_posicoes`/`organizacao_resolver_escopo_unidades`
+  — união coerente de escopo para múltiplas occupations;
+- semântica: gestor derivado da estrutura (nunca de cargo/senioridade); licença
+  não exclui; inactive não resolve por ausência de occupation (F3-05);
+  colegiado/dotted line fora do escopo; status não é filtro adicional;
+- autorização/capability, RLS final de recursos e snapshot de ciclo ficam para
+  as fases correspondentes (as funções são reutilizáveis por elas).
+- dados: somente sintéticos, via cenário de validação
+  `supabase/validacao/01-cenario-f3-07.sql`; rebuild e validação descritos no
+  README de `validacao/` e registrados na seção "Validação executada (F3-07)".
+
 ## Aplicação independente
 
 O frontend continua iniciando com `npm run dev`, mesmo sem Docker ou Supabase.
@@ -1117,4 +1155,45 @@ Node 24):
   futura); correctiona retroativa excepcional não implementada; tipos não
   concedem capability/autorização (resolução avaliativa futura decidirá
   explicitamente);
+- nenhuma conexão ao Supabase remoto, credencial ou dado real envolvido.
+
+## Validação executada (F3-07)
+
+Migrations, funções de resolução e RLS validados em 2026-09-07 nesta máquina
+(Docker Desktop 29.7.2; CLI Supabase 2.116.0 via npx; PostgreSQL 17.6; Node 24):
+
+- rebuild limpo: `supabase start` a partir de estado limpo e duas execuções
+  adicionais de `db reset` — as quatorze migrations aplicadas em ordem
+  (foundation, F2-01, F2-02, F2-03, F2-06, F2-07, `20260907103000_enable_btree_gist`,
+  `20260907103100_collaborators_identifiers_status_periods`,
+  `20260907120000_job_roles_seniority_levels`,
+  `20260907130000_organizational_units_positions`,
+  `20260907140000_position_reporting_lines`,
+  `20260907150000_occupations`, `20260907160000_temporary_responsibilities` e
+  `20260907170000_organization_resolution`) e o seed reaplicado automaticamente,
+  sem intervenção (três reconstruções limpas);
+- schema inalterado (14 tabelas no schema `public`; F3-07 adiciona apenas
+  funções); sete funções `organizacao_resolver_*` presentes, SQL/`STABLE`/
+  `SECURITY INVOKER`, sem grants adicionais explícitos;
+- comportamento comprovado (cenário + asserts em
+  `supabase/validacao/01-cenario-f3-07.sql` e `02-validar-f3-07.sql`): titular/
+  substituto/efetivo por posição (vaga com substituto, ocupada, vaga sem
+  substituto); gestor direto derivado da estrutura; gerência sem Coordenador
+  (Consultor/Analista → Gerente); múltiplas positions com união coerente de
+  escopo; licença sem excluir titular; cadeia ascendente preservando posições
+  vagas; descendentes e profundidades corretos; escopo de posições/unidades;
+  **20 verificações [PASS], 0 falhas** (execução repetida após o segundo
+  `db reset`, mesmo resultado);
+- RLS: deny-by-default comprovado — como `authenticated`, a função de resolução
+  retorna responsável NULL (não vaza dados); policies existentes (3) e RLS das
+  tabelas F2/F3-01..06 inalterados;
+- F3-01..F3-06 intactas (nenhuma tabela/coluna alterada); dados sintéticos do
+  cenário removidos ao final (banco local limpo); varredura sem colunas
+  secret-like e sem credenciais novas;
+- suíte completa local: `npm test` (556 testes em 50 arquivos — aprovados),
+  `npm run build` (tsc + vite) aprovado, `npm run lint` aprovado e
+  `git diff --check` aprovado;
+- limitações documentadas: a camada não implementa autorização/capability, RLS
+  final de recursos, colegiado nem snapshot de ciclo; resolução avaliativa
+  definitiva permanece para a camada futura de avaliações;
 - nenhuma conexão ao Supabase remoto, credencial ou dado real envolvido.
