@@ -1,4 +1,4 @@
-# Supabase local — desenvolvimento (F1-01 a F3-09)
+# Supabase local — desenvolvimento (F1-01 a F3-10)
 
 Infraestrutura local do Supabase para o Virtus Team, versionada e reconstruível
 integralmente a partir do repositório — sem configuração manual no dashboard,
@@ -1388,4 +1388,27 @@ Node 24):
   avaliações viver no localStorage (reforço server-side na migração futura);
   mudança de reporting line não é recalculada retroativamente (snapshot
   imutável); sem migração do domínio de ciclos/avaliações;
+- nenhuma conexão ao Supabase remoto, credencial ou dado real envolvido.
+
+## Validação executada (F3-10)
+
+Validação integrada da estrutura organizacional executada em 2026-09-07 nesta
+máquina (Docker Desktop 29.7.2; CLI Supabase 2.116.0 via npx; PostgreSQL 17.6;
+Node 24) — **sem migration nem alteração de schema**:
+
+- rebuild limpo (`supabase start` + duas execuções de `db reset`): 16 migrations
+  em ordem + seed, sem intervenção;
+- cenário + runner em `supabase/validacao/01-cenario-f3-10.sql` e
+  `02-validar-f3-10.sql`: organização 100% sintética representativa do piloto
+  (8 job_roles + Junior/Pleno/Senior), cobrindo os **14 cenários** da Issue com
+  asserts explícitos — incluindo Analistas Junior/Pleno/Senior com a mesma
+  relação hierárquica (mesma reporting line, mesmo gestor, mesma profundidade) e
+  Especialista no mesmo patamar do Gerente (mesmo superior, zero subordinados);
+- reconstrução histórica comprovada em **5 datas**; sucessão F3-09 (troca
+  definitiva de ocupante) com eventos; RLS deny-by-default comprovado como
+  `authenticated`; F3-01..F3-09 intactas; **29 verificações [PASS], 0 falhas**
+  (execução repetida após o segundo `db reset`, mesmo resultado);
+- `npm test` (556 testes em 50 arquivos), `npm run build`, `npm run lint` e
+  `git diff --check` aprovados; varredura sem secrets/credenciais/dados reais;
+  cenário sintético removido ao final;
 - nenhuma conexão ao Supabase remoto, credencial ou dado real envolvido.
