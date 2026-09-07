@@ -57,6 +57,21 @@ describe("decisão de acesso às rotas funcionais (F2-04)", () => {
     });
   });
 
+  it("sessão expirada (F2-08) não libera rotas funcionais", () => {
+    expect(
+      decidirAcessoARotasFuncionais(
+        { status: "sessaoExpirada", motivo: "inatividade" },
+        true
+      )
+    ).toEqual({ tipo: "redirecionarLogin" });
+    expect(
+      decidirAcessoARotasFuncionais(
+        { status: "sessaoExpirada", motivo: "duracaoMaxima" },
+        false
+      )
+    ).toEqual({ tipo: "redirecionarLogin" });
+  });
+
   it("auth indisponível permite apenas no DEV com simulação preservada", () => {
     expect(decidirAcessoARotasFuncionais({ status: "indisponivel" }, true)).toEqual({
       tipo: "permitir",

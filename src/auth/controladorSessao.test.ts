@@ -1,11 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Autenticador, RepositorioIdentidade } from "./contratos";
+import type { ArmazenamentoInicioSessao } from "./armazenamentoSessao";
+import type { Autenticador, EventoMudancaSessao, RepositorioIdentidade } from "./contratos";
 import { criarControladorSessao, type EstadoSessao } from "./controladorSessao";
+import {
+  DURACAO_MAXIMA_SESSAO_MS,
+  LIMITE_INATIVIDADE_MS,
+} from "./politicaSessao";
+
+type SessaoObservada = { usuario: { id: string; email?: string | null } } | null;
 
 interface AutenticadorFalso {
   autenticador: Autenticador;
   unsubscribe: ReturnType<typeof vi.fn>;
-  notificarSessao: (sessao: Parameters<Autenticador["observarAutenticacao"]>[0] extends (s: infer S) => void ? S : never) => void;
+  notificarSessao: (evento: EventoMudancaSessao, sessao: SessaoObservada) => void;
   senhasRecebidas: string[];
 }
 
@@ -15,7 +22,7 @@ function criarAutenticadorFalso(opcoes: {
   erroLogin?: unknown | null;
 } = {}): AutenticadorFalso {
   const unsubscribe = vi.fn();
-  let aoMudar: ((sessao: { usuario: { id: string; email?: string | null } } | null) => void) | null = null;
+  let aoMudar: ((evento: EventoMudancaSessao, sessao: SessaoObservada) => void) | null = null;
   const senhasRecebidas: string[] = [];
 
   const autenticador: Autenticador = {
@@ -45,7 +52,7 @@ function criarAutenticadorFalso(opcoes: {
   return {
     autenticador,
     unsubscribe,
-    notificarSessao: (sessao) => aoMudar?.(sessao),
+    notificarSessao: (evento, sessao) => aoMudar?.(evento, sessao),
     senhasRecebidas,
   };
 }
@@ -56,6 +63,32 @@ function repositorioFalso(parcial: Partial<RepositorioIdentidade> = {}): Reposit
     buscarMembershipsAtivas: vi.fn(async () => []),
     buscarOrganizacoes: vi.fn(async () => []),
     ...parcial,
+  };
+}
+
+/** Relógio controlado para testes temporais da F2-08. */
+function relogioControlado(inicial = 1_700_000_000_000) {
+  let agora = inicial;
+  return {
+    relogio: () => agora,
+    avancar(ms: number): void {
+      agora += ms;
+    },
+  };
+}
+
+/** Marcador de início de sessão em memória, com spies para asserções. */
+function marcadoresFalso(iniciais: Record<string, number> = {}) {
+  const valores = new Map<string, number>(Object.entries(iniciais));
+  const ler = vi.fn((userId: string) => valores.get(userId) ?? null);
+  const definir = vi.fn((userId: string, inicioMs: number) => {
+    valores.set(userId, inicioMs);
+  });
+  const remover = vi.fn((userId: string) => {
+    valores.delete(userId);
+  });
+  return { ler, definir, remover, valores } satisfies ArmazenamentoInicioSessao & {
+    valores: Map<string, number>;
   };
 }
 
@@ -244,7 +277,7 @@ describe("controlador de sessão (F2-03)", () => {
     });
 
     await controlador.inicializar();
-    fake.notificarSessao(null);
+    fake.notificarSessao("saiu", null);
     await microtarefas();
 
     expect(ultimo(estados)).toEqual({ status: "naoAutenticado" });
@@ -335,5 +368,228 @@ describe("revalidação de sessão (F2-07)", () => {
     await controlador.revalidar();
 
     expect(fake.autenticador.validarSessaoAtual).not.toHaveBeenCalled();
+  });
+});
+
+describe("política de sessão (F2-08)", () => {
+  it("sessão persistida com mais de 1 dia não é restaurada no bootstrap", async () => {
+    const tempo = relogioControlado();
+    const marcador = marcadoresFalso({
+      "uuid-1": tempo.relogio() - DURACAO_MAXIMA_SESSAO_MS - 1,
+    });
+    const fake = criarAutenticadorFalso({ sessaoInicial: { id: "uuid-1" } });
+    const repositorio = repositorioFalso();
+    const estados: EstadoSessao[] = [];
+    const controlador = criarControladorSessao({
+      autenticador: fake.autenticador,
+      repositorio,
+      notificar: (estado) => estados.push(estado),
+      relogio: tempo.relogio,
+      inicioSessao: marcador,
+    });
+
+    await controlador.inicializar();
+
+    expect(ultimo(estados)).toEqual({ status: "sessaoExpirada", motivo: "duracaoMaxima" });
+    // Nenhuma resolução de identidade acontece para uma sessão já vencida.
+    expect(repositorio.buscarPerfil).not.toHaveBeenCalled();
+    await microtarefas();
+    // Revogação global (mesmo signOut do logout explícito), best-effort.
+    expect(fake.autenticador.sair).toHaveBeenCalled();
+    expect(marcador.valores.has("uuid-1")).toBe(false);
+  });
+
+  it("restauração dentro do prazo preserva o marcador original e autentica", async () => {
+    const tempo = relogioControlado();
+    const inicioOriginal = tempo.relogio() - 10 * 60 * 60 * 1000;
+    const marcador = marcadoresFalso({ "uuid-1": inicioOriginal });
+    const fake = criarAutenticadorFalso({ sessaoInicial: { id: "uuid-1" } });
+    const estados: EstadoSessao[] = [];
+    const controlador = criarControladorSessao({
+      autenticador: fake.autenticador,
+      repositorio: repositorioFalso(),
+      notificar: (estado) => estados.push(estado),
+      relogio: tempo.relogio,
+      inicioSessao: marcador,
+    });
+
+    await controlador.inicializar();
+
+    expect(ultimo(estados).status).toBe("autenticado");
+    expect(marcador.definir).not.toHaveBeenCalled();
+    expect(marcador.valores.get("uuid-1")).toBe(inicioOriginal);
+  });
+
+  it("novo login reinicia a janela mesmo com marcador antigo no dispositivo", async () => {
+    const tempo = relogioControlado();
+    const marcador = marcadoresFalso({
+      "uuid-1": tempo.relogio() - DURACAO_MAXIMA_SESSAO_MS - 60_000,
+    });
+    const fake = criarAutenticadorFalso({ sessaoInicial: null });
+    const estados: EstadoSessao[] = [];
+    const controlador = criarControladorSessao({
+      autenticador: fake.autenticador,
+      repositorio: repositorioFalso(),
+      notificar: (estado) => estados.push(estado),
+      relogio: tempo.relogio,
+      inicioSessao: marcador,
+    });
+
+    await controlador.inicializar();
+    await controlador.entrar("pessoa@example.invalid", "senha-secreta");
+
+    expect(ultimo(estados).status).toBe("autenticado");
+    expect(marcador.definir).toHaveBeenCalledWith("uuid-1", tempo.relogio());
+  });
+
+  it("inatividade acima de 60 minutos exige nova autenticação (sem chamar o servidor)", async () => {
+    const tempo = relogioControlado();
+    const marcador = marcadoresFalso();
+    const fake = criarAutenticadorFalso({ sessaoInicial: { id: "uuid-1" } });
+    const estados: EstadoSessao[] = [];
+    const controlador = criarControladorSessao({
+      autenticador: fake.autenticador,
+      repositorio: repositorioFalso(),
+      notificar: (estado) => estados.push(estado),
+      relogio: tempo.relogio,
+      inicioSessao: marcador,
+    });
+
+    await controlador.inicializar();
+    expect(ultimo(estados).status).toBe("autenticado");
+
+    tempo.avancar(LIMITE_INATIVIDADE_MS);
+    await controlador.revalidar();
+
+    expect(ultimo(estados)).toEqual({ status: "sessaoExpirada", motivo: "inatividade" });
+    expect(fake.autenticador.validarSessaoAtual).not.toHaveBeenCalled();
+    await microtarefas();
+    expect(fake.autenticador.sair).toHaveBeenCalled();
+  });
+
+  it("atividade recente dentro da janela preserva a sessão autenticada", async () => {
+    const tempo = relogioControlado();
+    const marcador = marcadoresFalso();
+    const fake = criarAutenticadorFalso({ sessaoInicial: { id: "uuid-1" } });
+    const estados: EstadoSessao[] = [];
+    const controlador = criarControladorSessao({
+      autenticador: fake.autenticador,
+      repositorio: repositorioFalso(),
+      notificar: (estado) => estados.push(estado),
+      relogio: tempo.relogio,
+      inicioSessao: marcador,
+    });
+
+    await controlador.inicializar();
+
+    tempo.avancar(50 * 60 * 1000);
+    controlador.registrarAtividade();
+    tempo.avancar(50 * 60 * 1000);
+
+    await controlador.revalidar();
+
+    expect(fake.autenticador.validarSessaoAtual).toHaveBeenCalled();
+    expect(ultimo(estados).status).toBe("autenticado");
+  });
+
+  it("sessão operante que ultrapassa 1 dia expira por duração máxima", async () => {
+    const tempo = relogioControlado();
+    const marcador = marcadoresFalso();
+    const fake = criarAutenticadorFalso({ sessaoInicial: { id: "uuid-1" } });
+    const estados: EstadoSessao[] = [];
+    const controlador = criarControladorSessao({
+      autenticador: fake.autenticador,
+      repositorio: repositorioFalso(),
+      notificar: (estado) => estados.push(estado),
+      relogio: tempo.relogio,
+      inicioSessao: marcador,
+    });
+
+    await controlador.inicializar();
+
+    tempo.avancar(DURACAO_MAXIMA_SESSAO_MS);
+    controlador.registrarAtividade();
+    await controlador.revalidar();
+
+    expect(ultimo(estados)).toEqual({ status: "sessaoExpirada", motivo: "duracaoMaxima" });
+    expect(fake.autenticador.validarSessaoAtual).not.toHaveBeenCalled();
+  });
+
+  it("logout explícito remove o marcador de início de sessão", async () => {
+    const tempo = relogioControlado();
+    const marcador = marcadoresFalso();
+    const fake = criarAutenticadorFalso({ sessaoInicial: { id: "uuid-1" } });
+    const estados: EstadoSessao[] = [];
+    const controlador = criarControladorSessao({
+      autenticador: fake.autenticador,
+      repositorio: repositorioFalso(),
+      notificar: (estado) => estados.push(estado),
+      relogio: tempo.relogio,
+      inicioSessao: marcador,
+    });
+
+    await controlador.inicializar();
+    await controlador.sair();
+
+    expect(ultimo(estados)).toEqual({ status: "naoAutenticado" });
+    expect(marcador.remover).toHaveBeenCalledWith("uuid-1");
+    expect(marcador.valores.has("uuid-1")).toBe(false);
+  });
+
+  it("aviso de expiração não é sobrescrito por eventos de sessão e é reconhecido no login", async () => {
+    const tempo = relogioControlado();
+    const marcador = marcadoresFalso();
+    const fake = criarAutenticadorFalso({ sessaoInicial: { id: "uuid-1" } });
+    const estados: EstadoSessao[] = [];
+    const controlador = criarControladorSessao({
+      autenticador: fake.autenticador,
+      repositorio: repositorioFalso(),
+      notificar: (estado) => estados.push(estado),
+      relogio: tempo.relogio,
+      inicioSessao: marcador,
+    });
+
+    await controlador.inicializar();
+    tempo.avancar(LIMITE_INATIVIDADE_MS);
+    await controlador.revalidar();
+    expect(ultimo(estados)).toEqual({ status: "sessaoExpirada", motivo: "inatividade" });
+
+    // SIGNED_OUT do signOut assíncrono da própria política não sobrescreve o aviso.
+    fake.notificarSessao("saiu", null);
+    await microtarefas();
+    expect(ultimo(estados)).toEqual({ status: "sessaoExpirada", motivo: "inatividade" });
+
+    // Restauração duplicada ("inicial") também não recria o marcador sem novo login.
+    fake.notificarSessao("inicial", { usuario: { id: "uuid-1" } });
+    await microtarefas();
+    expect(ultimo(estados)).toEqual({ status: "sessaoExpirada", motivo: "inatividade" });
+
+    controlador.reconhecerExpiracao();
+    expect(ultimo(estados)).toEqual({ status: "naoAutenticado" });
+
+    // Reconhecer novamente é inócuo.
+    controlador.reconhecerExpiracao();
+    expect(ultimo(estados)).toEqual({ status: "naoAutenticado" });
+  });
+
+  it("evento de novo sign-in via assinatura inicia a janela da política", async () => {
+    const tempo = relogioControlado();
+    const marcador = marcadoresFalso();
+    const fake = criarAutenticadorFalso({ sessaoInicial: null });
+    const estados: EstadoSessao[] = [];
+    const controlador = criarControladorSessao({
+      autenticador: fake.autenticador,
+      repositorio: repositorioFalso(),
+      notificar: (estado) => estados.push(estado),
+      relogio: tempo.relogio,
+      inicioSessao: marcador,
+    });
+
+    await controlador.inicializar();
+    fake.notificarSessao("entrou", { usuario: { id: "uuid-1" } });
+    await microtarefas();
+
+    expect(ultimo(estados).status).toBe("autenticado");
+    expect(marcador.definir).toHaveBeenCalledWith("uuid-1", tempo.relogio());
   });
 });

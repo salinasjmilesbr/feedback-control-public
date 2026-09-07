@@ -19,6 +19,20 @@ export interface ResultadoAuth<T> {
   error: unknown | null;
 }
 
+/**
+ * Classificação da mudança de sessão observada (F2-08), derivada dos eventos
+ * do Supabase Auth. Permite à máquina de sessão distinguir uma restauração
+ * (INITIAL_SESSION — deve preservar o marcador de início e aplicar a duração
+ * máxima) de um novo login/recuperação (SIGNED_IN/PASSWORD_RECOVERY — reinicia
+ * a janela da política), sem depender de nomes internos do SDK.
+ */
+export type EventoMudancaSessao =
+  | "inicial"
+  | "entrou"
+  | "saiu"
+  | "tokenAtualizado"
+  | "outro";
+
 export interface Autenticador {
   entrarComSenha(email: string, senha: string): Promise<ResultadoAuth<UsuarioAuth>>;
   sair(): Promise<ResultadoAuth<null>>;
@@ -26,9 +40,12 @@ export interface Autenticador {
   /**
    * Registra um observador de mudanças de sessão e retorna a função de
    * cancelamento. A implementação deve garantir uma única assinatura por
-   * chamada e permitir `unsubscribe` sem efeitos colaterais.
+   * chamada e permitir `unsubscribe` sem efeitos colaterais. O primeiro
+   * argumento classifica o evento (F2-08) para as decisões de política.
    */
-  observarAutenticacao(aoMudar: (sessao: SessaoAuth | null) => void): () => void;
+  observarAutenticacao(
+    aoMudar: (evento: EventoMudancaSessao, sessao: SessaoAuth | null) => void
+  ): () => void;
   /**
    * Revalida a sessão corrente no servidor (`auth.getUser`). Usado na F2-07
    * para detectar revogação/banimento sem depender da expiração do JWT.

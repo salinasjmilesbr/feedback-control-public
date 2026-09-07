@@ -7,10 +7,12 @@ import {
 } from "react";
 import { TechnicalError } from "../errors/applicationErrors";
 import { criarAutenticador, criarRepositorioIdentidade } from "./adaptadores";
+import { criarArmazenamentoInicioSessaoLocal } from "./armazenamentoSessao";
 import { AuthContext } from "./AuthContext";
 import { criarClienteAuthSupabase } from "./cliente";
 import { mapearErroConvite } from "./conviteAdministrativo";
 import { criarControladorSessao, type EstadoSessao } from "./controladorSessao";
+import { INTERVALO_VERIFICACAO_SESSAO_MS } from "./politicaSessao";
 import {
   redefinirSenha as redefinirSenhaServico,
   solicitarRecuperacaoDeSenha as solicitarRecuperacaoDeSenhaServico,
@@ -33,10 +35,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => (cliente ? criarRepositorioIdentidade(cliente) : null),
     [cliente]
   );
+  const armazenamentoInicioSessao = useMemo(
+    () => criarArmazenamentoInicioSessaoLocal(),
+    []
+  );
 
   const controlador = useMemo(
-    () => criarControladorSessao({ autenticador, repositorio, notificar: setEstado }),
-    [autenticador, repositorio]
+    () =>
+      criarControladorSessao({
+        autenticador,
+        repositorio,
+        notificar: setEstado,
+        inicioSessao: armazenamentoInicioSessao,
+      }),
+    [autenticador, repositorio, armazenamentoInicioSessao]
   );
 
   useEffect(() => {
@@ -44,14 +56,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => controlador.dispose();
   }, [controlador]);
 
-  // F2-07: revalida a sessão vigente periodicamente e ao focar a janela, para
-  // detectar desativação/revogação sem esperar a expiração do JWT.
+  // F2-07/F2-08: revalida a sessão vigente periodicamente e ao focar a janela —
+  // detecta desativação/revogação (F2-07) e aplica os limites de inatividade
+  // (60 min) e duração máxima (1 dia) da F2-08 sem esperar a expiração do JWT.
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const intervalo = setInterval(() => {
       void controlador.revalidar();
-    }, 60_000);
+    }, INTERVALO_VERIFICACAO_SESSAO_MS);
 
     const aoFocar = () => {
       void controlador.revalidar();
@@ -66,6 +79,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [controlador]);
 
+  // F2-08: atividade real do usuário na janela (teclado, ponteiro, toque,
+  // rolagem) reinicia o relógio de inatividade. O foco/visibilidade acima
+  // verifica os limites ANTES de registrar atividade — voltar de uma ausência
+  // longa não "reanima" uma sessão que já deveria ter expirado.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const aoAtividade = () => controlador.registrarAtividade();
+    const eventos = ["keydown", "pointerdown", "pointermove", "wheel", "touchstart"];
+    eventos.forEach((evento) =>
+      window.addEventListener(evento, aoAtividade, { passive: true })
+    );
+
+    return () => {
+      eventos.forEach((evento) =>
+        window.removeEventListener(evento, aoAtividade)
+      );
+    };
+  }, [controlador]);
+
   const entrar = useCallback(
     async (email: string, senha: string) => {
       await controlador.entrar(email, senha);
@@ -75,6 +108,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const sair = useCallback(async () => {
     await controlador.sair();
+  }, [controlador]);
+
+  const reconhecerExpiracao = useCallback(() => {
+    controlador.reconhecerExpiracao();
   }, [controlador]);
 
   const solicitarRecuperacaoDeSenha = useCallback(
@@ -123,6 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         solicitarRecuperacaoDeSenha,
         redefinirSenha,
         convidarUsuario,
+        reconhecerExpiracao,
       }}
     >
       {children}

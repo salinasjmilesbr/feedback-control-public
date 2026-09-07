@@ -21,6 +21,7 @@ function contexto(estado: EstadoSessao): AuthContextValue {
     solicitarRecuperacaoDeSenha: async () => {},
     redefinirSenha: async () => {},
     convidarUsuario: async () => ({ userId: "uuid-1" }),
+    reconhecerExpiracao: () => {},
   };
 }
 
@@ -60,6 +61,28 @@ describe("roteamento autenticado (F2-04)", () => {
     expect(html).toContain("Entrar");
     expect(html).not.toContain(CONTEUDO);
     expect(html).not.toContain("FALLBACK FUNCIONAL");
+  });
+
+  it("sessão expirada (F2-08) mostra o motivo na rota /login e exige nova autenticação", () => {
+    const html = renderizar(
+      { status: "sessaoExpirada", motivo: "inatividade" },
+      "/login"
+    );
+
+    expect(html).toContain("Sessão expirada");
+    expect(html).toContain("por inatividade");
+    expect(html).toContain("Entrar");
+    expect(html).not.toContain(CONTEUDO);
+  });
+
+  it("sessão expirada acessando rota funcional não recebe conteúdo (guard redireciona)", () => {
+    const html = renderizar(
+      { status: "sessaoExpirada", motivo: "duracaoMaxima" },
+      "/pagina"
+    );
+
+    expect(html).not.toContain(CONTEUDO);
+    expect(html).not.toContain("Verificando sessão");
   });
 
   it("usuário autenticado acessa rota funcional direta", () => {

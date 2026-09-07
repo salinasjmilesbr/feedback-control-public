@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { TechnicalError } from "../errors/applicationErrors";
-import type { Autenticador, RepositorioIdentidade } from "./contratos";
+import type {
+  Autenticador,
+  EventoMudancaSessao,
+  RepositorioIdentidade,
+} from "./contratos";
 import type {
   MembershipAutenticada,
   OrganizacaoResolvida,
@@ -30,6 +34,27 @@ function paraUsuarioAuth(usuario: { id: string; email?: string | null } | null |
   return { id: usuario.id, email: usuario.email ?? null };
 }
 
+/**
+ * Classifica os eventos do Supabase Auth (F2-08): `INITIAL_SESSION` é uma
+ * restauração (sessão pré-existente no dispositivo) e `SIGNED_IN`/
+ * `PASSWORD_RECOVERY` iniciam uma sessão nova (janela da política reinicia).
+ */
+function mapearEventoAuth(evento: string): EventoMudancaSessao {
+  switch (evento) {
+    case "INITIAL_SESSION":
+      return "inicial";
+    case "SIGNED_IN":
+    case "PASSWORD_RECOVERY":
+      return "entrou";
+    case "SIGNED_OUT":
+      return "saiu";
+    case "TOKEN_REFRESHED":
+      return "tokenAtualizado";
+    default:
+      return "outro";
+  }
+}
+
 export function criarAutenticador(cliente: SupabaseClient): Autenticador {
   return {
     async entrarComSenha(email, senha) {
@@ -54,8 +79,11 @@ export function criarAutenticador(cliente: SupabaseClient): Autenticador {
     },
 
     observarAutenticacao(aoMudar) {
-      const { data } = cliente.auth.onAuthStateChange((_evento, sessao) => {
-        aoMudar(sessao ? { usuario: paraUsuarioAuth(sessao.user) ?? { id: sessao.user.id, email: null } } : null);
+      const { data } = cliente.auth.onAuthStateChange((evento, sessao) => {
+        aoMudar(
+          mapearEventoAuth(evento),
+          sessao ? { usuario: paraUsuarioAuth(sessao.user) ?? { id: sessao.user.id, email: null } } : null
+        );
       });
       return () => data.subscription.unsubscribe();
     },
