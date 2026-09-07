@@ -834,6 +834,75 @@ local, CLI 2.116.0, PostgreSQL 17.6; repetida após um segundo `db reset`, com o
 mesmo resultado). Detalhes na seção "Validação executada (F4-01)" do
 `supabase/README.md`.
 
+## F4-02 — Escopos de autorização (Issue #89)
+
+Validação estrutural contra o **Supabase local** da migration
+`20260908010000_authorization_scopes_membership_collaborator.sql`: vínculo
+membership→collaborator (tabela própria, 1 por membership), tabela filha de
+scopes por assignment (SELF/DIRECT_REPORTS/DESCENDANTS/ORGANIZATIONAL_UNIT/
+ORGANIZATION/ASSIGNED), target tipado de unidade e resolvers `SECURITY
+INVOKER`, sem antecipar scopes de substituição (F4-05) nem policies (F4-08).
+
+### Como reproduzir
+
+Requisitos: Docker Desktop em execução e o CLI Supabase da raiz
+(`npx --yes supabase@2.116.0`).
+
+```powershell
+# 1) subir a stack local (rebuild limpo: migrations em ordem + seed)
+npx --yes supabase@2.116.0 start
+
+# 2) aplicar o cenário sintético no banco local (idempotente)
+Get-Content supabase/validacao/01-cenario-f4-02.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+
+# 3) executar a validação (exit code 0 = todas as verificações passaram)
+Get-Content supabase/validacao/02-validar-f4-02.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+```
+
+Observações:
+
+- os scripts **não tocam projeto remoto**, **não alteram nenhuma policy RLS** e
+  removem ao final os dados sintéticos do cenário (banco local limpo);
+- `01-cenario-f4-02.sql` monta uma estrutura F3 sintética (units + parent,
+  positions, reporting lines, occupations com troca histórica, posição vaga e
+  multi-position) usando apenas UUIDs fixos com prefixo `d1` e a função
+  sintética `Analista` em todas as posições (hierarquia só por reporting line);
+- o deny-by-default é comprovado pelo passo 7 de `02-validar-f4-02.sql`
+  (`set role authenticated`: leituras 0 linhas; resolvers INVOKER retornam
+  vazio).
+
+### O que é verificado (02-validar-f4-02.sql)
+
+1. **Estrutura**: 3 tabelas novas com RLS habilitado e zero policies; 19
+   constraints; trigger `enforce_unit_target_scope_type`; 4 funções (3
+   resolvers `SECURITY INVOKER` + trigger).
+2. **Capability × scope**: mesma capability (`collaborator.read`) com 3 scopes
+   diferentes; SELF resolve só o colaborador vinculado; usuário sem vínculo
+   falha fechado nos estruturais; DIRECT_REPORTS usa reporting line (só COORD),
+   não job_role; DESCENDANTS pela árvore F3; união de múltiplas positions.
+3. **UNIT/ORGANIZATION**: UNIT alcança somente a unidade explícita (sem
+   subunidades); ORGANIZATION limitado ao tenant; ADMIN+ORGANIZATION sem
+   capability confidencial.
+4. **Fail-closed**: assignment sem scope resolve vazio; ASSIGNED não deriva
+   hierarquia (colegiado não vira hierarquia na F4-02).
+5. **Cross-tenant**: vínculo com colaborador de outra org e scope com
+   `organization_id` inconsistente bloqueados por FK composta.
+6. **Lifecycle**: membership/profile disabled resolvem vazio; revogação do pai
+   invalida scopes filhos preservando linhas; revogação granular preserva
+   histórico.
+7. **Temporal/histórico**: posição vaga sem alvo artificial; contexto histórico
+   (AN1 → SUCCESSOR) não reescrito pela estrutura atual.
+8. **RLS deny-by-default**: como `authenticated`, nenhuma leitura nas 3 tabelas
+   e resolvers vazios; 3 policies da F2 inalteradas.
+9. **Limpeza**: cenário sintético removido; catálogo de sistema F4-01 intacto.
+
+Execução registrada nesta Issue: **28 verificações [PASS], 0 falhas** (Supabase
+local, CLI 2.116.0, PostgreSQL 17.6; repetida após um segundo `db reset`, com o
+mesmo resultado). Detalhes na seção "Validação executada (F4-02)" do
+`supabase/README.md`.
+
 ## Limitações e notas registradas
 
 - **JWT é stateless**: após logout, o refresh token é revogado, mas um access

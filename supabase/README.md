@@ -826,6 +826,33 @@ Contrato arquitetural em `docs/F4-01-desenho-tecnico.md` (D1–D18 fechadas).
   escopos (SELF/DIRECT_REPORTS/DESCENDANTS/…) ficam para a F4-02; allowlists
   provisórias das F2 permanecem até substituto seguro.
 
+## Escopos de autorização (F4-02)
+
+Alcance (sobre quem/onde) das capabilities da F4-01 (Issue #89). Contrato em
+`docs/F4-02-desenho-tecnico.md` (D1–D18 fechadas + 14 invariantes).
+
+- **`membership_collaborator_links`** — vínculo explícito membership →
+  collaborator (D1 = A): uma linha por membership (reativação no lugar),
+  colaborador da mesma organização (FKs compostas); base de SELF e dos scopes
+  estruturais; ADMIN sem collaborator simplesmente não possui vínculo.
+- **`access_role_assignment_scopes`** — tabela filha 1:N de scopes por
+  assignment (D2 = B): tipos SELF/DIRECT_REPORTS/DESCENDANTS/
+  ORGANIZATIONAL_UNIT/ORGANIZATION/ASSIGNED; scope pertence à assignment
+  (D3 = A); múltiplos por assignment (D4 = A); `status` active/revoked
+  (revogação sem exclusão física — D5/D11).
+- **`access_role_assignment_unit_targets`** — alvo tipado da unidade
+  (D5/D6), somente ORGANIZATIONAL_UNIT, sem subunidades e sem polimorfismo
+  genérico (trigger `enforce_unit_target_scope_type`).
+- **Resolvers `SECURITY INVOKER`/`STABLE`** (D18 = A): `resolver_collaborador_
+  vinculado`, `resolver_capabilities_escopos_efetivas` (capability × scope ×
+  unidade) e `resolver_alvos_escopo` (alvos por scope na data — SELF/DR/
+  DESCENDANTS via F3-07; UNIT pela unidade; ORGANIZATION pelo tenant; ASSIGNED
+  fail-closed até F4-03/F4-05).
+- **Regras:** assignment sem scope = fail-closed (D15); ORGANIZATION é scope
+  **explícito** (D14); contexto vivo usa responsável efetivo na data (D9);
+  histórico de ciclo preserva F3-08/09; substituição temporária não é
+  persistida (D13); RLS deny-by-default nas três tabelas novas.
+
 ## Aplicação independente
 
 O frontend continua iniciando com `npm run dev`, mesmo sem Docker ou Supabase.
@@ -1473,3 +1500,34 @@ Node 24) — **somente banco local**:
 - fora do escopo (não entregue nesta issue): escopos hierárquicos (F4-02),
   policies por tabela/leitura ampla (etapas posteriores), UI de administração,
   migração das allowlists provisórias e dados reais.
+
+## Validação executada (F4-02)
+
+Validação estrutural dos escopos de autorização executada em 2026-09-08 nesta
+máquina (Docker Desktop 29.7.2; CLI Supabase 2.116.0 via npx; PostgreSQL 17.6;
+Node 24) — **somente banco local**:
+
+- rebuild limpo (`supabase db reset` **duas vezes**): 19 migrations em ordem +
+  seed, sem intervenção (a migration F4-02 aplica de forma determinística);
+- cenário + runner em `supabase/validacao/01-cenario-f4-02.sql` e
+  `02-validar-f4-02.sql`: 100% sintético (prefixo `d1`), com duas organizações,
+  estrutura F3 mínima (units + parent, positions, reporting lines, occupations
+  com troca histórica, posição vaga e multi-position), vínculo membership→
+  collaborator, role customizada e scopes (DIRECT_REPORTS + DESCENDANTS +
+  ORGANIZATIONAL_UNIT + ORGANIZATION);
+- **28 verificações [PASS], 0 falhas** — resultado idêntico nas duas execuções:
+  mesma capability com scopes diferentes, SELF só o vinculado, fail-closed sem
+  vínculo, DIRECT_REPORTS por reporting line (não job_role), DESCENDANTS pela
+  árvore F3, união de múltiplas positions, UNIT só a unidade (sem subunidades),
+  ORGANIZATION limitado ao tenant, ADMIN+ORGANIZATION sem confidencial,
+  assignment sem scope vazio, ASSIGNED sem hierarquia, cross-tenant bloqueado,
+  membership/profile disabled vazios, revogação pai→filhos e granular, posição
+  vaga sem alvo, histórico (AN1→SUCCESSOR) não reescrito, RLS deny-by-default
+  como `authenticated`, 3 policies F2 intactas e limpeza do cenário;
+- `npm test` (556 testes em 50 arquivos), `npm run build`, `npm run lint` e
+  `git diff --check` aprovados; nenhuma conexão ao Supabase remoto, credencial
+  ou dado real envolvido;
+- fora do escopo (deixado para etapas posteriores): policy engine (F4-03),
+  regra completa de substituição temporária e ASSIGNED de responsabilidades
+  avaliativas (F4-05), acesso excepcional auditado (F4-06), policies por
+  tabela/exposição a authenticated (F4-08) e migração das allowlists.
