@@ -1,8 +1,7 @@
 # F3-10 — Desenho da validação integrada da estrutura organizacional (Issue #87)
 
-> **Status:** desenho técnico em revisão — **não implementado**.
-> Esta etapa entrega apenas este documento; nenhuma migration, schema, código,
-> teste final ou PR de implementação é criado aqui. 100% sintético (sem dados reais).
+> **Status:** decisões D1–D3 **fechadas** (todas = A). Desenho pronto para
+> implementação. 100% sintético (sem dados reais).
 
 ## 1. Objetivo e escopo
 
@@ -189,37 +188,23 @@ licença + substituição) e **2024-12-01** (após tudo).
 - Nenhuma regra de negócio nova é inventada; a validação apenas exercita o modelo
   existente.
 
-## 12. Decisões pendentes (para revisão)
+## 12. Decisões fechadas (D1–D3)
 
-### D1 — Incluir a F3-09 (responsabilidade avaliativa + sucessão) na validação?
+- **D1 — A:** validar F3-01..F3-08 integralmente e incluir F3-09 de forma
+  representativa no cenário de troca definitiva de ocupante/avaliador (integração
+  ponta a ponta, sem bateria extensiva de F3-09).
+- **D2 — A:** um único par `supabase/validacao/01-cenario-f3-10.sql` +
+  `02-validar-f3-10.sql` (padrão determinístico/reproduzível).
+- **D3 — A:** reusar os oito conceitos sintéticos de `job_role` da F3-02 e as três
+  senioridades Junior/Pleno/Senior; sem novos nomes/semânticas de cargo.
 
-- **Pergunta:** a F3-10 exercita apenas a estrutura (F3-01..F3-08) ou também a
-  sucessão de avaliador (F3-09) no cenário de "troca definitiva de ocupante"?
-- **Alternativas:**
-  - **A (Recomendada):** F3-01..F3-08 integralmente + F3-09 no ponto "troca
-    definitiva" (materializar snapshot + responsabilidades + `registrar_sucessao_avaliador`).
-  - B: só F3-01..F3-08 (estrutura pura), F3-09 fora.
-  - C: F3-09 extensiva (múltiplas sucessões/vacância/substituição avaliativa).
-- **Impacto:** A fecha a integração ponta a ponta da Fase 3 (requer autor
-  `user_profiles` + snapshots); B é mais simples mas deixa a costura estrutura→
-  avaliação não validada em conjunto; C amplia além do pedido da Issue.
+### Refinamentos de asserts (obrigatórios)
 
-### D2 — Organização do artefato de validação
-
-- **Pergunta:** um único par `01-cenario-f3-10.sql` + `02-validar-f3-10.sql`, ou
-  múltiplos arquivos por tema?
-- **Alternativas:**
-  - **A (Recomendada):** um único cenário + um único runner (padrão F3-01..F3-09).
-  - B: dividir por tema (estrutura, temporalidade, colegiado, sucessão).
-- **Impacto:** A é determinístico e consistente com o padrão; B fragmenta e complica
-  a ordem de dependências.
-
-### D3 — Catálogo de job_roles/seniorities a usar
-
-- **Pergunta:** reusar exatamente os oito conceitos do piloto da F3-02 (incluindo
-  "Gerente Senior") + Junior/Pleno/Senior, ou definir um subconjunto?
-- **Alternativas:**
-  - **A (Recomendada):** reusar os 8 conceitos + 3 senioridades (100% sintéticos).
-  - B: subconjunto apenas dos papéis citados na Issue (sem "Gerente Senior").
-- **Impacto:** A preserva o catálogo canônico da F3-02 e cobre "nível repetido" sem
-  inventar nome; B diverge do catálogo já validado.
+1. **Analista Junior/Pleno/Senior sob o mesmo Coordenador:** provar que os três têm
+   exatamente a mesma relação hierárquica — mesma reporting line (mesma posição
+   superior), mesmo gestor direto resolvido e mesma profundidade na árvore; a
+   `seniority_level` **não** altera reporting line, gestor nem profundidade.
+2. **Especialista no mesmo patamar do Gerente:** provar que (a) reporta ao mesmo
+   superior formal que o Gerente; (b) possui zero subordinados diretos/descendentes;
+   (c) o cenário é representado **sem** rank/level/order (a hierarquia vem da
+   reporting line, não do cargo).
