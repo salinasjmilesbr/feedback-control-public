@@ -457,6 +457,69 @@ local, CLI 2.116.0, PostgreSQL 17.6; repetida após um segundo `db reset`, com o
 mesmo resultado). Detalhes na seção "Validação executada (F3-05)" do
 `supabase/README.md`.
 
+## F3-06 — Temporary responsibilities: substituições temporárias (Issue #83)
+
+Validação estrutural contra o **Supabase local** da migration
+`20260907160000_temporary_responsibilities.sql`: substituições temporárias
+sobre uma posição formal, sem alterar occupation, reporting line, status ou
+estrutura.
+
+### Como reproduzir
+
+Requisitos: Docker Desktop em execução e o CLI Supabase da raiz
+(`npx --yes supabase@2.116.0`).
+
+```powershell
+# 1) subir a stack local (rebuild limpo: migrations em ordem + seed)
+npx --yes supabase@2.116.0 start
+
+# 2) aplicar o cenário sintético no banco local (idempotente)
+Get-Content supabase/validacao/01-cenario-f3-06.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+
+# 3) executar a validação (exit code 0 = todas as verificações passaram)
+Get-Content supabase/validacao/02-validar-f3-06.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+```
+
+Observações:
+
+- os scripts **não tocam projeto remoto**, **não alteram nenhuma policy RLS** e
+  removem ao final os dados sintéticos do cenário (banco local limpo);
+- `01-cenario-f3-06.sql` insere via superuser local (equivalente a service_role)
+  apenas UUIDs fixos com prefixo `f8`, sem colidir com os cenários anteriores;
+- o deny-by-default é comprovado pelo passo 5 de `02-validar-f3-06.sql`
+  (`set role authenticated`: leituras retornam 0 linhas, INSERT é negado e
+  UPDATE/DELETE afetam zero linhas).
+
+### O que é verificado (02-validar-f3-06.sql)
+
+1. **Estrutura**: schema `public` contém somente as tabelas esperadas (F2 +
+   F3-01/02/03/04/05 + F3-06); colunas exatas de `temporary_responsibilities`
+   (sem titular explícito/autor/reporting/unit); `valid_to` NOT NULL (período
+   fechado); nenhuma tabela de colegiado/avaliação/capability/snapshot.
+2. **Constraints/triggers**: PK, FKs compostas + RESTRICT, checks (tipo, reason,
+   valid_to), exclusion por posição; funções/triggers de validade na posição e
+   anti-auto-substituição presentes.
+3. **Cenário**: titular mantém occupation; substituto resolvido sem occupation
+   artificial; reporting line inalterada; reconstrução antes/durante/depois
+   (titular reassume sem recriar occupation); mesmo substituto em duas posições;
+   tipo `evaluative` presente; período fechado; `reason` não vazio.
+4. **Rejeições/integridade**: sobreposição na mesma posição, período sem fim
+   (NULL), auto-substituição, cross-organization (substituto e posição), período
+   além do encerramento da posição, tipo inválido e `reason` vazio.
+5. **RLS deny-by-default**: habilitado na tabela nova, zero policies, RLS das
+   tabelas F2/F3-01..05 intacto e comportamento negado comprovado como
+   `authenticated`.
+6. **F3-01..F3-05 intactas**: colunas preservadas, constraints anteriores
+   presentes e 3 policies inalteradas.
+7. **Limpeza**: cenário sintético removido ao final.
+
+Execução registrada nesta Issue: **36 verificações [PASS], 0 falhas** (Supabase
+local, CLI 2.116.0, PostgreSQL 17.6; repetida após um segundo `db reset`, com o
+mesmo resultado). Detalhes na seção "Validação executada (F3-06)" do
+`supabase/README.md`.
+
 ## Limitações e notas registradas
 
 - **JWT é stateless**: após logout, o refresh token é revogado, mas um access
