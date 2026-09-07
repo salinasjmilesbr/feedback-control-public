@@ -30,6 +30,11 @@ export interface Autenticador {
    */
   observarAutenticacao(aoMudar: (sessao: SessaoAuth | null) => void): () => void;
   /**
+   * Revalida a sessão corrente no servidor (`auth.getUser`). Usado na F2-07
+   * para detectar revogação/banimento sem depender da expiração do JWT.
+   */
+  validarSessaoAtual(): Promise<ResultadoAuth<UsuarioAuth>>;
+  /**
    * Solicita a recuperação de senha (F2-05). O resultado NÃO deve ser usado
    * para revelar se o e-mail possui conta: a camada de serviço ignora `error`.
    */

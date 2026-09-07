@@ -40,6 +40,8 @@ export interface ControladorSessao {
   inicializar(): Promise<void>;
   entrar(email: string, senha: string): Promise<UsuarioAuth>;
   sair(): Promise<void>;
+  /** F2-07: revalida a sessão vigente no servidor e re-resolve a identidade. */
+  revalidar(): Promise<void>;
   dispose(): void;
 }
 
@@ -132,6 +134,21 @@ export function criarControladorSessao(deps: {
       await sairServico(autenticador);
       ultimoUserId = null;
       notificar({ status: "naoAutenticado" });
+    },
+
+    async revalidar() {
+      if (!autenticador || !repositorio || ultimoUserId === null) return;
+
+      const { data, error } = await autenticador.validarSessaoAtual();
+      if (error || !data) {
+        ultimoUserId = null;
+        notificar({ status: "naoAutenticado" });
+        return;
+      }
+
+      // Força a re-resolução para refletir o estado vigente (perfil/membership).
+      ultimoUserId = data.id;
+      await resolver({ usuario: data }, geracao);
     },
 
     dispose() {

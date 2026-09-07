@@ -44,6 +44,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => controlador.dispose();
   }, [controlador]);
 
+  // F2-07: revalida a sessão vigente periodicamente e ao focar a janela, para
+  // detectar desativação/revogação sem esperar a expiração do JWT.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const intervalo = setInterval(() => {
+      void controlador.revalidar();
+    }, 60_000);
+
+    const aoFocar = () => {
+      void controlador.revalidar();
+    };
+    window.addEventListener("focus", aoFocar);
+    document.addEventListener("visibilitychange", aoFocar);
+
+    return () => {
+      clearInterval(intervalo);
+      window.removeEventListener("focus", aoFocar);
+      document.removeEventListener("visibilitychange", aoFocar);
+    };
+  }, [controlador]);
+
   const entrar = useCallback(
     async (email: string, senha: string) => {
       await controlador.entrar(email, senha);

@@ -34,6 +34,10 @@ function criarAutenticadorFalso(opcoes: {
       aoMudar = callback;
       return unsubscribe;
     }),
+    validarSessaoAtual: vi.fn(async () => ({
+      data: { id: "uuid-1", email: "pessoa@example.invalid" },
+      error: null,
+    })),
     solicitarRecuperacaoDeSenha: vi.fn(async () => ({ data: null, error: null })),
     definirNovaSenha: vi.fn(async () => ({ data: null, error: null })),
   };
@@ -259,5 +263,77 @@ describe("controlador de sessão (F2-03)", () => {
 
     controlador.dispose();
     expect(fake.unsubscribe).toHaveBeenCalledOnce();
+  });
+});
+
+describe("revalidação de sessão (F2-07)", () => {
+  it("revalida e re-resolve a identidade para uma sessão ainda válida", async () => {
+    const fake = criarAutenticadorFalso({ sessaoInicial: { id: "uuid-1" } });
+    const repositorio = repositorioFalso();
+    const estados: EstadoSessao[] = [];
+    const controlador = criarControladorSessao({
+      autenticador: fake.autenticador,
+      repositorio,
+      notificar: (estado) => estados.push(estado),
+    });
+
+    await controlador.inicializar();
+    await controlador.revalidar();
+
+    expect(fake.autenticador.validarSessaoAtual).toHaveBeenCalled();
+    expect(ultimo(estados).status).toBe("autenticado");
+  });
+
+  it("sessão revogada no servidor derruba o usuário para não autenticado", async () => {
+    const fake = criarAutenticadorFalso({ sessaoInicial: { id: "uuid-1" } });
+    const estados: EstadoSessao[] = [];
+    const controlador = criarControladorSessao({
+      autenticador: fake.autenticador,
+      repositorio: repositorioFalso(),
+      notificar: (estado) => estados.push(estado),
+    });
+
+    await controlador.inicializar();
+    vi.mocked(fake.autenticador.validarSessaoAtual).mockResolvedValue({
+      data: null,
+      error: new Error("revogado"),
+    });
+
+    await controlador.revalidar();
+
+    expect(ultimo(estados)).toEqual({ status: "naoAutenticado" });
+  });
+
+  it("perfil que passou a disabled na revalidação vira acesso negado", async () => {
+    const fake = criarAutenticadorFalso({ sessaoInicial: { id: "uuid-1" } });
+    const repositorio = repositorioFalso();
+    const estados: EstadoSessao[] = [];
+    const controlador = criarControladorSessao({
+      autenticador: fake.autenticador,
+      repositorio,
+      notificar: (estado) => estados.push(estado),
+    });
+
+    await controlador.inicializar();
+    vi.mocked(repositorio.buscarPerfil).mockResolvedValueOnce(null);
+
+    await controlador.revalidar();
+
+    const estado = ultimo(estados);
+    expect(estado.status).toBe("acessoNegado");
+  });
+
+  it("não revalida quando não há sessão (sem chamada ao servidor)", async () => {
+    const fake = criarAutenticadorFalso({ sessaoInicial: null });
+    const controlador = criarControladorSessao({
+      autenticador: fake.autenticador,
+      repositorio: repositorioFalso(),
+      notificar: () => {},
+    });
+
+    await controlador.inicializar();
+    await controlador.revalidar();
+
+    expect(fake.autenticador.validarSessaoAtual).not.toHaveBeenCalled();
   });
 });

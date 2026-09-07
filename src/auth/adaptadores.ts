@@ -60,6 +60,11 @@ export function criarAutenticador(cliente: SupabaseClient): Autenticador {
       return () => data.subscription.unsubscribe();
     },
 
+    async validarSessaoAtual() {
+      const { data, error } = await cliente.auth.getUser();
+      return { data: paraUsuarioAuth(data.user), error };
+    },
+
     async solicitarRecuperacaoDeSenha(email, redirectTo) {
       const { error } = await cliente.auth.resetPasswordForEmail(email, {
         redirectTo,

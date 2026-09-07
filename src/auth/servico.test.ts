@@ -21,6 +21,7 @@ function autenticadorFalso(parcial: Partial<Autenticador> = {}): Autenticador {
     sair: vi.fn(async () => ({ data: null, error: null })),
     obterSessao: vi.fn(async () => ({ data: null, error: null })),
     observarAutenticacao: vi.fn(() => () => {}),
+    validarSessaoAtual: vi.fn(async () => ({ data: null, error: null })),
     solicitarRecuperacaoDeSenha: vi.fn(async () => ({ data: null, error: null })),
     definirNovaSenha: vi.fn(async () => ({ data: null, error: null })),
     ...parcial,

@@ -72,3 +72,8 @@ enabled = false
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/convidar-usuario/index.ts"
+
+[functions.gerenciar-usuario]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/gerenciar-usuario/index.ts"
