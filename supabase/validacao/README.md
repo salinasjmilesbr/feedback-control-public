@@ -754,6 +754,86 @@ local, CLI 2.116.0, PostgreSQL 17.6; repetida após um segundo `db reset`, com o
 mesmo resultado). Detalhes na seção "Validação executada (F3-10)" do
 `supabase/README.md`.
 
+## F4-01 — Capabilities e access_roles (Issue #88)
+
+Validação estrutural contra o **Supabase local** das migrations
+`20260908000000_authorization_capabilities_access_roles.sql` e
+`20260908000001_authorization_system_catalog.sql`: modelo explícito de
+autorização — catálogo global de capabilities, access_roles de sistema e
+customizados por organização, associação role→capability, atribuição
+membership→role, catálogo de sistema determinístico (role `admin`) e mecanismo
+mínimo server-side (conceder/revogar/resolver), sem escopos (F4-02) e com RLS
+deny-by-default.
+
+### Como reproduzir
+
+Requisitos: Docker Desktop em execução e o CLI Supabase da raiz
+(`npx --yes supabase@2.116.0`).
+
+```powershell
+# 1) subir a stack local (rebuild limpo: migrations em ordem + seed)
+npx --yes supabase@2.116.0 start
+
+# 2) aplicar o cenário sintético no banco local (idempotente)
+Get-Content supabase/validacao/01-cenario-f4-01.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+
+# 3) executar a validação (exit code 0 = todas as verificações passaram)
+Get-Content supabase/validacao/02-validar-f4-01.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+```
+
+Observações:
+
+- os scripts **não tocam projeto remoto**, **não alteram nenhuma policy RLS** e
+  removem ao final os dados sintéticos do cenário (banco local limpo), sem
+  tocar o catálogo de sistema da migration;
+- `01-cenario-f4-01.sql` insere via superuser local (equivalente a service_role)
+  apenas UUIDs fixos com prefixo `d0` (identidades `auth.users` + perfis +
+  memberships sintéticas), sem colidir com os cenários anteriores;
+- o deny-by-default é comprovado pelo passo 11 de `02-validar-f4-01.sql`
+  (`set role authenticated`: leituras retornam 0 linhas, INSERT é negado e
+  UPDATE/DELETE afetam zero linhas; `resolver_capabilities_efetivas` não é
+  executável por `authenticated`).
+
+### O que é verificado (02-validar-f4-01.sql)
+
+1. **Estrutura**: 4 tabelas novas (`capabilities`, `access_roles`,
+   `access_role_capabilities`, `membership_access_role_assignments`) com RLS
+   habilitado e zero policies; colunas exatas conforme contrato D1–D18.
+2. **Constraints/triggers/funções**: 23 constraints esperadas (pk/unique/fk/
+   check + referência aditiva em memberships), unicidade parcial de nome de
+   role de sistema, 5 triggers (updated_at + tenant da role) e 4 funções
+   (`conceder_acesso_role`/`revogar_acesso_role`/`resolver_capabilities_efetivas`
+   SECURITY DEFINER; `enforce_membership_role_within_organization`).
+3. **Independência de cargo/collaborator/occupation**: nenhuma FK entre o
+   modelo de autorização e `job_roles`/`seniority_levels`/`collaborators`/
+   `organizational_positions`/`occupations` (nem na direção inversa).
+4. **Catálogo de sistema determinístico**: 21 capabilities globais com códigos
+   únicos; `admin` (is_system, organization_id null, active) com bundle de 9
+   capabilities de administração — **sem** conteúdo confidencial (D18).
+5. **Resolução efetiva**: ADMIN_A (sem collaborator) resolve admin em Alfa;
+   ADMIN_B resolve admin em Beta (role de sistema em qualquer org); múltiplas
+   roles produzem união; membro sem atribuição resolve vazio (cargo/collaborator
+   não concedem); usuário sem membership resolve vazio.
+6. **Cross-tenant**: role customizada de Alfa não é atribuível a membership de
+   Beta (conceder rejeita) e `organization_id` inconsistente é bloqueado por FK
+   composta.
+7. **Lifecycle**: membership desabilitada e perfil desabilitado não produzem
+   autorização efetiva; concessão a membership desabilitada é rejeitada.
+8. **Sem exclusão física**: revogação preserva a linha (status revoked);
+   reativação no lugar; exclusão de role com atribuições e de capability em uso
+   bloqueada por FK RESTRICT.
+9. **RLS deny-by-default**: como `authenticated`, nenhuma leitura/escrita nas
+   4 tabelas; 3 policies da F2 inalteradas; RLS das tabelas F2/F3 intacto.
+10. **Limpeza**: cenário sintético removido; catálogo de sistema (migration)
+    intacto.
+
+Execução registrada nesta Issue: **39 verificações [PASS], 0 falhas** (Supabase
+local, CLI 2.116.0, PostgreSQL 17.6; repetida após um segundo `db reset`, com o
+mesmo resultado). Detalhes na seção "Validação executada (F4-01)" do
+`supabase/README.md`.
+
 ## Limitações e notas registradas
 
 - **JWT é stateless**: após logout, o refresh token é revogado, mas um access
