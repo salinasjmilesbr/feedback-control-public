@@ -1,7 +1,7 @@
 # F4-01 — Desenho técnico: catálogo de capabilities e roles de acesso (Issue #88)
 
-> **Status:** desenho técnico da F4-01 **aguardando revisão**. Decisões D1–D18
-> estão **abertas** (recomendação indicada em cada uma). Nenhuma migration,
+> **Status:** revisão arquitetural **concluída**; decisões D1–D18 **fechadas**
+> na seção 12 (D14, D16 e D18 com ajustes registrados). Nenhuma migration,
 > schema, código funcional, teste final ou PR de implementação é criado nesta
 > entrega — somente este documento, em branch exclusiva de docs.
 > Conteúdo 100% conceitual e sintético (sem dados reais).
@@ -31,7 +31,7 @@ mantendo:
 - Taxonomia inicial de capabilities e bundle inicial de access_roles.
 - Regras de multi-organização, histórico/mutabilidade, RLS baseline e
   transição dos mecanismos provisórios (allowlists das Fases 2).
-- Decisões abertas (D1–D18) para toda ambiguidade relevante.
+- Decisões D1–D18 **fechadas** após revisão arquitetural (registro na seção 12).
 
 ### 1.3 O que NÃO entra na F4-01 (fora do escopo, reafirmado da Issue #88)
 
@@ -171,8 +171,9 @@ Catálogo da **unidade explícita de permissão**. Colunas candidatas:
   (D1);
 - timestamps `created_at`/`updated_at` e `version`, conforme F1-02.
 
-Evolução futura (não criar agora): marcador de confidencialidade (D18),
-metadados de auditoria.
+Evolução futura (não criar agora): capabilities de confidencialidade
+separáveis por domínio/recurso quando houver necessidade concreta (D18 — sem
+capability genérica única nesta fase) e metadados de auditoria.
 
 ### 3.2 `access_roles`
 
@@ -206,8 +207,8 @@ cargo. Colunas candidatas:
 ### 3.5 Concessão direta de capability (avaliar)
 
 - Alternativa opcional `membership_capabilities` (idem atribuição) **somente**
-  se D3 decidir por concessão direta além de roles; recomendação preliminar:
-  não criar nesta fase (manter roles como única via, reduzindo superfície).
+  se houver concessão direta além de roles; **D3 = A**: não criar nesta fase
+  (roles como única via, reduzindo superfície).
 
 ### 3.6 Status, tenant e metadados
 
@@ -240,7 +241,7 @@ existe no plano membership/role/capability (regra de ouro da seção 11).
 | `job_role` (cargo) | Catálogo de função organizacional (ex.: Analista, Coordenador) | Descreve o **papel no trabalho**, não o que a pessoa pode fazer no sistema; cargo **não concede** capability |
 | `access_role` | Bundle configurável de capabilities atribuído a uma membership | É a unidade de **atribuição de permissão**; pode ser dado a quem ocupa qualquer cargo (ou a quem não tem cargo, ex.: ADMIN sem colaborador) |
 | `capability` | Permissão atômica explícita (ex.: criar avaliação) | É o **menor enunciado de permissão**; independe de quem pede e de onde (escopo vem da F4-02) |
-| `ADMIN` | access_role de **plataforma/acesso** (bootstrap) | Papel de acesso, não posição da hierarquia; **não** confere conteúdo confidencial automaticamente e **não** é SUPER_ADMIN irrestrito |
+| `ADMIN` | access_role de sistema **de acesso**, atribuído por membership/organização (D17) | Papel de acesso, não posição da hierarquia; **não** confere conteúdo confidencial automaticamente e **não** é SUPER_ADMIN irrestrito |
 
 Regras decorrentes:
 
@@ -268,12 +269,12 @@ decisão de **escopo na F4-02**, nunca desta capability.
 | Administração organizacional | `collaborator.read`, `collaborator.manage` (cadastro), `org.structure.manage` (unidades, posições, reporting lines, occupations, movimentações), `org.catalog.manage` (job_roles/seniority_levels) | Leitura de colaboradores **não** implica ler conteúdo confidencial; quem vê quem é escopo |
 | Administração de configurações | `settings.manage` (escala, expectativas de cargo, regras de ciclo/config geral) | Mantém o nome já usado no frontend |
 | Ciclos | `cycle.read`, `cycle.manage` (criar, ativar, encerrar; cancelar/reabrir/corrigir período são operações excepcionais auditáveis — a capability existe, o fluxo auditado permanece regra de domínio) | Estado do domínio continua barrando mutação inválida mesmo com capability (F4-10) |
-| Avaliações | `evaluation.read`, `evaluation.create`, `evaluation.write`, `evaluation.cancel`, `evaluation.reopen` | Conteúdo de avaliações de terceiros é **confidencial** (D18); quem lê é combinação capability+escopo |
+| Avaliações | `evaluation.read`, `evaluation.create`, `evaluation.write`, `evaluation.cancel`, `evaluation.reopen` | Conteúdo de avaliações de terceiros é **confidencial** (D18): acesso por capabilities explícitas separáveis por domínio (a definir quando houver necessidade concreta) + escopo (F4-02); nunca automático por ADMIN |
 | Metas | `goal.read`, `goal.write` (criar/editar/progredir/finalizar próprias e de terceiros conforme escopo), `goal.approve` | O "próprio" do colaborador virá de escopo SELF + capability, não de capability `.own` |
 | Observações | `observation.read`, `observation.write` (criar/editar/excluir em ciclo ATIVO) | Visibilidade de `Comunicado` para o colaborador é regra de conteúdo/escopo futura, não capability |
 | Relatórios | `report.read` (gerenciais/equipe e histórico individual) | Histórico próprio = escopo SELF + `report.read` |
-| Confidencial | capability dedicada de leitura de conteúdo confidencial (ex.: `confidential.read`) **ou** marcador nas capabilities — D18 | ADMIN **não** recebe por default |
-| Auditoria | `audit.view` — **reservada**; trilha avançada e acesso excepcional auditado são etapas posteriores da F4 | Não ampliar agora |
+| Confidencial | **Nenhuma capability genérica única de confidencialidade é catalogada nesta fase** (D18): o princípio modelado é que conteúdo confidencial exige capability explícita, separável por domínio/recurso quando a necessidade concreta surgir (ex.: acesso excepcional a avaliações não implica acesso a todo conteúdo confidencial) | ADMIN **nunca** recebe capabilities confidenciais automaticamente |
+| Auditoria | Sem capability de auditoria nesta fase (reservada conceitualmente) | Trilha avançada e acesso excepcional auditado são etapas posteriores da F4 |
 
 Nota de mapeamento (para o corte futuro do frontend): capabilities legadas com
 sufixo de papel/escopo (`cycle.cancel.manager`, `evaluation.edit.board`,
@@ -284,33 +285,35 @@ para o novo será feito quando o domínio migrar (F5), sem quebrar a regra de n�
 duplicar autorização em páginas (a policy central `src/authorization` continua
 a única porta no frontend até lá).
 
-## 6. Access roles iniciais
+## 6. Access roles iniciais (conjunto mínimo — D14)
 
-Bundles de acesso propostos apenas como **configuração inicial razoável**
-(bootstrap), com a ressalva de que o mapeamento exato capability↔papel dos
-fluxos atuais será fechado na implementação/validação (F4-02/F4-10):
+A revisão arquitetural fechou a F4-01 com um **conjunto mínimo** de
+access_roles: **um único access_role de sistema — `admin`** — atribuído por
+membership/organização, como papel de **acesso** (nunca posição hierárquica).
 
 | Access role (código candidato) | Natureza | Capabilities típicas (rascunho) | Notas |
 | --- | --- | --- | --- |
-| `admin` | Sistema/bootstrap | `membership.read`, `membership.manage`, `access_role.manage`, `collaborator.read`, `collaborator.manage`, `org.structure.manage`, `org.catalog.manage`, `settings.manage`, `cycle.read` | **Sem** `evaluation.read`/`goal.read`/`observation.read`/`confidential.read`/`report.read` de conteúdo de terceiros: ADMIN comum não lê conteúdo confidencial por padrão; não é SUPER_ADMIN |
-| `manager` (ver D14 sobre nome) | Sistema (atribuível por membro/org) | `evaluation.read`, `evaluation.create`, `evaluation.write`, `evaluation.cancel`, `evaluation.reopen`, `goal.read`, `goal.write`, `goal.approve`, `observation.read`, `observation.write`, `report.read`, `cycle.read` | Alcance real (DIRECT_REPORTS/DESCENDANTS) definido por escopo na F4-02; papel de **acesso**, não cargo "Gerente" |
-| `collaborator` | Sistema | `goal.read`, `goal.write` (próprias), `evaluation.read` (própria), `observation.read` (`Comunicado`/própria), `cycle.read` | Fluxos "próprios" confirmados por escopo SELF na F4-02 |
-| `auditor` | Futuro (se adequado; não criar agora) | `audit.view` etc. | Auditoria avançada é etapa posterior; deixar reservado, sem catálogo nesta fase |
+| `admin` | Sistema/bootstrap, atribuído **por membership** (por organização) | Administração da organização: `membership.read`, `membership.manage`, `access_role.manage`, `collaborator.read`, `collaborator.manage`, `org.structure.manage`, `org.catalog.manage`, `settings.manage`, `cycle.read` | Não exige collaborator/occupation; **sem** capabilities de conteúdo confidencial e **sem** SUPER_ADMIN; escopo administrativo é a organização da membership (D17) |
 
-Classificação proposta (detalhada nas decisões D2/D6/D14):
+Regras (D14, com D2/D6/D9):
 
-- **Sistema/bootstrap** (`is_system = true`, org null): `admin`, `collaborator`
-  e, se aprovado, `manager` — criados por seed/migration, **não removíveis nem
-  renomeáveis** (apenas inativáveis por migration), pois regras futuras e
-  validações os referenciam;
-- **Configuráveis/customizadas por organização**: organizações podem compor
-  bundles próprios (ex.: "admin de RH restrito") a partir das capabilities;
-- **Removíveis**: roles customizadas podem ser inativadas (nunca excluídas
-  fisicamente — D6); roles de sistema só perdem capabilities por decisão
-  explícita em migration;
-- **Nunca** usar GERENTE/COORDENADOR/CONSULTOR/ANALISTA/ESTAGIARIO como
-  access_roles "porque são cargos" (D14) — eles permanecem catálogo de
-  `job_roles`.
+- **Nenhum bundle espelha cargo organizacional**: GERENTE/COORDENADOR/
+  CONSULTOR/ANALISTA/ESTAGIARIO permanecem apenas no catálogo `job_roles` e
+  jamais concedem acesso;
+- **não existe access_role genérica `manager`/`collaborator` nesta fase**;
+  bundles de gestão/colaborador surgirão somente quando houver necessidade
+  concreta de autorização, no contexto dos escopos da F4-02+, e com
+  nomenclatura que não colida com cargos;
+- roles **customizadas por organização** podem ser criadas quando houver
+  necessidade (composições a partir das capabilities), sempre inativáveis e sem
+  exclusão física (D6);
+- roles de sistema são inativáveis apenas por migration e nunca renomeáveis
+  (D6); o catálogo de sistema nasce versionado por migration (D9/D16).
+
+O catálogo de capabilities da seção 5 existe desde a F4-01 mesmo sem bundles
+que as consumam: capability sem role atribuída **não produz efeito** (não há
+atribuições além do necessário e a RLS permanece deny-by-default); os bundles
+serão fechados quando cada necessidade concreta surgir (F4-02+).
 
 ## 7. Multi-organização
 
@@ -339,9 +342,9 @@ Invariantes de tenant para o modelo:
 
 ## 8. Histórico e mutabilidade
 
-Perguntas e posicionamento preliminar (decisões D5/D6/D7/D13):
+Posicionamento consolidado na revisão (decisões fechadas D5/D6/D7/D13):
 
-- **Validade temporal dos assignments**: recomendação — **não** introduzir
+- **Validade temporal dos assignments** (D7 = A): **não** introduzir
   `valid_from`/`valid_to` na F4-01. A F4-02 modelará o escopo (incluindo escopo
   temporário derivado de substituição F3-06, que expira com a própria
   substituição); acesso excepcional com janela/motivo é F4-09. A F4-01 deve
@@ -353,13 +356,13 @@ Perguntas e posicionamento preliminar (decisões D5/D6/D7/D13):
   Revogar uma atribuição = inativar/registrar revogação na linha (shape exato
   em D6/D13), preservando quem tinha o quê.
 - **Como auditorias futuras reconstroem "quem tinha qual role/capability"?**
-  As linhas de atribuição preservadas (com timestamps e, se D13=A, autor)
+  As linhas de atribuição preservadas (com timestamps e autor — D13 = A)
   permitem reconstrução; trilha de auditoria formal/append-only e acesso
   excepcional são etapas posteriores da F4 (não inventar auditoria completa
   aqui).
 - **Implementar agora ou preparar o modelo?** F4-01 implementa apenas o modelo
   com campos mínimos de evolução (`status`, `is_system`, timestamps/version,
-  autor opcional por D13) — sem tabela de auditoria, sem vigência, sem escopo.
+  autor por D13) — sem tabela de auditoria, sem vigência, sem escopo.
 
 ## 9. RLS e exposição
 
@@ -375,6 +378,11 @@ Baseline apropriado à F4-01 (não é liberação de acesso):
 - **sem `service_role` no cliente**: acesso privilegiado restrito a Edge
   Functions/server-side, como hoje (RPC `criar_perfil_membership` é o único
   precedente e é exclusivo `service_role`);
+- **qualquer mecanismo técnico mínimo de atribuição/bootstrap (D16)** é
+  exclusivamente server-side, valida membership e tenant, **não amplia RLS**
+  (sem policies novas), não substitui prematuramente as allowlists existentes e
+  **não cria bypass de autorização** (SECURITY INVOKER; sem `SECURITY DEFINER`
+  desnecessário);
 - **sem liberar leitura/escrita ampla antes da etapa da F4 que a autorizar**
   (mencionada pelo roadmap como "F4-08"): catálogos de capabilities/roles
   precisarão de leitura segura para o cliente **somente** quando a UI e as
@@ -401,36 +409,54 @@ acontecer.
 
 ## 11. Riscos e invariantes
 
-Invariantes de segurança que a implementação futura deve garantir:
+Invariantes de segurança **reforçadas na revisão arquitetural** (a
+implementação futura deve garantir):
 
-1. **Capability é a única unidade de permissão**; nenhuma regra autoriza
-   diretamente por cargo/senioridade/position/occupation/unidade.
-2. **`job_roles`/`seniority_levels`/`occupations` não concedem acesso**: não
-   pode existir FK, trigger, policy ou função que derive permissão da estrutura
-   organizacional.
-3. **Role agrupa capabilities** sem se confundir com cargo (catálogos
-   separados, sem cruzamento).
-4. **ADMIN é papel de acesso** independente de collaborator/occupation, **sem**
-   leitura automática de conteúdo confidencial e **sem** SUPER_ADMIN
-   irrestrito.
-5. **Toda autorização organizacional parte de uma membership ativa** do
-   usuário na organização (usuário sem membership ou com membership desabilitada
-   = nenhuma capability efetiva); perfil desabilitado também barra (F2-07).
-6. **Cross-organization é impossível por construção** (FKs compostas + checks),
-   nunca apenas por convenção de aplicação.
-7. **RLS deny-by-default preservado** em todas as tabelas novas e existentes;
-   nenhuma policy ampla antes da etapa que a autorizar.
-8. **Sem bypass**: funções futuras `SECURITY INVOKER`; nenhum caminho
-   `SECURITY DEFINER` desnecessário; `service_role` nunca no cliente.
-9. **Sem exclusão física** de catálogos/atribuições (histórico e reconstrução
-   preservados).
-10. **Regras não duplicadas**: enforcement futuro concentrado (policy central /
-    resolução única), nunca espalhado por páginas/policies ad hoc.
-11. **Vocabulário estável**: códigos de capability/role imutáveis após
-    publicados (renomear = nova capability/migration + deprecação).
-12. **Estado de domínio continua soberano**: capability válida não autoriza
-    mutação em estado inválido do domínio (ex.: editar avaliação concluída,
-    escrever observação fora de ciclo ATIVO) — regra de workflow permanece.
+1. **Cargo, senioridade, position e occupation nunca concedem capability**:
+   nenhuma FK, trigger, policy ou função pode derivar permissão da estrutura
+   organizacional — os catálogos de estrutura e o modelo de autorização não
+   possuem nenhum vínculo.
+2. **ADMIN é por membership/organização e não exige collaborator**: é um
+   access_role de acesso atribuído a uma membership ativa; existe sem linha em
+   `collaborators`/`occupations`.
+3. **ADMIN não é SUPER_ADMIN e não recebe conteúdo confidencial
+   automaticamente**: capabilities de conteúdo confidencial (separáveis por
+   domínio, D18) nunca entram no bundle `admin` por padrão.
+4. **Usuário sem membership ativa não possui autorização organizacional**:
+   toda capability efetiva parte de membership `active`; perfil `disabled`
+   também barra (F2-07).
+5. **Cross-tenant é impossível por construção**: FKs compostas/checks impedem
+   atribuir role/capability da Organização A a membership da B — nunca apenas
+   por convenção de aplicação.
+6. **Nenhuma allowlist provisória é removida antes de existir substituto
+   seguro** (allowlist `INVITE_ADMIN_USER_IDS`, `verify_jwt=false` local e
+   demais mecanismos da seção 10 permanecem até a migração equivalente
+   validada).
+7. **RLS permanece deny-by-default nesta etapa**: tabelas novas do modelo sem
+   policies e sem grants; nenhuma leitura/escrita ampla antes da etapa da F4
+   que a autorizar (F4-08 e posteriores).
+8. **Scope continua fora da F4-01**: SELF, DIRECT_REPORTS, DESCENDANTS,
+   ORGANIZATIONAL_UNIT, ORGANIZATION, ASSIGNED e o escopo temporário de
+   substituição pertencem à **F4-02**; a F4-01 apenas não bloqueia essa
+   evolução (D12).
+
+Invariantes complementares (mantidas do desenho original):
+
+- **Capability é a única unidade de permissão**; concessão direta fora de role
+  não existe na F4-01 (D3).
+- **Role agrupa capabilities** sem se confundir com cargo (catálogos
+  separados, sem cruzamento).
+- **Sem bypass**: funções futuras `SECURITY INVOKER`; nenhum `SECURITY
+  DEFINER` desnecessário; `service_role` nunca no cliente.
+- **Sem exclusão física** de catálogos/atribuições (histórico e reconstrução
+  preservados).
+- **Regras não duplicadas**: enforcement futuro concentrado (policy central /
+  resolução única), nunca espalhado por páginas/policies ad hoc.
+- **Vocabulário estável**: códigos de capability/role imutáveis após
+  publicados (renomear = nova capability/migration + deprecação).
+- **Estado de domínio continua soberano**: capability válida não autoriza
+  mutação em estado inválido do domínio (ex.: editar avaliação concluída,
+  escrever observação fora de ciclo ATIVO) — regra de workflow permanece.
 
 Riscos a vigiar durante a F4:
 
@@ -439,14 +465,20 @@ Riscos a vigiar durante a F4:
   engessar a F4-02 — manter taxonomia enxuta (seção 5);
 - antecipar escopo/policy na F4-01 e quebrar o deny-by-default;
 - remover allowlists/regras legadas antes do substituto seguro (seção 10);
-- "ADMIN vê tudo" acidental em bundles futuros (invariante 4 + D18).
+- "ADMIN vê tudo" acidental em bundles futuros (invariantes 2 e 3 + D18).
 
-## 12. Decisões pendentes (D1–D18)
+## 12. Decisões fechadas (D1–D18)
 
-Cada decisão apresenta pergunta objetiva, alternativas, recomendação e impacto.
-Todas estão **abertas** para revisão do desenho.
+Registro final da revisão arquitetural: cada decisão indica a alternativa
+**fechada** e o impacto correspondente. **D14, D16 e D18 incorporam ajustes
+obrigatórios** da revisão.
 
-### D1 — Capacidades: catálogo global ou por organização
+**Resumo dos fechamentos:** D1 = A · D2 = C · D3 = A · D4 = A · D5 = A ·
+D6 = B · D7 = A · D8 = A · D9 = A · D10 = A · D11 = A · D12 = A · D13 = A ·
+D14 = **B (ajustada)** · D15 = A · D16 = **A (ajustada)** · D17 = A ·
+D18 = **A (ajustada)**.
+
+### D1 — Capacidades: catálogo global ou por organização — **FECHADA (A)**
 
 - **Pergunta:** o catálogo de `capabilities` deve ser um conjunto global
   (códigos idênticos em todas as organizações) ou cada organização pode criar
@@ -454,99 +486,96 @@ Todas estão **abertas** para revisão do desenho.
 - **Alternativas:** (A) catálogo global de capabilities (`organization_id`
   null) — organizações apenas compõem roles; (B) capabilities por organização;
   (C) híbrido.
-- **Recomendação:** (A) catálogo global. Capability é o vocabulário de
-  permissão do produto; por organização tende a fragmentar o significado e
-  duplicar o catálogo.
-- **Impacto:** (A) simplifica validação e auditoria e mantém roles
-  customizadas como único ponto de variação por organização; (B)/(C) exigem
-  unicidade composta e complicam "a mesma permissão" entre orgs.
+- **Decisão (fechada): A** — catálogo **global** de capabilities. Capability é
+  o vocabulário de permissão do produto; por organização tende a fragmentar o
+  significado e duplicar o catálogo.
+- **Impacto:** validação e auditoria simplificadas; roles customizadas são o
+  único ponto de variação por organização.
 
-### D2 — Access roles: sistema vs customizáveis vs por organização
+### D2 — Access roles: sistema vs customizáveis vs por organização — **FECHADA (C)**
 
 - **Pergunta:** onde os access_roles vivem: roles de sistema globais
   (bootstrap), roles customizadas por organização, ou ambos?
 - **Alternativas:** (A) somente roles por organização (sem sistema); (B)
   somente roles de sistema globais; (C) híbrido: roles de sistema globais +
   customizadas por organização.
-- **Recomendação:** (C) híbrido, com `is_system` e `organization_id null` para
-  sistema e `organization_id not null` para customizadas (mesmo padrão de
-  catálogo `job_roles` por org, somado ao conjunto de sistema).
-- **Impacto:** (C) atende ADMIN/bootstrap sem hardcodar e dá flexibilidade por
-  organização sem multiplicar o catálogo base; (A) dificulta bootstrap seguro e
-  consistente; (B) impede composições locais.
+- **Decisão (fechada): C** — híbrido, com `is_system` e `organization_id null`
+  para roles de sistema e `organization_id not null` para customizadas (mesmo
+  padrão de catálogo `job_roles` por org, somado ao conjunto de sistema).
+- **Impacto:** atende ADMIN/bootstrap sem hardcodar e dá flexibilidade por
+  organização sem multiplicar o catálogo base.
 
-### D3 — Concessão direta de capability além de roles
+### D3 — Concessão direta de capability além de roles — **FECHADA (A)**
 
 - **Pergunta:** além da atribuição via access_role, uma membership pode receber
   capability diretamente?
 - **Alternativas:** (A) somente via roles (sem concessão direta); (B) conceder
   diretamente com as mesmas regras de tenant.
-- **Recomendação:** (A) na F4-01 (roles como única via), mantendo a porta para
-  exceções auditadas na F4-09 se necessário.
-- **Impacto:** (A) superfície menor, atribuição mais simples de auditar e de
-  revogar; (B) flexibilidade pontual, porém dois caminhos de concessão e maior
-  risco de acúmulo de permissões.
+- **Decisão (fechada): A** — roles como **única via** de concessão na F4-01,
+  mantendo a porta para exceções auditadas na F4-09 se necessário.
+- **Impacto:** superfície menor; atribuição mais simples de auditar e de
+  revogar; sem dois caminhos de concessão.
 
-### D4 — Múltiplos access_roles por membership
+### D4 — Múltiplos access_roles por membership — **FECHADA (A)**
 
 - **Pergunta:** uma membership pode ter mais de uma access_role simultânea?
 - **Alternativas:** (A) sim, múltiplas (união de capabilities); (B) uma única
   role por membership.
-- **Recomendação:** (A) múltiplas — composição real (ex.: `collaborator` +
-  role de gestão temporária; substituição F3-06 na F4-02).
-- **Impacto:** (A) exige unicidade por par e união na resolução; (B) força
-  roles "soma de tudo" e complica substituições temporárias.
+- **Decisão (fechada): A** — múltiplas roles por membership (união de
+  capabilities), habilitando composição real (ex.: `admin` + role customizada;
+  no futuro, papel de gestão com escopo de substituição F3-06 na F4-02).
+- **Impacto:** exige unicidade por par e união na resolução; evita roles
+  "soma de tudo" e prepara substituições temporárias.
 
-### D5 — Lifecycle/status de roles e capabilities
+### D5 — Lifecycle/status de roles e capabilities — **FECHADA (A)**
 
 - **Pergunta:** como evoluem roles/capabilities: exclusão ou estados?
 - **Alternativas:** (A) `status` `active`/`disabled` + sem exclusão física
   (padrão das F2/F3); (B) exclusão física.
-- **Recomendação:** (A) — consistente com `user_profiles`, memberships e
-  catálogos F3-02.
-- **Impacto:** (A) preserva histórico e referências; desativar capability/role
-  revoga efeito sem quebrar FKs; (B) viola convenção e perde rastreabilidade.
+- **Decisão (fechada): A** — `status` `active`/`disabled`, sem exclusão física,
+  consistente com `user_profiles`, memberships e catálogos F3-02.
+- **Impacto:** preserva histórico e referências; desativar capability/role
+  revoga o efeito sem quebrar FKs.
 
-### D6 — Role deletável vs inativável; mutabilidade das de sistema
+### D6 — Role deletável vs inativável; mutabilidade das de sistema — **FECHADA (B)**
 
 - **Pergunta:** uma access_role (ou capability) pode ser apagada; roles de
   sistema podem ser editadas?
 - **Alternativas:** (A) tudo inativável, inclusive sistema (sistema só muda por
   migration); (B) sistema imutável e customizadas inativáveis; (C) customizadas
   poderiam ser excluídas se sem atribuições.
-- **Recomendação:** (B) — roles/capabilities de sistema inativáveis apenas via
-  migration e nunca renomeáveis; customizadas inativáveis; sem exclusão física.
-- **Impacto:** (B) garante referências estáveis para validações futuras e
-  permite deprecação ordenada; (C) cria janela de exclusão física com risco de
-  perda de histórico.
+- **Decisão (fechada): B** — roles/capabilities de **sistema imutáveis e
+  inativáveis apenas via migration** (nunca renomeáveis); customizadas
+  inativáveis; **sem exclusão física**.
+- **Impacto:** referências estáveis para validações futuras e deprecação
+  ordenada, sem janela de exclusão física.
 
-### D7 — Validade temporal dos assignments
+### D7 — Validade temporal dos assignments — **FECHADA (A)**
 
 - **Pergunta:** a atribuição membership→role precisa de `valid_from`/`valid_to`
   já na F4-01?
 - **Alternativas:** (A) sem vigência na F4-01 (revogação por estado);
   (B) vigência temporal desde já.
-- **Recomendação:** (A), mas com shape que não bloqueie adicionar vigência na
-  F4-02/F4-09 (ver D12).
-- **Impacto:** (A) mantém a F4-01 enxuta; escopo temporário de substituição e
-  acesso excepcional por janela entram nas etapas certas; (B) antecipa
-  complexidade (exclusion constraints, close+open) sem consumidor ainda.
+- **Decisão (fechada): A** — **sem vigência na F4-01** (revogação por estado),
+  com shape que não bloqueie adicionar vigência na F4-02/F4-09 (ver D12).
+- **Impacto:** F4-01 enxuta; escopo temporário de substituição (F3-06) e acesso
+  excepcional por janela entram nas etapas certas.
 
-### D8 — Unicidade de códigos/nomes
+### D8 — Unicidade de códigos/nomes — **FECHADA (A)**
 
 - **Pergunta:** quais regras de unicidade para `code`/`name` de capabilities e
   roles?
 - **Alternativas:** (A) `code` único global (capabilities) e `name`/`code`
   único por escopo (roles de sistema global; customizadas por organização);
   (B) únicos somente por organização em tudo.
-- **Recomendação:** (A) — capability: `code` único global (D1); role:
+- **Decisão (fechada): A** — capability: `code` único global (D1); role:
   unicidade por `(organization_id, name)` para customizadas (espelho
   `job_roles`) e `name` único global para as de sistema, com `code`/`name`
   normalizados (`btrim`, minúsculas) conforme F1-02/F3-02.
-- **Impacto:** (A) dá endereço estável para capabilities e evita colisões entre
-  roles de sistema e customizadas; (B) dificulta referência global.
+- **Impacto:** endereço estável para capabilities; sem colisões entre roles de
+  sistema e customizadas.
 
-### D9 — Bootstrap do ADMIN e do catálogo de sistema
+### D9 — Bootstrap do ADMIN e do catálogo de sistema — **FECHADA (A)**
 
 - **Pergunta:** como nascem as roles/capabilities de sistema e a primeira
   atribuição ADMIN, sem hardcodar pessoas?
@@ -554,26 +583,26 @@ Todas estão **abertas** para revisão do desenho.
   RPC/script de bootstrap que atribui ADMIN à membership do primeiro
   administrador (fluxo de convite); (B) catálogo criado manualmente em cada
   ambiente; (C) criação via Edge Function desde o início.
-- **Recomendação:** (A) — catálogo de sistema versionado na migration
+- **Decisão (fechada): A** — catálogo de sistema **versionado na migration**
   (reproduzível, idêntico ao seed sintético local); atribuição inicial feita
-  por caminho administrativo (convite) que escolhe a role, nunca por UUID fixo
-  em código.
-- **Impacto:** (A) garante rebuild reproduzível e ADMIN sem collaborator; (B)
-  não reproduzível e propenso a divergência; (C) antecipa UI/fluxos que ainda
-  não existem.
+  por caminho administrativo (convite) que escolhe a role, **nunca por UUID
+  fixo em código**.
+- **Impacto:** rebuild reproduzível e ADMIN sem collaborator; sem divergência
+  entre ambientes.
 
-### D10 — Ownership tenant de roles customizadas (FKs compostas)
+### D10 — Ownership tenant de roles customizadas (FKs compostas) — **FECHADA (A)**
 
 - **Pergunta:** como garantir no schema que uma role customizada da
   Organização A nunca seja usada na B?
 - **Alternativas:** (A) FKs compostas `(id, organization_id)` com `uq` de
   referência aditiva (padrão F3-03/04/05); (B) apenas checagem em triggers;
   (C) apenas convenção de aplicação.
-- **Recomendação:** (A) — integridade de tenant declarativa como na F3.
-- **Impacto:** (A) impossibilita cross-org por construção; (B)/(C) dependem de
-  código e são menos seguras.
+- **Decisão (fechada): A** — integridade de tenant **declarativa** por FKs
+  compostas, como na F3.
+- **Impacto:** cross-org impossível por construção, não por disciplina de
+  código.
 
-### D11 — Tenant da associação role→capability
+### D11 — Tenant da associação role→capability — **FECHADA (A)**
 
 - **Pergunta:** uma role customizada da Organização A pode agregar capabilities
   "globais" (sim) e capabilities de outra organização (não existe, D1);
@@ -581,13 +610,12 @@ Todas estão **abertas** para revisão do desenho.
 - **Alternativas:** (A) associar somente capabilities do catálogo global +
   capabilities da mesma organização; garantir por FK/check; (B) permitir
   qualquer combinação.
-- **Recomendação:** (A) — com capabilities globais (D1) a associação é
-  livre entre roles (sistema/org) e o catálogo global, e roles customizadas
-  nunca referenciam capability de outra org (inexistente por D1).
-- **Impacto:** (A) mantém o vocabulário único e o tenant fechado; (B) quebraria
-  isolamento se capabilities fossem por org.
+- **Decisão (fechada): A** — com capabilities **globais** (D1), a associação é
+  livre entre roles (sistema/org) e o catálogo global; roles customizadas nunca
+  referenciam capability de outra org (inexistente por D1).
+- **Impacto:** vocabulário único e tenant fechado por construção.
 
-### D12 — Tabela-âncora da atribuição preparada para os escopos (F4-02)
+### D12 — Tabela-âncora da atribuição preparada para os escopos (F4-02) — **FECHADA (A)**
 
 - **Pergunta:** que formato dar à atribuição membership→role para que a F4-02
   adicione escopo (SELF, DIRECT_REPORTS, DESCENDANTS, ORGANIZATIONAL_UNIT,
@@ -595,38 +623,43 @@ Todas estão **abertas** para revisão do desenho.
 - **Alternativas:** (A) atribuição simples (membership+role) e a F4-02 evolui a
   mesma tabela adicionando escopo; (B) já nascer com coluna de escopo
   reservada; (C) tabelas separadas por tipo.
-- **Recomendação:** (A) — tabela-âncora própria e enxuta; a F4-02 adiciona o
-  modelo de escopo como evolução aditiva (nova migration), sem criar colunas
+- **Decisão (fechada): A** — tabela-âncora própria e **enxuta**; a F4-02 adiciona
+  o modelo de escopo como **evolução aditiva** (nova migration), sem colunas
   mortas na F4-01.
-- **Impacto:** (A) evita antecipar a F4-02 e mantém migrations coesas; (C)
-  fragmenta e dificulta a resolução conjunta.
+- **Impacto:** evita antecipar a F4-02 e mantém migrations coesas.
 
-### D13 — Metadados de autor (preparação de auditoria)
+### D13 — Metadados de autor (preparação de auditoria) — **FECHADA (A)**
 
 - **Pergunta:** a F4-01 grava `created_by`/`granted_by` (→ `user_profiles`) nas
   atribuições, ou deixa toda a trilha para as etapas de auditoria?
 - **Alternativas:** (A) gravar autor mínimo `created_by` onde trivial
   (convenção já adotada em F3-09 com `author_user_profile_id`); (B) nada agora.
-- **Recomendação:** (A) — custo baixo, sem criar trilha completa; prepara a
-  reconstrução de "quem atribuiu" sem antecipar auditoria formal.
-- **Impacto:** (A) alinha com F3-09 e facilita validação futura; (B) exigiria
-  backfill posterior para perguntas simples de auditoria.
+- **Decisão (fechada): A** — gravar autor mínimo `created_by` nas atribuições
+  (custo baixo), sem criar trilha completa de auditoria.
+- **Impacto:** alinha com F3-09 e permite reconstruir "quem atribuiu" sem
+  backfill posterior.
 
-### D14 — Nomes dos access_roles iniciais (colisão com cargo)
+### D14 — Access roles iniciais: conjunto mínimo sem colidir com cargo — **FECHADA (B ajustada)**
 
-- **Pergunta:** usar `admin`/`manager`/`collaborator` como codes de access_role
-  — e como evitar confusão com os cargos organizacionais (Gerente etc.)?
-- **Alternativas:** (A) codes curtos `admin`, `manager`, `collaborator` com
-  documentação explícita de que são papéis de acesso; (B) nomes marcados
-  (ex.: `access_manager`, `people_leader`); (C) sem role `manager` inicial.
-- **Recomendação:** (A) com documentação e validação reforçando a separação
-  (seções 4/6/11); alternativa (B) se a revisão julgar necessário evitar
-  qualquer colisão semântica com o cargo "Gerente".
-- **Impacto:** (A) vocabulário curto e reconhecível, porém exige disciplina de
-  documentação; (B) mais explícito porém menos idiomático; (C) empurra
-  decisões de bundle para a F4-02 sem ganho.
+- **Pergunta:** como estruturar os access_roles iniciais sem criar bundle que
+  possa ser confundido com cargo organizacional?
+- **Alternativas:** (A) codes curtos `admin`/`manager`/`collaborator`; (B)
+  conjunto mínimo apenas com `admin` (por organização), sem bundle espelhando
+  cargo; (C) roles de gestão já nesta fase, com nomes marcados
+  (ex.: `people_leader`).
+- **Decisão (fechada): B ajustada** — **não criar access_role genérica
+  `manager` (nem `collaborator`) nesta fase**, nem qualquer bundle que possa ser
+  confundido com Gerente/Coordenador ou outro cargo organizacional. A F4-01
+  parte de um **conjunto mínimo**: o access_role de sistema `admin`, atribuído
+  por membership/organização, como papel de **acesso** (não posição
+  hierárquica). Demais bundles existirão **somente quando houver necessidade
+  concreta de autorização** (no contexto dos escopos da F4-02+), com
+  nomenclatura que não espelhe cargos. Refletido na seção 6.
+- **Impacto:** evita espelhar a hierarquia organizacional e mantém o modelo
+  verificável; os bundles de gestão/colaborador entram com a necessidade
+  concreta de escopo, sem antecipação.
 
-### D15 — Vocabulário dos códigos de capability (espelho do frontend)
+### D15 — Vocabulário dos códigos de capability (espelho do frontend) — **FECHADA (A)**
 
 - **Pergunta:** os `code` das capabilities devem espelhar a notação
   `domínio.verbo` de `src/authorization/Capability.ts` (ex.: `evaluation.write`)
@@ -634,29 +667,34 @@ Todas estão **abertas** para revisão do desenho.
 - **Alternativas:** (A) manter notação com ponto espelhando o TS atual;
   (B) normalizar para snake_case puro no banco (convenção de identificadores
   F1-02) e mapear no futuro.
-- **Recomendação:** (A) — `code` é **dado** (não identificador SQL); manter a
-  mesma notação facilita o mapeamento 1:N futuro do frontend e evita dois
-  vocabulários. (Reavaliar se a revisão preferir padronização estrita.)
-- **Impacto:** (A) mapeamento direto com o catálogo TS; (B) mais "puro" quanto
-  à convenção de identificadores, porém exige tabela de tradução e rompe a
-  leitura comum com o código atual.
+- **Decisão (fechada): A** — `code` é **dado** (não identificador SQL); manter a
+  mesma notação (ponto) do catálogo TS atual facilita o mapeamento 1:N futuro
+  do frontend e evita dois vocabulários.
+- **Impacto:** mapeamento direto com o catálogo `src/authorization/Capability.ts`
+  no corte futuro; sem tabela de tradução.
 
-### D16 — Administração do catálogo/atribuições nesta fase (sem UI)
+### D16 — Administração do catálogo/atribuições nesta fase (sem UI) — **FECHADA (A ajustada)**
 
-- **Pergunta:** como o catálogo de sistema e as atribuições serão gravados na
+- **Pergunta:** como gravar o catálogo de sistema e as atribuições na
   implementação da F4-01 (que não tem UI)?
-- **Alternativas:** (A) catálogo de sistema via migration; atribuições via
-  RPC `SECURITY INVOKER` validada (ou fluxo de convite) executável por
-  servidor; (B) tudo via SQL/service_role manual; (C) Edge Function de
-  administração já nesta fase.
-- **Recomendação:** (A) — migration para o catálogo (reproduzível) e RPC de
-  atribuição com checks de tenant/perfil (sem policies novas), mantendo o
-  deny-by-default; sem Edge Function nova na F4-01.
-- **Impacto:** (A) permite validar o modelo sem UI nem ampliação de superfície;
-  (B) não reproduzível e sem validação central; (C) antecipa fronteira de
-  serviço sem necessidade.
+- **Alternativas:** (A) catálogo de sistema versionado por migration + mecanismo
+  técnico mínimo server-side para atribuições/bootstrap/testes; (B) tudo via
+  SQL/service_role manual; (C) Edge Function de administração já nesta fase.
+- **Decisão (fechada): A ajustada** — o catálogo de sistema é criado de forma
+  **determinística/versionada por migration**, **sem criar superfície
+  administrativa desnecessária ou ampla** nesta etapa. Se um mecanismo técnico
+  mínimo for necessário para atribuições/bootstrap e testes, ele deve:
+  - permanecer **server-side**;
+  - **validar membership e tenant**;
+  - **não ampliar RLS** (sem policies novas);
+  - **não substituir prematuramente as allowlists existentes** (seção 10);
+  - **não criar bypass de autorização** (SECURITY INVOKER; sem `SECURITY
+    DEFINER` desnecessário).
+  Sem Edge Function nova de administração na F4-01.
+- **Impacto:** modelo validável sem UI e sem ampliação de superfície; as
+  allowlists provisórias seguem vigentes até substituto seguro (invariante 6).
 
-### D17 — ADMIN por organização vs administração de plataforma
+### D17 — ADMIN por organização vs administração de plataforma — **FECHADA (A)**
 
 - **Pergunta:** `admin` é atribuído por membership (por organização) ou existe
   um papel de administração global de usuários/plataforma (as Edge Functions
@@ -665,28 +703,33 @@ Todas estão **abertas** para revisão do desenho.
   administração de contas/convites de uma org exige `admin` naquela org);
   (B) papel global de plataforma separado; (C) híbrido com role de sistema
   "platform" mínima.
-- **Recomendação:** (A) para a F4 (admin como access_role por membership),
-  mantendo a discussão de "operação de plataforma" (desativar conta de
-  usuário, recuperação) para quando as Edge Functions migrarem — sem inventar
-  papel global agora.
-- **Impacto:** (A) respeita tenant isolation e o princípio de não-SUPER_ADMIN;
-  (B)/(C) reintroduzem conceito global que a F4 quer evitar sem necessidade
-  demonstrada.
+- **Decisão (fechada): A** — `admin` como access_role **por membership/**
+  **organização**, mantendo a discussão de "operação de plataforma" (desativar
+  conta de usuário, recuperação) para quando as Edge Functions migrarem — sem
+  inventar papel global agora.
+- **Impacto:** respeita tenant isolation e o princípio de não-SUPER_ADMIN.
 
-### D18 — Conteúdo confidencial e o ADMIN
+### D18 — Conteúdo confidencial e o ADMIN — **FECHADA (A ajustada)**
 
-- **Pergunta:** como expressar que conteúdo confidencial (avaliações, notas,
-  metas/observações de terceiros, relatórios) exige permissão além do ADMIN, e
-  como evitar que bundles comuns (inclusive `admin`) a incluam por engano?
-- **Alternativas:** (A) capability dedicada de leitura confidencial
-   (ex.: `confidential.read`) que `admin` não recebe; (B) marcador
-  `is_confidential` por capability com regra de bundle; (C) sem distinção agora.
-- **Recomendação:** (A) — capability explícita e ausente do bundle `admin`
-  (e da maioria), deixando o conceito visível para a F4-02/F4-10; (B) fica como
-  alternativa se a revisão preferir metadado estrutural.
-- **Impacto:** (A) torna a regra "ADMIN não lê confidencial por padrão"
-  verificável em validação; (C) deixaria a regra implícita e vulnerável a
-  bundles futuros.
+- **Pergunta:** como garantir que conteúdo confidencial exija permissão além do
+  ADMIN, sem que uma permissão única abra todos os domínios confidenciais?
+- **Alternativas:** (A) capability genérica única de leitura confidencial
+  (ex.: `confidential.read`) ausente do ADMIN; (B) capabilities confidenciais
+  **separáveis por domínio/recurso**, criadas quando houver necessidade
+  concreta; (C) marcador `is_confidential` por capability.
+- **Decisão (fechada): A ajustada** — mantém-se o princípio de **capabilities
+  explícitas** para acesso confidencial, **nunca incluídas automaticamente no
+  ADMIN**, mas **sem depender de uma capability genérica única** (como
+  `confidential.read`) que pudesse abrir todos os domínios confidenciais.
+  Preferir **capabilities de confidencialidade separáveis por domínio/recurso**
+  quando a necessidade concreta surgir — por exemplo, acesso excepcional a
+  avaliações não implica acesso a todo o conteúdo confidencial do Virtus. Na
+  F4-01, modela-se apenas o necessário para tornar essa separação **possível e
+  verificável**, sem antecipar a taxonomia das fases posteriores (seções 5 e 13;
+  invariante 3).
+- **Impacto:** a regra "ADMIN não lê conteúdo confidencial por padrão" fica
+  verificável, e o desenho não cria um caminho único que abra todos os domínios
+  confidenciais no futuro.
 
 ## 13. Proposta de validação futura
 
@@ -700,6 +743,9 @@ runners sintéticos já usados (`supabase/validacao/`):
   (asserts de schema: nenhuma FK entre catálogos de estrutura e autorização).
 - **Role agrupa capability:** atribuir role com N capabilities e provar que a
   resolução efetiva = união exata das capabilities da role.
+- **Conjunto mínimo de roles (D14):** o catálogo de sistema contém apenas o
+  access_role `admin` (por organização); nenhuma role espelha cargo
+  organizacional; capability sem role atribuída não concede acesso.
 - **ADMIN não depende de collaborator:** perfil com membership e role `admin`
   **sem** linha em `collaborators` resolve as capabilities de administração.
 - **`job_role` não concede acesso:** ocupar posição com qualquer cargo não
@@ -708,8 +754,10 @@ runners sintéticos já usados (`supabase/validacao/`):
   Organização A a membership da B falha por constraint/FK (assert negativo).
 - **Membership desabilitada não concede acesso:** desabilitar a membership e
   provar que a resolução efetiva fica vazia (e perfil `disabled` idem).
-- **ADMIN sem conteúdo confidencial:** resolução das capabilities de `admin`
-  não contém leitura confidencial (assert de conjunto).
+- **ADMIN sem conteúdo confidencial:** a resolução das capabilities de `admin`
+  não contém nenhuma capability de conteúdo confidencial (assert de conjunto);
+  quando capabilities confidenciais por domínio existirem, verificar também a
+  separação por domínio/recurso (D18).
 - **Catálogo de sistema reproduzível:** rebuild limpo (`supabase db reset`)
   duas vezes produz catálogo de sistema idêntico (determinismo do seed/
   migration).
