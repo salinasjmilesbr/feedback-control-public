@@ -636,6 +636,69 @@ local, CLI 2.116.0, PostgreSQL 17.6; repetida após um segundo `db reset`, com o
 mesmo resultado). Detalhes na seção "Validação executada (F3-08)" do
 `supabase/README.md`.
 
+## F3-09 — Responsabilidade avaliativa e sucessão de avaliador (Issue #86)
+
+Validação estrutural contra o **Supabase local** da migration
+`20260907190000_evaluator_responsibility_succession.sql`: resolução avaliativa
+por posição/data, responsabilidade temporal por `(snapshot, posição)` e eventos
+imutáveis de sucessão, sem alterar os snapshots F3-08.
+
+### Como reproduzir
+
+Requisitos: Docker Desktop em execução e o CLI Supabase da raiz
+(`npx --yes supabase@2.116.0`).
+
+```powershell
+# 1) subir a stack local (rebuild limpo: migrations em ordem + seed)
+npx --yes supabase@2.116.0 start
+
+# 2) aplicar o cenário sintético no banco local (idempotente)
+Get-Content supabase/validacao/01-cenario-f3-09.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+
+# 3) executar a validação (exit code 0 = todas as verificações passaram)
+Get-Content supabase/validacao/02-validar-f3-09.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+```
+
+Observações:
+
+- os scripts **não tocam projeto remoto**, **não alteram nenhuma policy RLS** e
+  removem ao final os dados sintéticos do cenário (banco local limpo);
+- `01-cenario-f3-09.sql` insere via superuser local (equivalente a service_role)
+  apenas UUIDs fixos com prefixo `fb`, sem colidir com os cenários anteriores;
+- o deny-by-default é comprovado pelo passo 8 de `02-validar-f3-09.sql`
+  (`set role authenticated`).
+
+### O que é verificado (02-validar-f3-09.sql)
+
+1. **Estrutura**: schema `public` com 21 tabelas (2 novas da F3-09); 15
+   constraints esperadas; FKs `ON DELETE RESTRICT`; RLS habilitado nas 2
+   tabelas com zero policies; 5 funções F3-09 (SECURITY INVOKER).
+2. **Resolução avaliativa**: substituto `evaluative` > titular durante o
+   período; titular reassume após o período; múltiplas posições resolvidas
+   separadamente (2 linhas).
+3. **Materialização**: uma responsabilidade original por `(snapshot, posição
+   com superior)`; posição raiz não gera responsabilidade; responsável original
+   = titular (nunca o substituto, mesmo ativo na data).
+4. **Responsável vigente**: overlay do substituto por data; reversão ao titular;
+   após sucessão, novo responsável.
+5. **Sucessão**: 4 eventos (original → novo) com motivo/autor; responsável
+   original preservado nas linhas fechadas; novas responsabilidades abertas.
+6. **Idempotência/não-reabertura**: repetição não duplica eventos; ID de
+   responsabilidade encerrada é rejeitado; superior vago sem novo responsável é
+   rejeitado (fail-closed).
+7. **Tenant integrity**: responsabilidade e evento cross-organization
+   bloqueados (FKs compostas).
+8. **RLS deny-by-default** comprovado como `authenticated`.
+9. **F3-01..F3-08 intactas** (resoluções F3-07, policies e `materializar_
+   colegiado_ciclo` presentes) e **limpeza** do cenário.
+
+Execução registrada nesta Issue: **23 verificações [PASS], 0 falhas** (Supabase
+local, CLI 2.116.0, PostgreSQL 17.6; repetida após um segundo `db reset`, com o
+mesmo resultado). Detalhes na seção "Validação executada (F3-09)" do
+`supabase/README.md`.
+
 ## Limitações e notas registradas
 
 - **JWT é stateless**: após logout, o refresh token é revogado, mas um access
