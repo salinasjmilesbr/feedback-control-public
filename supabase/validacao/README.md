@@ -1,0 +1,119 @@
+# F2-10 — Validação integrada: múltiplas contas e isolamento de identidade
+
+Etapa final da Fase 2 (Issue #77). Valida, contra o **Supabase local**, que
+autenticação, perfis, memberships, organizações, RLS, revogação e isolamento de
+identidade funcionam em conjunto com múltiplas contas **sintéticas** — sem
+alterar a arquitetura (esta etapa é de validação/evidência, não de redesenho).
+
+## Contas e organizações sintéticas do cenário
+
+| Identidade | UUID (fixo/local) | E-mail (sintético) | Perfil | Membership inicial |
+| --- | --- | --- | --- | --- |
+| ADMIN | `b0000000-…-0001` | `admin.f2-10@example.invalid` | active | Alfa (active) |
+| A | `b0000000-…-000a` | `conta.a.f2-10@example.invalid` | active | Alfa (active) |
+| B | `b0000000-…-000b` | `conta.b.f2-10@example.invalid` | active | Beta (active) |
+| C | `b0000000-…-000c` | `conta.c.f2-10@example.invalid` | active | *(nenhuma)* |
+| D | `b0000000-…-000d` | `conta.d.f2-10@example.invalid` | active → passo 8 | Beta (active) |
+| E | `b0000000-…-000e` | `conta.e.f2-10@example.invalid` | active | Alfa (active → passo 9) |
+
+Organizações: `Org Sintetica Alfa (F2-10)` (`c0000000-…-00a1`) e
+`Org Sintetica Beta (F2-10)` (`c0000000-…-00b1`). Senha local de teste:
+`virtus-senha-f2-10-local` (somente banco local; nenhuma credencial real).
+
+## Como reproduzir
+
+Requisitos: Docker Desktop, Node 18+ e o CLI Supabase da raiz
+(`npx --yes supabase@2.116.0`).
+
+```powershell
+# 1) subir a stack local
+npx --yes supabase@2.116.0 start
+
+# 2) aplicar o cenário sintético no banco local (idempotente)
+Get-Content supabase/validacao/01-cenario-f2-10.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+
+# 3) exportar as variáveis locais (valores do `supabase status -o env`, sem aspas)
+$envOut = npx --yes supabase@2.116.0 status -o env
+$vars = @{}
+foreach ($l in ($envOut -split "`n")) { if ($l -match '^([A-Z_]+)=(.*)$') { $vars[$matches[1]] = $matches[2].Trim('"') } }
+$env:SUPABASE_URL              = $vars['API_URL']
+$env:SUPABASE_ANON_KEY         = $vars['ANON_KEY']
+$env:SUPABASE_SERVICE_ROLE_KEY = $vars['SERVICE_ROLE_KEY']
+
+# 4) executar a validação (exit code 0 = todas as verificações passaram)
+node supabase/validacao/02-validar-f2-10.mjs
+```
+
+Observações:
+
+- o script de validação **não imprime segredos** e **não toca projeto remoto**;
+- `01-cenario-f2-10.sql` insere via superuser local (equivalente a
+  service_role) **sem alterar nenhuma policy RLS** — o isolamento é comprovado
+  pelas consultas autenticadas do passo 4;
+- ao final, o runner restaura `E` (membership active) e reativa `D`, permitindo
+  reexecução sem reaplicar o SQL.
+
+## Matriz automatizada (runner 02-validar-f2-10.mjs)
+
+Registro da execução desta Issue (Supabase local, CLI 2.116.0, gotrue
+v2.196.0): **36 verificações, 0 falhas**.
+
+1. **ADMIN** — autentica com identidade própria (`auth.uid`/sub do JWT) e, sem
+   conceito de collaborator (ainda inexistente), resolve somente o próprio
+   perfil ativo; consegue invocar as Edge Functions administrativas (passos 8).
+2. **Conta A** — `auth.uid` = A; resolve apenas o próprio perfil; apenas a
+   membership de A (Alfa); enxerga somente Alfa; **não** enxerga Beta nem lê o
+   perfil de B.
+3. **Conta B** (simétrica) — `auth.uid` = B; perfil próprio; membership Beta;
+   somente Beta; **não** lê perfil/memberships de A nem Alfa.
+4. **C (sem membership)** — autentica como identidade válida, sem memberships
+   nem organizações (nenhuma organização inventada).
+5. **Estado local/impersonação DEV** — header de identidade local extra com o
+   token de A não altera o que o servidor enxerga (A segue vendo apenas Alfa):
+   a identidade é exclusivamente o JWT/`auth.uid`.
+6. **Refresh/restauração** — refresh preserva o mesmo `auth.uid` (sub) e a
+   mesma visão (Alfa) após a restauração da sessão.
+7. **Logout/troca** — logout global (204) revoga o refresh token (uso posterior
+   falha); login seguinte de B não herda estado/visão de A (B vê somente Beta).
+8. **Usuário desabilitado (D)** — Edge Function `gerenciar-usuario` (disable)
+   bane D e desativa o perfil: sign-in bloqueado, `getUser` do JWT antigo
+   rejeitado, RLS impede a resolução do próprio perfil (status `active`
+   exigido); B permanece intacto; `enable` restaura e novo login resolve Beta.
+9. **Membership desabilitada (E)** — com perfil ativo, a desativação da
+   membership remove o acesso à organização (orgs = []), a própria membership
+   desabilitada permanece visível (histórico preservado) e a reexecução é
+   segura (baseline restaurada).
+10. **Signup público** — continua desabilitado (sem `access_token`).
+
+## Matriz da Fase 2 (manual + automatizada, resumo)
+
+| Etapa | Issue | Entregue por | Cobertura automatizada |
+| --- | --- | --- | --- |
+| F2-01 organizations/user_profiles | #68 | migrations + RLS deny-by-default | suíte Vitest + rebuild local |
+| F2-02 memberships | #69 | migrations aditivas + unique por par | suíte Vitest |
+| F2-03 login/logout real + policies de leitura | #70 | `src/auth/*`, migrations de policies | unit (controlador/serviço/rotas) |
+| F2-04 guard de rotas | #71 | `LayoutAutenticado`/`rotasProtegidas` | unit de guard/roteamento |
+| F2-05 recuperação/redefinição | #72 | fluxo oficial Supabase + mailpit | unit F2-05 + validação manual local |
+| F2-06 convite administrativo | #73 | Edge Function + RPC | unit convite + validação local |
+| F2-07 desativação/revogação | #74 | Edge Function + RLS status | unit F2-07 + validação local |
+| F2-08 sessão/expiração | #75 | política central + marcador | unit temporal controlado |
+| F2-09 impersonação DEV | #76 | gate `simulacaoDevPermitida` | unit DEV/HOMOLOG/PROD |
+| F2-10 validação integrada | #77 | este diretório | runner integrado (36/36) |
+
+## Limitações e notas registradas
+
+- **JWT é stateless**: após logout, o refresh token é revogado, mas um access
+  token copiado continua assinado até expirar (`auth.jwt_expiry` local = 1h). A
+  revogação efetiva de sessões pré-existentes é feita por ban/desativação
+  (F2-07), validada no passo 8; políticas de dados de domínio futuras poderão
+  incorporar o status do usuário como condição adicional de RLS.
+- As policies de `organizations` são escopadas por membership ativa (F2-03); a
+  desativação de usuário **não** remove memberships (modelo F2-07): o bloqueio
+  efetivo vem do ban (login/refresh/getUser) + RLS do perfil
+  (`status = 'active'`), e a desativação de membership remove o acesso à
+  organização (passo 9).
+- Impersonação DEV (F2-09) é contexto local do frontend e nunca participa de
+  autorização server-side (passo 5 + testes de F2-09).
+- Fora do escopo: capabilities completas, RLS de avaliações/metas/observações,
+  estrutura organizacional completa e dados reais.

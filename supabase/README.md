@@ -1,4 +1,4 @@
-# Supabase local — desenvolvimento (F1-01 a F2-09)
+# Supabase local — desenvolvimento (F1-01 a F2-10)
 
 Infraestrutura local do Supabase para o Virtus Team, versionada e reconstruível
 integralmente a partir do repositório — sem configuração manual no dashboard,
@@ -331,6 +331,23 @@ nunca se confunda com autenticação:
   credencial/secret novo entrou no frontend; login/logout, recuperação,
   redefinição, guard, convite (F2-06), desativação/revogação (F2-07) e a
   política de sessão (F2-08) permanecem intactos.
+
+## Validação integrada com múltiplas contas (F2-10)
+
+A F2-10 encerra a Fase 2 com evidência reproduzível (somente Supabase local,
+dados sintéticos) de que autenticação, perfis, memberships, organizações, RLS,
+revogação e isolamento de identidade funcionam em conjunto. Artefatos em
+`supabase/validacao/` (cenário SQL idempotente + runner + matriz documentada):
+
+- ADMIN, A, B, C (sem membership), D (desabilitado no passo 8) e E (membership
+  desabilitada no passo 9) com perfis/memberships/organizações sintéticas;
+- runner valida `auth.uid`/sub por conta, resolução restrita ao próprio
+  perfil/memberships/organizações, isolamento A↔B, usuário sem membership,
+  refresh/restauração, logout/troca sem vazamento, impersonação DEV sem efeito
+  server-side, desativação/reativação via Edge Function, membership desabilitada
+  e signup público bloqueado;
+- execução registrada nesta Issue: 36 verificações, 0 falhas (instruções e
+  matriz completas no README da pasta de validação).
 
 ## Aplicação independente
 
