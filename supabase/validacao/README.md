@@ -699,6 +699,61 @@ local, CLI 2.116.0, PostgreSQL 17.6; repetida após um segundo `db reset`, com o
 mesmo resultado). Detalhes na seção "Validação executada (F3-09)" do
 `supabase/README.md`.
 
+## F3-10 — Validação integrada da estrutura organizacional (Issue #87)
+
+Validação de fechamento da Fase 3: uma organização 100% sintética, representativa
+dos padrões do piloto, exercitando em conjunto F3-01..F3-09 (sem migration nem
+alteração de schema).
+
+### Como reproduzir
+
+Requisitos: Docker Desktop em execução e o CLI Supabase da raiz
+(`npx --yes supabase@2.116.0`).
+
+```powershell
+# 1) subir a stack local (rebuild limpo: migrations em ordem + seed)
+npx --yes supabase@2.116.0 start
+
+# 2) aplicar o cenário sintético no banco local (idempotente)
+Get-Content supabase/validacao/01-cenario-f3-10.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+
+# 3) executar a validação (exit code 0 = todas as verificações passaram)
+Get-Content supabase/validacao/02-validar-f3-10.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+```
+
+Observações:
+
+- os scripts **não tocam projeto remoto**, **não alteram nenhuma policy RLS** e
+  removem ao final os dados sintéticos do cenário (banco local limpo);
+- `01-cenario-f3-10.sql` insere via superuser local (equivalente a service_role)
+  apenas UUIDs fixos com prefixo `fc`, sem colidir com os cenários anteriores;
+- o deny-by-default é comprovado no passo 6 de `02-validar-f3-10.sql`
+  (`set role authenticated`).
+
+### O que é verificado (02-validar-f3-10.sql)
+
+1. **Sem campos especiais por cargo**: 21 tabelas; nenhuma coluna
+   rank/level/order/hierarchy em job_roles/seniority_levels/positions; catálogo
+   com os 8 job_roles + Junior/Pleno/Senior.
+2. **14 cenários** com asserts explícitos: Gerente + 3 Coordenadores; Consultor
+   direto ao Gerente; Analistas Jr/Pl/Sr sob o mesmo Coordenador (mesma reporting
+   line/gestor/profundidade); Estagiário sob Coordenador e sob Gerente (sem
+   seniority); gerência menor sem Coordenador; Especialista no mesmo patamar do
+   Gerente (mesmo superior, zero subordinados); posição vaga; troca definitiva de
+   ocupante (+ sucessão F3-09); transferência entre coordenações; licença mantendo
+   occupation; substituição temporária; pessoa com duas posições; Diretor→Diretor;
+   colegiado ausente/vazio/com membros e histórico por ciclo.
+3. **Reconstrução histórica** em 5 datas (2024-02-01, 05-01, 07-15, 09-15, 12-01).
+4. **RLS deny-by-default** comprovado como `authenticated`; policies inalteradas.
+5. **F3-01..F3-09 intactas** e **limpeza** do cenário.
+
+Execução registrada nesta Issue: **29 verificações [PASS], 0 falhas** (Supabase
+local, CLI 2.116.0, PostgreSQL 17.6; repetida após um segundo `db reset`, com o
+mesmo resultado). Detalhes na seção "Validação executada (F3-10)" do
+`supabase/README.md`.
+
 ## Limitações e notas registradas
 
 - **JWT é stateless**: após logout, o refresh token é revogado, mas um access
