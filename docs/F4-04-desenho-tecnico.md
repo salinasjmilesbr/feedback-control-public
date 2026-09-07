@@ -1,7 +1,7 @@
 # F4-04 — Desenho técnico: hierarquia e assignments na autorização (Issue #91)
 
-> **Status:** desenho técnico da F4-04 **aguardando revisão**. Decisões
-> **D1–D18 abertas** (recomendação indicada em cada uma). Nenhuma
+> **Status:** revisão arquitetural **concluída**; decisões D1–D18 **fechadas**
+> na seção 23 (D8, D17 e D18 com ajustes registrados). Nenhuma
 > implementação: sem código, migrations, RLS, `SECURITY DEFINER`, alteração de
 > frontend/Edge Functions ou PR de implementação — somente este documento, em
 > branch exclusiva de docs.
@@ -99,17 +99,17 @@ Precisamente:
 
 - Consome a **árvore formal da F3** (reporting lines temporais, sem ciclos por
   trigger F3-04), partindo de **todas** as positions vigentes do ator;
-- percorre descendentes formais, resolve occupants (responsável efetivo no
-  contexto vivo — D9 F4-02), deduplica por position e por collaborator;
+- percorre descendentes formais e resolve os **occupants/titulares vigentes**
+  (occupations na data; sem herança de autorização ao substituto temporário —
+  D17, ver §11), deduplica por position e por collaborator;
 - **posição vaga não é alvo humano**, mas **não quebra a árvore**: a recursão
   continua abaixo dela (ver decisão D1 — não interromper);
 - **cross-tenant**: impossível (todos os nós pertencem à organização do ator;
   se algum nó divergisse, o provider nega e o engine falha fechado).
 
-**Decisão explícita requerida (D1):** posição vaga **intermediária** NÃO
-interrompe a travessia de descendents (a árvore é de positions; a vacância é do
-occupant). Recomendação: atravessar; os descendentes reais abaixo continuam
-alvos. (Registrar como decisão — não assumir.)
+**Decisão (D1 = A):** posição vaga **intermediária** NÃO interrompe a travessia
+de descendants (a árvore é de positions; a vacância é do occupant): atravessar;
+os descendentes reais abaixo continuam alvos (invariante 4).
 
 ## 6. Níveis futuros
 
@@ -187,7 +187,7 @@ Integração com F3-09, distinguindo:
 
 | Conceito | Fonte | Papel na autorização |
 | --- | --- | --- |
-| Responsável formal (estrutura viva) | positions/reporting/occupations na data (F3-07) | escopos estruturais no contexto vivo (D9 F4-02) |
+| Responsável formal (estrutura viva) | positions/reporting/occupations na data | escopos estruturais usam **occupants/titulares vigentes**; sem efeito autorizativo do substituto na F4-04 (D17) |
 | Responsável avaliativo congelado | `cycle_evaluation_responsibilities` (F3-09, snapshot por ciclo) | base do ASSIGNED de avaliador no ciclo |
 | Sucessão explícita | `evaluation_succession_events` (append-only) | atualiza o responsável avaliativo do ciclo (não reescreve histórico) |
 | ASSIGNED | derivado das duas anteriores | capability de avaliação sobre o avaliado/posição do ciclo |
@@ -203,6 +203,21 @@ Substituição temporária (F4-05) fica fora. Nenhuma duplicação de F3-09.
   aplicável (F3-08/09);
 - **nunca** reconstruir histórico usando apenas a estrutura atual — o engine
   recebe o contexto (ciclo) e o provider decide a fonte (D9/D12 F4-02/F4-04).
+
+**Boundary com F4-05 (D17 = A ajustada):** a F4-04 **não** concede autorização
+ao substituto temporário como efeito novo. Registro explícito:
+- a árvore formal continua definida por **positions + reporting lines**;
+- **occupants/titulares vigentes** são usados nos casos normais da F4-04;
+- `temporary_responsibilities` permanecem como **dado estrutural da F3** (sem
+  scope persistido, sem tratar o substituto como possuidor automático das
+  capabilities/scopes do titular, sem antecipar o mapa
+  responsibility_type × capability);
+- se algum resolver F3-07 devolver `responsible_collaborator_id` com substituto,
+  a F4-04 **não** converte isso automaticamente em nova concessão de
+  autorização;
+- **qualquer herança de autorização pelo substituto pertence exclusivamente à
+  F4-05**;
+- histórico de ciclo permanece soberano pela F3-08/F3-09.
 
 ## 12. Posição vaga
 
@@ -259,32 +274,30 @@ authorize(request)
 O engine **não sabe** o que é Gerente/Coordenador: conhece apenas
 `capability` + `scope` + `target` + `date` + probe.
 
-## 15. Fluxos que devem migrar
+## 15. Fluxos que devem migrar (D8 = A ajustada — fechada)
 
-Classificação (inventário concreto do estado atual):
+**Conjunto mínimo** migrado na F4-04 (necessário para provar hierarchy +
+ASSIGNED da Issue #91 — sem big-bang):
 
-**A — migrar na F4-04 (escopo Issue #91):**
-- `authorizationPolicy` branches de avaliação por relação
-  (`evaluation.create`, `evaluation.edit.manager/coordinator/board`,
-  `evaluation.cancel/reopen.manager`, `evaluation.view.admin`), resolvidos
-  agora por `obterPermissoesAvaliacao`/`podeAprovarMetaNoCiclo` (parcial);
-- visibilidade de colaboradores (`scopeCollaborators`/`getColaboradoresVisiveis`)
-  para gestão de equipe (DIRECT_REPORTS/DESCENDANTS) e colegiado (ASSIGNED);
-- aprovação de metas por gerente/coordenador (DIRECT_REPORTS/DESCENDANTS) e
-  gates `goal.approve.*`.
+1. **Visibilidade hierárquica de colaboradores/equipe**:
+   - DIRECT_REPORTS; DESCENDANTS; união de múltiplas positions
+   (`scopeCollaborators`/`getColaboradoresVisiveis` sobre os novos providers);
+2. **Autorização de avaliação baseada em relação**:
+   - gestor pela hierarquia (DIRECT_REPORTS/DESCENDANTS);
+   - colegiado via ASSIGNED (derivado de F3-08);
+   - responsabilidade avaliativa via fonte F3-09;
+3. **Um fluxo de aprovação hierárquica de metas**, somente se puder reutilizar
+   exatamente a mesma infraestrutura sem ampliar muito o PR.
 
-**B — deixar para F4-05:**
-- efeito de substituição temporária nos scopes.
+Fluxos de avaliação/metas/observações fora desse mínimo **permanecem legados**
+(até a migração em issues posteriores), sem big-bang.
 
-**C — deixar para a persistência F5/F4-08:**
-- enforcement server-side/RLS; vínculo real auth↔collaborator; avaliações/metas
-  em Supabase.
+**B — F4-05:** efeito autorizativo de substituição temporária.
+**C — F5/F4-08:** enforcement server-side/RLS; vínculo auth↔collaborator.
+**D — não é autorização:** rótulos de cargo, ordenações, formatações.
 
-**D — não é autorização:**
-- rótulos de cargo (exibição), ordenações, formatações.
-
-Sem big-bang além da Issue #91: o piloto SELF da F4-03 permanece e os fluxos A
-migram sobre o mesmo engine (mapa legado atualizado, nunca runtime — D18 F4-03).
+O piloto SELF da F4-03 permanece; o mapa legado é atualizado somente para os
+fluxos cobertos (nunca runtime — D18 F4-03).
 
 ## 16. ASSIGNED e capability
 
@@ -294,11 +307,18 @@ tipo de recurso:
 - `evaluation.read` + ASSIGNED(avaliação X) ⇒ permite X;
 - `goal.read` + ASSIGNED(avaliação X) ⇒ **não** permite meta alguma.
 
-Impedir confusão de resource type: o alvo tipado (`evaluation` vs `goal` vs
-`collaborator`) é vinculado à capability pedida por um **validador capability↔
-tipo de alvo** (ex.: capabilities `evaluation.*` só aceitam alvo `evaluation`/
-`collaborator` em contexto avaliativo; `goal.*` só `goal`/`collaborator` dono).
-Sem validação ⇒ DENY (fail-closed).
+**Contrato fechado capability ↔ tipo de alvo (D18 = A ajustada):** existe um
+contrato de **compatibilidade** apenas para impedir combinações
+semanticamente impossíveis:
+- `evaluation.*` só opera sobre alvo `evaluation` (ou subtarget claramente
+  derivado da avaliação);
+- `goal.*` não usa ASSIGNED de `evaluation`;
+- `observation.*` não usa alvo `goal`.
+
+O contrato **não** concede autorização, não substitui capability/scope/
+relationProvider, não reimplementa regras de domínio e não cria uma segunda
+matriz de policy — apenas valida o tipo de recurso compatível com a capability
+pedida. Incompatibilidade ⇒ DENY (fail-closed).
 
 ## 17. Tenant isolation
 
@@ -379,187 +399,212 @@ de cargo/gerente-coordenador hardcoded:
 
 ## 22. Riscos e invariantes
 
-Invariantes:
+Invariantes **reforçadas na revisão arquitetural**:
 
-1. capability define a ação; scope define o alcance; relação vem de
-   positions/reporting lines/occupations (nunca cargo);
-2. DIRECT_REPORTS/DESCENDANTS usam a estrutura temporal da F3 na data;
-3. múltiplas positions ⇒ união deduplicada de alvos; tenant soberano;
-4. posição vaga não cria collaborator artificial e não interrompe a árvore
-   (D1);
-5. colegiado concede somente o recurso/avaliação atribuído (ASSIGNED), sem
-   hierarchy nem outros recursos por consequência;
-6. ASSIGNED sozinho não concede nada; capability decide a ação e o tipo de
-   alvo;
-7. estrutura viva × histórico de ciclo permanecem separados (snapshot
-   soberano);
-8. F4-03 Policy Engine é a porta central; nenhuma segunda implementação;
-9. fail-closed; sem SUPER_ADMIN; sem capabilities por cargo;
-10. nenhuma migration/RLS/DEFINER nesta fase (salvo decisão explícita);
-11. nenhum cache que atrase revogação;
-12. cross-tenant impossível (mismatch ⇒ DENY).
+1. cargo/job_role **nunca** participa da decisão runtime dos fluxos migrados;
+2. DIRECT_REPORTS/DESCENDANTS partem de **todas** as positions confiáveis do
+   ator;
+3. o caller nunca escolhe qual position concede acesso;
+4. posição vaga intermediária **não quebra** a árvore;
+5. posição vaga nunca cria collaborator artificial;
+6. múltiplas positions produzem **união deduplicada** de alvos;
+7. colegiado concede somente o **recurso de avaliação atribuído**;
+8. ASSIGNED não cria hierarchy;
+9. ASSIGNED não funciona como wildcard;
+10. F3-08/F3-09 são **fontes soberanas** para histórico e responsabilidades
+    avaliativas;
+11. estrutura viva e histórico de ciclo não se misturam;
+12. substituição temporária **não concede autorização na F4-04**;
+13. o efeito autorizativo da substituição pertence **exclusivamente à F4-05**;
+14. tenant mismatch = DENY;
+15. nenhum `SECURITY DEFINER` novo;
+16. nenhuma migration necessária;
+17. nenhum cache;
+18. Policy Engine F4-03 continua sendo a única porta de decisão.
 
-## 23. Decisões pendentes (D1–D18)
+## 23. Decisões fechadas (D1–D18)
 
-Para cada decisão: pergunta, alternativas, recomendação e impacto. Todas
-**abertas** para revisão do desenho.
+Registro final da revisão arquitetural: cada decisão indica a alternativa
+**fechada** e o impacto correspondente. **D8, D17 e D18 incorporam ajustes
+obrigatórios** da revisão.
 
-### D1 — Posição vaga intermediária interrompe ou não descendants?
+**Resumo dos fechamentos:** D1 = A · D2 = A · D3 = A · D4 = A · D5 = A ·
+D6 = A · D7 = A · D8 = **A ajustada** · D9 = A · D10 = A · D11 = A · D12 = A ·
+D13 = A · D14 = A · D15 = A · D16 = A · D17 = **A ajustada** · D18 = **A
+ajustada**.
+
+### D1 — Posição vaga intermediária interrompe ou não descendants? — **FECHADA (A)**
 
 - **Pergunta:** ao atravessar a árvore, uma posição vaga no meio interrompe a
   recursão?
-- **Alternativas:** (A) atravessar: descendentes reais abaixo continuam alvos;
-  (B) interromper: ramo vazio a partir da vaga.
-- **Recomendação:** (A) — a árvore é de positions (F3-04); vacância é ausência
-  de occupant; interromper criaria buracos indevidos de acesso de gestão.
-- **Impacto:** (A) gestão contínua sob posições vagas (alvos reais preservados);
-  (B) simplifica mas "desliga" ramos sem necessidade.
+- **Alternativas:** (A) atravessar (descendentes reais abaixo continuam alvos);
+  (B) interromper.
+- **Decisão (fechada): A** — atravessar: a árvore é de positions; a vacância é
+  ausência de occupant.
+- **Impacto:** gestão contínua sob posições vagas; invariante 4.
 
-### D2 — Qual data governa a estrutura viva?
+### D2 — Qual data governa a estrutura viva? — **FECHADA (A)**
 
 - **Pergunta:** a data de contexto da estrutura viva vem de onde?
-- **Alternativas:** (A) data explícita por request (padrão; "agora" = relógio do
+- **Alternativas:** (A) data explícita por request ("agora" = relógio do
   serviço); (B) `now()` interno ao provider.
-- **Recomendação:** (A) — determinismo e consistência com ciclo (F4-02 D16 /
-  F4-03 D13).
-- **Impacto:** (A) previsível e testável; (B) inconsistente com snapshots.
+- **Decisão (fechada): A** — data explícita (F4-02 D16 / F4-03 D13).
+- **Impacto:** determinismo; sem inconsistência com snapshots.
 
-### D3 — União de múltiplas positions (quem resolve)
+### D3 — União de múltiplas positions (quem resolve) — **FECHADA (A)**
 
 - **Pergunta:** quem determina as positions usadas na união?
-- **Alternativas:** (A) provider resolve todas as positions confiáveis do ator
-  e o engine une; (B) caller informa a position.
-- **Recomendação:** (A) — impede escolha de position conveniente (security §18).
-- **Impacto:** (A) seguro; (B) ampliaria privilégio (rejeitado).
+- **Alternativas:** (A) provider resolve todas as positions confiáveis e o
+  engine une; (B) caller informa a position.
+- **Decisão (fechada): A** — o provider resolve **todas** as positions do ator;
+  o caller nunca escolhe (invariantes 2 e 3).
+- **Impacto:** impede escolha de position conveniente.
 
-### D4 — Shape de ASSIGNED para avaliação
+### D4 — Shape de ASSIGNED para avaliação — **FECHADA (A)**
 
 - **Pergunta:** qual a representação do alvo ASSIGNED de avaliação?
-- **Alternativas:** (A) derivado: alvo `evaluation`/`collaborator`+ciclo
-  confirmado contra F3-08/09 (sem tabela nova); (B) tabela de targets própria.
-- **Recomendação:** (A) — fonte soberana já existe (F3-08/09); sem duplicação.
-- **Impacto:** (A) sem duplicação e imutável por ciclo; (B) duplicaria.
+- **Alternativas:** (A) derivado (alvo `evaluation`/`collaborator`+ciclo
+  confirmado contra F3-08/09, sem tabela nova); (B) tabela de targets própria.
+- **Decisão (fechada): A** — derivado das fontes soberanas; sem duplicação.
+- **Impacto:** imutável por ciclo; sem paralelismo.
 
-### D5 — Fonte soberana do colegiado
+### D5 — Fonte soberana do colegiado — **FECHADA (A)**
 
 - **Pergunta:** qual estrutura define "membro do colegiado de X no ciclo"?
-- **Alternativas:** (A) `collegiate_cycle_snapshot_members` (F3-08) (ou a
-  configuração temporal `collegiate_configurations` antes da materialização);
-  (B) cópia local no frontend.
-- **Recomendação:** (A) — snapshot é a verdade por ciclo.
-- **Impacto:** (A) histórico correto; (B) divergente (rejeitado).
+- **Alternativas:** (A) `collegiate_cycle_snapshot_members` (F3-08); (B) cópia
+  local no frontend.
+- **Decisão (fechada): A** — snapshot da F3-08 é a verdade por ciclo.
+- **Impacto:** histórico correto; invariante 10.
 
-### D6 — Relação ASSIGNED × responsabilidade avaliativa (F3-09)
+### D6 — Relação ASSIGNED × responsabilidade avaliativa (F3-09) — **FECHADA (A)**
 
 - **Pergunta:** como o ASSIGNED de avaliador se relaciona com F3-09?
 - **Alternativas:** (A) derivado da `cycle_evaluation_responsibilities` (com
-  sucessão) — o avaliador "atribuído" é o responsável avaliativo do ciclo;
-  (B) registrar ASSIGNED à parte.
-- **Recomendação:** (A) — F3-09 é a fonte; sem paralelismo.
-- **Impacto:** (A) coeso; (B) duas fontes (rejeitado).
+  sucessão); (B) registrar ASSIGNED à parte.
+- **Decisão (fechada): A** — F3-09 é a fonte; sem paralelismo.
+- **Impacto:** coeso; invariante 10.
 
-### D7 — Como o RelationProvider recebe targets tipados
+### D7 — Como o RelationProvider recebe targets tipados — **FECHADA (A)**
 
 - **Pergunta:** a interface recebe quais targets?
-- **Alternativas:** (A) `TargetRef` tipado (collaborator/position/evaluation/
-  ...) e o provider despacha por tipo; (B) strings livres.
-- **Recomendação:** (A) — continua o contrato F4-03/D4.
-- **Impacto:** (A) sem spoofing; (B) inseguro (rejeitado).
+- **Alternativas:** (A) `TargetRef` tipado (provider despacha por tipo);
+  (B) strings livres.
+- **Decisão (fechada): A** — contrato F4-03/D4.
+- **Impacto:** sem spoofing.
 
-### D8 — Quais fluxos legados migram agora
+### D8 — Quais fluxos legados migram agora — **FECHADA (A ajustada)**
 
 - **Pergunta:** qual a extensão da migração na F4-04?
-- **Alternativas:** (A) fluxos A da seção 15 (avaliação por relação,
-  visibilidade de gestão, aprovação de metas); (B) todos os fluxos.
-- **Recomendação:** (A) — escopo Issue #91, sem big-bang.
-- **Impacto:** (A) revisável; (B) grande demais.
+- **Alternativas:** (A) conjunto mínimo para provar hierarchy + ASSIGNED;
+  (B) todos os fluxos.
+- **Decisão (fechada): A ajustada** — **sem migração ampla**: apenas (1)
+  visibilidade hierárquica de colaboradores/equipe (DIRECT_REPORTS,
+  DESCENDANTS, união de múltiplas positions); (2) autorização de avaliação por
+  relação (gestor pela hierarquia; colegiado via ASSIGNED; responsabilidade
+  avaliativa via F3-09); (3) **um** fluxo de aprovação hierárquica de metas,
+  somente se reutilizar exatamente a mesma infraestrutura sem ampliar o PR.
+  O objetivo é remover dependência de cargo **nos fluxos cobertos**, não fazer
+  big-bang (seção 15).
+- **Impacto:** PR focado; demais fluxos permanecem legados até issues
+  posteriores.
 
-### D9 — Ator sem occupation (scopes estruturais)
+### D9 — Ator sem occupation (scopes estruturais) — **FECHADA (A)**
 
-- **Pergunta:** o que DIRECT_REPORTS/DESCENDANTS retornam quando o ator não
-  possui collaborator/occupation?
-- **Alternativas:** (A) vazio (fail-closed); (B) tratar como ORGANIZATION-like.
-- **Recomendação:** (A) — estrutura exige positions reais.
-- **Impacto:** (A) seguro; (B) ampliaria (rejeitado).
+- **Pergunta:** DIRECT_REPORTS/DESCENDANTS quando o ator não possui
+  collaborator/occupation?
+- **Alternativas:** (A) vazio (fail-closed); (B) ORGANIZATION-like.
+- **Decisão (fechada): A** — vazio.
+- **Impacto:** sem alvos inventados.
 
-### D10 — Deduplicação de alvos
+### D10 — Deduplicação de alvos — **FECHADA (A)**
 
-- **Pergunta:** como deduplicar alvos entre positions/ramos?
-- **Alternativas:** (A) dedup por `position_id` e por `collaborator_id`
-  (collaborator com 2 positions entra uma vez como alvo humano); (B) sem dedup.
-- **Recomendação:** (A).
-- **Impacto:** (A) conjuntos corretos; (B) duplicidade em listagens.
+- **Pergunta:** como deduplicar entre positions/ramos?
+- **Alternativas:** (A) dedup por `position_id` e `collaborator_id`;
+  (B) sem dedup.
+- **Decisão (fechada): A** — deduplicação por position e por collaborator
+  (invariante 6).
+- **Impacto:** conjuntos corretos em listagens e decisões.
 
-### D11 — Tenant mismatch
+### D11 — Tenant mismatch — **FECHADA (A)**
 
-- **Pergunta:** comportamento quando qualquer nó da resolução pertence a outra
-  org?
-- **Alternativas:** (A) provider retorna falso/vazio; engine DENY (fail-closed);
-  (B) ignorar o nó.
-- **Recomendação:** (A).
-- **Impacto:** (A) sem vazamento; (B) vazamento (rejeitado).
+- **Pergunta:** comportamento quando algum nó pertence a outra org?
+- **Alternativas:** (A) provider retorna falso/vazio; engine DENY; (B) ignorar.
+- **Decisão (fechada): A** — DENY (invariante 14).
+- **Impacto:** sem vazamento.
 
-### D12 — Histórico vs estrutura viva (fronteira de fonte)
+### D12 — Histórico vs estrutura viva (fronteira de fonte) — **FECHADA (A)**
 
 - **Pergunta:** quem decide usar snapshot vs estrutura viva?
-- **Alternativas:** (A) o contexto do request (ciclo ⇒ snapshot; vivo ⇒ data) —
-  o provider recebe contexto e usa a fonte certa; (B) cada provider escolhe.
-- **Recomendação:** (A) — F4-02 D9/D16.
-- **Impacto:** (A) coerente; (B) divergência.
+- **Alternativas:** (A) o contexto do request (ciclo ⇒ snapshot; vivo ⇒ data);
+  (B) cada provider escolhe.
+- **Decisão (fechada): A** — contexto dirige a fonte (invariante 11).
+- **Impacto:** coerente.
 
-### D13 — Responsabilidade por listAllowedTargets
+### D13 — Responsabilidade por listAllowedTargets — **FECHADA (A)**
 
 - **Pergunta:** quem resolve a lista de alvos para listagens?
-- **Alternativas:** (A) serviço auxiliar delegando aos mesmos providers
-  (Hierarchy/Occupations/Assigned), nunca decidindo; (B) lógica própria.
-- **Recomendação:** (A) — D5 F4-03.
-- **Impacto:** (A) sem terceira fonte de decisão; (B) duplicaria.
+- **Alternativas:** (A) serviço auxiliar delegando aos mesmos providers, sem
+  decidir; (B) lógica própria.
+- **Decisão (fechada): A** — D5 F4-03.
+- **Impacto:** sem terceira fonte de decisão.
 
-### D14 — Alguma migration é realmente necessária na F4-04?
+### D14 — Alguma migration é realmente necessária na F4-04? — **FECHADA (A)**
 
 - **Pergunta:** o desenho exige alteração de schema?
-- **Alternativas:** (A) não — relações derivam de F3/F4-02 e o ASSIGNED de
-  F3-08/09 (tudo já modelado); implementação em TS/adapter; (B) sim (ex.:
-  tabela de ASSIGNED explícito).
-- **Recomendação:** (A) — evita migration sem consumidor concreto; ad hoc
-  (B) fica para quando houver fonte persistente (F5).
-- **Impacto:** (A) sem schema novo; (B) antecipação.
+- **Alternativas:** (A) não — relações derivam de F3/F4-02 e ASSIGNED de
+  F3-08/09; implementação em TS/adapter; (B) sim.
+- **Decisão (fechada): A** — **nenhuma migration** (invariante 16).
+- **Impacto:** sem schema novo.
 
-### D15 — SECURITY DEFINER seria necessário?
+### D15 — SECURITY DEFINER seria necessário? — **FECHADA (A)**
 
 - **Pergunta:** há necessidade de função privilegiada?
-- **Alternativas:** (A) não (resolução INVOKER/TS no mundo atual; servidor
-  futuro via service_role com contrato único); (B) sim.
-- **Recomendação:** (A) — nenhum DEFINER novo.
-- **Impacto:** (A) sem superfície privilegiada.
+- **Alternativas:** (A) não; (B) sim.
+- **Decisão (fechada): A** — nenhum DEFINER (invariante 15).
+- **Impacto:** sem superfície privilegiada.
 
-### D16 — Boundary F4-04 × F4-05
+### D16 — Boundary F4-04 × F4-05 — **FECHADA (A)**
 
 - **Pergunta:** onde termina a F4-04?
-- **Alternativas:** (A) hierarquia + ASSIGNED derivado (colegiado/avaliador) +
-  fluxos A; substituição temporária e mapa de domínios na F4-05; (B) incluir
-  substituição.
-- **Recomendação:** (A).
-- **Impacto:** (A) escopo Issue #91; (B) sobreposição com F4-05.
+- **Alternativas:** (A) hierarquia + ASSIGNED derivado + fluxos mínimos;
+  substituição e mapa de domínios na F4-05; (B) incluir substituição.
+- **Decisão (fechada): A**.
+- **Impacto:** escopo Issue #91; sem sobreposição com F4-05.
 
-### D17 — Responsável efetivo vs titular no contexto vivo (resolução hierárquica)
+### D17 — Titular/responsável efetivo e boundary com F4-05 — **FECHADA (A ajustada)**
 
 - **Pergunta:** DIRECT_REPORTS/DESCENDANTS no contexto vivo usam o titular ou o
-  responsável efetivo da posição (substituto operacional)?
-- **Alternativas:** (A) responsável efetivo na data (F3-07; D9 F4-02); (B)
-  titular estrito.
-- **Recomendação:** (A) — coerente com F3-07; histórico de ciclo segue a F3-08/09
-  congelada.
-- **Impacto:** (A) gestão flui com substituto; histórico intacto.
+  responsável efetivo com substituto operacional?
+- **Alternativas:** (A) titular estrito para autorização na F4-04 (sem efeito
+  do substituto); (B) responsável efetivo (herança ao substituto).
+- **Decisão (fechada): A ajustada** — a F4-04 **não concede autorização ao
+  substituto temporário como efeito novo**: a árvore formal é definida por
+  positions + reporting lines; occupants/titulares vigentes são usados nos
+  casos normais; `temporary_responsibilities` permanecem dado estrutural da F3
+  (sem scope persistido, sem tratar o substituto como possuidor automático de
+  capabilities/scopes do titular, sem antecipar o mapa responsibility_type ×
+  capability); se um resolver F3-07 devolver `responsible_collaborator_id` com
+  substituto, a F4-04 **não** converte isso automaticamente em concessão;
+  qualquer herança autorizativa do substituto é **exclusivamente F4-05**
+  (seção 11). Histórico de ciclo segue a F3-08/09 congelada.
+- **Impacto:** invariantes 12 e 13 respeitadas; sem concessão antecipada.
 
-### D18 — Validação capability ↔ tipo de alvo (evitar confusão)
+### D18 — capability × tipo de target — **FECHADA (A ajustada)**
 
-- **Pergunta:** como impedir `goal.read` + ASSIGNED(avaliação X)?
-- **Alternativas:** (A) validador capability↔tipo de alvo no engine (regras por
-  domínio: evaluation.*→evaluation; goal.*→goal; ...); (B) só convenção.
-- **Recomendação:** (A) — mapeamento declarado no engine (ou fornecido por
-  módulo de domínio), fail-closed.
-- **Impacto:** (A) impede confusão; (B) risco (rejeitado).
+- **Pergunta:** como impedir `goal.read` + ASSIGNED(avaliação X) e confusões
+  equivalentes?
+- **Alternativas:** (A) contrato fechado de compatibilidade capability↔tipo de
+  alvo; (B) só convenção.
+- **Decisão (fechada): A ajustada** — criar um **contrato fechado** de
+  compatibilidade entre capability e tipo de recurso/alvo apenas para impedir
+  combinações semanticamente impossíveis (ex.: `evaluation.*` só sobre
+  `evaluation`/subtarget derivado; `goal.*` não usa ASSIGNED de `evaluation`;
+  `observation.*` não usa alvo `goal`). O contrato **não** concede autorização,
+  não substitui capability/scope/relationProvider, não reimplementa regras de
+  domínio e não cria uma segunda matriz de policy — só valida o tipo de
+  recurso compatível; incompatibilidade ⇒ DENY fail-closed (seção 16).
+- **Impacto:** impede confusão de resource type (invariantes 8 e 9); sem
+  segunda policy.
 
 ## 24. Proposta de implementação
 
