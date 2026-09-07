@@ -1,4 +1,4 @@
-# Supabase local — desenvolvimento (F1-01 a F2-06)
+# Supabase local — desenvolvimento (F1-01 a F2-07)
 
 Infraestrutura local do Supabase para o Virtus Team, versionada e reconstruível
 integralmente a partir do repositório — sem configuração manual no dashboard,
@@ -18,11 +18,12 @@ F2-01 habilitou o serviço Auth local e criou as primeiras entidades funcionais 
 a F2-02 adicionou `user_organization_memberships` (membership usuário-organização
 por UUID, sem exigir colaborador), a F2-03 introduziu login/logout reais com
 Supabase Auth (policies mínimas de leitura via `auth.uid()`), a F2-04 protegeu as
-rotas funcionais, a F2-05 adicionou recuperação/redefinição de senha e a F2-06
-adicionou o convite administrativo via Edge Function (Auth Admin server-side).
+rotas funcionais, a F2-05 adicionou recuperação/redefinição de senha, a F2-06
+adicionou o convite administrativo via Edge Function (Auth Admin server-side) e
+a F2-07 adicionou desativação/reativação de usuário com revogação de sessão.
 O auto-cadastro público permanece desabilitado; o seed segue sem inserir dados
 funcionais, e o frontend mantém o localStorage como persistência funcional dos
-domínios (as F2-03/F2-04/F2-05/F2-06 alteram somente identidade/sessão).
+domínios (as F2-03 a F2-07 alteram somente identidade/sessão).
 
 ## Pré-requisitos (onboarding técnico)
 
@@ -74,15 +75,15 @@ docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -X \
   -c "select proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='set_updated_at'"
 ```
 
-Estado esperado ao final da F2-06:
+Estado esperado ao final da F2-07:
 
-- cinco migrations registradas (`20260906185540`, `20260906201856`,
-  `20260906203358`, `20260906205425` e `20260906230400`);
+- seis migrations registradas (`20260906185540`, `20260906201856`,
+  `20260906203358`, `20260906205425`, `20260906230400` e `20260907000250`);
 - no schema `public`, somente as tabelas da F2-01/F2-02 — `organizations`,
-  `user_profiles` e `user_organization_memberships` — com RLS habilitado e com
-  as três policies mínimas de leitura da F2-03 (`user_profiles_select_own`,
-  `user_organization_memberships_select_own`,
-  `organizations_select_via_membership`); nenhuma policy de escrita;
+  `user_profiles` e `user_organization_memberships` — com RLS habilitado; as
+  policies de leitura da F2-03 (`user_organization_memberships_select_own`,
+  `organizations_select_via_membership`) e `user_profiles_select_own` agora
+  exigindo `status = 'active'` (F2-07); nenhuma policy de escrita;
 - a função técnica `set_updated_at` (F1-03) e a RPC `criar_perfil_membership`
   (F2-06, SECURITY DEFINER, EXECUTE só para `service_role`) presentes;
 - o serviço Auth local habilitado com auto-cadastro público desabilitado
@@ -90,9 +91,9 @@ Estado esperado ao final da F2-06:
   referenciado por `user_profiles` (FK `fk_user_profiles_auth_users`);
 - captura local de e-mail habilitada (`[local_smtp] enabled = true`, mailpit na
   porta 54324) para recuperação de senha e convites;
-- Edge Runtime habilitado (`[edge_runtime] enabled = true`) com a função
-  `convidar-usuario` (Auth Admin server-side; `service_role` só no runtime da
-  função, nunca no frontend);
+- Edge Runtime habilitado (`[edge_runtime] enabled = true`) com as funções
+  `convidar-usuario` (F2-06) e `gerenciar-usuario` (F2-07) — Auth Admin
+  server-side; `service_role` só no runtime das funções, nunca no frontend;
 - `user_organization_memberships` relaciona `user_profiles` e `organizations`
   por UUID (FKs `ON DELETE RESTRICT`) com unique por par usuário/organização.
 
@@ -249,6 +250,33 @@ sem signup público, com Supabase Auth Admin exclusivamente server-side:
   função com o JWT do usuário; a autorização real é server-side;
 - auditoria: a infraestrutura de auditoria ainda não existe — contrato/pendência
   explícito para a etapa correspondente (nenhum log local/pseudo-auditoria).
+
+## Desativação e revogação de acesso (F2-07)
+
+A F2-07 garante que um usuário desabilitado perca acesso efetivo mesmo com uma
+sessão/JWT emitida antes da desativação:
+
+- Edge Function `gerenciar-usuario` (mesma autorização allowlist da F2-06) com
+  ações `disable`/`enable`:
+  - `disable` → `user_profiles.status = 'disabled'` + ban no Auth
+    (`banned_until`) que invalida refresh, `getUser` e sign-in; em falha,
+    compensa revertendo o status;
+  - `enable` → desbane (`ban_duration = 'none'`) + `status = 'active'`; sessões
+    antigas não são restauradas — exige nova autenticação;
+  - nenhuma linha de perfil/membership/histórico é excluída fisicamente;
+- RLS: `user_profiles_select_own` passa a exigir `status = 'active'` — um perfil
+  desabilitado deixa de ser resolvido pelo próprio usuário (enforcement no
+  banco, independente do frontend);
+- membership desabilitada já era respeitada (resolução filtra `status='active'`
+  e `organizations_select_via_membership` exige membership ativa): a
+  desativação de uma membership remove o acesso àquela organização sem apagar
+  outras memberships;
+- frontend: `AuthProvider` revalida a sessão periodicamente (~60s) e ao focar a
+  janela (`getUser` + re-resolução), entrando em estado seguro (não autenticado
+  ou acesso negado) e fazendo o guard redirecionar — sem depender da expiração
+  natural do JWT;
+- usuário ≠ colaborador: a desativação do usuário NÃO desativa o colaborador
+  vinculado (lifecycles independentes).
 
 ## Aplicação independente
 
