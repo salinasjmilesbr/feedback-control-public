@@ -1,7 +1,7 @@
 # F4-03 — Desenho técnico: authorization policy engine (Issue #90)
 
-> **Status:** desenho técnico da F4-03 **aguardando revisão**. Decisões
-> **D1–D18 abertas** (recomendação indicada em cada uma). Nenhuma
+> **Status:** revisão arquitetural **concluída**; decisões D1–D18 **fechadas**
+> na seção 23 (D1, D5, D9, D15 e D18 com ajustes registrados). Nenhuma
 > implementação: sem código funcional, migrations, RLS final, `SECURITY
 > DEFINER`, alteração de frontend/Edge Functions ou PR de implementação —
 > somente este documento, em branch exclusiva de docs.
@@ -32,8 +32,9 @@ UI e devolvendo negações coerentes com a taxonomia F0-05.
 
 ### 1.3 O que fica para F4-04+ e F4-08
 
-- **F4-04 em diante:** migração dos demais fluxos de domínio (avaliações,
-  metas, observações, relatórios) para o engine, domínio a domínio;
+- **F4-04:** aplicação **ampla** de hierarchy + assignments à autorização
+  (fluxos de avaliação, metas/aprovação, observações, relatórios dependentes
+  de árvore) — fora do escopo da F4-03 (D15);
 - **F4-08:** policies RLS finais por tabela (o engine **não substitui RLS**;
   RLS é a última barreira server-side);
 - migração funcional dos domínios para Supabase (Fase 5) e vínculo real
@@ -317,21 +318,26 @@ Regra: a UI recebe apenas `code`/`category`/mensagem pública (F0-05); razões
 internas ficam para log/diagnóstico (F4-06). Cross-tenant vira NOT_FOUND quando
 o ator não deveria saber que o recurso existe (evita enumeração).
 
-## 15. API/serviço proposto
+## 15. API/serviço proposto (D5 = A ajustada — fechada)
 
 ```ts
-// porta única do engine
-can(request: AuthorizationRequest): AuthorizationDecision;
-authorize(request: AuthorizationRequest): void; // lança (F0-05 público) quando DENY
-// scope list (para listagens): alvos permitidos de um capability+scope
+// Únicas portas de decisão do engine:
+can(request: AuthorizationRequest): AuthorizationDecision;   // predicação (UX/UI)
+authorize(request: AuthorizationRequest): void;             // mutações: lança erro público F0-05 quando DENY
+
+// Serviço AUXILIAR de listagem/resolução (NÃO é fonte de decisão):
 listAllowedTargets(actor, capability, scopeType, date): TargetRef[];
 ```
 
-- `can` — para UI/predicados (retorna decisão estruturada; não lança);
-- `authorize` — para mutações (lança `ForbiddenError`/`NotFoundError`/
+- `can` — auxiliar de **UX/predicação** (retorna decisão estruturada; não
+  lança); **nunca é enforcement** (invariante 1);
+- `authorize` — protege **mutações** (lança `ForbiddenError`/`NotFoundError`/
   `ConflictError`/`ValidationError` coerente com a razão interna);
-- **`assertAuthorized` é redundante** (igual a `authorize`) — não criar uma
-  terceira API; manter as duas + `listAllowedTargets`.
+- **`assertAuthorized` não existe** (redundante com `authorize`; não criar
+  terceira API);
+- `listAllowedTargets` pode existir como serviço auxiliar de resolução/
+  listagem, mas **não se torna uma terceira fonte de decisão**: uma mutação
+  nunca considera "estar na lista" como substituto de `authorize()` (D5).
 
 ## 16. Integração com SQL resolvers
 
@@ -339,32 +345,37 @@ listAllowedTargets(actor, capability, scopeType, date): TargetRef[];
   resolvers SQL (F3-07, F4-01/02): `capabilityProvider`, `scopeProvider`,
   `relationProvider`, `domainStateProvider` — interfaces em
   `src/authorization`, implementações atuais sobre o seed/localStorage;
+- **não criar uma segunda implementação independente do engine em SQL** nesta
+  fase (D1 = A ajustada): o engine TS é a fonte única de decisão na camada
+  application; quando houver enforcement server-side real, ele **reutiliza a
+  mesma regra/contrato arquitetural** e não diverge silenciosamente;
 - quando um domínio migrar para Supabase (Fase 5), o adapter do domínio
-  fornecerá estado e targets; e, se houver camada server-side própria, os
-  resolvers SQL INVOKER passam a ser consumíveis — mas sob **RLS deny-by-
-  default** eles retornam vazio para `authenticated`; um caminho privilegiado
-  server-side (service_role) só existe para servidor de confiança;
-- **nenhum `SECURITY DEFINER`** novo nesta etapa; qualquer helper privilegiado
-  futuro é **decisão explícita** (D8/D18 F4-03) com `EXECUTE` restrito.
+  fornecerá estado e targets; os resolvers SQL INVOKER poderão ser consumidos
+  por um servidor de confiança — mas sob **RLS deny-by-default** retornam vazio
+  para `authenticated`; caminho privilegiado (service_role) só para servidor
+  de confiança;
+- **nenhum `SECURITY DEFINER`** novo nesta etapa (D8 = A); qualquer helper
+  privilegiado futuro é **decisão explícita** com `EXECUTE` restrito.
 
-## 17. Migração gradual das regras antigas
+## 17. Migração gradual das regras antigas (D15 = A ajustada — fechada)
 
-Ordem proposta (sem big-bang, domínio a domínio):
+Escopo da F4-03 (piloto, sem sobreposição com a F4-04):
 
-1. **F4-03 (esta etapa):** engine + matriz capability/scope/relação/estado para
-   os fluxos que já têm dados no domínio atual, começando pelos
-   **auto-fluxos** (metas próprias, observações próprias/Comunicado) e
-   **gates administrativos simples** (settings.manage, collaborator list);
-2. **F4-03/F4-04:** fluxos de avaliação (criação/edição/cancelamento/reabertura)
-   e metas/aprovação, substituindo `actor.funcao` por capability+scope+relação
-   (mapping central);
+1. **F4-03 (esta etapa):** engine genérico + contratos/providers + matriz
+   positiva/negativa + **poucos fluxos-piloto de baixo risco** suficientes para
+   provar o engine (ex.: auto-fluxos de metas/observações próprias e gates
+   administrativos simples), com remoção de comparações por cargo **somente
+   nesses fluxos cobertos**;
+2. **F4-04:** aplicação **ampla** de hierarchy + assignments à autorização
+   (fluxos de avaliação/metas/aprovação/relatórios dependentes de árvore) —
+   fora da F4-03;
 3. **somente após persistência Supabase dos domínios (Fase 5):** enforcement
    server-side real com RLS (F4-08) e vínculo auth↔collaborator;
-4. relatórios/exportação e fluxos que dependem de árvore completa migram quando
-   a estrutura F3 for a fonte viva do frontend.
+4. relatórios/exportação e fluxos dependentes de árvore completa migram com a
+   F3 como fonte viva do frontend.
 
-`funcao` deixa de ser fonte de autorização; permanece apenas como **rótulo de
-cargo** (exibição) até o corte.
+`funcao` deixa de ser fonte de autorização nos fluxos migrados; permanece como
+**rótulo de cargo** (exibição) até o corte.
 
 ## 18. Matriz de autorização (sintética)
 
@@ -401,8 +412,15 @@ cargo** (exibição) até o corte.
 - **bypass frontend:** esconder botão não é autorização; o engine roda também
   onde a mutação acontece (mesma camada); enforcement server-side só com F5/
   F4-08 (limitação registrada);
-- **TOCTOU:** autorização e mutação no mesmo fluxo síncrono; para Supabase
-  (F5) revalidar **dentro da transação/RPC** (server-side) — ver D9;
+- **TOCTOU (D9 = A ajustada — requisito arquitetural):**
+  - no mundo atual/localStorage, `authorize()` ocorre **na mesma camada de
+    serviço, imediatamente antes da mutação**; nenhuma mutação confia apenas em
+    `can()` executado previamente pela UI;
+  - no futuro Supabase, **operações críticas revalidam autorização server-side
+    dentro da mesma RPC/transação** que realiza a mutação; RLS permanece a
+    última barreira; **uma autorização calculada no cliente nunca é prova para
+    a transação**;
+  - registrado como requisito para **F5/F4-08**;
 - **RLS:** última barreira (F4-08); o engine nunca substitui.
 
 ## 20. Performance
@@ -424,211 +442,252 @@ refazer o engine.
 
 ## 22. Riscos e invariantes
 
-Invariantes:
+Invariantes **reforçadas na revisão arquitetural**:
 
-1. **Capability define a ação; scope define alcance** — os dois juntos e o
-   alvo dentro do alcance;
-2. **cargo/job_role nunca é fonte permanente** de autorização (nem no engine
-   nem em páginas);
-3. **relação organizacional vem de estrutura** (positions/reporting/
-   occupations/vínculo), nunca do nome do cargo;
-4. **estado do domínio é soberano** — estado inválido ⇒ DENY mesmo com
-   capability+scope;
-5. **membership/profile ativos** são pré-condição; **cross-tenant** ⇒ DENY;
-6. **fail-closed** (indeterminação/ASSIGNED não resolvido ⇒ DENY);
-7. **nenhum bypass** por UI/`can` — mutações usam `authorize` na camada certa;
-8. **nenhum SUPER_ADMIN**; ADMIN sem conteúdo confidencial;
-9. **sem SECURITY DEFINER novo** nesta etapa;
-10. **policy engine não substitui RLS** (RLS é F4-08);
-11. **negações coerentes com F0-05** (código público seguro; razões internas
-    não vazam);
-12. **sem duplicação** de regra entre engine, páginas, serviços e banco.
+1. **`can()` é auxiliar de UX/predicação; `authorize()` protege mutações** —
+   nenhuma mutação confia em `can()` prévio da UI (D9).
+2. **UI nunca é enforcement** — esconder botão/tela não autoriza nem desautoriza.
+3. **Actor, tenant e estado do domínio não vêm de input arbitrário da UI** —
+   resolvidos pela camada de serviço/repositório.
+4. **Tenant do alvo é derivado do recurso carregado** — nunca do request.
+5. **Capability e scope são resolvidos por providers, nunca declarados pelo
+   caller** — o chamador só pede a ação.
+6. **Regra de domínio permanece fora do engine** — predicates/probes do
+   domínio soberano.
+7. **Capability sem scope = DENY.**
+8. **Scope sem capability = DENY.**
+9. **Estado inválido = DENY mesmo com capability+scope válidos.**
+10. **ASSIGNED não resolvido = DENY** (fail-closed até F4-05).
+11. **Nenhum cargo/job_role participa da decisão runtime dos fluxos migrados**
+    (o mapa legado é artefato de migração — D18).
+12. **Nenhum `SECURITY DEFINER` novo nesta etapa** (D8).
+13. **Nenhum cache nesta etapa** (D12).
+14. **Cross-tenant não deve vazar a existência do recurso** (público NOT_FOUND).
+15. **Policy engine não substitui RLS** (RLS é a última barreira — F4-08).
+16. **Autorização e mutação crítica futuras devem ser atomicamente revalidadas
+    server-side** (mesma RPC/transação — requisito F5/F4-08, D9).
 
-Riscos: mapear regras por cargo incorretamente (usar tabela única de
-mapeamento); vazar razão interna; estado de domínio "inventado" no engine;
-permitir allow por omissão; duplicar a árvore F3 no TS em divergência do SQL
-(usar adapters com a mesma semântica e testes espelhados).
+Riscos: mapear regras por cargo incorretamente (o mapa é temporário e só de
+regressão — nunca consultado em runtime como fonte de decisão — D18); vazar
+razão interna; estado de domínio "inventado" no engine; permitir allow por
+omissão; duplicar a árvore F3 no TS em divergência do SQL (usar adapters com a
+mesma semântica e testes espelhados); criar segunda implementação SQL do engine
+(D1).
 
-## 23. Decisões pendentes (D1–D18)
+## 23. Decisões fechadas (D1–D18)
 
-Para cada decisão: pergunta, alternativas, recomendação e impacto. Todas
-**abertas** para revisão do desenho.
+Registro final da revisão arquitetural: cada decisão indica a alternativa
+**fechada** e o impacto correspondente. **D1, D5, D9, D15 e D18 incorporam
+ajustes obrigatórios** da revisão.
 
-### D1 — Engine TypeScript vs SQL vs híbrido
+**Resumo dos fechamentos:** D1 = **A ajustada** · D2 = A · D3 = A · D4 = A ·
+D5 = **A ajustada** · D6 = A · D7 = A · D8 = A · D9 = **A ajustada** · D10 = A ·
+D11 = A · D12 = A · D13 = A · D14 = A · D15 = **A ajustada** · D16 = A ·
+D17 = A · D18 = **A ajustada**.
+
+### D1 — Engine TypeScript (fonte única na application) — **FECHADA (A ajustada)**
 
 - **Pergunta:** onde o engine vive: TypeScript (application), SQL/funções do
   banco, ou híbrido?
 - **Alternativas:** (A) TS em `src/authorization`; (B) SQL no banco; (C)
   híbrido (TS hoje + SQL server-side quando houver camada servidora).
-- **Recomendação:** (A) nesta etapa, com **provedores** (interfaces) que no
-  futuro (F5/F4-08) trocam a fonte para Supabase sem reescrever o engine —
-  evita duplicação divergente e mantém uma única semântica.
-- **Impacto:** (A) testável em Vitest e independente de servidor; (C) exige
-  camada servidora própria para o SQL ser útil (não existe ainda).
+- **Decisão (fechada): A ajustada** — o engine vive em **TypeScript nesta
+  etapa como fonte única de decisão na camada application**, estruturado por
+  **interfaces/providers** para que a origem dos dados possa migrar depois para
+  Supabase/server-side **sem reescrever a semântica da decisão**. **Não criar
+  uma segunda implementação independente do engine em SQL nesta fase**; quando
+  houver enforcement server-side real, ele **reutiliza a mesma regra/contrato
+  arquitetural** e não diverge silenciosamente.
+- **Impacto:** testável (Vitest) e independente de servidor; sem duplicação
+  divergente TS×SQL; a migração da fonte de dados é aditiva.
 
-### D2 — Fonte soberana da decisão
+### D2 — Fonte soberana da decisão — **FECHADA (A)**
 
 - **Pergunta:** qual o ponto único que decide autorização nos fluxos?
 - **Alternativas:** (A) o engine em `src/authorization` é a única porta
   (`can`/`authorize`); (B) cada serviço decide localmente.
-- **Recomendação:** (A) — nenhuma página/componente/serviço decide; a policy
-  central atual evolui para o engine.
-- **Impacto:** (A) auditável e coerente; (B) duplicação (proibida).
+- **Decisão (fechada): A** — o engine é a **única porta** de decisão;
+  nenhuma página/componente/serviço decide (a policy central atual evolui para
+  o engine).
+- **Impacto:** decisão auditável e coerente; sem duplicação.
 
-### D3 — Onde as regras de domínio entram
+### D3 — Onde as regras de domínio entram — **FECHADA (A)**
 
 - **Pergunta:** como o engine incorpora estado de domínio sem reimplementar?
-- **Alternativas:** (A) predicates exportados pelos módulos de domínio
-  (`domainStateProvider` consultado na etapa 9); (B) engine conhece status de
-  cada domínio.
-- **Recomendação:** (A) — domínio declara `probe.allows(action)`, engine só
-  consome.
-- **Impacto:** (A) mantém soberania e testabilidade do domínio; (B) acopla e
-  duplica regra (rejeitado).
+- **Alternativas:** (A) predicates/probes exportados pelos módulos de domínio
+  (`domainStateProvider` na etapa 9); (B) engine conhece status de cada
+  domínio.
+- **Decisão (fechada): A** — o domínio declara `probe.allows(action)`; o engine
+  apenas consome; **regra de domínio permanece fora do engine**.
+- **Impacto:** domínio soberano e testável; sem acoplamento nem duplicação.
 
-### D4 — Contrato de target
+### D4 — Contrato de target — **FECHADA (A)**
 
 - **Pergunta:** como representar o alvo sem strings livres/polimorfismo
   inseguro?
 - **Alternativas:** (A) `TargetRef` tipado fechado (collaborator/position/unit/
   cycle/evaluation/goal/observation); (B) string livre; (C) alvo genérico
   `{type,id}` sem validação.
-- **Recomendação:** (A) — tipos fechados, tenant derivado do recurso, sem
-  registro novo no banco nesta etapa.
-- **Impacto:** (A) seguro e extensível; (B)/(C) IDOR/spoofing (rejeitado).
+- **Decisão (fechada): A** — tipos fechados com tenant derivado do recurso;
+  sem registro novo no banco nesta etapa.
+- **Impacto:** sem IDOR/spoofing; extensível com contrato.
 
-### D5 — API: can vs authorize vs assertAuthorized
+### D5 — API pública: can + authorize (listAllowedTargets é auxiliar) — **FECHADA (A ajustada)**
 
 - **Pergunta:** quais portas o engine expõe?
 - **Alternativas:** (A) `can` + `authorize`; (B) três (com `assertAuthorized`);
   (C) só `authorize`.
-- **Recomendação:** (A) — `can` para UI/predicados (decisão estruturada) e
-  `authorize` para mutações (lança erro público F0-05); `assertAuthorized` é
-  redundante; adicionar `listAllowedTargets` para listagens.
-- **Impacto:** (A) superfície mínima; (C) força exceção para predicação de UI.
+- **Decisão (fechada): A ajustada** — **apenas duas portas de decisão**:
+  `can(request): AuthorizationDecision` (predicação/UX; nunca enforcement) e
+  `authorize(request): void` (mutações; lança erro público F0-05 quando DENY).
+  `assertAuthorized` **não existe**. `listAllowedTargets` pode existir como
+  **serviço auxiliar de resolução/listagem**, mas **não se torna uma terceira
+  fonte de decisão** — uma mutação nunca considera "estar na lista" como
+  substituto de `authorize()` (seção 15).
+- **Impacto:** superfície mínima e segura; listagem sem força de decisão.
 
-### D6 — Razão de negação pública vs interna
+### D6 — Razão de negação pública vs interna — **FECHADA (A)**
 
 - **Pergunta:** quanto da razão de negação chega ao frontend?
 - **Alternativas:** (A) só código/categoria pública F0-05; razões internas para
   log; (B) repassar razão detalhada.
-- **Recomendação:** (A) — enum interno mapeado para FORBIDDEN/NOT_FOUND/
-  CONFLICT/VALIDATION/TECHNICAL; cross-tenant vira NOT_FOUND.
-- **Impacto:** (A) sem vazamento; (B) auxiliaria atacante (rejeitado).
+- **Decisão (fechada): A** — enum interno mapeado para FORBIDDEN/NOT_FOUND/
+  CONFLICT/VALIDATION/TECHNICAL; **cross-tenant não vaza existência**
+  (NOT_FOUND).
+- **Impacto:** sem vazamento; auxiliaria atacante seria rejeitado.
 
-### D7 — Consumo dos resolvers SQL sob RLS deny-by-default
+### D7 — Consumo dos resolvers SQL sob RLS deny-by-default — **FECHADA (A)**
 
 - **Pergunta:** o engine TS deve chamar os resolvers SQL (INVOKER) hoje?
 - **Alternativas:** (A) não — provedores TS com a mesma semântica; resolvers
   SQL ficam para a camada servidora futura (F5/F4-08); (B) chamar via cliente
   Supabase (retornaria vazio/deny para authenticated).
-- **Recomendação:** (A) — hoje os dados de domínio vivem em localStorage; o
-  adapter Supabase chega com a Fase 5; usar o cliente agora seria inócuo.
-- **Impacto:** (A) engine funcional sem servidor; (B) falso deny em toda
-  chamada (inútil).
+- **Decisão (fechada): A** — hoje os dados vivem em localStorage; o adapter
+  Supabase chega com a Fase 5; usar o cliente agora seria inócuo (falso deny).
+- **Impacto:** engine funcional sem servidor; SQL reutiliza o mesmo contrato
+  (D1) quando houver camada servidora.
 
-### D8 — Helper SECURITY DEFINER
+### D8 — Helper SECURITY DEFINER — **FECHADA (A)**
 
 - **Pergunta:** é necessário criar função DEFINER para o engine?
 - **Alternativas:** (A) não nesta etapa; (B) sim, para expor resolução.
-- **Recomendação:** (A) — nenhum DEFINER novo; se a F4-08 precisar de
-  resolução privilegiada, será decisão explícita com `EXECUTE` restrito.
-- **Impacto:** (A) sem superfície privilegiada; (B) risco sem consumidor.
+- **Decisão (fechada): A** — **nenhum `SECURITY DEFINER` novo**; se a F4-08
+  precisar de resolução privilegiada, será decisão explícita com `EXECUTE`
+  restrito.
+- **Impacto:** sem superfície privilegiada nova.
 
-### D9 — Transação autorização + mutação
+### D9 — TOCTOU: autorização + mutação — **FECHADA (A ajustada)**
 
 - **Pergunta:** como evitar TOCTOU entre decidir e persistir?
-- **Alternativas:** (A) autorizar no mesmo fluxo antes de persistir (hoje
-  síncrono) e, no Supabase (F5), revalidar dentro da RPC/transação;
-  (B) decidir apenas na UI.
-- **Recomendação:** (A) — mutação sempre passa por `authorize` na camada de
-  serviço, e o futuro adapter Supabase revalida server-side na transação.
-- **Impacto:** (A) minimiza TOCTOU; (B) bypass trivial (rejeitado).
+- **Alternativas:** (A) autorizar no mesmo fluxo antes de persistir e revalidar
+  server-side na transação futura; (B) decidir apenas na UI.
+- **Decisão (fechada): A ajustada** —
+  - **mundo atual/localStorage:** `authorize()` ocorre **na mesma camada de
+    serviço, imediatamente antes da mutação**; nenhuma mutação confia apenas em
+    `can()` executado previamente pela UI;
+  - **futuro Supabase:** **operações críticas revalidam autorização
+    server-side dentro da mesma RPC/transação** que realiza a mutação; RLS
+    permanece a última barreira; **uma autorização calculada no cliente nunca é
+    prova para a transação**;
+  - registrado como **requisito arquitetural para F5/F4-08** (seção 19).
+- **Impacto:** minimiza TOCTOU hoje e fecha a janela no server-side futuro.
 
-### D10 — Recursos ainda em localStorage
+### D10 — Recursos ainda em localStorage — **FECHADA (A)**
 
 - **Pergunta:** como o engine lê estado/alvo de domínios ainda em localStorage?
 - **Alternativas:** (A) provedores que carregam do repositório local (nunca do
-  objeto passado pela UI) — mesma interface que os adapters Supabase futuros;
+  objeto passado pela UI) — mesma interface dos adapters Supabase futuros;
   (B) aceitar estado arbitrário do chamador.
-- **Recomendação:** (A) — repositório como fonte; a UI pede, o serviço carrega,
-  o engine decide; limitação (sem enforcement server-side) documentada até
-  F5/F4-08.
-- **Impacto:** (A) coerente e migrável; (B) IDOR (rejeitado).
+- **Decisão (fechada): A** — repositório como fonte; a UI pede, o serviço
+  carrega, o engine decide; limitação (sem enforcement server-side) documentada
+  até F5/F4-08.
+- **Impacto:** coerente e migrável; sem IDOR.
 
-### D11 — Migração gradual
+### D11 — Migração gradual — **FECHADA (A)**
 
 - **Pergunta:** qual a ordem de migração dos fluxos por cargo?
-- **Alternativas:** (A) auto-fluxos e administrativos simples primeiro, depois
-  avaliação/metas, depois relatórios; (B) tudo de uma vez.
-- **Recomendação:** (A) — domínio a domínio, sem big-bang (§17).
-- **Impacto:** (A) risco baixo; (B) regressão ampla (rejeitado).
+- **Alternativas:** (A) poucos fluxos-piloto de baixo risco primeiro, cobertura
+  ampla depois; (B) tudo de uma vez.
+- **Decisão (fechada): A** — domínio a domínio, sem big-bang (D15/seção 17).
+- **Impacto:** risco baixo e PRs revisáveis.
 
-### D12 — Cache
+### D12 — Cache — **FECHADA (A)**
 
 - **Pergunta:** cachear resoluções?
 - **Alternativas:** (A) sem cache na F4-03; (B) cache com invalidação.
-- **Recomendação:** (A) — barato hoje e revogação imediata; reavaliar com
-  medição real.
-- **Impacto:** (A) simples; (B) risco de revogação atrasada (prematuro).
+- **Decisão (fechada): A** — **nenhum cache nesta etapa** (barato hoje e
+  revogação imediata); reavaliar com medição real.
+- **Impacto:** simples; sem risco de revogação atrasada.
 
-### D13 — Contexto temporal
+### D13 — Contexto temporal — **FECHADA (A)**
 
 - **Pergunta:** como o engine recebe a data?
 - **Alternativas:** (A) data explícita em toda decisão (contexto: agora ou
   ciclo); (B) engine usa `now()` internamente.
-- **Recomendação:** (A) — determinismo e histórico corretos (D16 F4-02).
-- **Impacto:** (A) previsível; (B) inconsistência com snapshots.
+- **Decisão (fechada): A** — data explícita; determinismo e histórico corretos
+  (D16 F4-02).
+- **Impacto:** previsível; sem inconsistência com snapshots.
 
-### D14 — ASSIGNED fail-closed
+### D14 — ASSIGNED fail-closed — **FECHADA (A)**
 
 - **Pergunta:** como tratar scopes ASSIGNED enquanto não há resolução de
   F3-08/09 no engine?
-- **Alternativas:** (A) DENY (fail-closed) sempre que a única via de allow for
-  ASSIGNED sem provedor; (B) ignorar o scope e seguir.
-- **Recomendação:** (A) — nenhum allow por omissão; resolução de colegiado/
-  avaliador chega com F4-05.
-- **Impacto:** (A) seguro; (B) allow indevido (rejeitado).
+- **Alternativas:** (A) DENY sempre que a única via de allow for ASSIGNED sem
+  provedor; (B) ignorar o scope e seguir.
+- **Decisão (fechada): A** — **ASSIGNED não resolvido = DENY** (fail-closed);
+  resolução de colegiado/avaliador chega com F4-05.
+- **Impacto:** sem allow por omissão.
 
-### D15 — Boundary F4-03 × F4-04
+### D15 — Boundary F4-03 × F4-04 — **FECHADA (A ajustada)**
 
 - **Pergunta:** o que exatamente a F4-03 entrega vs a F4-04?
-- **Alternativas:** (A) F4-03: engine genérico + matriz + primeiros fluxos
-  (auto-fluxos e administrativos simples); F4-04: demais fluxos de domínio;
-  (B) F4-03 cobre todos os fluxos.
-- **Recomendação:** (A) — engine pronto e provado em subconjunto; cobertura
-  total é incremental.
-- **Impacto:** (A) PR revisável; (B) escopo grande demais.
+- **Alternativas:** (A) F4-03: engine + contratos + matriz + poucos
+  fluxos-piloto; F4-04: aplicação ampla; (B) F4-03 cobre todos os fluxos.
+- **Decisão (fechada): A ajustada** — F4-03 implementa: **engine genérico;
+  contratos/providers; matriz positiva/negativa; poucos fluxos-piloto de baixo
+  risco suficientes para provar o engine; e remoção de comparações por cargo
+  apenas nesses fluxos cobertos**. **Não migrar agora todos os fluxos
+  hierárquicos** — a **F4-04** fará a aplicação ampla de hierarchy + assignments
+  à autorização. Evitar sobreposição de escopo entre as duas issues (seção 17).
+- **Impacto:** PR revisável e prova do engine sem escopo gigante.
 
-### D16 — Input confiável (anti-IDOR/spoofing)
+### D16 — Input confiável (anti-IDOR/spoofing) — **FECHADA (A)**
 
 - **Pergunta:** quem fornece actor/org/estado no request?
 - **Alternativas:** (A) camada de serviço (sessão + repositório); o engine
   deriva tenant do alvo; (B) aceitar do chamador arbitrário.
-- **Recomendação:** (A) — actor e organização da sessão; tenant do alvo
-  derivado do recurso.
-- **Impacto:** (A) impede spoofing/IDOR; (B) inseguro (rejeitado).
+- **Decisão (fechada): A** — actor e organização da sessão; **tenant do alvo
+  derivado do recurso carregado**; capability/scope resolvidos por providers
+  (nunca declarados pelo caller).
+- **Impacto:** impede spoofing/IDOR.
 
-### D17 — Identidade DEV × real
+### D17 — Identidade DEV × real — **FECHADA (A)**
 
 - **Pergunta:** como o engine resolve actor/membership hoje, sem vínculo
   auth↔collaborator real?
 - **Alternativas:** (A) actor da identidade DEV/impersonação (F2-09) resolvido
   via provedor; o mesmo contrato valerá com a identidade real (F5); (B)
   bloquear o engine fora de produção.
-- **Recomendação:** (A) — engine agnóstico de DEV/produção; limitação de
+- **Decisão (fechada): A** — engine agnóstico de DEV/produção; limitação de
   enforcement server-side documentada.
-- **Impacto:** (A) evoluível; (B) inutilizável em DEV (rejeitado).
+- **Impacto:** evoluível; utilizável em DEV.
 
-### D18 — Mapa das regras por cargo → capability/scope
+### D18 — Mapa legado cargo → capability/scope (somente migração) — **FECHADA (A ajustada)**
 
 - **Pergunta:** como converter as ~15 regras por `funcao` sem perder semântica?
-- **Alternativas:** (A) tabela única de mapeamento (regra antiga → capability +
-  scope/relação) num módulo do engine, validada por testes espelhados;
-  (B) migrar caso a caso sem tabela.
-- **Recomendação:** (A) — central e rastreável; a tabela some quando todos os
-  fluxos estiverem no engine.
-- **Impacto:** (A) transição auditável; (B) risco de regressão silenciosa.
+- **Alternativas:** (A) tabela única de mapeamento num módulo do engine; (B)
+  migrar caso a caso sem tabela.
+- **Decisão (fechada): A ajustada** — o mapa pode existir **SOMENTE como
+  artefato temporário de migração/regressão**; **nunca é consultado pelo engine
+  em runtime como fonte permanente de autorização**. Objetivos do mapa:
+  documentar a regra antiga; indicar a capability/scope equivalente; permitir
+  testes espelhados durante a migração; controlar quais fluxos ainda dependem
+  do legado. À medida que cada fluxo migra, a decisão runtime vem
+  **exclusivamente** de identity + membership + capability + scope + relation +
+  domain state; **quando todos os fluxos forem migrados, o mapa deve poder ser
+  removido sem alterar o comportamento do engine**.
+- **Impacto:** transição auditável sem legado em runtime; remoção futura sem
+  efeito colateral.
 
 ## 24. Proposta de implementação futura
 
@@ -664,12 +723,18 @@ sintéticos):
   (fail-closed);
 - `authorize` lança erro F0-05 correto (FORBIDDEN/NOT_FOUND/CONFLICT) e
   `can` devolve decisão estruturada sem lançar;
+- **D5/D9:** teste de fronteira de que nenhuma mutação confia em `can()`/
+  `listAllowedTargets` — mutações cobertas chamam `authorize()` na camada de
+  serviço imediatamente antes de persistir;
 - nenhuma página/componente contém comparação por cargo em decisão de ação
   (grep em testes de regressão — "autorização não depende de cargo === ..."
-  nos fluxos cobertos);
+  nos fluxos cobertos; o mapa legado só existe como artefato de migração e não
+  é consultado em runtime — D18);
 - regras de domínio permanecem nos módulos de domínio (teste de fronteira:
   engine não importa status específico);
-- CI/build/lint/diff-check e, após F5, RLS como última barreira.
+- `listAllowedTargets` nunca decide autorização (só listagem); CI/build/lint/
+  diff-check e, após F5/F4-08, revalidação server-side atômica + RLS como
+  última barreira.
 
 Nada disso é implementado nesta entrega; fica como contrato para as próximas
 etapas da Fase 4.
