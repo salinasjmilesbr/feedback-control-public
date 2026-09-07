@@ -1,4 +1,4 @@
-# Supabase local — desenvolvimento (F1-01 a F2-07)
+# Supabase local — desenvolvimento (F1-01 a F2-09)
 
 Infraestrutura local do Supabase para o Virtus Team, versionada e reconstruível
 integralmente a partir do repositório — sem configuração manual no dashboard,
@@ -308,6 +308,29 @@ sistema de autenticação — o Supabase Auth permanece o gestor da sessão
 - nenhuma senha é armazenada e não existe mecanismo próprio de
   remember-password; o `auth.jwt_expiry` local permanece o padrão (1h) e o
   refresh de token do SDK segue responsável pela renovação dentro dos limites.
+
+## Impersonação DEV (F2-09)
+
+A F2-09 garante que o mecanismo de simulação/impersonação (seletor de
+colaboradores sintéticos do seed local) exista somente em DEV explícito e
+nunca se confunda com autenticação:
+
+- o gate central é `simulacaoDevPermitida` (DEV do Vite + ambiente
+  `development`), reutilizado por `UsuarioAtualProvider`/`UsuarioAtualBar`
+  (frontend) e pelo guard (F2-04); não há inferência de DEV por localhost;
+- em HOMOLOG/PROD o provider não carrega colaborador simulado como identidade,
+  não lê/grava o marcador local e bloqueia a troca; o seletor não é renderizado
+  (a barra rotula a simulação como "Usuário atual — simulação DEV" apenas em
+  DEV) — fail-closed, sem fallback simulado;
+- separação conceitual: a impersonação DEV é um contexto local de visão sobre o
+  seed sintético; o Supabase Auth permanece soberano — ela não altera
+  `auth.uid()`, JWT ou sessão, não participa de chamadas server-side como
+  autorização e não contorna RLS/segurança do servidor (nenhuma alteração de
+  RLS foi necessária);
+- nenhum dado real é usado no mecanismo (somente seed sintético) e nenhuma
+  credencial/secret novo entrou no frontend; login/logout, recuperação,
+  redefinição, guard, convite (F2-06), desativação/revogação (F2-07) e a
+  política de sessão (F2-08) permanecem intactos.
 
 ## Aplicação independente
 

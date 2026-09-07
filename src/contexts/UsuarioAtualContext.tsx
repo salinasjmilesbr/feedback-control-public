@@ -5,6 +5,12 @@ export type UsuarioAtualContextValue = {
   usuarioAtual?: Colaborador;
   usuariosDisponiveis: Colaborador[];
   selecionarUsuario: (matricula: number) => void;
+  /**
+   * F2-09: `true` quando este contexto representa a impersonação DEV (somente
+   * DEV explícito). Fora de DEV não há colaborador sintético carregado, a
+   * troca é bloqueada e o seletor não é exibido. Nunca é autenticação real.
+   */
+  simulacaoDevAtiva?: boolean;
 };
 
 export const UsuarioAtualContext = createContext<UsuarioAtualContextValue | undefined>(

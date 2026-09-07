@@ -22,10 +22,15 @@ O gate `resetDesenvolvimentoPermitido` exige contexto DEV do Vite e ambiente
 development. Bootstrap e função de reset continuam protegidos pela mesma decisão.
 Versão, chaves e comportamento do reset em DEV não mudam.
 
-`simulacaoDevPermitida` (F2-04) usa a mesma base e sinaliza o contexto DEV em que
-a simulação de identidade (seletor atual) permanece ativa no roteamento; é sempre
-`false` em HOMOLOG/PROD, onde nenhuma identidade simulada substitui autenticação
-real. O refinamento definitivo da impersonação DEV pertence à F2-09.
+`simulacaoDevPermitida` (F2-04/F2-09) usa a mesma base e é o gate único da
+impersonação de desenvolvimento: em DEV explícito (contexto DEV do Vite +
+ambiente `development`) o `UsuarioAtualProvider`/seletor de colaboradores
+sintéticos permanece ativo; em HOMOLOG/PROD é sempre `false` — nenhum
+colaborador simulado é carregado como identidade, a troca local é bloqueada e
+o seletor não é renderizado. A impersonação DEV é um contexto local de visão
+(features sobre o seed sintético); nunca substitui o Supabase Auth, não altera
+`auth.uid()`/JWT/sessão e não participa de chamadas server-side como
+autorização.
 
 `VITE_PUBLIC_API_URL` reserva uma configuração pública opcional, sem fornecedor
 ou integração ativa. Quando preenchida, deve ser uma URL HTTP(S) absoluta sem

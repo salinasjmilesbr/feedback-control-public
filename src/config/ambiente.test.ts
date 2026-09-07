@@ -46,6 +46,26 @@ describe("configuração central de ambiente", () => {
     expect(modulo.simulacaoDevPermitida).toBe(modulo.resetDesenvolvimentoPermitido);
   });
 
+  it("HOMOLOG/PROD nunca habilitam a impersonação DEV, mesmo com flags DEV ligadas (F2-09)", async () => {
+    const combinacoes: ReadonlyArray<readonly [boolean, string]> = [
+      [true, "homologation"],
+      [false, "homologation"],
+      [true, "production"],
+      [false, "production"],
+    ];
+
+    for (const [dev, informado] of combinacoes) {
+      vi.resetModules();
+      vi.stubEnv("DEV", dev);
+      vi.stubEnv("PROD", false);
+      vi.stubEnv("VITE_APP_ENV", informado);
+      const modulo = await import("./ambiente");
+
+      expect(modulo.configuracaoAmbiente.ambiente).toBe(informado);
+      expect(modulo.simulacaoDevPermitida).toBe(false);
+    }
+  });
+
   it("sem contexto confiável resolve produção, inclusive com flags contraditórias", async () => {
     const { resolverConfiguracaoAmbiente } = await import("./ambiente");
     expect(resolverConfiguracaoAmbiente({}).ambiente).toBe("production");
