@@ -246,6 +246,82 @@ local, CLI 2.116.0, PostgreSQL 17.6; repetida após um segundo `db reset`, com o
 mesmo resultado). Detalhes na seção "Validação executada (F3-02)" do
 `supabase/README.md`.
 
+## F3-03 — Unidades e posições da estrutura formal (Issue #80)
+
+Validação estrutural contra o **Supabase local** da migration
+`20260907130000_organizational_units_positions.sql`: unidades com existência e
+composição temporal (árvore formal) e posições vinculadas a unidade + função +
+senioridade opcional, todas independentes de ocupantes.
+
+### Como reproduzir
+
+Requisitos: Docker Desktop em execução e o CLI Supabase da raiz
+(`npx --yes supabase@2.116.0`).
+
+```powershell
+# 1) subir a stack local (rebuild limpo: migrations em ordem + seed)
+npx --yes supabase@2.116.0 start
+
+# 2) aplicar o cenário sintético no banco local (idempotente)
+Get-Content supabase/validacao/01-cenario-f3-03.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+
+# 3) executar a validação (exit code 0 = todas as verificações passaram)
+Get-Content supabase/validacao/02-validar-f3-03.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+```
+
+Observações:
+
+- os scripts **não tocam projeto remoto**, **não alteram nenhuma policy RLS** e
+  removem ao final os dados sintéticos do cenário (banco local limpo);
+- `01-cenario-f3-03.sql` insere via superuser local (equivalente a service_role)
+  apenas UUIDs fixos com prefixo `f5`, sem colidir com os cenários anteriores;
+- o deny-by-default é comprovado pelo passo 5 de `02-validar-f3-03.sql`
+  (`set role authenticated`: leituras retornam 0 linhas, INSERT é negado e
+  UPDATE/DELETE afetam zero linhas).
+
+### O que é verificado (02-validar-f3-03.sql)
+
+1. **Estrutura**: schema `public` contém somente as tabelas esperadas (F2 +
+   F3-01 + F3-02 + F3-03); nenhuma tabela/coluna de occupation/reporting line/
+   gestor/rank/colegiado/dotted line antecipada.
+2. **Colunas exatas** de `organizational_units`, `organizational_unit_parent_periods`
+   e `organizational_positions` (sem name/code/collaborator_id/occupation).
+3. **UUID técnico** com `gen_random_uuid()`; PKs somente por `id`; posições sem
+   unique natural (ocorrências idênticas válidas); unidades com unique por
+   `(org, name)` e de referência `(id, org)`.
+4. **Constraints/triggers**: 18 constraints esperadas (pk/unique/fk/check/
+   exclusion), FKs todas `ON DELETE RESTRICT`, FKs de posição restritas ao
+   escopo estrutural, unique de referência aditiva em `job_roles`/
+   `seniority_levels`, zero dependências referenciando posições e triggers de
+   `updated_at` presentes.
+5. **Cenário**: unidades e posições por organização; unidade sem posições e
+   unidade encerrada preservada; posições vagas (sem ocupante); posição
+   encerrada preservada; parent temporal com histórico (mudança de parent sem
+   recriar unidade; raiz por parent null; expansão acima e nível intermediário
+   posterior); Especialista sem equipe; Gerente + Analista na mesma unidade sem
+   Coordenador; mesmo job_role em alturas diferentes; posições idênticas como
+   ocorrências distintas; seniority null válido.
+6. **Rejeições/integridade**: tenant integrity (FKs compostas rejeitam unidade/
+   função/senioridade/parent de outra organização), sobreposição de parent,
+   auto-parent, nome duplicado de unidade na mesma org (mesmo nome entre orgs
+   permitido), nomes com espaços, períodos inválidos e exclusão física de org
+   com estrutura (RESTRICT).
+7. **Timestamps/version**: trigger `set_updated_at` redefine `updated_at`;
+   `version` default 0 e incrementável.
+8. **RLS deny-by-default**: habilitado nas três tabelas, zero policies, RLS das
+   tabelas F2/F3-01/F3-02 intacto e comportamento negado comprovado como
+   `authenticated`.
+9. **F3-01/F3-02 intactas**: colunas preservadas (alterações apenas aditivas),
+   constraints anteriores presentes e 3 policies inalteradas.
+10. **Limpeza**: cenário sintético removido ao final.
+
+Execução registrada nesta Issue: **56 verificações [PASS], 0 falhas** (Supabase
+local, CLI 2.116.0, PostgreSQL 17.6; repetida após um segundo `db reset`, com o
+mesmo resultado). Detalhes na seção "Validação executada (F3-03)" do
+`supabase/README.md`.
+
 ## Limitações e notas registradas
 
 - **JWT é stateless**: após logout, o refresh token é revogado, mas um access
