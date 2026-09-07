@@ -1,4 +1,4 @@
-# Supabase local — desenvolvimento (F1-01 a F3-02)
+# Supabase local — desenvolvimento (F1-01 a F3-03)
 
 Infraestrutura local do Supabase para o Virtus Team, versionada e reconstruível
 integralmente a partir do repositório — sem configuração manual no dashboard,
@@ -27,6 +27,10 @@ status (`collaborator_status_periods`), sem estrutura hierárquica nem posiçõe
 A F3-02 criou os catálogos configuráveis por organização de funções
 (`job_roles`) e senioridades (`seniority_levels`), independentes entre si, da
 hierarquia e da autorização.
+A F3-03 criou a estrutura organizacional formal — `organizational_units` (com
+composição temporal pai/filho e existência própria) e `organizational_positions`
+(unidade + função + senioridade opcional) — independente das pessoas que
+futuramente as ocuparão e sem reporting lines.
 O auto-cadastro público permanece desabilitado; o seed segue sem inserir dados
 funcionais, e o frontend mantém o localStorage como persistência funcional dos
 domínios (as F2-03 a F2-07 alteram somente identidade/sessão).
@@ -81,23 +85,27 @@ docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -X \
   -c "select proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='set_updated_at'"
 ```
 
-Estado esperado ao final da F3-02 (após rebuild limpo):
+Estado esperado ao final da F3-03 (após rebuild limpo):
 
-- nove migrations registradas (`20260906185540`, `20260906201856`,
+- dez migrations registradas (`20260906185540`, `20260906201856`,
   `20260906203358`, `20260906205425`, `20260906230400`, `20260907000250`,
-  `20260907103000`, `20260907103100` e `20260907120000`);
+  `20260907103000`, `20260907103100`, `20260907120000` e
+  `20260907130000`);
 - no schema `public`, as tabelas de identidade/membership da Fase 2 —
   `organizations`, `user_profiles` e `user_organization_memberships` — as três
   tabelas de colaboradores da F3-01 — `collaborators`,
-  `collaborator_identifiers` e `collaborator_status_periods` — e os dois
-  catálogos da F3-02 — `job_roles` e `seniority_levels` — todas com RLS
-  habilitado; policies apenas nas tabelas de identidade (F2-03/F2-07), nenhuma
-  policy nas tabelas F3-01/F3-02 (deny-by-default); nenhuma policy de escrita;
+  `collaborator_identifiers` e `collaborator_status_periods` — os dois
+  catálogos da F3-02 — `job_roles` e `seniority_levels` — e as três tabelas da
+  F3-03 — `organizational_units`, `organizational_unit_parent_periods` e
+  `organizational_positions` — todas com RLS habilitado; policies apenas nas
+  tabelas de identidade (F2-03/F2-07), nenhuma policy nas demais
+  (deny-by-default); nenhuma policy de escrita;
 - a função técnica `set_updated_at` (F1-03) e a RPC `criar_perfil_membership`
   (F2-06, SECURITY DEFINER, EXECUTE só para `service_role`) presentes;
 - a extensão `btree_gist` habilitada (F3-01) e as exclusion constraints
-  `ex_collaborator_status_periods_no_overlap` e
-  `ex_collaborator_identifiers_no_overlap` presentes nas tabelas de lifecycle;
+  `ex_collaborator_status_periods_no_overlap`,
+  `ex_collaborator_identifiers_no_overlap` e
+  `ex_organizational_unit_parent_periods_no_overlap` presentes;
 - o serviço Auth local habilitado com auto-cadastro público desabilitado
   (`enable_signup = false`) e provedor de e-mail ativo: `auth.users` existe e é
   referenciado por `user_profiles` (FK `fk_user_profiles_auth_users`);
@@ -111,11 +119,19 @@ Estado esperado ao final da F3-02 (após rebuild limpo):
 - `collaborators` referencia `organizations` (`ON DELETE RESTRICT`);
   `collaborator_identifiers` referencia o par (id, organization_id) de
   `collaborators` via FK composta e `collaborator_status_periods` referencia
-  `collaborators`; nenhuma FK para posição/ocupação/estrutura (inexistentes);
+  `collaborators`;
 - `job_roles` e `seniority_levels` referenciam apenas `organizations` (`ON
   DELETE RESTRICT`) com unique por `(organization_id, name)`, `status`
-  `active`/`disabled`, sem coluna de ordenação/rank e sem FKs cruzadas entre
-  catálogos nem para colaboradores/posições.
+  `active`/`disabled`, sem coluna de ordenação/rank; recebem (aditivo) o unique
+  de referência `(id, organization_id)` usado pelas FKs compostas da F3-03;
+- `organizational_units` referencia `organizations` e carrega `valid_from`/
+  `valid_to` (existência temporal); `organizational_unit_parent_periods`
+  referencia `organizational_units` (filho e pai opcional/raiz) via FKs
+  compostas com exclusão de um parent vigente por unidade;
+  `organizational_positions` referencia `organizations`,
+  `organizational_units`, `job_roles` e `seniority_levels` (opcional) via FKs
+  compostas — nenhuma FK para colaboradores/ocupação/reporting lines
+  (inexistentes).
 
 O nome do container deriva do `project_id` (`supabase_db_<project_id>`); para
 descobri-lo, use `docker ps --format '{{.Names}}'`.
@@ -455,6 +471,46 @@ sobre o estado da F3-01):
   inserir dados funcionais); rebuild e validação descritos no README de
   `validacao/` e registrados na seção "Validação executada (F3-02)".
 
+## Estrutura organizacional formal — unidades e posições (F3-03)
+
+A F3-03 (Issue #80) modelou unidades e posições formais independentemente das
+pessoas que futuramente as ocuparão, sem depender de sequência fixa de cargos
+ou níveis (uma migration aditiva sobre o estado da F3-02):
+
+- `public.organizational_units` — unidade formal da organização (`name` único
+  por organização, UUID técnico, sem níveis/cargos codificados); existência
+  temporal na própria entidade (`valid_from` obrigatório, `valid_to` null =
+  vigente, `valid_to > valid_from` quando encerrada; encerramento preserva a
+  linha/UUID — reativação após encerramento = nova unidade, decisão
+  documentada);
+- `public.organizational_unit_parent_periods` — relação temporal de composição
+  pai/filho entre unidades (filho, pai null = raiz, `valid_from`/`valid_to`);
+  exclusion constraint garante no máximo um parent vigente por unidade em cada
+  instante; mudança de parent não recria a unidade e o histórico de
+  reestruturações é integral; auto-parent proibido; ciclos multi-nível são
+  validados pela aplicação (limitação documentada, sem trigger recursivo nesta
+  fase); NÃO é reporting line entre posições;
+- `public.organizational_positions` — posição formal vinculada a unidade +
+  `job_role` + `seniority_level` opcional (null válido), com existência temporal
+  própria (`valid_from`/`valid_to`); posição existe sem ocupante (posição vaga
+  é o estado natural; occupation/reporting line são issues posteriores);
+  múltiplas posições com a mesma combinação são ocorrências formais distintas
+  (sem unique natural); sem `collaborator_id`, sem name/code próprios;
+- integridade multi-organização declarativa: FKs compostas
+  `(ref_id, organization_id) → (id, organization_id)` para unidades (filho/pai),
+  posições→unidade/função/senioridade, com unique de referência aditiva em
+  `job_roles`/`seniority_levels` (ALTER aditivo; sem mudança de semântica);
+- independência de cargo e hierarquia: função/senioridade não determinam a
+  posição na árvore; sem rank/sequência fixa; duas posições com o mesmo
+  `job_role` podem existir em partes/alturas diferentes; Especialista sem
+  equipe e Gerente → Analista sem Coordenador intermediário são representáveis;
+- RLS habilitado e deny-by-default nas três tabelas, sem policies e sem grants
+  (mesmo padrão das fases anteriores); nenhuma policy existente foi alterada;
+- dados: somente sintéticos, via cenário de validação
+  `supabase/validacao/01-cenario-f3-03.sql` (o `seed.sql` continua sem inserir
+  dados funcionais); rebuild e validação descritos no README de `validacao/` e
+  registrados na seção "Validação executada (F3-03)".
+
 ## Aplicação independente
 
 O frontend continua iniciando com `npm run dev`, mesmo sem Docker ou Supabase.
@@ -678,4 +734,59 @@ Node 24):
 - suíte completa local: `npm test` (556 testes em 50 arquivos — aprovados),
   `npm run build` (tsc + vite) aprovado, `npm run lint` aprovado e
   `git diff --check` aprovado;
+- nenhuma conexão ao Supabase remoto, credencial ou dado real envolvido.
+
+## Validação executada (F3-03)
+
+Migrations, schema, constraints, triggers e RLS validados em 2026-09-07 nesta
+máquina (Docker Desktop 29.7.2; CLI Supabase 2.116.0 via npx; PostgreSQL 17.6;
+Node 24):
+
+- rebuild limpo: `supabase start` a partir de estado limpo e duas execuções
+  adicionais de `db reset` — as dez migrations aplicadas em ordem (foundation,
+  F2-01, F2-02, F2-03, F2-06, F2-07, `20260907103000_enable_btree_gist`,
+  `20260907103100_collaborators_identifiers_status_periods`,
+  `20260907120000_job_roles_seniority_levels` e
+  `20260907130000_organizational_units_positions`) e o seed reaplicado
+  automaticamente, sem intervenção (três reconstruções limpas);
+- schema verificado: somente as onze tabelas esperadas no schema `public`
+  (identidade/membership da F2 + F3-01 + F3-02 + `organizational_units`,
+  `organizational_unit_parent_periods` e `organizational_positions`); colunas,
+  tipos e defaults conforme F1-02; triggers `trg_*_updated_at` presentes;
+- constraints verificadas: 18 constraints nas tabelas F3-03 (PKs por UUID,
+  uniques de unidade por nome e de referência `(id, organization_id)`, checks
+  de trim/validade, FKs compostas com `ON DELETE RESTRICT` e exclusion
+  `ex_organizational_unit_parent_periods_no_overlap`); unique de referência
+  aditiva `(id, organization_id)` em `job_roles`/`seniority_levels`;
+  zero dependências referenciando `organizational_positions` (sem occupation/
+  reporting line);
+- comportamento comprovado (cenário + asserts em
+  `supabase/validacao/01-cenario-f3-03.sql` e `02-validar-f3-03.sql`): unidade
+  e posição existem sem ocupante; posições vagas válidas; posição referencia
+  unidade/job_role/seniority (null válido); unidade sem posições e unidade/
+  posição encerradas preservadas (`valid_to`); parent temporal com histórico
+  (mudança de parent sem recriar unidade; raiz por parent null; expansão acima
+  e nível intermediário posterior); Especialista sem equipe; Gerente + Analista
+  na mesma unidade sem Coordenador; mesmo job_role em alturas diferentes;
+  posições idênticas como ocorrências distintas; **56 verificações [PASS],
+  0 falhas** (execução repetida após o segundo `db reset`, mesmo resultado);
+- integridade/tenant: FKs compostas rejeitam unidade/função/senioridade e
+  parents de outra organização; sobreposição de parent, auto-parent, nome
+  duplicado de unidade na mesma org (mesmo nome entre orgs permitido), nomes
+  com espaços, períodos inválidos e exclusão física de org com estrutura são
+  rejeitados no banco; `version`/`updated_at` mantidos pelo trigger técnico;
+- RLS: habilitado nas três tabelas F3-03 com zero policies e zero grants;
+  deny-by-default comprovado como `authenticated` (leituras retornam 0 linhas,
+  INSERT negado por row-level security, UPDATE/DELETE afetam zero linhas); RLS
+  das tabelas F2/F3-01/F3-02 e policies existentes (3) inalterados;
+- F3-01 e F3-02 intactas (colunas preservadas; alterações apenas aditivas);
+  nenhuma tabela/coluna de occupation/reporting line/gestor/rank/colegiado/
+  dotted line antecipada; dados sintéticos do cenário removidos ao final (banco
+  local limpo); varredura sem colunas secret-like e sem credenciais novas;
+- suíte completa local: `npm test` (556 testes em 50 arquivos — aprovados),
+  `npm run build` (tsc + vite) aprovado, `npm run lint` aprovado e
+  `git diff --check` aprovado;
+- limitação documentada: ciclos multi-nível na árvore de unidades não são
+  detectados por trigger recursivo nesta issue (validação pela aplicação;
+  auto-parent e sobreposição de parent são impedidos no banco);
 - nenhuma conexão ao Supabase remoto, credencial ou dado real envolvido.
