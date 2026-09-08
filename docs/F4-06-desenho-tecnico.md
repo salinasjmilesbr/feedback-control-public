@@ -713,6 +713,12 @@ consultada nem consumida. `listAllowedTargets` roda sem a origem C.
 
 - **Classificação:** soberana via `ExceptionalProvider.isTargetConfidential`
   (domínio/probe); o caller não informa confidencialidade; indeterminada ⇒ DENY.
+- **D10 (fail-closed no provider):** a correlação de `cycleId` é feita no
+  `ExceptionalProvider` (fronteira de segurança), não presumindo que todo grant
+  de entrada foi criado pelo serviço atual: para o alvo `evaluation` (recurso
+  por ciclo), `cycleId` é obrigatório **no grant e no pedido**, não vazio e
+  exatamente igual — `undefined` nunca é interpretado como "qualquer ciclo";
+  grant ou pedido sem ciclo, ou ciclos diferentes ⇒ NÃO aplicável (DENY).
 - **Auditoria:** `granted`/`revoked` (serviço) e `used` (engine, via
   `recordUsage`); expiração é **derivada** por data (sem job/evento armazenado);
   posse ≠ consumo; nenhum evento de uso quando A/B já autorizam.
@@ -724,7 +730,7 @@ consultada nem consumida. `listAllowedTargets` roda sem a origem C.
 
 ### 21.4 Validação
 
-- `npm test` → **679 testes / 54 arquivos aprovados** (+49 da F4-06);
+- `npm test` → **685 testes / 54 arquivos aprovados** (+55 da F4-06);
 - `npm run build` → aprovado (`tsc -b` + `vite build`);
 - `npm run lint` → aprovado;
 - `git diff --check` → aprovado.

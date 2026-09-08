@@ -45,7 +45,28 @@ export interface ExceptionalProviderInput {
   recordUsage?: (record: ExceptionalUsageRecord) => void;
 }
 
-/** Um grant se aplica ao pedido? Correlação EXATA (D11/D15/D16). */
+/**
+ * D10 (fail-closed): avaliação é recurso por ciclo. No domínio-piloto o
+ * `cycleId` é OBRIGATÓRIO no grant E no pedido, e deve ser exatamente igual e
+ * não vazio. `undefined` NUNCA é interpretado como "qualquer ciclo". Para
+ * tipos não associados a ciclo (fora do piloto), o grant não pode declarar
+ * ciclo. Sem fallback.
+ */
+function cicloCompativel(
+  grant: ExceptionalGrant,
+  cycleId: string | undefined
+): boolean {
+  if (grant.target.type === "evaluation") {
+    if (grant.cycleId === undefined || grant.cycleId.trim() === "") return false;
+    if (cycleId === undefined || cycleId.trim() === "") return false;
+    return grant.cycleId === cycleId;
+  }
+  // Tipos não associados a ciclo: cycleId deve estar ausente no grant (D10).
+  if (grant.cycleId !== undefined) return false;
+  return true;
+}
+
+/** Um grant se aplica ao pedido? Correlação EXATA (D10/D11/D15/D16). */
 function grantAplicavel(
   grant: ExceptionalGrant,
   beneficiaryId: string,
@@ -60,8 +81,8 @@ function grantAplicavel(
   if (grant.capability !== capability) return false;
   if (grant.target.type !== target.type) return false;
   if (grant.target.id !== target.id) return false;
-  // D10: quando o grant tem cycleId (recurso por ciclo), exige igualdade exata.
-  if (grant.cycleId !== undefined && grant.cycleId !== cycleId) return false;
+  // D10 fail-closed: cycleId obrigatório e exato para recurso por ciclo.
+  if (!cicloCompativel(grant, cycleId)) return false;
   if (grant.status !== "active") return false;
   // D13: janela fechada [validFrom, validTo); futuro/expirado não autoriza.
   if (date < grant.validFrom || date >= grant.validTo) return false;

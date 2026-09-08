@@ -813,3 +813,57 @@ describe("F4-06 — listAllowedTargets (D18) e ausência de cargo", () => {
     expect(can(req(), providers).allowed).toBe(false);
   });
 });
+
+describe("F4-06 — D10 fail-closed de cycleId no ExceptionalProvider", () => {
+  function providerDireto(grants: ExceptionalGrant[]) {
+    return createExceptionalProvider({
+      organizationId: ORG,
+      grants,
+      isTargetConfidential: () => true,
+    });
+  }
+
+  it("49. grant evaluation sem cycleId + request sem cycleId ⇒ NÃO aplicável", () => {
+    const p = providerDireto([grant({ cycleId: undefined })]);
+    expect(
+      p.resolveExceptionalGrants("ben1", ORG, "evaluation.read", EVAL_1, D, undefined)
+    ).toEqual([]);
+  });
+
+  it("50. grant evaluation sem cycleId + request com cycleId ⇒ NÃO aplicável", () => {
+    const p = providerDireto([grant({ cycleId: undefined })]);
+    expect(
+      p.resolveExceptionalGrants("ben1", ORG, "evaluation.read", EVAL_1, D, "c1")
+    ).toEqual([]);
+  });
+
+  it("51. grant evaluation com cycleId + request sem cycleId ⇒ NÃO aplicável", () => {
+    const p = providerDireto([grant({ cycleId: "c1" })]);
+    expect(
+      p.resolveExceptionalGrants("ben1", ORG, "evaluation.read", EVAL_1, D, undefined)
+    ).toEqual([]);
+  });
+
+  it("52. grant evaluation com cycleId diferente ⇒ NÃO aplicável", () => {
+    const p = providerDireto([grant({ cycleId: "c1" })]);
+    expect(
+      p.resolveExceptionalGrants("ben1", ORG, "evaluation.read", EVAL_1, D, "c2")
+    ).toEqual([]);
+  });
+
+  it("53. grant evaluation com cycleId exatamente igual ⇒ aplicável", () => {
+    const p = providerDireto([grant({ cycleId: "c1" })]);
+    expect(
+      p.resolveExceptionalGrants("ben1", ORG, "evaluation.read", EVAL_1, D, "c1")
+    ).toEqual([grant({ cycleId: "c1" })]);
+  });
+
+  it("54. engine: ciclo exato autoriza; ausente/diferente negam (fail-closed)", () => {
+    const providers = makeProviders({
+      exceptional: makeExceptional({ grants: [grant()] }),
+    });
+    expect(decidir(req({ context: { date: D, cycleId: "c1" } }), providers).allowed).toBe(true);
+    expect(decidir(req({ context: { date: D } }), providers).allowed).toBe(false);
+    expect(decidir(req({ context: { date: D, cycleId: "c2" } }), providers).allowed).toBe(false);
+  });
+});
