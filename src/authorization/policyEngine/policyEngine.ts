@@ -1,4 +1,5 @@
 import { codigoPublicoDeNegacao, erroDeNegacao } from "./errors";
+import { isCapabilityTargetCompatible } from "./capabilityTarget";
 import type {
   AuthorizationDecision,
   AuthorizationRequest,
@@ -59,14 +60,20 @@ export function decidir(
     return negar("CAPABILITY_MISSING");
   }
 
+  // 5.1) contrato capability × tipo de alvo (D18 F4-04): só rejeita combinações
+  // semanticamente impossíveis; não concede autorização.
+  if (!isCapabilityTargetCompatible(capability, target)) {
+    return negar("TARGET_INCOMPATIBLE");
+  }
+
   // 6) scope efetivo (pelo menos um ativo)
   const scopes = providers.scopes.getActiveScopes(actor.actorId, actor.organizationId);
   if (scopes.length === 0) return negar("SCOPE_INSUFFICIENT");
 
-  // 7) relação: alvo pertence a AO MENOS um scope do ator, na data
+  // 7) relação: alvo pertence a AO MENOS um scope do ator, na data/contexto
   let matchedScope: ScopeType | undefined;
   for (const scope of scopes) {
-    if (providers.relations.isTargetInScope(actor.actorId, actor.organizationId, scope, target, context.date)) {
+    if (providers.relations.isTargetInScope(actor.actorId, actor.organizationId, scope, target, context.date, context.cycleId)) {
       matchedScope = scope;
       break;
     }

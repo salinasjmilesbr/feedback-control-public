@@ -9,6 +9,8 @@ export type Capability =
   | "cycle.period.correct.manager"
   | "cycle.team.panel.view"
   | "evaluation.create"
+  | "evaluation.read"
+  | "evaluation.write"
   | "evaluation.cancel.manager"
   | "evaluation.reopen.manager"
   | "evaluation.view.admin"
