@@ -1,10 +1,11 @@
 # F4-05 — Desenho técnico: autorização temporária por substituição (Issue #92)
 
-> **Status:** desenho técnico da F4-05 **aguardando revisão** — decisões
-> **D1–D16 abertas** (recomendação indicada, sem fechamento). Nenhuma
-> implementação: sem código, migration, RLS, `SECURITY DEFINER`, alteração de
-> frontend/Edge Functions ou PR de implementação. Somente este documento, em
-> branch exclusiva de docs. Conteúdo 100% conceitual e sintético.
+> **Status:** revisão arquitetural concluída — recomendações **D1–D16
+> APROVADAS e FECHADAS** (com três esclarecimentos obrigatórios incorporados,
+> §13) e passam a constituir o **contrato arquitetural da F4-05** (§14).
+> Nenhuma implementação: sem código, migration, RLS, `SECURITY DEFINER`,
+> alteração de frontend/Edge Functions ou PR de implementação. Somente este
+> documento, em branch exclusiva de docs (PR #147 mantida).
 
 ## 1. Objetivo e boundary
 
@@ -14,8 +15,8 @@ Conceder ao **substituto** — durante a vigência de uma
 `temporary_responsibility` (F3-06) — **apenas o escopo/capabilities
 necessários** sobre o **alvo e o período aplicáveis**, com **revogação
 automática no término** (e reflexo imediato em retorno antecipado/encerramento
-administrativo), **sem** criar escopo permanente, **sem** hierarquia paralela e
-**sem** duplicar a F3.
+administrativo), **sem** criar escopo permanente, **sem** hierarquia paralela,
+**sem** revogar o titular e **sem** duplicar a F3.
 
 ### 1.2 Boundary exato da F4-05
 
@@ -23,7 +24,8 @@ administrativo), **sem** criar escopo permanente, **sem** hierarquia paralela e
   F4-04 (provedor temporário puro sobre entrada F3-shaped), contrato
   `responsibility_type × capability`, tratamento de vigência/retorno, interação
   com DIRECT_REPORTS/DESCENDANTS/ASSIGNED e com o contrato capability×target,
-  e registros de origem para auditoria futura;
+  fronteira vivo × congelado (F3-08/F3-09) e registros de origem para auditoria
+  futura;
 - **Fora:** UI final de substituição, acesso excepcional (F4-06), RLS (F4-08),
   persistência dos domínios no runtime (F5) — a migração de fluxos de página
   permanece condicionada à fonte F3 no runtime (mesma limitação da F4-04).
@@ -42,7 +44,8 @@ administrativo), **sem** criar escopo permanente, **sem** hierarquia paralela e
 - **F4-03/04**: Policy Engine (pipeline 1–10, fail-closed), contrato
   capability×target fechado (allowlist), providers estruturais
   (`structure.ts`, `assigned.ts`, `structuralRelation.ts`), `TargetRef` tipado,
-  `EvaluationTargetResolver` (ASSIGNED específico).
+  `EvaluationTargetResolver` (ASSIGNED específico), `DomainStateProbe`
+  (consulta de estado do domínio na decisão).
 - **Legado no runtime atual**: não há representação local de substituição
   (apenas no banco F3) — logo **nenhum ponto legado** de substituição/delegação
   no frontend; a migração de fluxos depende da fonte F3 no runtime (F5).
@@ -57,20 +60,36 @@ administrativo), **sem** criar escopo permanente, **sem** hierarquia paralela e
   **responsável temporário** = substitute da responsibility vigente na data;
 - a substitution concede ao substituto, **somente durante `[valid_from,
   valid_to)`**, um **conjunto de capabilities "elegíveis"** (pelo
-  `responsibility_type`) com **alcance restrito à position** (subordinados/
-  descendentes/unidade da position) — **nunca** as capabilities/scopes da
-  membership do titular (sem herança genérica).
+  `responsibility_type`) com **alcance restrito à position substituída** —
+  **nunca** as capabilities/scopes da membership do titular (sem herança
+  genérica);
+- a substitution **NÃO revoga nem suspende** a autorização do titular: titular
+  e substituto podem permanecer autorizados simultaneamente, e exclusividade de
+  atuação é questão de **estado/regra do domínio**, nunca regra genérica do
+  Policy Engine nem suspensão implícita do titular;
+- as **autorizações próprias do substituto** (derivadas das occupations/
+  positions normais dele) **continuam válidas e independentes** durante a
+  vigência: a substitution não as amplia nem as altera, e para o grant
+  temporário a raiz estrutural é **exclusivamente a position substituída**;
+- a decisão pode considerar a **união deduplicada dos grants válidos** (próprios
+  + temporários), preservando a **origem de cada grant** no diagnóstico;
+- a substitution **não é fonte para o histórico**: no contexto avaliativo ela só
+  produz autorização temporária enquanto o ciclo/responsabilidade ainda **não
+  estiver soberanamente congelado** por F3-08/F3-09 (que permanecem soberanos).
 
 ```
 position (raiz estrutural, occupations)
-   └─ titular (occupation)         → acesso próprio (sem herança de permissões)
+   ├─ titular (occupation)         → autorização própria NÃO é revogada pela substitution
    └─ substituto (temporary_responsibility, por data, tipo X)
-        └─ capabilities elegíveis por X (mapa responsibility_type × capability)
-        └─ alcance: posições sob a position / avaliação da position (ASSIGNED vivo)
+        └─ grant TEMPORÁRIO: capabilities elegíveis por X (mapa fechado D3)
+        └─ alcance: posições sob a position / avaliação viva da position (D9)
         └─ expira em valid_to (resolução por data)
+        └─ raiz exclusiva = position substituída (não usa occupations do substituto)
+   └─ substituto também pode ter autorizações PRÓPRIAS (occupations normais)
+        └─ independentes do grant temporário; união deduplicada preserva origem
 ```
 
-## 4. Invariantes
+## 4. Invariantes (contrato)
 
 1. capability define a ação; scope define o alcance; a raiz continua sendo a
    position (positions + reporting lines + occupations);
@@ -78,287 +97,319 @@ position (raiz estrutural, occupations)
    em nenhuma outra fonte (nenhuma tabela genérica de grants);
 3. cargo/job_role/nome de função nunca participa da autorização runtime;
 4. Policy Engine F4-03 é a única porta de decisão;
-5. o caller nunca escolhe position nem qual responsabilidade concede acesso;
-6. **nenhuma herança implícita de todas as capabilities do titular** — o
-   substituto recebe só as elegíveis pelo tipo, no período e alvo;
-7. tenant mismatch = DENY; vigência fora de `[valid_from, valid_to)` = DENY
-   (substituição futura/expirada); fail-closed;
-8. estrutura viva e histórico de ciclo permanecem separados; F3-08/F3-09 e
-   snapshots **permanecem soberanos** (substituição atual não os reescreve);
-9. ASSIGNED (F4-04) não vira wildcard; contrato capability×target (F4-04)
-   permanece fechado;
-10. nenhuma migration/RLS/DEFINER nova (salvo decisão explícita);
-11. sem cache que atrase a revogação (retorno antecipado reflete imediatamente
-    — a decisão é sempre resolvida por data na F3).
+5. o caller nunca escolhe position, origem (própria × temporária) nem qual
+   responsabilidade concede acesso;
+6. **nenhuma herança implícita das capabilities do titular** — o substituto
+   recebe só as elegíveis pelo tipo, no período e alvo (D1/D3);
+7. a substitution **NÃO revoga nem suspende a autorização do titular**; titular
+   e substituto podem estar autorizados simultaneamente (D2);
+8. o Policy Engine **NÃO arbitra genericamente "titular × substituto"**;
+   exclusividade de atuação é tratada explicitamente pelo estado/regra do
+   domínio (`DomainStateProbe` ou mecanismo equivalente), nunca por regra
+   genérica do engine nem por suspensão implícita (D6);
+9. para o grant originado pela `temporary_responsibility`, a raiz estrutural é
+   **exclusivamente a position substituída**; as **autorizações próprias** do
+   substituto (occupations/positions normais) permanecem válidas e
+   independentes — a substitution **nunca amplia nem altera** as positions
+   próprias dele; a decisão considera a **união deduplicada dos grants válidos
+   preservando a origem de cada um** (D4/D5/D12);
+10. tenant mismatch = DENY; vigência fora de `[valid_from, valid_to)` = DENY
+    (substituição futura/expirada); fail-closed;
+11. **fronteira avaliativa (D8/D9):** `temporary_responsibility` dos tipos
+    `evaluative`/`operational_evaluative` só produz autorização temporária no
+    **contexto vivo** em que a responsabilidade avaliativa ainda não esteja
+    soberanamente congelada por F3-08/F3-09; quando o recurso/ciclo for
+    governado por snapshot/responsabilidade congelada, essas fontes **são
+    soberanas**; `temporary_responsibilities` **não reescrevem, não substituem
+    nem concorrem** com histórico/snapshot; **ausência de informação suficiente
+    para distinguir contexto vivo de congelado = DENY**;
+12. estrutura viva e histórico de ciclo permanecem separados; F3-08/F3-09 e
+    snapshots **permanecem soberanos** (substituição atual não os reescreve);
+13. ASSIGNED (F4-04) não vira wildcard; contrato capability×target (F4-04)
+    permanece fechado (D13);
+14. nenhuma migration/RLS/DEFINER nova (D16);
+15. sem cache que atrase a revogação (retorno antecipado reflete imediatamente
+    — a decisão é sempre resolvida por data na F3) (D15).
 
 ## 5. Integração com Policy Engine
 
-Fluxo proposto (engine inalterado em forma):
+Fluxo proposto (engine inalterado em forma; providers resolvem origens):
 
 ```
-authorize(request)  [request.capability e target do substituto]
- → 1–4 identidade/profile/membership/tenant
- → capability efetiva da membership do substituto  (se possuir, para o caso base)
- → OU capability TEMPORÁRIA elegível (via TemporaryResponsibilityProvider,
-     marcada como origem "temporary:<id>")
- → scope (DIRECT_REPORTS/DESCENDANTS/ASSIGNED) resolvido sobre a POSITION
-     substituída na data
- → target ∈ alcance
- → domain state (probe)
- → ALLOW (diagnostics com matchedScope + origem temporária)
+authorize(request)
+ → 1–4 identidade/profile/membership/tenant (fail-closed)
+ → grants próprios da membership do substituto (capabilities/roles efetivos)
+     ⊕ grants TEMPORÁRIOS elegíveis (TemporaryResponsibilityProvider,
+       origem "temporary:<id>")  → UNIÃO DEDUPLICADA preservando a origem
+ → por grant: scope resolvido sobre a raiz adequada
+     · grant temporário  → DIRECT_REPORTS/DESCENDANTS/ASSIGNED da POSITION
+                           SUBSTITUÍDA na data (raiz exclusiva)
+     · grant próprio     → positions/occupations normais do substituto
+ → target ∈ alcance do grant correspondente
+ → DomainStateProbe:
+     · exclusividade de recurso/processo = estado do domínio (não do engine)
+     · contexto avaliativo: se o ciclo/responsabilidade estiver congelado por
+       F3-08/F3-09, o grant temporário avaliativo NÃO autoriza; fontes congeladas
+       são soberanas
+     · sem informação suficiente p/ distinguir vivo × congelado → DENY
+ → ALLOW (diagnostics com matchedScope + origem de cada grant)
 ```
 
-O substituto **não precisa** possuir a capability na membership: a
-elegibilidade é concedida pelo tipo da responsibility **somente** quando a
-capability está no mapa do tipo e o target está no alcance da position. Tudo
-fora disso = DENY.
+O substituto **não precisa** possuir a capability na membership para receber o
+grant temporário: a elegibilidade é concedida pelo tipo da responsibility
+**somente** quando a capability está no mapa fechado do tipo (D3) e o target
+está no alcance da position substituída. Tudo fora disso = DENY. A existência
+de autorização própria não é condição nem é afetada pelo grant temporário.
 
 ## 6. Providers/adapters necessários
 
 - `TemporaryResponsibilityProvider` (puro, entrada F3-shaped):
   `getActiveForPosition(actorId, positionId, orgId, date)`, que devolve as
   responsibilities vigentes do ator na data (sem sobreposição — F3 garante);
-- `ResponsibilityCapabilityMap` — tabela declarada (D3) `tipo × capabilities
-  elegíveis`, num único módulo;
-- composição no `RelationProvider`: para DIRECT_REPORTS/DESCENDANTS, a raiz
-  viva do substituto = a **position substituída** (não as occupations do
-  substituto); para ASSIGNED avaliativo vivo, alvo da position substituída.
+- `ResponsibilityCapabilityMap` — mapa declarado e **fechado** (D3)
+  `responsibility_type × capabilities elegíveis`, num único módulo;
+- composição no `RelationProvider`: para o **grant temporário**, a raiz =
+  **position substituída** (nunca as occupations do substituto); para grants
+  próprios, raiz = positions normais do substituto (independentes);
+- `DomainStateProbe`: consulta de estado do domínio para (a) exclusividade de
+  recurso/processo (D6) e (b) status vivo × congelado do ciclo/responsabilidade
+  avaliativa (D9); ausência de resposta ⇒ DENY;
+- diagnóstico com **origem por grant** (`membership:…`, `temporary:<id>`) (D10).
 
-## 7. responsibility_type × capability (D3)
+## 7. Contrato responsibility_type × capability (D3 — fechada)
 
-Mapa **declarado e fechado** por tipo (a definir em detalhe na decisão D3),
-sem cargo:
+Mapa **declarado, fechado e único**, sem cargo (detalhe capability-por-
+capability resolvido na implementação dentro da allowlist aprovada):
 
-| Tipo | Domínios de capability elegíveis (candidatos) |
+| Tipo | Domínios de capability elegíveis |
 | --- | --- |
 | `operational` | operação/gestão da position (ex.: estrutural/colaboradores/observações de equipe) |
-| `evaluative` | avaliação da position/avaliado (capabilities `evaluation.*`; domínio avaliativo) |
+| `evaluative` | avaliação viva da position/avaliado (capabilities `evaluation.*`; domínio avaliativo) |
 | `operational_evaluative` | união dos dois conjuntos |
 
-Exato (capability por capability) fica **aberto em D3** — a recomendação é
-listar explicitamente cada capability elegível (allowlist, nunca "tudo").
+Regra fechada: **allowlist explícita** de capabilities por tipo; capability
+fora da lista do tipo ⇒ o tipo não a concede (DENY); nunca "tudo"; nenhuma
+capability entra por prefixo de domínio sem estar listada.
 
-## 8. Interação com hierarchy
+## 8. Interação com hierarchy (D4/D5/D12 — fechadas)
 
 - A **árvore não muda**: reporting lines e occupations históricas intactas;
-- DIRECT_REPORTS/DESCENDANTS **durante a substituição**: o substituto age
-  "pela position" → os alvos são os subordinados/descendentes **da position**
-  (não do substituto); a posição continua sendo a mesma raiz estrutural (D4/D5);
-- substituto **não ganha hierarchy própria**: nada que venha das occupations
-  do substituto é usado como raiz durante a substituição.
+- **grant temporário** durante a substituição: o substituto age "pela position
+  substituída" → DIRECT_REPORTS/DESCENDANTS são os subordinados/descendentes
+  **da position substituída**, que é a **raiz exclusiva** desse grant;
+- as **occupations/positions próprias do substituto continuam valendo** e
+  gerando autorizações próprias independentes — a substitution **não as
+  amplia, não as altera e não as suspende**;
+- substituto **não ganha hierarchy própria por causa da substitution**: as
+  positions próprias dele não são raiz do grant temporário, nem o grant
+  temporário amplia o alcance das autorizações próprias.
 
-## 9. Interação com ASSIGNED
+## 9. Interação com ASSIGNED e fronteira vivo × congelado (D8/D9 — fechadas)
 
-- No **contexto vivo**, uma responsibility `evaluative`/
-  `operational_evaluative` sobre a position pode autorizar o substituto a atuar
-  como avaliador daquela position/avaliado (origem temporária; ASSIGNED não
+- **Contexto vivo (não congelado):** uma responsibility `evaluative`/
+  `operational_evaluative` sobre a position pode autorizar o substituto como
+  avaliador vivo daquela position/avaliado (origem temporária; ASSIGNED não
   vira wildcard);
-- no **histórico de ciclo**, a F3-09 (responsabilidades congeladas +
-  sucessão) e os snapshots F3-08 continuam soberanos — substituição atual não
-  reescreve quem avaliou naquele ciclo (D8).
+- **Governado por F3-08/F3-09 (congelado):** snapshot e responsabilidades
+  avaliativas congeladas são **soberanos**; a substitution **não autoriza,
+  não reescreve, não substitui nem concorre** com essas fontes (quem avaliou
+  no ciclo congelado permanece o que a F3-08/F3-09 registra);
+- **Sem distinção possível** entre contexto vivo e congelado ⇒ **DENY**
+  (fail-closed);
+- a sucessão de avaliador registrada em F3-09 continua sendo o mecanismo
+  histórico; a substitution atual é uma autorização temporária do contexto
+  vivo, nunca uma mutação do histórico.
 
-## 10. Temporalidade
+## 10. Temporalidade (D15 — fechada)
 
 - Sempre resolvido **por data**: `date ∈ [valid_from, valid_to)` ⇒ vigente;
   futura/expirada ⇒ DENY; retorno antecipado/encerramento administrativo =
   fechar `valid_to` na F3 ⇒ data corrente deixa de casar ⇒ **sem cache**, sem
-  ação manual de revogação no engine.
+  ação manual de revogação no engine (reflexo imediato).
 
 ## 11. Tenant e fail-closed
 
 - Responsibility, position, substitute e alvo da mesma organização (FKs F3);
   mismatch ⇒ provider vazio ⇒ DENY;
-- ausência de data, responsabilidade inexistente, tipo desconhecido ou
-  capability fora do mapa ⇒ DENY.
+- ausência de data, responsabilidade inexistente, tipo desconhecido,
+  capability fora do mapa do tipo ou **indistinção vivo × congelado** ⇒ DENY.
 
-## 12. Fluxos candidatos à migração
+## 12. Fluxos candidatos à migração (D11 — fechada)
 
 - No runtime atual **não há** ponto legado de substituição no frontend; a
   integração F4-05 é entregue no **core + engine** (provedor puro + mapa +
   origem temporária), e os fluxos de página migram **quando a fonte F3 estiver
   no runtime (F5)** — mesmo condicionamento da F4-04 (documentado).
 
-## 13. Decisões abertas (D1–D16)
+## 13. Esclarecimentos obrigatórios da revisão arquitetural (incorporados)
 
-Cada decisão: problema, alternativas, impactos e recomendação **aberta**.
+Regras vinculantes adicionadas/aprimoradas sobre o desenho original, e
+refletidas nas invariantes §4, no modelo §3, na integração §5–§9 e na matriz
+de testes §15.
 
-### D1 — O substituto herda capability, scope, ambos ou nenhum?
+### 13.1 Titular × substituto (fecha D2/D6)
 
-- **Problema:** o que exatamente a substituição concede?
-- **Alternativas:** (A) nenhum — concede apenas um conjunto **novo e
-  restrito** (capabilities elegíveis + alcance da position); (B) herda todas
-  as capabilities do titular; (C) herda scopes do titular.
-- **Impactos:** (A) menor privilégio e auditável; (B) herança genérica
-  (proibida pelo contrato); (C) depende de haver scopes persistidos.
-- **Recomendação (aberta):** (A).
+- A `temporary_responsibility` **NÃO revoga automaticamente** a autorização do
+  titular; titular e substituto podem permanecer autorizados simultaneamente;
+- quando um recurso/processo exigir **exclusividade de atuação**, essa
+  exclusividade deve ser tratada **explicitamente pelo estado/regra do
+  domínio** (`DomainStateProbe` ou mecanismo de domínio equivalente) — e não
+  como regra genérica do Policy Engine nem como suspensão implícita do titular;
+- o Policy Engine **não arbitra genericamente "titular versus substituto"**.
 
-### D2 — O titular mantém acesso durante a substituição?
+### 13.2 temporary responsibility avaliativa × F3-08/F3-09 (fecha D8/D9)
 
-- **Problema:** conflito titular × substituto em acesso à mesma position.
-- **Alternativas:** (A) titular mantém (substituição é overlay adicional);
-  (B) titular suspenso no período (posição "exclusiva" do substituto).
-- **Impactos:** (A) simples; recursos de exclusividade (1 avaliador/
-  aprovação) podem precisar de regra de domínio; (B) mais fiel à operação mas
-  exige desativar o titular por data.
-- **Recomendação (aberta):** (A) com regra de domínio de exclusividade onde
-  houver (D6).
+- `temporary_responsibility` dos tipos `evaluative`/`operational_evaluative`
+  pode produzir autorização temporária avaliativa **somente no contexto vivo**
+  em que a responsabilidade avaliativa ainda não esteja **soberanamente
+  congelada** por F3-08/F3-09;
+- quando o recurso/ciclo estiver governado pelo snapshot/responsabilidade
+  congelada F3-08/F3-09, **essas fontes são soberanas**;
+- `temporary_responsibilities` **não reescrevem, não substituem nem concorrem**
+  com o histórico/snapshot;
+- **ausência de informação suficiente para distinguir contexto vivo de
+  congelado = DENY** (fail-closed).
 
-### D3 — Contrato responsibility_type × capability (formato e granularidade)
+### 13.3 Autorização própria do substituto × autorização temporária (fecha D4/D5/D12)
 
-- **Problema:** definir o mapa elegível por tipo sem cargo e sem "tudo".
-- **Alternativas:** (A) allowlist explícita capability-por-capability por tipo,
-  num módulo único; (B) regras por prefixo de domínio; (C) lista ampla.
-- **Impactos:** (A) fechado e verificável; (B) mais solto; (C) herança
-  genérica.
-- **Recomendação (aberta):** (A).
+Correção de qualquer formulação que possa sugerir que as occupations próprias
+do substituto deixam de valer durante uma substituição. A regra é:
 
-### D4 — Como o substituto entra na decisão (position como raiz viva)
+- para resolver o **grant originado pela `temporary_responsibility`**, a raiz
+  estrutural é **exclusivamente a position substituída**;
+- o substituto pode **simultaneamente possuir autorizações próprias**,
+  derivadas de suas occupations/positions normais;
+- essas autorizações são **independentes**;
+- a decisão pode considerar a **união deduplicada dos grants válidos**,
+  **preservando a origem de cada um**;
+- uma `temporary_responsibility` **nunca amplia nem altera** as positions
+  próprias do substituto;
+- o **caller nunca escolhe** qual origem/position concede o acesso.
 
-- **Problema:** qual "position do ator" o engine usa durante a vigência.
-- **Alternativas:** (A) raiz = position substituída (resolvida por data) — o
-  caller não informa; (B) position informada.
-- **Impactos:** (A) seguro e alinhado à F4-04 D3; (B) escolha pelo caller
-  (proibida).
-- **Recomendação (aberta):** (A).
+## 14. Contrato arquitetural — decisões D1–D16 (FECHADAS)
 
-### D5 — DIRECT_REPORTS/DESCENDANTS durante a substituição
+As recomendações D1–D16 foram **aprovadas** na revisão arquitetural e, com os
+esclarecimentos obrigatórios do §13, **passam a constituir o contrato
+arquitetural da F4-05**. Regras vinculantes (não são recomendações):
 
-- **Problema:** o que o substituto alcança.
-- **Alternativas:** (A) subordinados/descendentes da position substituída;
-  (B) da position do próprio substituto (occupation própria); (C) ambos.
-- **Impactos:** (A) espelha a operação; (B) mistura fontes; (C) amplia.
-- **Recomendação (aberta):** (A), sem misturar occupations do substituto.
+1. **D1 — Sem herança genérica:** a substituição concede um conjunto **novo e
+   restrito** (capabilities elegíveis do tipo + alcance da position
+   substituída); o substituto **não herda** capabilities nem scopes do titular.
+2. **D2 — Titular não é revogado:** a substitution é overlay adicional; titular
+   e substituto podem estar autorizados simultaneamente (§13.1).
+3. **D3 — Contrato fechado por tipo:** allowlist explícita capability-por-
+   capability por `responsibility_type`, num único módulo, sem cargo e sem
+   "tudo" (§7).
+4. **D4 — Raiz do grant temporário:** position substituída, resolvida por
+   data; o caller nunca informa a position.
+5. **D5 — Alcance do grant temporário:** DIRECT_REPORTS/DESCENDANTS da
+   position substituída; sem misturar occupations do substituto nesse grant.
+6. **D6 — Sem arbitragem titular × substituto:** conflitos resolvidos pela
+   união de autorizações; exclusividade somente via estado/regra do domínio
+   (§13.1).
+7. **D7 — Múltiplas substituições:** união deduplicada por position; F3 já
+   impede sobreposição na mesma position; positions distintas ⇒ união de
+   grants temporários com origem preservada.
+8. **D8 — Histórico intocado:** nenhum efeito em histórico/snapshot; F3-08/F3-
+   09 e snapshots soberanos; substitution atua só no contexto vivo.
+9. **D9 — Fronteira vivo × congelado:** substitution avaliativa autoriza apenas
+   no contexto vivo não congelado; congelado ⇒ F3-08/F3-09 soberanos; sem
+   distinção possível ⇒ DENY (§13.2).
+10. **D10 — Origem sem schema:** origem preservada no diagnóstico
+    (`temporary:<id>` + reason); auditoria completa fica na F4-06.
+11. **D11 — Fonte F3-shaped no core:** provider puro com entrada F3-shaped;
+    migração de fluxos de página adiada à fonte F3 no runtime (F5).
+12. **D12 — Autorizações próprias preservadas:** positions próprias do
+    substituto continuam válidas e independentes; substitution não as amplia
+    nem altera; união deduplicada preserva a origem; caller nunca escolhe a
+    origem (§13.3).
+13. **D13 — Contrato capability×target único:** reuso do contrato fechado da
+    F4-04; nenhuma matriz paralela; combinações novas só com atualização da
+    allowlist.
+14. **D14 — listAllowedTargets auxiliar:** consome o mesmo provedor temporário
+    (somente listagem); `authorize()` continua a única proteção efetiva.
+15. **D15 — Reflexo imediato:** decisão sempre por data lendo a F3; nenhum
+    estado copiado/cache; retorno antecipado/encerramento reflete na hora.
+16. **D16 — Sem schema novo:** nenhuma migration/RLS/`SECURITY DEFINER`;
+    origem no diagnóstico; se surgir necessidade real de schema, nova decisão
+    antes de qualquer mudança.
 
-### D6 — Conflitos titular × substituto e exclusividade
+## 15. Matriz de testes (projetada conforme o contrato)
 
-- **Problema:** quando os dois agem sobre o mesmo recurso.
-- **Alternativas:** (A) união (ambos permitidos) com origem no diagnóstico;
-  (B) o substituto prevalece durante a vigência em recursos exclusivos
-  (regra de domínio explícita).
-- **Impactos:** (A) simples; (B) coerente com "quem está respondendo pela
-  posição".
-- **Recomendação (aberta):** (A) + (B) apenas com regra de domínio
-  documentada.
+**Vigência e temporalidade:**
+- substituição vigente concede somente as capabilities previstas no período;
+- responsabilidade expirada ⇒ DENY; futura ⇒ DENY;
+- retorno antecipado (fechamento do `valid_to`) reflete imediatamente, sem
+  cache/job (D15).
 
-### D7 — Múltiplas substituições e sobreposição
+**Grants temporários (D1/D3/D4/D5):**
+- `responsibility_type` incompatível com a capability ⇒ DENY;
+- substituto não herda capability fora do mapa do tipo;
+- capability fora da allowlist do tipo não é concedida (nunca "tudo");
+- grant temporário com raiz exclusiva = position substituída (occupations do
+  substituto não entram na raiz);
+- DIRECT_REPORTS/DESCENDANTS do grant temporário = subordinados/descendentes
+  da position substituída;
+- capability incompatível com o target (contrato F4-04) ⇒ DENY (D13);
+- múltiplas substituições em positions distintas ⇒ união deduplicada com
+  origem preservada (D7).
 
-- **Problema:** várias responsibilities do mesmo substituto ou em posições
-  diferentes.
-- **Alternativas:** (A) união por position (F3 já impede sobreposição na mesma
-  position por exclusion); (B) permitir e arbitrar por prioridade.
-- **Impactos:** (A) sem ambiguidade na mesma position; múltiplas positions ⇒
-  união deduplicada (padrão F4-04).
-- **Recomendação (aberta):** (A).
+**Titular × substituto (D2/D6):**
+- titular permanece autorizado durante a vigência (não revogado/suspenso);
+- titular e substituto autorizados simultaneamente sobre o mesmo alvo;
+- recurso com exigência de exclusividade NÃO é decidido por regra genérica do
+  engine: o engine delega ao estado do domínio (DomainStateProbe);
+- sem nenhuma regra genérica "titular vs substituto" no engine.
 
-### D8 — Substituição × histórico/snapshot
+**Autorizações próprias do substituto (D12):**
+- substituto mantém grants próprios (occupations normais) durante a vigência;
+- grants próprios e temporários são independentes e combináveis em união
+  deduplicada;
+- a substitution não amplia nem altera as positions próprias do substituto;
+- diagnóstico preserva a origem de cada grant (próprio × `temporary:<id>`);
+- caller nunca escolhe origem/position concedente.
 
-- **Problema:** efeito em avaliações/colegiado de ciclos passados.
-- **Alternativas:** (A) nenhum — F3-08/09 e snapshots soberanos; substituição
-  afeta apenas contexto vivo; (B) reescrever histórico.
-- **Impactos:** (A) preserva auditoria; (B) reescrita (proibida).
-- **Recomendação (aberta):** (A).
+**Fronteira avaliativa vivo × congelado (D8/D9):**
+- substitution `evaluative`/`operational_evaluative` autoriza somente em
+  contexto vivo não congelado;
+- ciclo governado por snapshot/responsabilidade congelada F3-08/F3-09 ⇒
+  fontes congeladas soberanas (substitution não autoriza, não reescreve, não
+  concorre);
+- sem informação suficiente p/ distinguir vivo × congelado ⇒ DENY.
 
-### D9 — Interação com ASSIGNED avaliativo (vivo)
+**Tenant e fail-closed:**
+- cross-tenant ⇒ DENY; profile/membership desabilitado ⇒ DENY; ator sem
+  vínculo ⇒ DENY; responsabilidade inexistente/tipo desconhecido ⇒ DENY;
+- períodos sobrepostos na mesma position (bloqueio F3); múltiplas positions do
+  substituto;
+- `listAllowedTargets` não substitui `authorize()` (D14).
 
-- **Problema:** avaliador da position no contexto vivo durante a substituição.
-- **Alternativas:** (A) responsibility `evaluative` autoriza o substituto como
-  avaliador vivo da position (origem temporária); histórico segue F3-09;
-  (B) ASSIGNED avaliativo só por F3-09 congelada.
-- **Impactos:** (A) cobre operação corrente; (B) substituto não avalia no
-  corrente.
-- **Recomendação (aberta):** (A) restrita ao vivo e ao tipo.
+## 16. Riscos, dependências e itens fora de escopo
 
-### D10 — Origem/auditoria do acesso temporário
-
-- **Problema:** rastrear que o acesso veio de uma substitution.
-- **Alternativas:** (A) campo `origin` no diagnóstico da decisão
-  (`temporary:<id>`) + reason; (B) tabela de auditoria nova.
-- **Impactos:** (A) sem schema (F4-06 audita depois); (B) migration (fora).
-- **Recomendação (aberta):** (A).
-
-### D11 — Fonte no runtime atual (pré-F5)
-
-- **Problema:** não existe `temporary_responsibilities` no runtime local.
-- **Alternativas:** (A) provider puro com entrada F3-shaped (testado) e
-  migração de fluxos adiada à F5; (B) grant local derivado.
-- **Impactos:** (A) coerente com F4-04; (B) fonte inventada (proibida).
-- **Recomendação (aberta):** (A).
-
-### D12 — Múltiplas positions do substituto
-
-- **Problema:** interação de occupations próprias com a position substituída.
-- **Alternativas:** (A) manter separadas (raiz = só a position substituída);
-  (B) unir.
-- **Impactos:** (A) não amplia; (B) ampliaria o alcance.
-- **Recomendação (aberta):** (A).
-
-### D13 — Contrato capability × target (F4-04) sob substituição
-
-- **Problema:** capabilities temporárias precisam respeitar o contrato fechado.
-- **Alternativas:** (A) reutilizar o contrato existente (sem novas combinações
-  sem atualizar a allowlist); (B) contrato paralelo.
-- **Impactos:** (A) sem segunda matriz; (B) duplicaria.
-- **Recomendação (aberta):** (A).
-
-### D14 — ListAllowedTargets e authorize sob substituição
-
-- **Problema:** listagem de alvos disponíveis ao substituto.
-- **Alternativas:** (A) listAllowedTargets consome o mesmo provedor temporário
-  (só listagem) e authorize continua a única proteção; (B) listagem própria.
-- **Impactos:** (A) alinhado a D5 F4-03/F4-04.
-- **Recomendação (aberta):** (A).
-
-### D15 — Retorno antecipado/encerramento (imediato)
-
-- **Problema:** reflexo imediato sem cache.
-- **Alternativas:** (A) decisão sempre por data lendo a F3 (nenhum estado
-  copiado); (B) job de revogação.
-- **Impactos:** (A) imediato e sem duplicação; (B) janela + estado.
-- **Recomendação (aberta):** (A).
-
-### D16 — Migration/RLS/DEFINER
-
-- **Problema:** alguma alteração de banco seria necessária?
-- **Alternativas:** (A) nenhuma (tudo derivado da F3; origem no diagnóstico);
-  (B) migration p/ auditoria de origem.
-- **Impactos:** (A) sem schema; (B) antecipação (F4-06).
-- **Recomendação (aberta):** (A) — se surgir necessidade real, apresentar
-  decisão antes.
-
-## 14. Matriz de testes (a projetar)
-
-- substituição vigente concede somente capabilities previstas;
-- expirada ⇒ DENY; futura ⇒ DENY;
-- responsibility_type incompatível com capability ⇒ DENY;
-- substituto não herda capability não prevista;
-- substituto não ganha hierarchy própria;
-- posição formal continua definindo a árvore;
-- titular mantém/não mantém acesso conforme D2;
-- múltiplas substituições; períodos sobrepostos (bloqueio F3); cross-tenant;
-- profile/membership disabled; ator sem vínculo; múltiplas positions;
-- DIRECT_REPORTS/DESCENDANTS durante a substituição; ASSIGNED vivo;
-- ciclo histórico não reescrito; snapshot F3-08/09 inalterado;
-- capability incompatível com target = DENY;
-- listAllowedTargets não substitui authorize().
-
-## 15. Riscos, dependências e itens fora de escopo
-
-- **Riscos:** herança genérica (mitigada por D1/D3); hierarquia paralela
-  (proibida); janela de revogação (mitigada por D15); duplicação da F3
-  (proibida); cargo na runtime (proibido).
+- **Riscos e mitigações (contrato):** herança genérica (D1/D3); hierarquia
+  paralela (proibida — invariante 2); janela de revogação (D15); duplicação da
+  F3 (proibida); cargo em runtime (proibido); arbitragem titular × substituto
+  no engine (proibida — D6, §13.1); indistinção vivo × congelado (DENY — D9);
+  fonte inventada no runtime (D11).
 - **Dependências:** F4-03 (engine), F4-04 (providers estruturais + ASSIGNED +
-  contrato capability×target), F3-06/07/09 (fontes), F5 (fonte F3 no runtime
-  para migração de fluxos).
+  contrato capability×target + DomainStateProbe), F3-06/07/09 (fontes), F5
+  (fonte F3 no runtime para migração de fluxos).
 - **Fora de escopo:** UI final, acesso excepcional (F4-06), RLS (F4-08),
-  auditoria completa, persistência dos domínios (F5).
+  auditoria completa (F4-06), persistência dos domínios (F5).
 
-## 16. Plano de implementação posterior (indicativo)
+## 17. Plano de implementação posterior (indicativo)
 
-1. `TemporaryResponsibilityProvider` puro + mapa `responsibility_type ×
-   capability` (allowlist) num módulo;
-2. origem temporária no diagnóstico (sem schema);
-3. composição no `RelationProvider` (raiz = position substituída, por data);
-4. testes da matriz §14; docs + PR.
+1. `TemporaryResponsibilityProvider` puro + `ResponsibilityCapabilityMap`
+   (allowlist fechada D3) num módulo;
+2. origem por grant no diagnóstico (`temporary:<id>`) — sem schema (D10/D16);
+3. composição no `RelationProvider` (raiz = position substituída por data, D4/
+   D5/D12) e consulta vivo × congelado via `DomainStateProbe` (D8/D9);
+4. exclusividade como regra de domínio (D6), fora do engine;
+5. testes da matriz §15; docs + PR de implementação.
 
-Nada disso é implementado nesta entrega; fica como contrato aberto para
-revisão das decisões D1–D16.
+Nada disso é implementado nesta entrega. **D1–D16 estão fechadas e constituem o
+contrato arquitetural da F4-05** (§14), sujeito apenas a nova deliberação se um
+dos pontos proibidos (migration/RLS/DEFINER, duplicação da F3, herança
+genérica, suspensão implícita do titular, reescrita de histórico) se tornar
+necessário — caso em que a decisão deve ser apresentada antes de qualquer
+mudança.
