@@ -413,3 +413,124 @@ dos pontos proibidos (migration/RLS/DEFINER, duplicação da F3, herança
 genérica, suspensão implícita do titular, reescrita de histórico) se tornar
 necessário — caso em que a decisão deve ser apresentada antes de qualquer
 mudança.
+
+## 18. Implementação e finalização (Issue #92)
+
+> A F4-05 foi implementada **somente no core + Policy Engine**, sem migration,
+> sem RLS, sem `SECURITY DEFINER` e sem conexão ao Supabase remoto. Fluxos de
+> página não foram migrados (limitação do runtime pré-F5, mesma regra da F4-04).
+
+### 18.1 Arquivos criados/alterados
+
+- **Criado:** `src/authorization/providers/temporary.ts` — provider temporário
+  puro (entrada F3-shaped), allowlist fechada D3 e resolução por data.
+- **Criado:** `src/authorization/providers/f4-05-core.test.ts` — 32 testes da
+  matriz §15.
+- **Alterado:** `src/authorization/policyEngine/types.ts` — contrato
+  `TemporaryProvider`/`TemporaryGrant`, campo opcional `temporary` em
+  `PolicyEngineProviders` e `temporaryOrigins` no diagnóstico.
+- **Alterado:** `src/authorization/policyEngine/policyEngine.ts` — pipeline
+  passa a considerar a **união deduplicada** das origens membership ⊕ temporária,
+  preservando a origem de cada grant.
+
+### 18.2 Providers implementados
+
+- `createTemporaryProvider(input)` → `TemporaryProvider` com
+  `getEligibleCapabilities` e `resolveTemporaryGrants`;
+- entrada F3-shaped pura: `TemporaryResponsibility[]` (F3-06), `PositionEdge[]` +
+  `Occupant[]` (F3-03/04/05), `resolveEvaluationTarget` (F4-04) e
+  `isEvaluationFrozen` (fronteira vivo × congelado D8/D9);
+- `getActiveTemporaryResponsibilities`/`getEligibleTemporaryCapabilities`
+  resolvem vigência por data (`[valid_from, valid_to)`), tenant e ator =
+  substituto.
+
+### 18.3 responsibility_type × capability (D3 fechada — implementado)
+
+Allowlist única em `TEMPORARY_RESPONSIBILITY_CAPABILITIES` (sem prefixo, sem
+wildcard, sem cargo):
+
+| Tipo | Capabilities (escopo) |
+| --- | --- |
+| `operational` | `collaborator.list`, `observation.create`, `observation.edit`, `observation.delete`, `goal.approve`, `goal.view.admin`, `report.view` — escopo **DESCENDANTS** da position substituída |
+| `evaluative` | `evaluation.create`, `evaluation.read`, `evaluation.write` — escopo **ASSIGNED** vivo (não congelado) |
+| `operational_evaluative` | união dos dois conjuntos |
+
+Tipo desconhecido ⇒ nenhuma capability (fail-closed).
+
+### 18.4 Integração ao Policy Engine
+
+- Passo 5 (capability): membership **OU** temporária elegível (`CAPABILITY_MISSING`
+  somente se nenhuma origem concede);
+- Passo 5.1 (capability × target) compartilhado pelas duas origens;
+- Passos 6/7 (scope/relação): membership **OU** grants temporários (raiz =
+  position substituída); `SCOPE_INSUFFICIENT` somente se nenhuma origem cobre o
+  alvo;
+- Passos 8/9 (data/estado do domínio) compartilhados; `DomainStateProbe` segue
+  soberano (exclusividade e vivo × congelado são do domínio, não do engine);
+- Diagnóstico preserva `matchedScope` (membership) e `temporaryOrigins`
+  (união deduplicada de `temporary:<id>`).
+
+### 18.5 Titular × substituto (D2/D6)
+
+- Nenhuma revogação/suspensão do titular: a substitution é overlay adicional;
+- titular e substituto podem estar autorizados simultaneamente (testado);
+- exclusividade é expressa somente pelo `DomainStateProbe`/regra de domínio —
+  o engine **não** arbitra "titular vs substituto" (testado).
+
+### 18.6 Grants próprios × temporários (D12)
+
+- Autorizações próprias do substituto (occupations/positions normais)
+  permanecem válidas e independentes durante a vigência;
+- o grant temporário enraíza **exclusivamente** na position substituída (as
+  positions próprias não ampliam o grant temporário — testado);
+- a decisão considera a união deduplicada das origens, preservando a origem;
+- o caller nunca escolhe position/origem/responsibility (não há campo no
+  request; a raiz é derivada dos dados).
+
+### 18.7 DIRECT_REPORTS / DESCENDANTS (D4/D5)
+
+- Reuso integral de `resolveDirectReports`/`resolveDescendants` da F4-04 com a
+  **position substituída como raiz**;
+- posição vaga intermediária não quebra a travessia (testado);
+- as occupations próprias do substituto não entram na raiz do grant temporário.
+
+### 18.8 ASSIGNED e fronteira vivo × congelado (D8/D9)
+
+- O grant avaliativo temporário exige: position substituída == posição superior
+  (avaliadora) da posição do avaliado (correlação específica, sem wildcard) **e**
+  contexto **vivo** (`isEvaluationFrozen() === false`);
+- `true` (congelado por F3-08/F3-09) ou `undefined` (indistinguível) ⇒ DENY —
+  fontes congeladas soberanas, sem reescrita/sucessão implícita.
+
+### 18.9 Fluxos migrados e limitações do runtime pré-F5
+
+- **Migrados:** somente o core (provider temporário + allowlist + integração ao
+  engine). Nenhuma página/serviço real foi migrado.
+- **Limitação:** o runtime atual (localStorage) não possui fonte F3
+  (`temporary_responsibilities`/positions/snapshots); portanto nenhum fluxo
+  funcional é migrado até a F5, sem bootstrap por cargo e sem grant fake/local
+  (D11).
+
+### 18.10 Testes e resultados
+
+- `f4-05-core.test.ts` cobre os 30 casos da matriz §15 (32 `it`);
+- `npm test` → **630 testes / 53 arquivos aprovados**;
+- `npm run build` → aprovado (`tsc -b` + `vite build`);
+- `npm run lint` → aprovado;
+- `git diff --check` → aprovado.
+
+### 18.11 Riscos/limitações e itens deixados para F4-06/F4-08/F5
+
+- **F4-06:** auditoria completa do acesso temporário (a origem `temporary:<id>`
+  já é preservada no diagnóstico, sem schema novo);
+- **F4-08:** RLS final (nenhuma policy criada nesta issue);
+- **F5:** fonte F3 no runtime e migração dos fluxos de página reais.
+
+### 18.12 Confirmação explícita
+
+- **Não houve herança genérica** de capabilities/scopes do titular (allowlist
+  fechada D3; testado);
+- **Não houve revogação automática do titular** (overlay adicional; testado);
+- **Nenhuma** migration, RLS, `SECURITY DEFINER`, cargo/job_role em runtime,
+  hierarquia derivada de `temporary_responsibilities`, grant genérico/wildcard
+  ou reescrita de F3-08/F3-09 foi introduzida.
