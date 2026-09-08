@@ -60,4 +60,22 @@ export const LEGACY_AUTHORIZATION_MAP: readonly LegacyAuthorizationMapping[] = [
     scope: "DIRECT_REPORTS",
     note: "Migração na F4-04.",
   },
+  {
+    legacyRule: "evaluation.edit.manager (actor.funcao === GERENTE)",
+    capability: "evaluation.write",
+    scope: "DESCENDANTS",
+    note: "F4-04 (core pronto; migração do fluxo bloqueada até a fonte F3 no runtime — F5).",
+  },
+  {
+    legacyRule: "evaluation.edit.coordinator (actor.funcao === COORDENADOR)",
+    capability: "evaluation.write",
+    scope: "DIRECT_REPORTS",
+    note: "F4-04 (core pronto; migração do fluxo bloqueada até F5).",
+  },
+  {
+    legacyRule: "evaluation.edit.board (avaliadoresColegiadoMatriculas)",
+    capability: "evaluation.write",
+    scope: "ASSIGNED",
+    note: "F4-04 (ASSIGNED derivado de F3-08; migração do fluxo bloqueada até F5).",
+  },
 ];

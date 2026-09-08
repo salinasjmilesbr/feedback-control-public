@@ -27,6 +27,7 @@ export function codigoPublicoDeNegacao(reason: DenialReason):
     case "MEMBERSHIP_INVALID":
     case "CAPABILITY_MISSING":
     case "SCOPE_INSUFFICIENT":
+    case "TARGET_INCOMPATIBLE":
     case "INDETERMINATE":
       return "FORBIDDEN";
   }

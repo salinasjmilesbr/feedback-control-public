@@ -37,6 +37,7 @@ export type DenialReason =
   | "CAPABILITY_MISSING"
   | "SCOPE_INSUFFICIENT"
   | "DOMAIN_STATE_INVALID"
+  | "TARGET_INCOMPATIBLE"
   | "INDETERMINATE";
 
 export interface ActorRef {
@@ -98,13 +99,14 @@ export interface TargetProvider {
 }
 
 export interface RelationProvider {
-  /** O alvo pertence ao scope do ator, na data? */
+  /** O alvo pertence ao scope do ator, na data/contexto? */
   isTargetInScope(
     actorId: string,
     organizationId: string,
     scope: ScopeType,
     target: TargetRef,
-    date: Date
+    date: Date,
+    cycleId?: string
   ): boolean;
 }
 
