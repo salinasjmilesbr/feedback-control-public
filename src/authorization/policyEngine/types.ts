@@ -17,6 +17,15 @@ export type ScopeType =
   | "ORGANIZATION"
   | "ASSIGNED";
 
+/**
+ * Tipo de responsabilidade temporária (F3-06). É dado de domínio — a tradução
+ * para capabilities é feita pela allowlist FECHADA da F4-05 (D3), nunca aqui.
+ */
+export type ResponsibilityType =
+  | "operational"
+  | "evaluative"
+  | "operational_evaluative";
+
 /** Alvo tipado, sem strings livres nem polimorfismo inseguro (D4). */
 export type TargetRef =
   | { type: "collaborator"; id: string }
@@ -76,6 +85,8 @@ export interface AuthorizationDecision {
   };
   diagnostics?: {
     matchedScope?: ScopeType;
+    /** Origens temporárias válidas (união deduplicada), ex.: "temporary:<id>". */
+    temporaryOrigins?: string[];
   };
 }
 
@@ -110,10 +121,50 @@ export interface RelationProvider {
   ): boolean;
 }
 
+/**
+ * Grant temporário (F4-05) derivado de uma temporary_responsibility vigente.
+ * Origem preservada no diagnóstico para auditoria (D10); raiz = position
+ * substituída (D4/D5). NUNCA é informado/forçado pelo caller.
+ */
+export interface TemporaryGrant {
+  origin: string;
+  responsibilityId: string;
+  responsibilityType: ResponsibilityType;
+  capability: Capability;
+  scope: ScopeType;
+  substitutedPositionId: string;
+}
+
+/**
+ * Origem temporária independente da origem membership (D2/D12): o engine
+ * considera a UNIÃO DEDUPLICADA das duas origens, preservando a origem de cada
+ * grant. Falha fechado para tipo desconhecido, tenant divergente, data fora da
+ * vigência ou dados insuficientes (D1/D3/D9/D15).
+ */
+export interface TemporaryProvider {
+  /** Capabilities elegíveis (união deduplicada) das responsabilidades vigentes do ator na data. */
+  getEligibleCapabilities(
+    actorId: string,
+    organizationId: string,
+    date: Date
+  ): Capability[];
+  /** Grants temporários cujo alcance (raiz = position substituída) cobre o alvo. */
+  resolveTemporaryGrants(
+    actorId: string,
+    organizationId: string,
+    capability: Capability,
+    target: TargetRef,
+    date: Date,
+    cycleId?: string
+  ): TemporaryGrant[];
+}
+
 export interface PolicyEngineProviders {
   identity: IdentityProvider;
   capabilities: CapabilityProvider;
   scopes: ScopeProvider;
   targets: TargetProvider;
   relations: RelationProvider;
+  /** Origem temporária (F4-05); ausente = sem grants temporários (retrocompatível). */
+  temporary?: TemporaryProvider;
 }

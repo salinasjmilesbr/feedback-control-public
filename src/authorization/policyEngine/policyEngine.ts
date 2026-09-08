@@ -15,9 +15,10 @@ import type {
  * origem dos dados migre para Supabase/server-side sem reescrever a semântica.
  *
  * Pipeline determinística (D/§7), fail-closed (qualquer indeterminação = DENY):
- *   1 identidade → 2 profile → 3 membership → 4 tenant → 5 capability →
- *   6 scope → 7 relação (alvo ∈ scope) → 8 contexto temporal → 9 estado do
- *   domínio → 10 ALLOW.
+ *   1 identidade → 2 profile → 3 membership → 4 tenant → 5 capability
+ *   (membership ⊕ temporária elegível) → 5.1 capability×target → 6/7 scope e
+ *   relação (membership ⊕ temporária, união deduplicada com origem preservada) →
+ *   8 contexto temporal → 9 estado do domínio → 10 ALLOW.
  */
 
 function negar(
@@ -55,30 +56,59 @@ export function decidir(
   if (targetTenant === undefined) return negar("TARGET_INVALID");
   if (targetTenant !== actor.organizationId) return negar("CROSS_TENANT");
 
-  // 5) capability efetiva
-  if (!providers.capabilities.hasCapability(actor.actorId, actor.organizationId, capability)) {
+  // 5) capability efetiva: membership OU origem temporária elegível (união D12)
+  const hasMembershipCapability = providers.capabilities.hasCapability(
+    actor.actorId,
+    actor.organizationId,
+    capability
+  );
+  const eligibleTemporarily = providers.temporary
+    ? providers.temporary
+        .getEligibleCapabilities(actor.actorId, actor.organizationId, context.date)
+        .includes(capability)
+    : false;
+
+  if (!hasMembershipCapability && !eligibleTemporarily) {
     return negar("CAPABILITY_MISSING");
   }
 
-  // 5.1) contrato capability × tipo de alvo (D18 F4-04): só rejeita combinações
-  // semanticamente impossíveis; não concede autorização.
+  // 5.1) contrato capability × tipo de alvo (D18 F4-04): compartilhado pelas
+  // duas origens — só rejeita combinações semanticamente impossíveis.
   if (!isCapabilityTargetCompatible(capability, target)) {
     return negar("TARGET_INCOMPATIBLE");
   }
 
-  // 6) scope efetivo (pelo menos um ativo)
-  const scopes = providers.scopes.getActiveScopes(actor.actorId, actor.organizationId);
-  if (scopes.length === 0) return negar("SCOPE_INSUFFICIENT");
-
-  // 7) relação: alvo pertence a AO MENOS um scope do ator, na data/contexto
+  // 6) scope membership (pelo menos um ativo com alvo no alcance)
   let matchedScope: ScopeType | undefined;
-  for (const scope of scopes) {
-    if (providers.relations.isTargetInScope(actor.actorId, actor.organizationId, scope, target, context.date, context.cycleId)) {
-      matchedScope = scope;
-      break;
+  const scopes = providers.scopes.getActiveScopes(actor.actorId, actor.organizationId);
+  if (scopes.length > 0) {
+    for (const scope of scopes) {
+      if (providers.relations.isTargetInScope(actor.actorId, actor.organizationId, scope, target, context.date, context.cycleId)) {
+        matchedScope = scope;
+        break;
+      }
     }
   }
-  if (!matchedScope) return negar("SCOPE_INSUFFICIENT");
+
+  // 6.1) origem temporária: grants cujo alcance (raiz = position substituída)
+  // cobre o alvo; origem preservada por grant (D10).
+  const temporaryGrants = providers.temporary
+    ? providers.temporary.resolveTemporaryGrants(
+        actor.actorId,
+        actor.organizationId,
+        capability,
+        target,
+        context.date,
+        context.cycleId
+      )
+    : [];
+  const temporaryOrigins = Array.from(
+    new Set(temporaryGrants.map((g) => g.origin))
+  );
+
+  if (!matchedScope && temporaryGrants.length === 0) {
+    return negar("SCOPE_INSUFFICIENT");
+  }
 
   // 8) contexto temporal explícito
   if (!context.date) return negar("INDETERMINATE");
@@ -89,8 +119,14 @@ export function decidir(
     return negar("DOMAIN_STATE_INVALID");
   }
 
-  // 10) ALLOW
-  return { allowed: true, diagnostics: { matchedScope } };
+  // 10) ALLOW — união deduplicada das origens válidas, preservando cada origem.
+  return {
+    allowed: true,
+    diagnostics: {
+      ...(matchedScope ? { matchedScope } : {}),
+      ...(temporaryOrigins.length > 0 ? { temporaryOrigins } : {}),
+    },
+  };
 }
 
 /** Auxiliar de UX/predicação: nunca enforcement (invariante 1). */
