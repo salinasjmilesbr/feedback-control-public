@@ -31,4 +31,5 @@ export type Capability =
   | "observation.edit"
   | "observation.delete"
   | "report.view"
-  | "settings.manage";
+  | "settings.manage"
+  | "exceptional_access.grant";

@@ -87,6 +87,8 @@ export interface AuthorizationDecision {
     matchedScope?: ScopeType;
     /** Origens temporárias válidas (união deduplicada), ex.: "temporary:<id>". */
     temporaryOrigins?: string[];
+    /** Grant excepcional que autorizou a decisão (F4-06), ex.: exceptional:<grantId>. */
+    exceptionalGrant?: { id: string; origin: string };
   };
 }
 
@@ -159,6 +161,74 @@ export interface TemporaryProvider {
   ): TemporaryGrant[];
 }
 
+/**
+ * Grant excepcional (F4-06, contrato fechado D1–D20). 1 grant = 1 beneficiário
+ * + 1 capability + 1 target específico + 1 tenant + cycleId quando aplicável +
+ * 1 janela temporal fechada. Somente leitura no piloto; auto-concessão
+ * proibida; sem wildcard; nunca é informado/forçado pelo caller.
+ */
+export interface ExceptionalGrant {
+  id: string;
+  organizationId: string;
+  /** Identidade soberana do beneficiário (user_profile/membership; sem exigir collaborator). */
+  beneficiaryUserProfileId: string;
+  grantedByUserProfileId: string;
+  capability: Capability;
+  target: TargetRef;
+  /** Obrigatório quando o tipo de recurso é associado a ciclo (avaliação). */
+  cycleId?: string;
+  justification: string;
+  validFrom: Date;
+  validTo: Date;
+  status: "active" | "revoked";
+  revokedAt?: Date;
+  revokedBy?: string;
+  revocationMotive?: string;
+}
+
+/** Registro de uso efetivo da origem C (D12/Q3): somente quando C autoriza. */
+export interface ExceptionalUsageRecord {
+  grantId: string;
+  organizationId: string;
+  beneficiaryUserProfileId: string;
+  capability: Capability;
+  target: TargetRef;
+  cycleId?: string;
+  date: Date;
+  origin: string;
+}
+
+/**
+ * Origem C — acesso excepcional (F4-06, D6/D7/D8/D16). Independente de A
+ * (membership) e B (temporary). É consultada SOMENTE quando A/B DENY; a
+ * classificação de confidencialidade é soberana (domínio/probe), nunca do
+ * caller; mais de um grant aplicável sem identificação inequívoca ⇒ DENY.
+ */
+export interface ExceptionalProvider {
+  /** Capability pertence à allowlist fechada de exceção (D8)? */
+  isCapabilityExceptionalEligible(capability: Capability): boolean;
+  /**
+   * Classificação soberana do recurso: true = confidencial elegível;
+   * false = não confidencial; undefined = indeterminado/ausente (fail-closed).
+   */
+  isTargetConfidential(
+    target: TargetRef,
+    cycleId: string | undefined,
+    organizationId: string
+  ): boolean | undefined;
+  /** Grants excepcionais aplicáveis (beneficiário/tenant/capability/target/ciclo/data/status). */
+  resolveExceptionalGrants(
+    beneficiaryId: string,
+    organizationId: string,
+    capability: Capability,
+    target: TargetRef,
+    date: Date,
+    cycleId?: string
+  ): ExceptionalGrant[];
+  /** Evento de uso efetivo — invocado pelo engine quando C autoriza. */
+  recordUsage?(record: ExceptionalUsageRecord): void;
+}
+
 export interface PolicyEngineProviders {
   identity: IdentityProvider;
   capabilities: CapabilityProvider;
@@ -167,4 +237,6 @@ export interface PolicyEngineProviders {
   relations: RelationProvider;
   /** Origem temporária (F4-05); ausente = sem grants temporários (retrocompatível). */
   temporary?: TemporaryProvider;
+  /** Origem excepcional (F4-06); ausente = sem acesso excepcional (retrocompatível). */
+  exceptional?: ExceptionalProvider;
 }

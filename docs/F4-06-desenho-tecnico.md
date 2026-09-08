@@ -662,3 +662,83 @@ a implementação da F4-06 (core/provider testável + allowlist `evaluation.read
 + origem C no engine + eventos de auditoria em memória), a ser executada em
 fase posterior com nova branch/PR de implementação — sempre sem migration/RLS/
 DEFINER e sem antecipar F4-07/F4-08.
+
+## 21. Implementação e finalização (Issue #93)
+
+> Implementado o **core testável** da F4-06 (origem C), integrado ao Policy
+> Engine. Sem migration, sem RLS, sem `SECURITY DEFINER`, sem conexão ao
+> Supabase remoto e sem migração de fluxos de página (runtime pré-F5, mesmo
+> condicionamento das F4-04/F4-05). D1–D20 e Q1–Q8 permanecem fechados.
+
+### 21.1 Arquivos implementados
+
+- **Alterado** `src/authorization/Capability.ts` — nova capability runtime
+  `exceptional_access.grant` (administrativa de concessão; **não** pertence à
+  allowlist de exceção e **não** é adicionada a bundle ADMIN — dívida de
+  alinhamento SQL×runtime registrada em Q6/§17.2);
+- **Alterado** `src/authorization/policyEngine/capabilityTarget.ts` — entrada
+  fechada `"exceptional_access.grant": ["evaluation"]` (concessão somente sobre
+  targets de avaliação, no piloto);
+- **Alterado** `src/authorization/policyEngine/types.ts` — contratos
+  `ExceptionalGrant`, `ExceptionalUsageRecord`, `ExceptionalProvider`,
+  `PolicyEngineProviders.exceptional?` e diagnóstico `exceptionalGrant`
+  (`{ id, origin }`);
+- **Alterado** `src/authorization/policyEngine/policyEngine.ts` — origem C como
+  fallback pós A/B DENY; gates globais (tenant, capability×target, data,
+  DOMAIN_STATE) preservados; `listAllowedTargets` **remove** a origem C (D18);
+- **Criado** `src/authorization/providers/exceptional.ts` — allowlist fechada
+  `EXCEPTIONAL_CAPABILITIES` (`["evaluation.read"]`) e `createExceptionalProvider`
+  (resolução exata por beneficiário/tenant/capability/target/cycleId/data/
+  status; fail-closed);
+- **Criado** `src/authorization/exceptionalAccess.ts` — serviço de concessão e
+  revogação (auto-concessão proibida, justificativa, janela fechada, ciclo
+  obrigatório p/ avaliação, `grantedBy ≠ beneficiary`, autorização do concedente
+  via `exceptional_access.grant`) + eventos de auditoria `granted`/`revoked`/
+  `used` (event sink);
+- **Criado** `src/authorization/providers/f4-06-core.test.ts` — 49 testes da
+  matriz (§15) + extras exigidos.
+
+### 21.2 Integração ao Policy Engine
+
+`autorizarOrigemExcepcional` é consultada somente quando A/B negam por
+capability (`CAPABILITY_MISSING`) ou por scope/relação (`SCOPE_INSUFFICIENT`),
+e apenas se `providers.exceptional` existe. Ordem interna: (1) capability ∈
+allowlist fechada; (2) contrato capability×target (TARGET_INCOMPATIBLE); (3)
+classificação soberana `=== true` (false/undefined ⇒ DENY); (4) data explícita;
+(5) DOMAIN_STATE; (6) resolução de grants (0 ⇒ mantém a negação; 1 ⇒ ALLOW com
+`exceptional:<id>` + `recordUsage`; >1 ⇒ DENY). Quando A/B ALLOW, C não é
+consultada nem consumida. `listAllowedTargets` roda sem a origem C.
+
+### 21.3 Classificação, auditoria e limitações
+
+- **Classificação:** soberana via `ExceptionalProvider.isTargetConfidential`
+  (domínio/probe); o caller não informa confidencialidade; indeterminada ⇒ DENY.
+- **D10 (fail-closed no provider):** a correlação de `cycleId` é feita no
+  `ExceptionalProvider` (fronteira de segurança), não presumindo que todo grant
+  de entrada foi criado pelo serviço atual: para o alvo `evaluation` (recurso
+  por ciclo), `cycleId` é obrigatório **no grant e no pedido**, não vazio e
+  exatamente igual — `undefined` nunca é interpretado como "qualquer ciclo";
+  grant ou pedido sem ciclo, ou ciclos diferentes ⇒ NÃO aplicável (DENY).
+- **Auditoria:** `granted`/`revoked` (serviço) e `used` (engine, via
+  `recordUsage`); expiração é **derivada** por data (sem job/evento armazenado);
+  posse ≠ consumo; nenhum evento de uso quando A/B já autorizam.
+- **Pré-F5:** core/provider testável com entrada F3/F4-shaped e event sink
+  in-memory; sem bootstrap por cargo, sem allowlist fake, sem localStorage como
+  fonte soberana; migração funcional (UI administrativa) fica para F5.
+- **Adiados:** F4-07 (Pilot Full Access), F4-08 (RLS/policies), auditoria geral
+  de leitura confidencial normal A/B, alinhamento SQL×runtime de capabilities.
+
+### 21.4 Validação
+
+- `npm test` → **685 testes / 54 arquivos aprovados** (+55 da F4-06);
+- `npm run build` → aprovado (`tsc -b` + `vite build`);
+- `npm run lint` → aprovado;
+- `git diff --check` → aprovado.
+
+### 21.5 Confirmações
+
+- Nenhuma migration, RLS ou `SECURITY DEFINER`;
+- Nenhum uso de cargo/job_role no novo caminho;
+- `exceptional_access.grant` não concede leitura e `evaluation.read` não concede
+  concessão; ADMIN não recebe acesso excepcional automático;
+- Issue #93 será fechada pelo merge desta PR (não realizado aqui).

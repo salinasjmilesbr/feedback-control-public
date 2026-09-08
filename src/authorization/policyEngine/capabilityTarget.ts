@@ -47,6 +47,7 @@ const ALLOWED_TARGETS: Record<Capability, readonly TargetType[]> = {
   "observation.delete": ["observation", "collaborator", "cycle"],
   "report.view": ["collaborator", "cycle", "evaluation"],
   "settings.manage": ["cycle"],
+  "exceptional_access.grant": ["evaluation"],
 };
 
 export function isCapabilityTargetCompatible(
