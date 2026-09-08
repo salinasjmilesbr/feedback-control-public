@@ -53,7 +53,7 @@ const memberships: CollegiateMembership[] = [
 ];
 
 const responsibilities: EvaluationResponsibility[] = [
-  { cycleId: "c1", organizationId: ORG, positionId: "p3", responsibleCollaboratorId: "c_ger" },
+  { cycleId: "c1", organizationId: ORG, positionId: "p3", evaluatedCollaboratorId: "c_an1", responsibleCollaboratorId: "c_ger" },
 ];
 
 describe("F4-04 — hierarchy (structure)", () => {
@@ -103,23 +103,40 @@ describe("F4-04 — hierarchy (structure)", () => {
 });
 
 describe("F4-04 — ASSIGNED (colegiado / responsabilidade avaliativa)", () => {
-  const target = { cycleId: "c1", organizationId: ORG, evaluatedCollaboratorId: "c_an1" };
+  const target = { cycleId: "c1", organizationId: ORG, evaluatedCollaboratorId: "c_an1", positionId: "p3" };
+  const targetB = { cycleId: "c1", organizationId: ORG, evaluatedCollaboratorId: "c_an2", positionId: "p4" };
+
+  // mapper sintético TargetRef → EvaluationTarget (avaliado + posição)
+  const positionPorAvaliado: Record<string, string> = { c_an1: "p3", c_an2: "p4" };
+  const resolveEvaluationTarget = (t: TargetRef, cycleId: string | undefined, org: string) => {
+    if (!cycleId || (t.type !== "collaborator" && t.type !== "evaluation")) return undefined;
+    const positionId = positionPorAvaliado[t.id];
+    return positionId
+      ? { cycleId, organizationId: org, evaluatedCollaboratorId: t.id, positionId }
+      : undefined;
+  };
 
   it("colegiado permite somente o membro atribuído", () => {
     expect(isCollegiateAssigned("c_avaliador", target, memberships)).toBe(true);
     expect(isCollegiateAssigned("c_coord", target, memberships)).toBe(false);
   });
 
-  it("responsabilidade avaliativa (F3-09) reconhece o responsável", () => {
+  it("responsabilidade avaliativa (F3-09) reconhece o responsável do alvo específico", () => {
     expect(isEvaluationAssigned("c_ger", target, responsibilities)).toBe(true);
     expect(isEvaluationAssigned("c_coord", target, responsibilities)).toBe(false);
   });
 
-  it("snapshot/ciclo é soberano (outro ciclo => sem atribuição)", () => {
-    expect(isCollegiateAssigned("c_avaliador", { ...target, cycleId: "c2" }, memberships)).toBe(false);
+  it("responsabilidade de A não vira wildcard para B no mesmo ciclo/tenant", () => {
+    // ator responsável por A (p3/c_an1); consulta B (p4/c_an2) => false
+    expect(isEvaluationAssigned("c_ger", targetB, responsibilities)).toBe(false);
   });
 
-  it("RelationProvider: ASSIGNED não cria hierarchy (alvo fora do avaliado)", () => {
+  it("snapshot/ciclo é soberano (outro ciclo => sem atribuição)", () => {
+    expect(isCollegiateAssigned("c_avaliador", { ...target, cycleId: "c2" }, memberships)).toBe(false);
+    expect(isEvaluationAssigned("c_ger", { ...target, cycleId: "c2" }, responsibilities)).toBe(false);
+  });
+
+  it("RelationProvider: ASSIGNED correlaciona posição/avaliado (A vs B)", () => {
     const relation = createStructuralRelationProvider({
       organizationId: ORG,
       resolveActorPositions: () => [],
@@ -127,24 +144,69 @@ describe("F4-04 — ASSIGNED (colegiado / responsabilidade avaliativa)", () => {
       occupants,
       collegiateMemberships: memberships,
       evaluationResponsibilities: responsibilities,
+      resolveEvaluationTarget,
     });
-    const aval: TargetRef = { type: "collaborator", id: "c_an1" };
-    const fora: TargetRef = { type: "collaborator", id: "c_deep" };
-    expect(relation.isTargetInScope("c_avaliador", ORG, "ASSIGNED", aval, new Date(), "c1")).toBe(true);
-    expect(relation.isTargetInScope("c_avaliador", ORG, "ASSIGNED", fora, new Date(), "c1")).toBe(false);
+    const alvoA: TargetRef = { type: "collaborator", id: "c_an1" };
+    const alvoB: TargetRef = { type: "collaborator", id: "c_an2" };
+    expect(relation.isTargetInScope("c_ger", ORG, "ASSIGNED", alvoA, new Date(), "c1")).toBe(true);
+    expect(relation.isTargetInScope("c_ger", ORG, "ASSIGNED", alvoB, new Date(), "c1")).toBe(false);
+    // colegiado também é específico ao avaliado (sem hierarchy/wildcard)
+    expect(relation.isTargetInScope("c_avaliador", ORG, "ASSIGNED", alvoB, new Date(), "c1")).toBe(false);
+  });
+
+  it("Policy Engine: ASSIGNED A permite A e nega B (DENY)", () => {
+    const relation = createStructuralRelationProvider({
+      organizationId: ORG,
+      resolveActorPositions: () => [],
+      positions,
+      occupants,
+      collegiateMemberships: memberships,
+      evaluationResponsibilities: responsibilities,
+      resolveEvaluationTarget,
+    });
+    const providers: PolicyEngineProviders = {
+      identity: { isProfileActive: () => true, isMembershipActive: () => true },
+      capabilities: { hasCapability: () => true },
+      scopes: { getActiveScopes: () => ["ASSIGNED"] },
+      targets: { resolveTargetTenant: () => ORG },
+      relations: relation,
+    };
+    const req = (targetId: string) => ({
+      actor: { actorId: "c_ger", organizationId: ORG },
+      capability: "evaluation.write" as const,
+      target: { type: "collaborator" as const, id: targetId },
+      context: { date: new Date(), cycleId: "c1" },
+      domainState: { allows: () => true },
+    });
+    expect(decidir(req("c_an1"), providers).allowed).toBe(true);
+    const denied = decidir(req("c_an2"), providers);
+    expect(denied.allowed).toBe(false);
+    expect(denied.denial?.reason).toBe("SCOPE_INSUFFICIENT");
   });
 });
 
-describe("F4-04 — contrato capability × target (D18)", () => {
+describe("F4-04 — contrato capability × target (D18, fechado)", () => {
+  it("permite combinações explicitamente suportadas", () => {
+    expect(isCapabilityTargetCompatible("evaluation.write", { type: "evaluation", id: "x" })).toBe(true);
+    expect(isCapabilityTargetCompatible("evaluation.write", { type: "collaborator", id: "x" })).toBe(true);
+    expect(isCapabilityTargetCompatible("goal.write", { type: "goal", id: "x" })).toBe(true);
+    expect(isCapabilityTargetCompatible("goal.write", { type: "collaborator", id: "x" })).toBe(true);
+    expect(isCapabilityTargetCompatible("observation.create", { type: "cycle", id: "x" })).toBe(true);
+    expect(isCapabilityTargetCompatible("report.view", { type: "evaluation", id: "x" })).toBe(true);
+    expect(isCapabilityTargetCompatible("collaborator.create", { type: "collaborator", id: "x" })).toBe(true);
+  });
+
   it("rejeita combinações semanticamente impossíveis", () => {
     expect(isCapabilityTargetCompatible("evaluation.write", { type: "goal", id: "x" })).toBe(false);
     expect(isCapabilityTargetCompatible("goal.write", { type: "evaluation", id: "x" })).toBe(false);
     expect(isCapabilityTargetCompatible("observation.create", { type: "goal", id: "x" })).toBe(false);
   });
 
-  it("permite subtargets válidos", () => {
-    expect(isCapabilityTargetCompatible("evaluation.write", { type: "collaborator", id: "x" })).toBe(true);
-    expect(isCapabilityTargetCompatible("goal.write", { type: "goal", id: "x" })).toBe(true);
+  it("combinação não explicitamente autorizada => false (fail-closed)", () => {
+    expect(isCapabilityTargetCompatible("settings.manage", { type: "collaborator", id: "x" })).toBe(false);
+    expect(isCapabilityTargetCompatible("collaborator.create", { type: "cycle", id: "x" })).toBe(false);
+    expect(isCapabilityTargetCompatible("report.view", { type: "goal", id: "x" })).toBe(false);
+    expect(isCapabilityTargetCompatible("cycle.management.view", { type: "collaborator", id: "x" })).toBe(false);
   });
 
   it("engine nega capability incompatível com target (TARGET_INCOMPATIBLE)", () => {

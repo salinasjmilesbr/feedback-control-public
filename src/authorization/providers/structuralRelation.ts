@@ -2,9 +2,12 @@ import type { RelationProvider } from "../policyEngine/types";
 import {
   isCollegiateAssigned,
   isEvaluationAssigned,
-  resolveEvaluationTarget,
 } from "./assigned";
-import type { CollegiateMembership, EvaluationResponsibility } from "./assigned";
+import type {
+  CollegiateMembership,
+  EvaluationResponsibility,
+  EvaluationTargetResolver,
+} from "./assigned";
 import {
   resolveDescendants,
   resolveDirectReports,
@@ -28,6 +31,11 @@ export interface StructuralRelationInput {
   occupants: readonly Occupant[];
   collegiateMemberships: readonly CollegiateMembership[];
   evaluationResponsibilities: readonly EvaluationResponsibility[];
+  /**
+   * Resolve o TargetRef em alvo avaliativo específico (avaliado + posição +
+   * ciclo). Obrigatório para ASSIGNED: sem ele, ASSIGNED falha fechado.
+   */
+  resolveEvaluationTarget: EvaluationTargetResolver;
 }
 
 export function createStructuralRelationProvider(
@@ -56,7 +64,7 @@ export function createStructuralRelationProvider(
       }
 
       if (scope === "ASSIGNED") {
-        const aval = resolveEvaluationTarget(target, cycleId, input.organizationId);
+        const aval = input.resolveEvaluationTarget(target, cycleId, input.organizationId);
         if (!aval) return false;
         return (
           isCollegiateAssigned(actorId, aval, input.collegiateMemberships) ||

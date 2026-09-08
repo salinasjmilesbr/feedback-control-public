@@ -751,3 +751,20 @@ de contrato. O mapa legado permanece como artefato até a F5 (D18 F4-03).
 nenhum scope de substituição foi persistido, nenhum mapa
 responsibility_type×capability foi criado e nenhum `responsible_collaborator_id`
 de substituto é convertido em concessão pelo core F4-04.
+
+### 26.10 Correções aplicadas após revisão da PR
+
+1. **ASSIGNED F3-09 deixou de ser wildcard:** `EvaluationTarget` agora exige
+   `positionId` (+ `evaluatedCollaboratorId` + ciclo + tenant) e
+   `EvaluationResponsibility` carrega `positionId` + `evaluatedCollaboratorId`;
+   `isEvaluationAssigned` correlaciona **posição + avaliado + ciclo + tenant +
+   responsável**. O alvo genérico é convertido pelo resolver tipado
+   `EvaluationTargetResolver` (obrigatório no `StructuralRelationInput`; sem
+   ele, ASSIGNED falha fechado). Teste negativo: ator responsável por A
+   (p3/c_an1) consultando B (p4/c_an2) no mesmo ciclo/tenant ⇒ false/DENY —
+   coberto em função, RelationProvider e Policy Engine.
+2. **Contrato capability × target fechado:** `capabilityTarget.ts` passou de
+   lista de proibidos para **allowlist explícita** `Record<Capability,
+   readonly TargetType[]>` — combinação não prevista ⇒ incompatível ⇒ DENY
+   (fail-closed). Testes de combinações válidas, inválidas e "não autorizada ⇒
+   false".

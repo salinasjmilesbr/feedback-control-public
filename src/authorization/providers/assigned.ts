@@ -2,9 +2,12 @@ import type { TargetRef } from "../policyEngine/types";
 
 /**
  * ASSIGNED derivado das fontes soberanas F3-08/F3-09 (F4-04, D5/D6).
- * NÃO cria hierarquia, NÃO é wildcard e NÃO duplica os dados: recebe as linhas
- * já materializadas (colegiado / responsabilidade avaliativa) e apenas
- * responde se o ator está atribuído ao alvo avaliativo no ciclo.
+ * NÃO cria hierarquia, NÃO é wildcard e NÃO duplica os dados.
+ *
+ * Correlação específica (F3-09): a responsabilidade avaliativa é keyed por
+ * (ciclo, organização, posição, avaliado) — o alvo avaliativo precisa de
+ * positionId + evaluatedCollaboratorId para nunca casar "qualquer avaliação do
+ * ciclo".
  */
 
 export interface CollegiateMembership {
@@ -17,15 +20,19 @@ export interface CollegiateMembership {
 export interface EvaluationResponsibility {
   cycleId: string;
   organizationId: string;
+  /** Posição avaliada (chave da responsabilidade F3-09). */
   positionId: string;
+  /** Avaliado do snapshot do ciclo (F3-08/09). */
+  evaluatedCollaboratorId: string;
   responsibleCollaboratorId: string;
 }
 
-/** Alvo avaliativo resolvido (avaliado × ciclo × organização). */
+/** Alvo avaliativo resolvido (avaliado × posição × ciclo × organização). */
 export interface EvaluationTarget {
   cycleId: string;
   organizationId: string;
   evaluatedCollaboratorId: string;
+  positionId: string;
 }
 
 export function isCollegiateAssigned(
@@ -51,19 +58,19 @@ export function isEvaluationAssigned(
     (r) =>
       r.cycleId === target.cycleId &&
       r.organizationId === target.organizationId &&
+      r.positionId === target.positionId &&
+      r.evaluatedCollaboratorId === target.evaluatedCollaboratorId &&
       r.responsibleCollaboratorId === actorId
   );
 }
 
-/** Resolve um TargetRef genérico para o alvo avaliativo (para ASSIGNED). */
-export function resolveEvaluationTarget(
+/**
+ * Contrato do resolver de alvo avaliativo: converte um TargetRef genérico em
+ * EvaluationTarget (avaliado + posição + ciclo) ou undefined. O adapter real
+ * (F5) deriva a posição/avaliado da avaliação concreta.
+ */
+export type EvaluationTargetResolver = (
   target: TargetRef,
   cycleId: string | undefined,
   organizationId: string
-): EvaluationTarget | undefined {
-  if (!cycleId) return undefined;
-  if (target.type === "evaluation" || target.type === "collaborator") {
-    return { cycleId, organizationId, evaluatedCollaboratorId: target.id };
-  }
-  return undefined;
-}
+) => EvaluationTarget | undefined;
