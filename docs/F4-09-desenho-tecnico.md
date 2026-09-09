@@ -1,14 +1,14 @@
 # F4-09 — Contrato arquitetural: autorização funcional aplicada aos domínios do Virtus (Issue #96)
 
-> **Status:** DESENHO TÉCNICO — contrato em revisão de desenho. Esta atividade é
+> **Status: CONTRATO FECHADO PARA IMPLEMENTAÇÃO.**
+> Q1–Q7 **FECHADAS** (§17); D1–D12 **FECHADAS** (§18); matriz §7 revisada para o
+> vocabulário canônico (capability = ação) — sem contradições internas.
+>
+> **IMPLEMENTAÇÃO BLOQUEADA ATÉ O MERGE DA F4-08 / PR #154.** Esta atividade é
 > **somente documentação**: nenhum código funcional, nenhuma migration, nenhuma
 > alteração de banco, nenhuma policy RLS foi produzida. A Issue #96 **permanece
 > aberta**; o PR desta atividade é somente documentação e **NÃO usa `Closes #96`**;
 > **sem merge**.
->
-> A implementação da F4-09 **começa somente após o merge da F4-08 (PR #154)**.
-> Este desenho usa o CONTRATO fechado da F4-08 (docs/F4-08-desenho-tecnico.md),
-> mas **não depende de código não mergeado como se já estivesse na main**.
 
 ## 1. Objetivo e fronteira (Issue #96)
 
@@ -38,9 +38,9 @@ Issue #96.
   "policy pronta antes de conceder acesso"; sem FORCE RLS; sem novo DEFINER.
 - **Para os domínios funcionais (localStorage):** a F4-09 protege na **camada de
   aplicação**, sem simular segurança de banco para dado que ainda existe apenas
-  localmente. As invariantes que a F4-09 define (§15) deverão sobreviver à
-  migração F5, quando cada tabela funcional nascerá com RLS + `organization_id` +
-  classificação D16 e o enforcement passar a ser revalidado atomicamente na
+  localmente. As invariantes definidas na §15 deverão sobreviver à migração F5,
+  quando cada tabela funcional nascerá com RLS + `organization_id` +
+  classificação D16 e o enforcement passará a ser revalidado atomicamente na
   RPC/transação (F4-03 D9).
 
 ## 2. Adversários (segurança e confidencialidade permanentes)
@@ -76,16 +76,15 @@ não se assume "avaliação antiga = menos confidencial"; a mudança organizacio
 atual não reescreve autorização histórica quando o contrato histórico
 (snapshot F3-08/09, sucessão F3-09) determina outra coisa.
 
-### 4.1 Casos que a matriz (§7) decide explicitamente
+### 4.1 Casos decididos (fechados; ver matriz §7)
 
 1. colaborador A → avaliação de B: DENY;
 2. colaborador → própria avaliação ANTES da liberação: DENY (estado);
-3. colaborador → própria avaliação DEPOIS da liberação, se a regra funcional
-   permitir: ALLOW (SELF + capability + estado);
-4. gestor atual → avaliação histórica anterior a assumir a equipe: regra
-   explícita (sem presunção de acesso);
-5. ex-gestor → avaliação após perder a relação: DENY (salvo contrato histórico
-   explícito);
+3. colaborador → própria avaliação em `CONCLUIDA` (se a regra funcional
+   permitir): ALLOW (SELF + capability + estado) — Q4 fechada;
+4. gestor atual → avaliação histórica anterior a assumir a equipe: **DENY por
+   padrão** (Q5 fechada); histórico usa relação/snapshot soberano do período;
+5. ex-gestor → avaliação após perder a relação: DENY;
 6. coordenador → pessoa fora do alcance: DENY;
 7. gerente extrapolando scope: DENY;
 8. substituto temporário (F4-05): ALLOW somente na janela e nas capabilities
@@ -102,11 +101,11 @@ Quando apropriado, o usuário não autorizado não deve distinguir com facilidad
 Superfícies: IDs e consulta direta; contagens e listas; filtros/autocomplete;
 mensagens de erro; metadata/endpoints; relatórios/agregações (§12); histórico.
 
-Regra de desenho (refinada na matriz): em **leitura/resolução** de conteúdo
-confidencial, preferir resultado vazio/not-found genérico (não distingue
-existência); em **mutação**, erro de autorização pode ser explícito quando não
-há benefício em ocultar. O engine já mapeia `CROSS_TENANT/TARGET_INVALID →
-NOT_FOUND` (F4-03 D6), coerente com esta regra.
+Regra: em **leitura/resolução** de conteúdo confidencial, preferir resultado
+vazio/not-found genérico (não distingue existência); em **mutação**, erro de
+autorização pode ser explícito quando não há benefício em ocultar. O engine já
+mapeia `CROSS_TENANT/TARGET_INVALID → NOT_FOUND` (F4-03 D6), coerente com esta
+regra.
 
 ## 6. Estado atual real (inventário verificado no repositório)
 
@@ -115,31 +114,27 @@ NOT_FOUND` (F4-03 D6), coerente com esta regra.
 1. **Persistência:** nenhum domínio funcional usa banco/Supabase. Tudo em
    `localStorage`, JSON serializado. `src/infrastructure/supabase/` é apenas um
    cliente condicional (auth) sem fluxo funcional.
-2. **Duas superfícies de autorização coexistem:**
-   - **Engine novo** (`policyEngine/` + providers): usado em produção somente no
-     fluxo de **metas próprias** (`goal.write` + SELF via `localWorld`) e nos
-     núcleos de concessão C/D (sem UI). O resto do app usa:
-   - **API legada** (`authorizationPolicy.ts`): decisão **por `funcao`**
-     (GERENTE/COORDENADOR/…) + estado do recurso + helpers
-     (`permissaoAvaliacao.ts`, `visibilidadeColaboradores.ts`,
-     `relatorioService.ts`, `metaStorage.podeAprovarMetaNoCiclo`). Esta é a
-     superfície que a F4-09 precisa **substituir por chamadas ao engine**.
-3. **Dois vocabulários de capability (drift registrado — F4-06 Q6):** catálogo SQL
-   (21) × `Capability.ts` runtime (36). Coincidem por string apenas em
-   `settings.manage`, `evaluation.read/create/write`, `goal.write/approve`. O
-   runtime é a referência dos contratos F4-06/07; a F4-09 usa o vocabulário
-   runtime e propõe alinhamento (Q1).
+2. **Duas superfícies de autorização coexistem:** o **engine novo**
+   (`policyEngine/` + providers) é usado em produção somente no fluxo de **metas
+   próprias** (`goal.write` + SELF) e nos núcleos de concessão C/D (sem UI); o
+   restante do app usa a **API legada** (`authorizationPolicy.ts`), que decide **por
+   `funcao`** (GERENTE/COORDENADOR/…) + estado do recurso + helpers legados. A
+   F4-09 substitui a superfície legada por chamadas ao engine (D2).
+3. **Drift de vocabulário (Q1 fechada):** catálogo SQL (21) × `Capability.ts`
+   runtime (36), quase disjuntos, com várias capabilities runtime codificando
+   papel (`.manager/.coordinator/.board/.view.admin` etc.). **Capability passa a
+   representar AÇÃO**; papel é expresso por relação/scope/target/domainState
+   (Q1). Ver §6.3 (catálogo canônico) e o mapa de reconciliação.
 4. **Duas trilhas de identidade:** (a) Supabase Auth resolve identidade
    (user_profile/membership/org — **sem dados de colaborador/cargo**); (b)
-   Impersonação DEV escolhe um `Colaborador` sintético (matrícula/função/status).
-   **Não existe em src código mapeando user_profile → colaborador** — a ponte
-   existe no banco (`membership_collaborator_links` + `resolver_collaborador_vinculado`)
-   e está prevista para F5. Hoje o ator do engine é `actorId = String(matricula)`
-   no tenant sintético `organizacao-sintetica-local`.
-5. **Regra legada por cargo** é o que F4-09 erradica: nenhuma capability nasce de
-   `funcao`; a relação que autoriza (gestor da cadeia, coordenador direto,
-   colegiado/avaliador) é **dado estrutural/derivado** (gestorDireto,
-   avaliadoresColegiado, histórico organizacional, snapshot F3-08/09 após F5).
+   Impersonação DEV escolhe um `Colaborador` sintético. **Não existe em src
+   código mapeando user_profile → colaborador** — a ponte existe no banco
+   (`membership_collaborator_links` + `resolver_collaborador_vinculado`) e está
+   prevista para F5.
+5. **Mundo local pré-F5 (Q2 fechada):** para a F4-09 rodar antes da F5, será usado
+   **binding explícito DEV-only de capabilities por colaborador/identidade**
+   (nunca derivado de `funcao`; fail-closed fora de DEV; transitório). A F5
+   substitui pelo fluxo real `membership → access_role → capability`.
 
 ### 6.2 Domínios funcionais (inventário por domínio)
 
@@ -149,115 +144,156 @@ Legenda de estados: Ciclo `PLANEJADO|ATIVO|ENCERRADO|CANCELADO`; Avaliação
 `EM_ANDAMENTO|ATINGIDA|NAO_ATINGIDA`; Colaborador
 `ATIVO|LICENCA|DESLIGADO`.
 
-| Domínio (entidade) | Persistência (chave localStorage) | Services/repos | Páginas/componentes | Ops | Sensibilidade | Histórico/auditoria |
-|---|---|---|---|---|---|---|
-| Ciclos (`CicloAvaliacao`) | `feedback-control-ciclos` | `cicloAvaliacaoStorage`, `cicloEquipeService`, serviços cancelar/reabrir/corrigir/reabrir | `CiclosAvaliacaoPage`, `PainelCicloPage`, `PainelCiclosCoordenadorPage` | criar/ativar/encerrar/excluir(planejado)/editar período/config/corrigir período/cancelar/reabrir | Baixa (config de janela) | `cancelamento/encerramentos/reaberturas/correcoesPeriodo` |
-| Avaliações (`Feedback`) | `feedback-control-feedbacks` | `feedbackStorage`, `permissaoAvaliacao`, `progressoAvaliacao`, cancelar/reabrir, `cicloEquipeService` | `ColaboradorDetalhePage`, `NovoFeedbackPage`, `EditarFeedbackPage`, `FeedbackDetalhePage`, `MinhaAvaliacao(Detalhe)Page` | criar/editar(papéis)/concluir/cancelar/reabrir/ler | **MUITO ALTA** (notas, comentários, votos, feedback final) | `dataConclusao`, `canceladoPor*`, `reaberturas[]`, snapshots de expectativa; disponibilização ao avaliado só em `CONCLUIDA` |
-| Observações (`Observacao`) | `feedback-control-observacoes` | `observacaoStorage` | `ObservacoesColaborador`, filtro por ciclo | criar/editar/excluir (soft)/marcar comunicado/ler | **ALTA** (podem ser negativas; avaliado vê só `comunicado`) | `historico[]` (CRIAÇÃO/EDIÇÃO/EXCLUSÃO), `excluida` + autor |
-| Metas (`Meta`) | `feedback-control-metas` | `metaStorage` | `MinhasMetasPage`, `AcompanhamentoMetasPage`, `PainelCicloPage` | criar/editar/aprovar(excluir/acompanhar/finalizar) | Média (dono + aprovações) | `historico[]` (8 ações), soft delete, invalidação de aprovações |
-| Colaboradores (`Colaborador`) | `feedback-control-colaboradores` | `colaboradorStorage`, portas hexagonais (`CollaboratorRepository`) | `ColaboradoresPage`, `NovoColaborador/EditarColaborador/DetalhePage`, `InicioPage` | listar/criar/editar/ver detalhe | Alta (dados pessoais) | desligamento por status; movimentações em `HistoricoOrganizacional` |
-| Hist. organizacional (`MovimentacaoOrganizacional`) | `feedback-control-historico-organizacional` | `historicoOrganizacionalStorage` | `ColaboradorDetalhePage` | registrar/ler | Média | append-only; base "quem era o gestor na data/ciclo" |
-| Régua/notas (`EscalaAvaliacao`) | `feedback-control-escala-avaliacao` | `escalaAvaliacaoStorage` | `ConfiguracoesAparenciaPage` | ler/salvar/restaurar | Baixa (config) | histórico de versões preservado por storage |
-| Expectativa de cargo | `feedback-control-expectativas-cargo` | `expectativaCargoStorage` | `ConfiguracoesAparenciaPage` | ler/salvar/restaurar | Baixa | snapshots na criação de avaliação |
-| Branding/config | `feedback-control-branding` | `brandingStorage` | `ConfiguracoesAparenciaPage` | ler/salvar/resetar | Baixa | padrão + persistência |
-| Relatórios (derivado) | (não persiste; agrega painel+escala) | `relatorioService`, `exportarAvaliacaoPdf` | `RelatoriosPage` | ler/exportar | **ALTA** (agrega avaliações) | consolida só `PRONTA_PARA_FEEDBACK/CONCLUIDA`; coordenador só equipe direta |
+| Domínio (entidade) | Persistência (chave localStorage) | Services/repos | Páginas/componentes | Sensibilidade | Histórico/auditoria |
+|---|---|---|---|---|---|
+| Ciclos (`CicloAvaliacao`) | `feedback-control-ciclos` | `cicloAvaliacaoStorage`, `cicloEquipeService`, serviços cancelar/reabrir/corrigir | `CiclosAvaliacaoPage`, `PainelCicloPage`, `PainelCiclosCoordenadorPage` | Baixa (config de janela) | `cancelamento/encerramentos/reaberturas/correcoesPeriodo` |
+| Avaliações (`Feedback`) | `feedback-control-feedbacks` | `feedbackStorage`, `permissaoAvaliacao`, `progressoAvaliacao`, cancelar/reabrir | `ColaboradorDetalhePage`, `Novo/EditarFeedbackPage`, `FeedbackDetalhePage`, `MinhaAvaliacao(Detalhe)Page` | **MUITO ALTA** | `dataConclusao`, `canceladoPor*`, `reaberturas[]`; avaliado só `CONCLUIDA` |
+| Observações (`Observacao`) | `feedback-control-observacoes` | `observacaoStorage` | `ObservacoesColaborador` | **ALTA** (avaliado vê só `comunicado`) | `historico[]`, soft delete + autor |
+| Metas (`Meta`) | `feedback-control-metas` | `metaStorage` | `MinhasMetasPage`, `AcompanhamentoMetasPage`, `PainelCicloPage` | Média | `historico[]` (8 ações), soft delete, invalidação de aprovações |
+| Colaboradores (`Colaborador`) | `feedback-control-colaboradores` | `colaboradorStorage`, portas hexagonais | `ColaboradoresPage`, `Novo/EditarColaborador/DetalhePage`, `InicioPage` | Alta (dados pessoais) | desligamento por status; movimentações |
+| Hist. organizacional | `feedback-control-historico-organizacional` | `historicoOrganizacionalStorage` | `ColaboradorDetalhePage` | Média | append-only; base "gestor na data/ciclo" |
+| Régua/notas, expectativa, branding | chaves próprias dos storages | `escalaAvaliacaoStorage` etc. | `ConfiguracoesAparenciaPage` | Baixa | padrão + preservação |
+| Relatórios (derivado) | (não persiste) | `relatorioService`, `exportarAvaliacaoPdf` | `RelatoriosPage` | **ALTA** (agrega avaliações) | consolida só `PRONTA_PARA_FEEDBACK/CONCLUIDA` |
 
 Modelo de avaliação: `Feedback` pertence a um avaliado (`colaboradorId`) e a um
-ciclo por referência implícita `ano+ciclo` (1|2|3); notas por papel
-(`notaGerente/notaCoordenador/notaColegiado/notaFinal`) com autoria; o avaliado
-vê a avaliação somente `CONCLUIDA` e observações somente `comunicado`.
+ciclo por referência implícita `ano+ciclo` (1|2|3); notas por papel com autoria;
+o avaliado vê a avaliação somente `CONCLUIDA` e observações somente `comunicado`.
 
-## 7. Matriz de autorização (DOMÍNIO × AÇÃO × CAPABILITY × TARGET × SCOPE ×
-RELAÇÃO × ESTADO × TEMPORALIDADE × CONFIDENCIALIDADE × ORIGEM)
+### 6.3 Catálogo canônico de capabilities (Q1 fechada — estratégia)
 
-Convenção: capability = código runtime; target = tipo de recurso; scope =
+**Decisão:** capability = **ação**, nunca papel organizacional. Gerente,
+coordenador e colegiado são distinguidos por **relação + scope + target +
+domainState**, e por **quem recebe a capability** (configuração de `access_role`
+por membership — F4-01/F5), nunca por nome de capability com sufixo de papel.
+
+**Reconciliação das 21 SQL × 36 runtime:**
+
+1. O catálogo SQL da F4-01 já é majoritariamente de ação (`evaluation.cancel`,
+   `evaluation.reopen`, `goal.approve`…). Ele vira a **âncora canônica**.
+2. Capabilities runtime que codificam papel são **depreciadas e mapeadas** para a
+   ação canônica correspondente (a diferença real vai para scope/relação/
+   domainState):
+   - `evaluation.edit.manager` / `evaluation.edit.coordinator` /
+     `evaluation.edit.board` → **`evaluation.write`** (o papel que edita é
+     resolvido por scope DESCENDANTS/DIRECT_REPORTS/ASSIGNED + merge por papel
+     como regra funcional);
+   - `evaluation.view.admin` → **`evaluation.read`** (ler avaliação de terceiro
+     exige relação/scope; ler a própria exige SELF + `CONCLUIDA`);
+   - `evaluation.cancel.manager` → **`evaluation.cancel`**;
+   - `evaluation.reopen.manager` → **`evaluation.reopen`**;
+   - `cycle.cancel.manager` → **`cycle.cancel`**;
+   - `cycle.reopen.manager` → **`cycle.reopen`**;
+   - `cycle.period.correct.manager` → **`cycle.period.correct`**;
+   - `goal.approve.manager` / `goal.approve.coordinator` → **`goal.approve`**;
+   - `goal.*.own` → **`goal.write`** com scope **SELF** (+ `goal.read` para ver);
+   - `goal.view.admin` → **`goal.read`**;
+   - `report.view` → **`report.read`** (código SQL);
+   - `collaborator.list` → **`collaborator.read`** (dataset via scope);
+   - `collaborator.create` / `collaborator.edit` permanecem (ações), alinhadas ao
+     catálogo de gestão de cadastro;
+   - `observation.create/edit/delete` permanecem (ações), reconciliadas com
+     `observation.read/write` do catálogo (ver nota da matriz §7.3);
+   - `cycle.coordinator.list`, `cycle.management.view`, `cycle.team.panel.view`
+     → leituras administrativas de ciclo: **`cycle.read`** + scope (painel de
+     equipe = DIRECT_REPORTS/DESCENDANTS; administração = role com `cycle.read`
+     administrativo);
+   - `exceptional_access.grant`, `pilot_full_access.grant` permanecem (ações de
+     concessão, F4-06/F4-07).
+3. **Catálogo canônico proposto após F4-09 (uma única lista compartilhada — TS
+   union + linhas SQL sincronizadas):**
+   `collaborator.read/create/edit`; `cycle.read/manage/cancel/reopen/period.correct`;
+   `evaluation.read/create/write/cancel/reopen`; `goal.read/write/approve`;
+   `observation.read/create/edit/delete`; `report.read`; `settings.manage`;
+   `membership.read/manage`; `access_role.manage`; `org.structure.manage`;
+   `org.catalog.manage`; `exceptional_access.grant`; `pilot_full_access.grant`
+   (~27 códigos). As capabilities legadas com papel permanecem apenas como
+   **aliases de migração** (mapeadas ao canônico), nunca como novas decisões.
+
+## 7. Matriz de autorização (DOMÍNIO × AÇÃO × CAPABILITY(canônica) × TARGET ×
+SCOPE × RELAÇÃO × ESTADO/TEMPORALIDADE × CONFIDENCIALIDADE × ORIGEM)
+
+Convenção: capability = **ação canônica** (§6.3); scope =
 `SELF|DIRECT_REPORTS|DESCENDANTS|ORGANIZATIONAL_UNIT|ORGANIZATION|ASSIGNED`;
-origem = A/B (normal), C (exceptional), D (pilot — development only, nunca
-confidencial); coluna "quem/porquê" resume a regra (detalhe nas notas por
-domínio). Para operações hoje sem `authorize` no serviço (somente `can` na UI),
-a F4-09 adiciona o `authorize` (marcado ▸).
+"quem" = **relação resolvida por dado** (gerente da cadeia via `gestorDireto`
+na data; coordenador direto; membro de colegiado atribuído) **+ concessão da
+capability por role** — nunca cargo; origem A/B (normal), C (exceptional), D
+(pilot — development only, nunca confidencial). Operações que hoje têm somente
+`can` na UI recebem `authorize` no serviço (▸). `domainState` valida se a ação
+pode ocorrer naquele estado/momento (Q7).
 
-### 7.1 Ciclos (administração GERENTE + visão coordenador)
+### 7.1 Ciclos
 
-| Ação | Capability | Target | Scope | Regra (estado/temporalidade) | Quem pode / quem não pode |
+| Ação | Capability | Target | Scope | Estado/temporalidade | Quem pode / quem não pode |
 |---|---|---|---|---|---|
-| Ver administração de ciclos | `cycle.management.view` | ciclo | ORGANIZATION | — | GERENTE (na A/B, ver Q sobre origem da capability pré-F5) |
-| Criar/ativar/encerrar ciclo | `cycle.management.view` | ciclo | ORGANIZATION | transição PLANEJADO→ATIVO→ENCERRADO; encerrar exige pendências resolvidas | gerente do tenant; demais: DENY |
-| Corrigir período de ciclo ATIVO | `cycle.period.correct.manager` | ciclo | ORGANIZATION | só ATIVO; justificativa | gerente; coordenador: DENY |
-| Cancelar ciclo ATIVO | `cycle.cancel.manager` | ciclo | ORGANIZATION | só ATIVO; auditoria | gerente |
-| Reabrir ciclo ENCERRADO | `cycle.reopen.manager` | ciclo | ORGANIZATION | só ENCERRADO; impede 2 ATIVOS | gerente |
-| Excluir ciclo PLANEJADO | `cycle.management.view` | ciclo | ORGANIZATION | só PLANEJADO e sem avaliações preenchidas | gerente |
-| Painel de ciclo (equipe) | `cycle.team.panel.view` | colaborador-list/ciclo | DIRECT_REPORTS (coordenador) / DESCENDANTS (gerente) | dataset = colaboradores visíveis na data | gerente (descendentes) e coordenador (diretos), conforme §7.6; usuário comum: DENY |
-| Painel agregado do coordenador | `cycle.coordinator.list` | ciclo | DIRECT_REPORTS | apenas ciclos em que é coordenador | coordenador; demais: DENY |
+| Ver administração de ciclos | `cycle.read` | ciclo | ORGANIZATION | — | role administrativa com `cycle.read`; demais: DENY |
+| Criar/ativar/encerrar/configurar ciclo | `cycle.manage` | ciclo | ORGANIZATION | transições legais; encerrar exige pendências resolvidas (domainState) | role administrativa com `cycle.manage`; demais: DENY |
+| Corrigir período (ciclo ATIVO) | `cycle.period.correct` | ciclo | ORGANIZATION | só ATIVO; justificativa (domainState) | role administrativa (gerente) com `cycle.period.correct`; coordenador: DENY |
+| Cancelar ciclo (ATIVO) | `cycle.cancel` | ciclo | ORGANIZATION | só ATIVO (domainState); auditoria | role administrativa (gerente); demais: DENY |
+| Reabrir ciclo (ENCERRADO) | `cycle.reopen` | ciclo | ORGANIZATION | só ENCERRADO; impede 2 ATIVOS (domainState) | role administrativa (gerente) |
+| Excluir ciclo PLANEJADO | `cycle.manage` | ciclo | ORGANIZATION | só PLANEJADO e sem avaliações preenchidas (domainState) | role administrativa |
+| Painel de ciclo (equipe/coordenador) | `cycle.read` | colaborador-list/ciclo | DIRECT_REPORTS (coordenador) / DESCENDANTS (gerente) | dataset = colaboradores visíveis na data | gerente (descendentes) e coordenador (diretos) no alcance; usuário comum: DENY |
 
-### 7.2 Avaliações (administração: quem avalia/edita/gerencia)
+### 7.2 Avaliações
 
-Base de relação (dado estrutural, não cargo): gerente = gerente responsável na
-cadeia do avaliado (`gestorDiretoMatricula` ↑ até GERENTE); coordenador =
-coordenador direto de avaliado ANALISTA/ESTAGIÁRIO; colegiado = membro do
-colegiado do avaliado (derivado de F3-08 após F5; hoje do
-`avaliadoresColegiadoMatriculas` + histórico).
-
-| Ação | Capability | Target | Scope | Regra (estado) | Quem pode / quem não pode |
+| Ação | Capability | Target | Scope | Estado/temporalidade/confidencial | Quem pode / quem não pode |
 |---|---|---|---|---|---|
-| Criar avaliação do avaliado no ciclo | `evaluation.create` | evaluation (avaliado×ciclo) | DESCENDANTS (gerente)/DIRECT_REPORTS (coordenador)/ASSIGNED (colegiado) | ciclo ≠ CANCELADO; avaliado ATIVO; avaliado elegível no ciclo | gerente/coordenador/colegiado com relação; ADMIN comum sem relação: DENY; avaliado (SELF): DENY |
-| Ler avaliação de terceiro (avaliador/admin) | `evaluation.read` (admin: `evaluation.view.admin`) | evaluation | DIRECT_REPORTS/DESCENDANTS/ASSIGNED | estado qualquer, se autorizado; sem autorização ⇒ DENY/not-found | avaliador com relação; **ex-gestor/fora do alcance: DENY**; histórico só com regra explícita |
-| Ler própria avaliação | `evaluation.read` | evaluation (SELF) | SELF | **somente CONCLUIDA** e ciclo ≠ CANCELADO | avaliado; antes da liberação: DENY |
-| Editar (papel gerente) | `evaluation.edit.manager` | evaluation | DESCENDANTS | ciclo ≠ CANCELADO e status ≠ CONCLUIDA/CANCELADA; merge por papel | gerente da cadeia |
-| Editar (papel coordenador) | `evaluation.edit.coordinator` | evaluation | DIRECT_REPORTS | idem; avaliado ANALISTA/ESTAGIÁRIO | coordenador direto |
-| Editar (papel colegiado) | `evaluation.edit.board` | evaluation | ASSIGNED | idem | membro do colegiado atribuído |
-| Concluir/pronta para feedback | `evaluation.write` | evaluation | conforme papel | transições legais | quem pode editar o papel |
-| Cancelar avaliação | `evaluation.cancel.manager` | evaluation | DESCENDANTS | ciclo ≠ CANCELADO; status ≠ CANCELADA | gerente da cadeia (não coordenador/colegiado) |
-| Reabrir avaliação CONCLUIDA | `evaluation.reopen.manager` | evaluation | DESCENDANTS | status CONCLUIDA; ciclo ≠ ENCERRADO/CANCELADO | gerente da cadeia |
-| Acesso excepcional a conteúdo de terceiros | `evaluation.read` via C | evaluation (+cycleId) | C | somente leitura; ciclo obrigatório; A/B DENY + confidencial; 1 grant; janela | beneficiário do grant C; revogado/expirado ⇒ DENY |
-| Avaliado ler avaliação (visão Minha Avaliação) | `evaluation.read` | evaluation (SELF) | SELF | CONCLUIDA + ciclo ≠ CANCELADO | avaliado |
+| Criar avaliação do avaliado no ciclo | `evaluation.create` | evaluation (avaliado×ciclo) | DESCENDANTS / DIRECT_REPORTS / ASSIGNED | ciclo ≠ CANCELADO; avaliado ATIVO e elegível (domainState) | gerente/coordenador/colegiado com relação; ADMIN comum sem relação: DENY; avaliado (SELF): DENY |
+| Ler avaliação de terceiro (avaliador/admin) | `evaluation.read` | evaluation | DIRECT_REPORTS / DESCENDANTS / ASSIGNED | confidencial; sem relação ⇒ DENY/not-found; histórico só com regra explícita (Q5) | avaliador com relação; ex-gestor/fora do alcance: DENY |
+| Ler própria avaliação | `evaluation.read` | evaluation (SELF) | SELF | **somente `CONCLUIDA`** e ciclo ≠ CANCELADO (Q4; SELF nunca supera) | avaliado; antes da liberação: DENY |
+| Editar/avaliar por papel | `evaluation.write` | evaluation | DESCENDANTS (gerente) / DIRECT_REPORTS (coordenador) / ASSIGNED (colegiado) | ciclo ≠ CANCELADO e status ≠ CONCLUIDA/CANCELADA; merge por papel é regra funcional | gerente/coordenador/colegiado com relação (papel por scope); demais: DENY |
+| Cancelar avaliação | `evaluation.cancel` | evaluation | DESCENDANTS (cadeia do gerente) | ciclo ≠ CANCELADO; status ≠ CANCELADA (domainState) | role de gestão com `evaluation.cancel` na cadeia (regra funcional "só gerente" mantida por concessão+scope); coordenador/colegiado: DENY |
+| Reabrir avaliação CONCLUIDA | `evaluation.reopen` | evaluation | DESCENDANTS (cadeia do gerente) | status CONCLUIDA; ciclo ≠ ENCERRADO/CANCELADO (domainState) | role de gestão com `evaluation.reopen` na cadeia |
+| Acesso excepcional (C) | `evaluation.read` via C | evaluation (+cycleId) | C | somente leitura; ciclo obrigatório; A/B DENY + confidencial; 1 grant; janela | beneficiário do grant C; revogado/expirado ⇒ DENY |
 
-### 7.3 Observações (quem pode criar/ver/editar/excluir/comunicar)
+### 7.3 Observações
 
-| Ação | Capability | Target | Scope | Regra | Quem pode / quem não pode |
+| Ação | Capability | Target | Scope | Estado/temporalidade/confidencial | Quem pode / quem não pode |
 |---|---|---|---|---|---|
-| Criar observação sobre colaborador | `observation.create` | observation (colaborador×ciclo) | DIRECT_REPORTS/DESCENDANTS | ciclo ATIVO; avaliado ≠ DESLIGADO | gerente/coordenador (na relação); avaliado: DENY |
-| Editar observação | `observation.edit` ▸(add authorize) | observation | DIRECT_REPORTS/DESCENDANTS | ciclo ATIVO; autor/gestor no alcance | gerente/coordenador; demais: DENY |
-| Excluir observação | `observation.delete` ▸(add authorize) | observation | DIRECT_REPORTS/DESCENDANTS | ciclo ATIVO; soft delete + histórico | gerente/coordenador |
-| Marcar como `Comunicado` | `observation.edit` ▸ | observation | DIRECT_REPORTS/DESCENDANTS | decisão do gestor/coordenador | gestor/coordenador |
-| Colaborador ver observações | leitura restrita (não é capability `observation.read` genérica para o avaliado) | observation (SELF, só ciclo) | SELF | **somente `comunicado=true`** do próprio ciclo; não-comunicadas invisíveis | avaliado (comunicadas); não-comunicadas: DENY mesmo SELF |
+| Criar observação sobre colaborador | `observation.create` | observation (colaborador×ciclo) | DIRECT_REPORTS / DESCENDANTS | ciclo ATIVO; avaliado ≠ DESLIGADO (domainState) | gerente/coordenador na relação; avaliado: DENY |
+| Editar observação | `observation.edit` ▸(add authorize) | observation | DIRECT_REPORTS / DESCENDANTS | ciclo ATIVO; autor/gestor no alcance | gerente/coordenador; demais: DENY |
+| Excluir observação | `observation.delete` ▸(add authorize) | observation | DIRECT_REPORTS / DESCENDANTS | ciclo ATIVO; soft delete + histórico | gerente/coordenador |
+| Marcar como `Comunicado` | `observation.edit` ▸ | observation | DIRECT_REPORTS / DESCENDANTS | ato de disponibilização ao avaliado | gerente/coordenador |
+| Colaborador ver observações do próprio ciclo | regra funcional sobre dados (não abre não-comunicado) | observation (SELF, só ciclo) | SELF | **somente `comunicado=true`** do próprio ciclo | avaliado (comunicadas); não-comunicadas: DENY mesmo SELF |
+
+> Nota de reconciliação (§6.3): `observation.edit`/`observation.delete` e
+> `observation.read/write` do catálogo podem ser unificados na implementação como
+> ações granulares canônicas; o essencial (Q1) é que nenhum código carregue papel
+> no nome. A granularidade de edição vs. exclusão é mantida por serem ações
+> distintas com auditoria própria.
 
 ### 7.4 Metas
 
+| Ação | Capability | Target | Scope | Estado/temporalidade | Quem pode / quem não pode |
+|---|---|---|---|---|---|
+| Criar/editar/acompanhar/finalizar meta própria | `goal.write` | goal (owner SELF) | SELF | ciclo ATIVO; dono = ator; perfil com fluxo próprio é regra funcional (Q3) | colaborador dono (conforme perfil funcional atual — Q3 preserva a regra do produto) |
+| Aprovar meta (coordenador/gerente) | `goal.approve` | goal | DIRECT_REPORTS (coordenador) / DESCENDANTS (gerente) | ciclo ATIVO; meta do subordinado no alcance (domainState) | coordenador direto / gerente da cadeia (papel por scope) |
+| Acompanhar/ver metas de terceiro | `goal.read` | goal | DIRECT_REPORTS / DESCENDANTS | ciclo ATIVO | gerente/coordenador no alcance |
+| Metas do colegiado | — | — | — | regra funcional de produto (Q3) | colegiado não obtém hierarquia nem metas por ASSIGNED de avaliação (F4-04) |
+
+### 7.5 Relatórios e dashboards
+
 | Ação | Capability | Target | Scope | Regra | Quem pode / quem não pode |
 |---|---|---|---|---|---|
-| Criar/editar/excluir/acompanhar/finalizar meta própria | `goal.create.own/edit.own/delete.own/progress.own/finalize.own` (base `goal.write`+SELF) | goal (owner SELF) | SELF | ciclo ATIVO; dono = ator; perfil com fluxos próprios (definição em Q3) | colaborador dono (não-gerente, conforme perfil funcional); gerente dono: ver Q3 |
-| Aprovar meta (coordenador) | `goal.approve.coordinator` | goal | DIRECT_REPORTS | ciclo ATIVO; meta do subordinado | coordenador direto |
-| Aprovar meta (gerente) | `goal.approve.manager` | goal | DESCENDANTS | ciclo ATIVO | gerente responsável na cadeia |
-| Aprovar meta (colegiado) | `goal.approve` | goal | ASSIGNED | se a regra funcional prevê colegiado em metas (ver F4-04: `goal.*` não usa ASSIGNED de evaluation — Q) | colegiado só onde previsto; não vira hierarquia |
-| Acompanhar metas de terceiro | `goal.view.admin` | goal | DIRECT_REPORTS/DESCENDANTS | ciclo ATIVO | gerente/coordenador no alcance |
-
-### 7.5 Relatórios e dashboard
-
-| Ação | Capability | Target | Scope | Regra | Quem pode / quem não pode |
-|---|---|---|---|---|---|
-| Ver relatórios | `report.view` | relatório (dataset colaboradores) | DIRECT_REPORTS (coordenador) / DESCENDANTS (gerente) | dataset limitado antes da agregação (§12); consolida só PRONTA_PARA_FEEDBACK/CONCLUIDA; coordenador só equipe direta (não colegiado) | gerente/coordenador no alcance; **ADMIN comum: DENY**; **D não cobre `report.view`**; C não abre relatório genérico |
-| Dashboard/Início | `cycle.team.panel.view`/`goal.view.admin` | conforme | conforme §7.1/7.4 | dataset visível | conforme |
+| Ver relatórios | `report.read` | relatório (dataset colaboradores) | DIRECT_REPORTS (coordenador) / DESCENDANTS (gerente) | **limit-then-aggregate (D12)**; consolida só `PRONTA_PARA_FEEDBACK/CONCLUIDA`; coordenador só equipe direta | gerente/coordenador no alcance; ADMIN comum: DENY; D não cobre `report.read`; C não abre relatório genérico |
 
 ### 7.6 Escopo de colaboradores visíveis (base funcional)
 
-- gerente: descendentes da cadeia (BFS por gestorDireto) — equivalente a
-  DESCENDANTS;
-- coordenador: subordinados diretos ∪ colegiado onde é avaliador (para
-  operação/avaliação); em **relatório**: somente equipe direta;
+- gerente: descendentes da cadeia (equivalente a DESCENDANTS);
+- coordenador: subordinados diretos ∪ colegiado onde é avaliador (para operação);
+  em **relatório**: somente equipe direta;
 - demais: `[]` (fail-closed);
 - a F4-09 substitui `getColaboradoresVisiveis`/`authorizationPolicy` por
   providers do engine que derivam DIRECT_REPORTS/DESCENDANTS/ASSIGNED dos dados
-  (gestorDireto + colegiado + histórico na data), **sem cargo**.
+  (gestorDireto + colegiado + histórico na data), **sem cargo** (D2/D3).
 
 ### 7.7 Origem de autorização e confidencialidade
 
 - conteúdo de avaliação/feedback e observações não-comunicadas = **confidencial**
   (classificação soberana por domínio/probe `isTargetConfidential`); relatório
   consolidado = confidencial;
-- A/B tentam primeiro; confidencial: A/B DENY ⇒ somente C (leitura, contrato
-  F4-06); não-confidencial: A/B DENY ⇒ D possível (development only, F4-07);
-  indeterminada ⇒ DENY;
+- A/B tentam primeiro; confidencial: A/B DENY ⇒ somente C (leitura, F4-06);
+  não-confidencial: A/B DENY ⇒ D possível (development only, F4-07); indeterminada
+  ⇒ DENY;
 - C fora de `listAllowedTargets`; D não cobre confidencial; C/D revogados/
   expirados ⇒ DENY.
 
@@ -271,7 +307,7 @@ colegiado do avaliado (derivado de F3-08 após F5; hoje do
   nunca consultado em runtime; páginas/serviços não decidem;
 - pipeline fail-closed (identidade→profile→membership→tenant→capability→
   capability×target→scope/relação→data→domainState→ALLOW);
-- origem C/D só como fallback pontual quando A/B DENY (§8.2); erros públicos:
+- origem C/D só como fallback pontual quando A/B DENY (§7.7); erros públicos:
   cross-tenant/target inválido ⇒ NOT_FOUND; estado inválido ⇒ CONFLICT; demais ⇒
   FORBIDDEN.
 
@@ -279,19 +315,17 @@ colegiado do avaliado (derivado de F3-08 após F5; hoje do
 
 - Na **camada de serviço/use-case**, imediatamente antes da mutação e antes de
   retornar leitura crítica — nunca na UI;
-- alvo/contexto resolvidos do **recurso carregado** (nunca `collaboratorId`/
-  `evaluationId`/`cycleId`/`organizationId` do cliente); tenant derivado do
-  recurso;
+- alvo/contexto resolvidos do **recurso carregado** (nunca ids/org do cliente);
+  tenant derivado do recurso;
 - TOCTOU: `can`/`listAllowedTargets` não substituem `authorize`; com F5, a
   revalidação ocorre na mesma RPC/transação (F4-03 D9) com RLS por linha;
-- a F4-09 adiciona `authorize` onde hoje só existe `can` (marcado ▸ na §7), em
-  especial: edição/exclusão de observação, abertura da página de edição de
-  avaliação e leituras administrativas sensíveis.
+- a F4-09 adiciona `authorize` onde hoje só existe `can` (▸ na §7), em especial:
+  edição/exclusão de observação e leituras administrativas sensíveis.
 
 ### 8.2 Origens A/B, C, D
 
 - A/B = membership → role → capability → scope (fonte real após F5; no mundo
-  local, binding explícito de desenvolvimento — Q2);
+  local, binding DEV-only explícito — Q2/D3);
 - C (F4-06): allowlist fechada `evaluation.read`, leitura, ciclo obrigatório,
   1 grant por (beneficiário, capability, target, tenant, janela); avaliada só
   quando A/B DENY e confidencial; não revela inventário;
@@ -304,8 +338,8 @@ colegiado do avaliado (derivado de F3-08 após F5; hoje do
 
 **SELF não significa "posso ler qualquer dado sobre mim"**: a própria avaliação
 pode estar bloqueada pelo estado (publicação) — SELF + capability + estado +
-temporalidade + confidencialidade avaliados juntos. Vale a mesma análise para
-DIRECT_REPORTS/DESCENDANTS/UNIT/ORGANIZATION/ASSIGNED:
+temporalidade + confidencialidade avaliados juntos (Q4). Vale a mesma análise
+para DIRECT_REPORTS/DESCENDANTS/UNIT/ORGANIZATION/ASSIGNED:
 
 - DIRECT_REPORTS/DESCENDANTS dão **alcance** sobre colaboradores da árvore na
   data — não liberam conteúdo; a capability e o estado decidem a ação;
@@ -321,10 +355,10 @@ DIRECT_REPORTS/DESCENDANTS/UNIT/ORGANIZATION/ASSIGNED:
 Distinguir: relação atual (viva); relação no momento da avaliação; snapshot/
 histórico (F3-08 imutável); assignment histórico; substituição temporária
 (F4-05, janela `[valid_from, valid_to)`, contexto vivo); mudança de gestor/
-coordenador (sucessão F3-09); desligamento/licença (status do colaborador).
+coordenador (sucessão F3-09); desligamento/licença.
 
 - relação atual **não concede automaticamente** acesso histórico sem regra
-  explícita;
+  explícita (Q5: DENY por padrão);
 - relação passada **não continua concedendo** acesso atual (ex-gestor perde;
   substituição expira; desligamento remove);
 - ciclo avaliativo é congelado (responsável/colegiado = F3-08/09);
@@ -332,29 +366,27 @@ coordenador (sucessão F3-09); desligamento/licença (status do colaborador).
 
 ## 11. Observações e feedback (análise explícita)
 
-- conteúdo sensível: observações podem ser negativas sobre o colaborador; a
-  visão do colaborador é **somente `comunicado=true`** do próprio ciclo
-  (baseline/Issue #96) — não-comunicadas nunca chegam ao avaliado (nem mesmo
-  SELF);
+- conteúdo sensível: observações podem ser negativas; a visão do colaborador é
+  **somente `comunicado=true`** do próprio ciclo — não-comunicadas nunca chegam
+  ao avaliado (nem SELF);
 - criar: gestor/coordenador no alcance, ciclo ATIVO, avaliado ativo;
-- editar/excluir: autorizado a gestor/coordenador no alcance, ciclo ATIVO, com
-  `authorize` (hoje parcialmente só `can`);
-- "marcar como comunicado": decisão de gestor/coordenador (ato de
-  disponibilização ao avaliado);
+- editar/excluir: gestor/coordenador no alcance, ciclo ATIVO, com `authorize`
+  (hoje parcialmente só `can`);
+- "marcar como comunicado": ato de disponibilização ao avaliado;
 - histórico/rastreabilidade: soft delete + `historico[]` + autores preservados;
-- feedback final de gerente/coordenador e votos de colegiado são os campos mais
-  sensíveis — nunca expostos por SELF antes de `CONCLUIDA` e nunca por
-  agregação não autorizada (§12).
+- feedback final e votos de colegiado são os campos mais sensíveis — nunca por
+  SELF antes de `CONCLUIDA` e nunca por agregação não autorizada.
 
-## 12. Relatórios e agregações
+## 12. Relatórios e agregações (D12)
 
-- `report.view` não está no bundle do ADMIN comum; D não cobre `report.view`;
-  C não abre relatório como domínio genérico;
-- **limitar o dataset antes da agregação** (limit-then-aggregate fail-closed):
-  a consulta agrega sobre o conjunto de alvos autorizados (scopes do ator);
-  sem scope ⇒ dataset vazio ⇒ agregado vazio;
-- filtros/export herdam o dataset autorizado; contagens não revelam existência
-  de dados confidenciais fora do alcance.
+- `report.read` não está no bundle do ADMIN comum; D não cobre `report.read`; C
+  não abre relatório como domínio genérico;
+- **limit-then-aggregate (D12):** (1) determinar os targets/dataset autorizados;
+  (2) limitar o dataset; (3) só então agregar/calcular/exportar. Proibido
+  agregar o dataset completo e filtrar depois. Sem targets autorizados ⇒ dataset
+  vazio ⇒ agregado vazio. Vale também após a migração F5.
+- filtros/export herdam o dataset autorizado; contagens não revelam existência de
+  dados confidenciais fora do alcance.
 
 ## 13. Ameaças a considerar (threat model e testes futuros)
 
@@ -364,24 +396,27 @@ acesso antecipado; acesso histórico indevido; ex-gestor; gestor fora do scope;
 usuário comum tentando relatório gerencial; inferência de existência por erro;
 manipulação de estado no frontend; localStorage adulterado; refresh/session
 stale; capability removida durante a sessão; assignment removido; substituição
-expirada; C revogado; D revogado.
+expirada; C revogado; D revogado; **ADMIN (função/perfil administrativo) usado
+como bypass de conteúdo confidencial (D11)**; agregação sobre dataset completo
+seguida de filtro (D12).
 
 ## 14. Arquitetura de aplicação (fluxo seguro por operação)
 
 1. **Entrada funcional** (page → hook → service): UI pede uma operação
-   (capability) sobre um recurso;
+   (capability de ação) sobre um recurso;
 2. **Service/use-case** (fronteira de aplicação) é o único executor e o único que
    chama o engine;
-3. **Carregar o recurso** (storage/repositório) para derivar alvo/contexto; o
-   tenant é derivado do recurso; nunca confiar em ids/org do cliente;
+3. **Carregar o recurso** para derivar alvo/contexto; o tenant é derivado do
+   recurso; nunca confiar em ids/org do cliente;
 4. **`authorize`** no serviço imediatamente antes da operação (TOCTOU), com
-   origens A/B→C/D conforme §8.2 e probe de domínio (estado) soberano;
+   origens A/B→C/D conforme §7.7 e probe de domínio (domainState) soberano
+   (Q7);
 5. **Persistir/retornar** após ALLOW; falha → erro público F0-05 (mutação) ou
    vazio/not-found genérico (leitura confidencial).
 
-Evita: carregar confidencial antes de autorizar (quando carregar em si vaza,
-usar predicação vazia/not-found); confiar em target/org do frontend; duplicar
-autorização em UI; autorizar por cargo/nome; bypass por chamada direta.
+Evita: carregar confidencial antes de autorizar; confiar em target/org do
+frontend; duplicar autorização em UI; autorizar por cargo/nome; bypass por
+chamada direta; ADMIN como superusuário de conteúdo (D11).
 
 ## 15. F4-08 e F5
 
@@ -392,140 +427,116 @@ autorização em UI; autorizar por cargo/nome; bypass por chamada direta.
 - **Depende de F5:** RLS em tabelas funcionais e impossibilidade de bypass por
   chamada direta a API/banco. Quando os domínios migrarem, cada tabela funcional
   nasce com `ENABLE RLS` + policy por comando + `organization_id` + classificação
-  D16 e revalidação atômica na RPC/transação (F4-03 D9).
+  D16 e revalidação atômica na RPC/transação (F4-03 D9); **D12 (limit-then-
+  aggregate) vale também após F5**.
 - **Invariantes que devem sobreviver à migração:** avaliação só acessível com
   autorização explícita (idade não reduz confidencialidade); avaliado vê somente
   observações `comunicado`; colegiado (ASSIGNED) sem hierarquia; ADMIN sem leitura
-  de confidencial sem grant excepcional; mutação respeita estado do ciclo/
-  recurso; SELF restrito por estado; **nenhuma segunda regra paralela de
-  autorização**.
+  de confidencial sem grant excepcional (D11); mutação respeita estado do ciclo/
+  recurso; SELF restrito por estado; nenhuma segunda regra paralela.
 
 ## 16. Matriz de testes (desenho; priorizar NEGATIVOS)
 
-Obrigatórios (refinados na implementação; decisões §18 e questões §17 pendentes
-não bloqueiam a lista): funcionário A → avaliação de B = DENY; SELF antes da
-liberação = DENY; SELF após liberação (quando permitido) = ALLOW; ex-gestor →
+Obrigatórios (vocabulário canônico; implementação após merge F4-08): funcionário
+A → avaliação de B = DENY; SELF antes da liberação (`PRONTA_PARA_FEEDBACK` e
+anteriores) = DENY; SELF em `CONCLUIDA` (quando permitido) = ALLOW; ex-gestor →
 histórico indevido = DENY; gestor correto → recurso dentro do scope = ALLOW;
 gestor → fora do scope = DENY; ID manipulado = DENY; C válido = ALLOW somente no
 contrato C; C revogado = DENY; D válido somente onde permitido; D nunca abre
 confidencial; D revogado = DENY; substituição válida = ALLOW na janela;
 substituição expirada = DENY; assignment removido = DENY; capability removida =
-DENY; relatório não vaza dados fora do dataset autorizado; usuário não
-autorizado não enumera existência de avaliações; mutação direta sem UI = DENY;
-observação não-comunicada invisível ao avaliado; ciclo cancelado bloqueia
-criar/editar; colegiado não obtém hierarquia do avaliado; ADMIN comum não lê
-confidencial; localStorage adulterado não concede (sem persistência real, o
-enforcement é de aplicação — teste de regressão do gate único).
+DENY; **ADMIN sem relação lendo avaliação/observação não-comunicada = DENY
+(D11)**; relatório não vaza dados fora do dataset autorizado (D12 — agregar
+dataset completo e filtrar depois = proibido); usuário não autorizado não
+enumera existência de avaliações; mutação direta sem UI = DENY; observação
+não-comunicada invisível ao avaliado; ciclo cancelado bloqueia criar/editar;
+colegiado não obtém hierarquia do avaliado; nenhum mapeamento `funcao →
+capability` em runtime (regressão).
 
-## 17. Questões para validação
+## 17. Questões — Q1–Q7 (TODAS FECHADAS)
 
-Convenção do projeto: dúvida/ambiguidade/decisão de negócio **não é assumida
-silenciosamente** — registrada abaixo. O desenho pode ser concluído e o PR
-aberto mesmo com questões abertas; **a implementação não começa enquanto
-decisões arquiteturais permanecerem abertas** (§18/§19).
+Histórico das questões abertas no desenho, agora **fechadas**:
 
-1. **Q1 — Vocabulário de capabilities (drift 21 SQL × 36 runtime).**
-   Contexto: catálogo SQL (F4-01) e `Capability.ts` quase disjuntos; runtime é a
-   referência das F4-06/07 e do código. Decisão necessária: qual vocabulário
-   governa a F4-09 e como reconciliar (espelhar runtime no catálogo? manter 2
-   camadas com mapa explícito?). Alternativas: (a) alinhar o catálogo SQL ao
-   runtime (granular, sem capability por papel); (b) derivar runtime do catálogo
-   (perde granularidade funcional). Recomendação: (a) — unificar com
-   capabilities de domínio.verbo genéricas (avaliar remover variantes
-   `.manager/.coordinator/.board` que codificam papel — a F4 separa capability do
-   quem). Impacto: migrations F4-01, providers, testes. Seções: §6.1(3), §7.
-2. **Q2 — Origem de capability no mundo local (pré-F5).** Contexto: o engine
-   exige capability de membership→role; hoje `localWorld` só dá `goal.write` e
-   não há roles locais. Decisão: como o ambiente DEV/local concede capabilities
-   funcionais sem reintroduzir cargo e sem simular F5? Alternativas: (a) binding
-   local explícito por colaborador (rolo de "perfil de desenvolvimento") que o
-   F5 substitui por membership do banco; (b) usar o perfil PILOT D como mundo de
-   teste (não confidencial) + C para teste de confidencial. Recomendação: (a),
-   marcado DEV-only com fail-closed fora de DEV; nenhum mapeamento funcao→
-   capability em runtime. Impacto: §6.1(2,4), §8.2, §7. Seções: §7, §8.
-3. **Q3 — SELF/metas e perfis com fluxos próprios.** Contexto: hoje
-   `perfilPossuiFluxosPropriosAtuais` exclui GERENTE de metas próprias; "SELF não
-   abre tudo" e a regra de negócio decide. Decisão: quais funções/perfis têm
-   ciclo "Minhas Metas"/"Minha Avaliação" (e se o gerente é excluído por regra
-   funcional, não por cargo de autorização). Recomendação: manter a regra
-   funcional como domainState/probe e confirmar com negócio. Seções: §7.2/7.4,
-   §9.
-4. **Q4 — Liberação/publicação da avaliação ao avaliado.** Contexto: hoje o
-   avaliado vê a avaliação só `CONCLUIDA`; existe `PRONTA_PARA_FEEDBACK` para
-   consolidação. Decisão: qual é o marco de "liberação" e se o avaliado deve ter
-   acesso em `PRONTA_PARA_FEEDBACK` (após feedback do gestor) ou apenas
-   `CONCLUIDA`; notificação? Recomendação: confirmar com negócio; tratar o marco
-   como estado no domainState (nunca "idade"). Seções: §4, §7.2, §9.
-5. **Q5 — Acesso do gestor a avaliação histórica anterior à sua gestão.**
-   Contexto: gestor atual, equipe assumida agora; contrato não prevê acesso
-   retroativo automático. Decisão: negar por padrão ou permitir leitura
-   administrativa com regra explícita (auditável)? Recomendação: DENY por padrão
-   (histórico = snapshot congelado); ALLOW apenas com regra explícita de domínio.
-   Seções: §4.1(4), §10.
-6. **Q6 — Observações e relatórios como domínio no contrato C.** Contexto:
-   F4-06 cobre piloto `evaluation.read`; relatório e observações não entram como
-   domínio genérico em C. Decisão: manter fora de C nesta fase? Recomendação:
-   sim (nada muda em C sem nova versão/contrato). Seções: §7.3/7.5, §8.2.
-7. **Q7 — Encerramento com pendências e correção de período × autorização.**
-   Contexto: regras de pendências/encerramento existem em serviço. Decisão: se
-   todas as mutações de encerramento passam por authorize (capability +
-   domainState) ou apenas domainState com capability administrativa já
-   concedida. Recomendação: authorize + domainState; confirmar capability de
-   encerramento no vocabulário (Q1). Seções: §7.1.
+1. **Q1 — Vocabulário de capabilities — FECHADA.** Capability representa **ação**,
+   não papel. Gerente/coordenador/colegiado distinguidos por relação/scope/
+   target/domainState e por concessão de role — nunca por capability com sufixo
+   de papel. Estratégia de reconciliação e catálogo canônico em §6.3; nenhum
+   mapeamento `funcao → capability` em runtime.
+2. **Q2 — Origem de capability no mundo local (pré-F5) — FECHADA.** Binding
+   **explícito DEV-only** de capabilities por colaborador/identidade para permitir
+   a F4-09 antes da F5; nunca derivado de `funcao`; fail-closed fora de DEV;
+   transitório; F5 substitui por `membership → access_role → capability`.
+3. **Q3 — SELF/metas e perfis com fluxos próprios — FECHADA.** Preservar nesta
+   fase as regras funcionais atuais do produto; não redesenhar quem possui fluxo
+   próprio durante a F4-09. Diferença funcional por perfil é modelada em
+   domainState/regra funcional, nunca transformando cargo em fonte de autorização.
+   Revisão de produto eventual = backlog separado.
+4. **Q4 — Publicação/liberação da avaliação — FECHADA.** O avaliado lê a própria
+   avaliação **somente em `CONCLUIDA`**. `PRONTA_PARA_FEEDBACK` permanece
+   confidencial (não é publicação). SELF nunca supera essa regra.
+5. **Q5 — Gestor atual × avaliação histórica anterior — FECHADA.** **DENY por
+   padrão**: assumir responsabilidade atual não concede acesso a avaliações
+   históricas anteriores à relação. Histórico usa relação/snapshot soberano do
+   período. Exceção futura: explícita, capability específica, auditável e
+   desenhada separadamente.
+6. **Q6 — C para observações/relatórios — FECHADA.** Não ampliar o contrato C
+   nesta fase; C permanece exatamente conforme F4-06; observações e relatórios não
+   se tornam acessíveis genericamente por C.
+7. **Q7 — Encerramento e mutações administrativas — FECHADA.** Toda mutação
+   administrativa funcional passa por **`authorize()` + `domainState`**: a
+   capability responde se o ator pode executar a ação; o domainState responde se a
+   ação pode ocorrer naquele estado/momento. Nenhuma substitui a outra.
 
-## 18. Decisões arquiteturais (fechadas neste desenho)
+## 18. Decisões arquiteturais — D1–D12 (TODAS FECHADAS)
 
 1. **D1 — Fronteira de aplicação primeiro.** A F4-09 aplica o Policy Engine aos
-   domínios funcionais na camada de serviço (enforcement `authorize`) e usa
-   `can` somente para UX; o RLS dos domínios funcionais é adiado a F5 (sem
-   simular segurança de banco para localStorage). Fonte: F4-03 D5/D9, F4-08 D22,
-   Issue #96.
+   domínios funcionais na camada de serviço (enforcement `authorize`) e usa `can`
+   somente para UX; o RLS dos domínios funcionais é adiado a F5 (sem simular
+   segurança de banco para localStorage).
 2. **D2 — Substituir a superfície legada.** `authorizationPolicy.ts` (decisão por
-   `funcao`) e helpers legados (`permissaoAvaliacao`, `visibilidadeColaboradores`,
-   `aplicarEscopoRelatorio`, `podeAprovarMetaNoCiclo`) deixam de ser a fonte de
-   decisão; a relação autorizadora passa a ser derivada de dados (gestorDireto +
-   colegiado + histórico na data) via providers do engine. `legacyMap` permanece
-   somente como artefato de regressão (nunca runtime). Fonte: F4-01 inv.1, F4-03
-   D1/D2/D18.
+   `funcao`) e helpers legados deixam de ser a fonte de decisão; a relação
+   autorizadora passa a ser derivada de dados (gestorDireto + colegiado +
+   histórico na data) via providers do engine. `legacyMap` permanece somente como
+   artefato de regressão (nunca runtime).
 3. **D3 — Mundo local (pré-F5) derivado dos dados, sem cargo.** O provider do
    mundo local resolve DIRECT_REPORTS/DESCENDANTS a partir da cadeia
-   `gestorDiretoMatricula` e ASSIGNED a partir do colegiado/avaliadores na data
-   (hoje `avaliadoresColegiadoMatriculas` + histórico; após F5, fontes F3-08/09).
-   Nenhuma capability é derivada de `funcao`. Fonte: F4-04/05, F4-08 D1.
+   `gestorDiretoMatricula` e ASSIGNED do colegiado/avaliadores na data; nenhuma
+   capability é derivada de `funcao`; binding DEV-only (Q2).
 4. **D4 — SELF não abre conteúdo antes do estado.** SELF + capability + estado +
-   temporalidade + confidencialidade avaliados conjuntamente: avaliação própria
-   só liberada por estado (Q4); observações não-comunicadas invisíveis mesmo a
-   SELF. Fonte: F4-03 pipeline, §4/§9 deste desenho.
+   temporalidade + confidencialidade avaliados conjuntamente (Q4: só `CONCLUIDA`).
 5. **D5 — Capability × tipo de alvo em allowlist fechada.** Combinação não
-   prevista ⇒ DENY (ex.: `evaluation.*` sobre alvo evaluation; `observation.*`
-   não usa alvo de goal). Fonte: F4-04 D18.
-6. **D6 — ASSIGNED não cria hierarquia nem wildcard.** Colegiado só sobre o
-   alvo tipado atribuído; não concede metas/observações do avaliado. Fonte:
-   F4-04/05, Issue #96.
+   prevista ⇒ DENY.
+6. **D6 — ASSIGNED não cria hierarquia nem wildcard.** Colegiado só sobre o alvo
+   tipado atribuído; não concede metas/observações do avaliado.
 7. **D7 — Confidencialidade soberana por domínio/probe.** Classificação
-   (`isTargetConfidential`) decide C vs D; indeterminada ⇒ DENY; D nunca é
-   fallback de confidencial; C fora de `listAllowedTargets`. Fonte: F4-06 D7,
-   F4-07 D7/Q7.
-8. **D8 — Grants C/D respeitam os contratos existentes.** C: leitura,
-   `evaluation.read`, ciclo obrigatório, 1×1, janela; D: development-only,
-   perfil versionado, ≤30 dias; revogação/expiração ⇒ efeito imediato. Fonte:
-   F4-06, F4-07.
-9. **D9 — Sem tabelas novas e sem novo DEFINER nesta fase.** A F4-09 é
-   enforcement de aplicação + testes; nenhuma tabela C/D, nenhum SECURITY
-   DEFINER, nenhum FORCE RLS. Fonte: F4-08 D9/D10/D22.
-10. **D10 — Autorização administrativa de ciclo/avaliação exige relação, não
-    cargo.** Criar/editar/cancelar/reabrir exige relação (gerente da cadeia /
-    coordenador direto / colegiado) + capability + estado; ADMIN comum não lê
-    confidencial sem C. Fonte: F4-01 D18, Issue #96.
+   (`isTargetConfidential`) decide C vs D; indeterminada ⇒ DENY; D nunca é fallback
+   de confidencial; C fora de `listAllowedTargets`.
+8. **D8 — Grants C/D respeitam F4-06/F4-07.** C: leitura, `evaluation.read`,
+   ciclo obrigatório, 1×1, janela; D: development-only, perfil versionado, ≤30
+   dias; revogação/expiração ⇒ efeito imediato.
+9. **D9 — Sem tabelas novas e sem novo DEFINER nesta fase.** Enforcement de
+   aplicação + testes; nenhuma tabela C/D, nenhum SECURITY DEFINER, nenhum FORCE
+   RLS.
+10. **D10 — Administrativo exige relação, não cargo.** Criar/editar/cancelar/
+    reabrir exige relação + capability + estado; ver D11.
+11. **D11 — ADMIN NÃO É SUPERUSUÁRIO DE CONTEÚDO.** Ter função/perfil/capability
+    administrativa NÃO concede automaticamente leitura de avaliações, notas,
+    comentários, observações confidenciais, feedback ou histórico confidencial.
+    Conteúdo confidencial exige autorização explícita sobre target/contexto
+    (C é a única via excepcional); cargo/função ADMIN nunca funciona como bypass.
+12. **D12 — LIMIT-THEN-AGGREGATE.** Relatórios, dashboards, médias, contagens,
+    rankings e exports: (1) determinam os targets/dataset autorizados; (2) limitam
+    o dataset; (3) só então agregam/calculam/exportam. Proibido agregar o dataset
+    completo e filtrar depois. Sem targets autorizados ⇒ dataset vazio ⇒ agregado
+    vazio. Vale também após a migração F5.
 
 ## 19. Confirmações da atividade
 
-Nenhum código funcional, nenhuma migration, nenhuma alteração de banco, nenhuma
-policy RLS foi produzida — somente `docs/F4-09-desenho-tecnico.md`. Issue #96
-permanece aberta; o PR é somente documentação e **não usa `Closes #96`**; **sem
-merge**. A implementação da F4-09 começa somente após o merge da F4-08 (PR
-#154) e após o fechamento das decisões pendentes (§17 Q1–Q7 e §18 itens que
-dependerem de validação).
-
-_Seções em aberto para revisão: §7 (matriz a validar contra Q1–Q7), §17 (Q1–Q7),
-§18 (D1–D10)._
+- **Somente documentação:** nenhum código funcional, nenhuma migration, nenhuma
+  alteração de banco, nenhuma policy RLS foi produzida.
+- **Contrato fechado para implementação**, com **implementação bloqueada até o
+  merge da F4-08 / PR #154**.
+- Issue #96 **permanece aberta**; o PR é somente documentação e **não usa
+  `Closes #96`**; **sem merge**.
+- Q1–Q7 fechadas (§17); D1–D12 fechadas (§18); matriz §7 consistente com o
+  vocabulário canônico (§6.3); nenhum texto interno contradiz as decisões.
