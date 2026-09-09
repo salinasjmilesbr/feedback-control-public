@@ -25,8 +25,8 @@ export default function LayoutAutenticado({
 }: {
   simulacaoDev?: boolean;
 } = {}) {
-  const { estado } = useAuth();
-  const decisao = decidirAcessoARotasFuncionais(estado, simulacaoDev);
+  const { estado, organizacaoAtivaId } = useAuth();
+  const decisao = decidirAcessoARotasFuncionais(estado, simulacaoDev, organizacaoAtivaId);
 
   if (decisao.tipo === "carregando") {
     return (

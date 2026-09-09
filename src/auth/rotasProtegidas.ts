@@ -30,7 +30,8 @@ export type DecisaoRotaFuncional =
 
 export function decidirAcessoARotasFuncionais(
   estado: EstadoSessao,
-  simulacaoDevPermitida: boolean
+  simulacaoDevPermitida: boolean,
+  organizacaoAtivaId: string | null = null
 ): DecisaoRotaFuncional {
   switch (estado.status) {
     case "verificando":
@@ -43,7 +44,9 @@ export function decidirAcessoARotasFuncionais(
       return { tipo: "semOrganizacao" };
 
     case "aguardandoSelecao":
-      return { tipo: "aguardandoSelecao" };
+      // F5-03: com N>1, a área funcional só é liberada quando há uma organização
+      // selecionada válida (organizacaoAtivaId); sem seleção, bloqueia.
+      return organizacaoAtivaId ? { tipo: "permitir" } : { tipo: "aguardandoSelecao" };
 
     case "sessaoIndisponivel":
       return { tipo: "indisponivelTemporaria" };

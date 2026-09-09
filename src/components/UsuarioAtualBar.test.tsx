@@ -55,6 +55,10 @@ function authFalso(): AuthContextValue {
     convidarUsuario: async () => ({ userId: "uuid-auth-1" }),
     reconhecerExpiracao: () => {},
     revalidar: async () => {},
+    organizacaoAtivaId: null,
+    organizacoesDisponiveis: [],
+    selecionarOrganizacao: () => {},
+    organizacaoVersao: 0,
   };
 }
 

@@ -67,6 +67,20 @@ describe("decisão de acesso às rotas funcionais (F2-04)", () => {
     });
   });
 
+  it("N>1 com organização selecionada válida libera a área funcional", () => {
+    const estadoAguardando: EstadoSessao = {
+      status: "aguardandoSelecao",
+      sessao: { usuario: { id: "uuid-1" } },
+      identidade: identidadeValida,
+    };
+    expect(decidirAcessoARotasFuncionais(estadoAguardando, true, "org-1")).toEqual({
+      tipo: "permitir",
+    });
+    expect(decidirAcessoARotasFuncionais(estadoAguardando, false, "org-1")).toEqual({
+      tipo: "permitir",
+    });
+  });
+
   it("revalidação não confirmada (sessão indisponível) bloqueia a área funcional", () => {
     expect(decidirAcessoARotasFuncionais({ status: "sessaoIndisponivel" }, true)).toEqual({
       tipo: "indisponivelTemporaria",
