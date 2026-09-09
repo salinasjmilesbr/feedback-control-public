@@ -2,9 +2,13 @@ import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
 import type { Observacao } from "../types/Observacao";
 import type { StatusFeedback } from "../types/Feedback";
+import type { DevCapabilityBindings } from "./mundoFuncional";
+import type { DomainStateProbe } from "./policyEngine/types";
 
 export type GlobalResource = Readonly<{
   kind: "global";
+  /** Opcional (compat): quando ausente, a policy deriva o mundo do storage. */
+  collaborators?: readonly Colaborador[];
 }>;
 
 export type CollaboratorListResource = Readonly<{
@@ -15,11 +19,15 @@ export type CollaboratorListResource = Readonly<{
 export type CycleResource = Readonly<{
   kind: "cycle";
   cycle: CicloAvaliacao;
+  /** Opcional (compat): quando ausente, a policy deriva o mundo do storage. */
+  collaborators?: readonly Colaborador[];
 }>;
 
 export type CollaboratorResource = Readonly<{
   kind: "collaborator";
   collaborator: Colaborador;
+  /** Opcional (compat): quando ausente, a policy deriva o mundo do storage. */
+  collaborators?: readonly Colaborador[];
 }>;
 
 export type EvaluationResource = Readonly<{
@@ -42,6 +50,8 @@ export type ObservationResource = Readonly<{
   collaborator: Colaborador;
   observation?: Observacao;
   cycle?: CicloAvaliacao;
+  /** Opcional (compat): quando ausente, a policy deriva o mundo do storage. */
+  collaborators?: readonly Colaborador[];
 }>;
 
 export type AuthorizationResource =
@@ -58,4 +68,9 @@ export type CollaboratorScopePurpose = "OPERATIONAL_TEAM" | "REPORT";
 export type CollaboratorScopeInput = Readonly<{
   purpose: CollaboratorScopePurpose;
   collaborators: readonly Colaborador[];
+  /** Probe de estado do domínio para a avaliação final (default: permite). */
+  domainState?: DomainStateProbe;
+  cicloId?: string;
+  /** Binding DEV-only explícito (testes/revogação); default derivado dos dados. */
+  bindingsDev?: DevCapabilityBindings;
 }>;

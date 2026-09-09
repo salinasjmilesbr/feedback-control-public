@@ -10,6 +10,7 @@ import { getFeedbacks } from "./feedbackStorage";
 import { getMetasDoCiclo } from "./metaStorage";
 import { getObservacoesByCiclo } from "./observacaoStorage";
 import { calcularImpactoCorrecaoPeriodo } from "./impactoCorrecaoPeriodoCiclo";
+import { getColaboradores } from "./colaboradorStorage";
 
 function getCicloAtivoPersistido(cicloId: string): CicloAvaliacao {
   const ciclo = getCiclosAvaliacao().find((item) => item.id === cicloId);
@@ -74,9 +75,14 @@ export function corrigirPeriodoCicloAtivo(
       status: autor.status,
     },
   };
+  const colaboradores = getColaboradores();
+  const mundo = colaboradores.some((c) => c.matricula === autor.matricula)
+    ? colaboradores
+    : [autor, ...colaboradores];
   authorize(context, "cycle.period.correct.manager", {
     kind: "cycle",
     cycle: ciclo,
+    collaborators: mundo,
   });
   validarPeriodoCorrigido(ciclo, dataInicio, dataFim);
 

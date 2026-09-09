@@ -11,6 +11,8 @@ import type { Observacao } from "../types/Observacao";
 import type { AuthorizationContext } from "./AuthorizationContext";
 import { AuthorizationError } from "./authorizationError";
 import { authorize, can, scopeCollaborators } from "./authorizationPolicy";
+import { dominioPermite } from "./autorizacaoFuncional";
+import { derivarBindingsDev } from "./mundoFuncional";
 import type {
   CollaboratorResource,
   EvaluationResource,
@@ -96,6 +98,7 @@ describe("authorizationPolicy", () => {
   const collaboratorResource: CollaboratorResource = {
     kind: "collaborator",
     collaborator: direto,
+    collaborators,
   };
   const observacaoDeOutroAutor: Observacao = {
     id: "observacao-outro-autor",
@@ -115,6 +118,7 @@ describe("authorizationPolicy", () => {
     collaborator: direto,
     observation: observacaoDeOutroAutor,
     cycle: ciclo,
+    collaborators,
   };
 
   it("mantém criação de avaliação e observação para colaborador ativo", () => {
@@ -192,18 +196,21 @@ describe("authorizationPolicy", () => {
       can(contexto(gerente), "cycle.cancel.manager", {
         kind: "cycle",
         cycle: ciclo,
+        collaborators,
       })
     ).toBe(true);
     expect(
       can(contexto(coordenador), "cycle.cancel.manager", {
         kind: "cycle",
         cycle: ciclo,
+        collaborators,
       })
     ).toBe(false);
     expect(
       can(contexto(gerente), "cycle.cancel.manager", {
         kind: "cycle",
         cycle: { ...ciclo, status: "CANCELADO" },
+        collaborators,
       })
     ).toBe(false);
   });
@@ -221,6 +228,7 @@ describe("authorizationPolicy", () => {
         can(contexto(actor), "cycle.period.correct.manager", {
           kind: "cycle",
           cycle: { ...ciclo, status },
+          collaborators,
         })
       ).toBe(esperado);
     }
@@ -289,7 +297,10 @@ describe("authorizationPolicy", () => {
     "caracteriza collaborator.create para %s",
     (_perfil, actor, esperado) => {
       expect(
-        can(contexto(actor), "collaborator.create", { kind: "global" })
+        can(contexto(actor), "collaborator.create", {
+          kind: "global",
+          collaborators,
+        })
       ).toBe(esperado);
     }
   );
@@ -392,7 +403,10 @@ describe("authorizationPolicy", () => {
       can(contexto(gerente), "collaborator.create", collaboratorResource)
     ).toBe(false);
     expect(
-      can(contexto(gerente), "collaborator.edit", { kind: "global" })
+      can(contexto(gerente), "collaborator.edit", {
+        kind: "global",
+        collaborators,
+      })
     ).toBe(false);
   });
 
@@ -498,12 +512,14 @@ describe("authorizationPolicy", () => {
     "observation.edit",
     "observation.delete",
   ] as const)("nega %s para resource kind incorreto", (capability) => {
-    expect(can(contexto(gerente), capability, { kind: "global" })).toBe(false);
+    expect(
+      can(contexto(gerente), capability, { kind: "global", collaborators })
+    ).toBe(false);
   });
 
   it.each([
     ["COORDENADOR", coordenador, true],
-    ["GERENTE", gerente, false],
+    ["GERENTE", gerente, true],
     ["ANALISTA", direto, false],
     ["CONSULTOR", pessoa(16, "CONSULTOR"), false],
     ["ESTAGIARIO", pessoa(17, "ESTAGIARIO"), false],
@@ -512,7 +528,10 @@ describe("authorizationPolicy", () => {
     "caracteriza cycle.coordinator.list para %s",
     (_perfil, actor, esperado) => {
       expect(
-        can(contexto(actor), "cycle.coordinator.list", { kind: "global" })
+        can(contexto(actor), "cycle.coordinator.list", {
+          kind: "global",
+          collaborators,
+        })
       ).toBe(esperado);
     }
   );
@@ -525,12 +544,14 @@ describe("authorizationPolicy", () => {
     ["ESTAGIARIO", pessoa(11, "ESTAGIARIO"), false],
     ["SEM_FUNCAO", pessoa(12, undefined), false],
   ] as const)("caracteriza report.view para %s", (_perfil, actor, esperado) => {
-    expect(can(contexto(actor), "report.view", { kind: "global" })).toBe(esperado);
+    expect(
+      can(contexto(actor), "report.view", { kind: "global", collaborators })
+    ).toBe(esperado);
   });
 
   it.each([
     ["GERENTE", gerente, true],
-    ["COORDENADOR", coordenador, false],
+    ["COORDENADOR", coordenador, true],
     ["ANALISTA", direto, false],
     ["CONSULTOR", pessoa(13, "CONSULTOR"), false],
     ["ESTAGIARIO", pessoa(14, "ESTAGIARIO"), false],
@@ -539,7 +560,10 @@ describe("authorizationPolicy", () => {
     "caracteriza cycle.management.view para %s",
     (_perfil, actor, esperado) => {
       expect(
-        can(contexto(actor), "cycle.management.view", { kind: "global" })
+        can(contexto(actor), "cycle.management.view", {
+          kind: "global",
+          collaborators,
+        })
       ).toBe(esperado);
     }
   );
@@ -552,9 +576,9 @@ describe("authorizationPolicy", () => {
     ["ESTAGIARIO", pessoa(20, "ESTAGIARIO"), false],
     ["SEM_FUNCAO", pessoa(21, undefined), false],
   ] as const)("caracteriza settings.manage para %s", (_perfil, actor, esperado) => {
-    expect(can(contexto(actor), "settings.manage", { kind: "global" })).toBe(
-      esperado
-    );
+    expect(
+      can(contexto(actor), "settings.manage", { kind: "global", collaborators })
+    ).toBe(esperado);
   });
 
   it.each([
@@ -568,34 +592,28 @@ describe("authorizationPolicy", () => {
     "caracteriza cycle.team.panel.view para %s",
     (_perfil, actor, esperado) => {
       expect(
-        can(contexto(actor), "cycle.team.panel.view", { kind: "global" })
+        can(contexto(actor), "cycle.team.panel.view", {
+          kind: "global",
+          collaborators,
+        })
       ).toBe(esperado);
     }
   );
 
-  it.each([
-    ["evaluation.edit.manager", gerente, "podeAvaliarComoGerente"],
-    [
-      "evaluation.edit.coordinator",
-      coordenador,
-      "podeAvaliarComoCoordenador",
-    ],
-    ["evaluation.edit.board", coordenador, "podeAvaliarComoColegiado"],
-  ] as const)(
-    "mantém equivalência de %s com obterPermissoesAvaliacao",
-    (capability, actor, campoLegado) => {
-      const legado = obterPermissoesAvaliacao(
-        actor,
-        direto,
-        collaborators,
-        ciclo
-      );
-
-      expect(can(contexto(actor), capability, evaluationResource)).toBe(
-        legado[campoLegado]
-      );
-    }
-  );
+  it("colapsa evaluation.edit.* em evaluation.write (capability = ação)", () => {
+    // F4-09 Q1: capability é AÇÃO; o papel é resolvido por scope/relação.
+    // evaluation.edit.manager/coordinator/board são aliases de evaluation.write.
+    expect(
+      can(contexto(gerente), "evaluation.edit.manager", evaluationResource)
+    ).toBe(true);
+    expect(
+      can(contexto(coordenador), "evaluation.edit.coordinator", evaluationResource)
+    ).toBe(true);
+    // coordenador direto também escreve via evaluation.write (colapso Q1).
+    expect(
+      can(contexto(coordenador), "evaluation.edit.board", evaluationResource)
+    ).toBe(true);
+  });
 
   it("nega as capabilities de avaliação fora do escopo", () => {
     expect(
@@ -636,12 +654,16 @@ describe("authorizationPolicy", () => {
   it.each(["RASCUNHO", "PRONTA_PARA_FEEDBACK"] as const)(
     "preserva as permissões de edição para avaliação %s",
     (evaluationStatus) => {
+      const avaliado = {
+        ...direto,
+        avaliadoresColegiadoMatriculas: [outroCoordenador.matricula],
+      };
       const resource: EvaluationResource = {
         ...evaluationResource,
-        evaluatedCollaborator: {
-          ...direto,
-          avaliadoresColegiadoMatriculas: [outroCoordenador.matricula],
-        },
+        evaluatedCollaborator: avaliado,
+        collaborators: collaborators.map((c) =>
+          c.matricula === avaliado.matricula ? avaliado : c
+        ),
         evaluationStatus,
       };
 
@@ -664,12 +686,16 @@ describe("authorizationPolicy", () => {
   ] as const)(
     "preserva consulta administrativa de avaliação concluída para %s",
     (_papel, actor) => {
+      const avaliado = {
+        ...direto,
+        avaliadoresColegiadoMatriculas: [outroCoordenador.matricula],
+      };
       const resource: EvaluationResource = {
         ...evaluationResource,
-        evaluatedCollaborator: {
-          ...direto,
-          avaliadoresColegiadoMatriculas: [outroCoordenador.matricula],
-        },
+        evaluatedCollaborator: avaliado,
+        collaborators: collaborators.map((c) =>
+          c.matricula === avaliado.matricula ? avaliado : c
+        ),
         evaluationStatus: "CONCLUIDA",
       };
 
@@ -688,12 +714,16 @@ describe("authorizationPolicy", () => {
   ] as const)(
     "autoriza evaluation.view.admin para %s conforme a responsabilidade do ciclo",
     (_perfil, actor, esperado) => {
+      const avaliado = {
+        ...direto,
+        avaliadoresColegiadoMatriculas: [outroCoordenador.matricula],
+      };
       const resource: EvaluationResource = {
         ...evaluationResource,
-        evaluatedCollaborator: {
-          ...direto,
-          avaliadoresColegiadoMatriculas: [outroCoordenador.matricula],
-        },
+        evaluatedCollaborator: avaliado,
+        collaborators: collaborators.map((c) =>
+          c.matricula === avaliado.matricula ? avaliado : c
+        ),
       };
 
       expect(
@@ -732,7 +762,7 @@ describe("authorizationPolicy", () => {
     ).toBe(true);
     expect(
       can(contexto(coordenador), "evaluation.edit.manager", resource)
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it.each([
@@ -750,6 +780,14 @@ describe("authorizationPolicy", () => {
               ...direto,
               avaliadoresColegiadoMatriculas: [outroCoordenador.matricula],
             },
+            collaborators: collaborators.map((c) =>
+              c.matricula === direto.matricula
+                ? {
+                    ...direto,
+                    avaliadoresColegiadoMatriculas: [outroCoordenador.matricula],
+                  }
+                : c
+            ),
           }
         : evaluationResource;
     const podeAvaliar =
@@ -760,7 +798,7 @@ describe("authorizationPolicy", () => {
     expect(podeAvaliar).toBe(esperado);
   });
 
-  it("preserva a estrutura histórica para coordenador anterior e atual", () => {
+  it("histórico não concede autorização: ex-gestor DENY e gestor atual ALLOW", () => {
     const coordenadorAnterior = pessoa(40, "COORDENADOR", gerente.matricula);
     const coordenadorAtual = pessoa(41, "COORDENADOR", gerente.matricula);
     const avaliado = pessoa(42, "ANALISTA", coordenadorAtual.matricula);
@@ -805,28 +843,20 @@ describe("authorizationPolicy", () => {
       cycle: ciclo,
     };
 
-    for (const actor of [coordenadorAnterior, coordenadorAtual]) {
-      const legado = obterPermissoesAvaliacao(actor, avaliado, equipe, ciclo);
-      expect(
-        can(contexto(actor), "evaluation.edit.coordinator", resource)
-      ).toBe(legado.podeAvaliarComoCoordenador);
-    }
+    // F4-09 Q5: histórico NÃO concede autorização; o engine usa a relação
+    // corrente (gestorDiretoMatricula). Ex-gestor ⇒ DENY; gestor atual ⇒ ALLOW.
     expect(
-      can(
-        contexto(coordenadorAnterior),
-        "evaluation.edit.coordinator",
-        resource
-      )
-    ).toBe(true);
-    expect(
-      can(contexto(coordenadorAtual), "evaluation.edit.coordinator", resource)
+      can(contexto(coordenadorAnterior), "evaluation.edit.coordinator", resource)
     ).toBe(false);
     expect(
       can(contexto(coordenadorAnterior), "evaluation.view.admin", resource)
+    ).toBe(false);
+    expect(
+      can(contexto(coordenadorAtual), "evaluation.edit.coordinator", resource)
     ).toBe(true);
     expect(
       can(contexto(coordenadorAtual), "evaluation.view.admin", resource)
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("mantém o fallback para ciclo ativo quando cycle é undefined", () => {
@@ -890,7 +920,7 @@ describe("authorizationPolicy", () => {
     ["CONSULTOR", pessoa(70, "CONSULTOR"), true],
     ["ANALISTA", direto, true],
     ["ESTAGIARIO", pessoa(71, "ESTAGIARIO"), true],
-    ["GERENTE", gerente, false],
+    ["GERENTE", gerente, true],
   ] as const)(
     "aplica capabilities de metas próprias à configuração atual para %s",
     (_perfil, actor, esperado) => {
@@ -954,13 +984,13 @@ describe("authorizationPolicy", () => {
     ).toBe(true);
     expect(
       can(contexto(gerente), "goal.approve.coordinator", goalResource)
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("caracteriza os papéis de aprovação do coordenador direto", () => {
     expect(
       can(contexto(coordenador), "goal.approve.manager", goalResource)
-    ).toBe(false);
+    ).toBe(true);
     expect(
       can(contexto(coordenador), "goal.approve.coordinator", goalResource)
     ).toBe(true);
@@ -1035,7 +1065,7 @@ describe("authorizationPolicy", () => {
     ).toBe(false);
   });
 
-  it("preserva o responsável histórico na aprovação de metas", () => {
+  it("histórico não concede aprovação de meta: ex-gestor DENY e gestor atual ALLOW", () => {
     const coordenadorAnterior = pessoa(50, "COORDENADOR", gerente.matricula);
     const coordenadorAtual = pessoa(51, "COORDENADOR", gerente.matricula);
     const owner = pessoa(52, "ANALISTA", coordenadorAtual.matricula);
@@ -1081,19 +1111,11 @@ describe("authorizationPolicy", () => {
     };
 
     expect(
-      can(
-        contexto(coordenadorAnterior),
-        "goal.approve.coordinator",
-        resource
-      )
-    ).toBe(true);
-    expect(
-      can(
-        contexto(coordenadorAtual),
-        "goal.approve.coordinator",
-        resource
-      )
+      can(contexto(coordenadorAnterior), "goal.approve.coordinator", resource)
     ).toBe(false);
+    expect(
+      can(contexto(coordenadorAtual), "goal.approve.coordinator", resource)
+    ).toBe(true);
   });
 
   it.each([
@@ -1250,6 +1272,94 @@ describe("authorizationPolicy", () => {
         contexto(actorAusente),
         { purpose: "REPORT", collaborators }
       )
+    ).toEqual([]);
+  });
+
+  it("scopeCollaborators: hierarquia válida sem report.read ⇒ lista vazia", () => {
+    const bindings = derivarBindingsDev(collaborators);
+    const capsCoordenador = new Set(bindings.get(coordenador.matricula)!);
+    capsCoordenador.delete("report.read");
+    const semReport = new Map(bindings);
+    semReport.set(coordenador.matricula, capsCoordenador);
+
+    expect(
+      scopeCollaborators(contexto(coordenador), {
+        purpose: "REPORT",
+        collaborators,
+        bindingsDev: semReport,
+      })
+    ).toEqual([]);
+  });
+
+  it("scopeCollaborators: report.read presente ⇒ somente targets ALLOW", () => {
+    const resultado = scopeCollaborators(contexto(coordenador), {
+      purpose: "REPORT",
+      collaborators,
+    });
+
+    expect(resultado.map((c) => c.matricula)).toEqual([direto.matricula]);
+    expect(resultado).not.toContainEqual(apenasColegiado);
+    expect(resultado).not.toContainEqual(externo);
+  });
+
+  it("scopeCollaborators: capability presente + domainState inválido ⇒ vazio", () => {
+    expect(
+      scopeCollaborators(contexto(coordenador), {
+        purpose: "REPORT",
+        collaborators,
+        domainState: dominioPermite(false),
+      })
+    ).toEqual([]);
+  });
+
+  it("scopeCollaborators: target fora do scope/relação é excluído", () => {
+    const resultado = scopeCollaborators(contexto(coordenador), {
+      purpose: "OPERATIONAL_TEAM",
+      collaborators,
+    });
+
+    expect(resultado.map((c) => c.matricula).sort()).toEqual(
+      [direto.matricula, apenasColegiado.matricula].sort()
+    );
+    expect(resultado).not.toContainEqual(externo);
+    expect(resultado).not.toContainEqual(outroCoordenador);
+  });
+
+  it("scopeCollaborators: alterar funcao/cargo sem alterar relação não muda o resultado", () => {
+    const promovido: Colaborador = {
+      ...coordenador,
+      funcao: "GERENTE",
+      cargo: "Gerente",
+    };
+
+    const antes = scopeCollaborators(contexto(coordenador), {
+      purpose: "REPORT",
+      collaborators,
+    });
+    const depois = scopeCollaborators(contexto(promovido), {
+      purpose: "REPORT",
+      collaborators,
+    });
+
+    expect(depois).toEqual(antes);
+  });
+
+  it("scopeCollaborators: helpers de candidato não são prova final de autorização", () => {
+    const candidatos = getColaboradoresVisiveis(coordenador, [...collaborators]);
+    expect(candidatos.length).toBeGreaterThan(0); // descoberta por hierarquia
+
+    const bindings = derivarBindingsDev(collaborators);
+    const capsCoordenador = new Set(bindings.get(coordenador.matricula)!);
+    capsCoordenador.delete("report.read");
+    const semReport = new Map(bindings);
+    semReport.set(coordenador.matricula, capsCoordenador);
+
+    expect(
+      scopeCollaborators(contexto(coordenador), {
+        purpose: "REPORT",
+        collaborators,
+        bindingsDev: semReport,
+      })
     ).toEqual([]);
   });
 });

@@ -148,7 +148,10 @@ export function aplicarEscopoRelatorio<T extends { colaborador: Colaborador }>(
   linhas: T[],
   usuario: Colaborador
 ): T[] {
-  if (usuario.funcao === "COORDENADOR") {
+  // F4-09 (D2/D12): coordenador (gestor NÃO-raiz) consolida somente a equipe
+  // direta; gerente (raiz) consolida os descendentes. Derivado de dado, não de
+  // `funcao`. Participações em colegiado não entram na consolidação de equipe.
+  if (usuario.gestorDiretoMatricula) {
     return linhas.filter(
       (linha) =>
         linha.colaborador.gestorDiretoMatricula === usuario.matricula

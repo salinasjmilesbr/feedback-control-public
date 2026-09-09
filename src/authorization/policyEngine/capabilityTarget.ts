@@ -4,18 +4,41 @@ import type { TargetRef } from "../policyEngine/types";
 /**
  * Contrato FECHADO de compatibilidade capability × tipo de alvo (F4-04,
  * D18 = A ajustada). Allowlist explícita: somente as combinações listadas são
- * semanticamente válidas para as capabilities suportadas pelas F4-03/F4-04.
- * Qualquer combinação não prevista ⇒ incompatível ⇒ DENY (fail-closed).
+ * semanticamente válidas. Qualquer combinação não prevista ⇒ DENY (fail-closed).
  *
- * NÃO concede autorização, NÃO substitui capability/scope/relationProvider e
- * NÃO reimplementa regra de domínio.
+ * F4-09 (Q1): inclui o catálogo CANÔNICO (ação) e mantém os aliases legados
+ * mapeados à mesma semântica de alvo (migração).
  */
 
 type TargetType = TargetRef["type"];
 
 const ALLOWED_TARGETS: Record<Capability, readonly TargetType[]> = {
+  // Canônicas
   "collaborator.create": ["collaborator"],
   "collaborator.edit": ["collaborator"],
+  "collaborator.read": ["collaborator"],
+  "cycle.read": ["cycle", "collaborator"],
+  "cycle.manage": ["cycle"],
+  "cycle.cancel": ["cycle"],
+  "cycle.reopen": ["cycle"],
+  "cycle.period.correct": ["cycle"],
+  "evaluation.create": ["evaluation", "collaborator", "position"],
+  "evaluation.read": ["evaluation", "collaborator", "position"],
+  "evaluation.write": ["evaluation", "collaborator", "position"],
+  "evaluation.cancel": ["evaluation", "collaborator", "position"],
+  "evaluation.reopen": ["evaluation", "collaborator", "position"],
+  "goal.read": ["goal", "collaborator"],
+  "goal.write": ["goal", "collaborator"],
+  "goal.approve": ["goal", "collaborator"],
+  "observation.read": ["observation", "collaborator", "cycle"],
+  "observation.create": ["observation", "collaborator", "cycle"],
+  "observation.edit": ["observation", "collaborator", "cycle"],
+  "observation.delete": ["observation", "collaborator", "cycle"],
+  "report.read": ["collaborator", "cycle", "evaluation"],
+  "settings.manage": ["cycle"],
+  "exceptional_access.grant": ["evaluation"],
+  "pilot_full_access.grant": ["collaborator", "cycle", "goal", "observation"],
+  // Aliases legados (mesma semântica de alvo do canônico)
   "collaborator.list": ["collaborator"],
   "cycle.coordinator.list": ["cycle"],
   "cycle.management.view": ["cycle"],
@@ -23,9 +46,6 @@ const ALLOWED_TARGETS: Record<Capability, readonly TargetType[]> = {
   "cycle.reopen.manager": ["cycle"],
   "cycle.period.correct.manager": ["cycle"],
   "cycle.team.panel.view": ["cycle"],
-  "evaluation.create": ["evaluation", "collaborator", "position"],
-  "evaluation.read": ["evaluation", "collaborator", "position"],
-  "evaluation.write": ["evaluation", "collaborator", "position"],
   "evaluation.cancel.manager": ["evaluation", "collaborator", "position"],
   "evaluation.reopen.manager": ["evaluation", "collaborator", "position"],
   "evaluation.view.admin": ["evaluation", "collaborator", "position"],
@@ -35,25 +55,18 @@ const ALLOWED_TARGETS: Record<Capability, readonly TargetType[]> = {
   "goal.view.admin": ["goal", "collaborator"],
   "goal.approve.manager": ["goal", "collaborator"],
   "goal.approve.coordinator": ["goal", "collaborator"],
-  "goal.approve": ["goal", "collaborator"],
-  "goal.write": ["goal", "collaborator"],
   "goal.create.own": ["goal", "collaborator"],
   "goal.edit.own": ["goal", "collaborator"],
   "goal.delete.own": ["goal", "collaborator"],
   "goal.progress.own": ["goal", "collaborator"],
   "goal.finalize.own": ["goal", "collaborator"],
-  "observation.create": ["observation", "collaborator", "cycle"],
-  "observation.edit": ["observation", "collaborator", "cycle"],
-  "observation.delete": ["observation", "collaborator", "cycle"],
   "report.view": ["collaborator", "cycle", "evaluation"],
-  "settings.manage": ["cycle"],
-  "exceptional_access.grant": ["evaluation"],
-  "pilot_full_access.grant": ["collaborator", "cycle", "goal", "observation"],
 };
 
 export function isCapabilityTargetCompatible(
   capability: Capability,
   target: TargetRef
 ): boolean {
-  return ALLOWED_TARGETS[capability].includes(target.type);
+  const tipos = ALLOWED_TARGETS[capability];
+  return tipos !== undefined && tipos.includes(target.type);
 }
