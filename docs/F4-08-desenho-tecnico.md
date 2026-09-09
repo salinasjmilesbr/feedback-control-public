@@ -588,11 +588,13 @@ soberana D1 COMPLETA: `auth.uid()` + user_profile ATIVO + membership ATIVA
 ### 26.6 Testes locais (Supabase local, docker/psql)
 
 `supabase db reset` + `supabase/validacao/01-cenario-f4-08.sql` +
-`02-validar-f4-08.sql` — **56 verificações `[PASS]`**, incluindo:
-- schema guard (FORCE RLS; RLS global; 4 DEFINER; EXECUTE indevido; policies;
-  **privilégios efetivos via `has_table_privilege`** para anon/authenticated;
-  catálogo tenant-specific D16; view sem `security_invoker`; policy
-  trivially-permissive);
+`02-validar-f4-08.sql` — **57 verificações `[PASS]`** + `03-validar-f4-08-mutacoes.sql`
+(**8 mutation tests** do schema guard), incluindo:
+- schema guard (FORCE RLS; RLS global; 4 DEFINER + **EXECUTE efetivo dos
+  DEFINER**; EXECUTE indevido; policies; **privilégios efetivos via
+  `has_table_privilege`** para anon/authenticated; **catálogo completo D16**
+  (toda tabela `public` explicitamente classificada); **view/materialized view
+  não aprovadas**; policy trivially-permissive);
 - **profile inativo + membership ativa = DENY** (estrutura, `organizations` por
   listagem e por ID direto, e perfil);
 - membership inativa / sem membership = DENY; multi-membership (Alfa+Beta, não
@@ -606,11 +608,16 @@ soberana D1 COMPLETA: `auth.uid()` + user_profile ATIVO + membership ATIVA
 
 ### 26.7 Schema guard
 
-Em `02-validar-f4-08.sql` (§1): FORCE RLS, tabela `public` sem RLS (inclui
-particionadas), SECURITY DEFINER além dos 4, EXECUTE indevido, privilégios
-efetivos (`has_table_privilege`: SELECT/INSERT/UPDATE/DELETE/TRUNCATE/
-REFERENCES/TRIGGER) para anon/authenticated, catálogo tenant-specific D16, view
-sem `security_invoker`, policy trivially-permissive e contagem de policies.
+Em `02-validar-f4-08.sql` (§1): FORCE RLS; tabela `public` sem RLS (inclui
+particionadas); SECURITY DEFINER além dos 4; **EXECUTE efetivo dos 4 DEFINER**
+(public/anon/authenticated proibidos); EXECUTE indevido nas funções de negócio;
+privilégios efetivos (`has_table_privilege`: SELECT/INSERT/UPDATE/DELETE/
+TRUNCATE/REFERENCES/TRIGGER) para anon/authenticated; **catálogo completo D16**
+(toda tabela `public` deve ser explicitamente classificada — nova tabela não
+classificada ⇒ FAIL); **view/materialized view não aprovadas ⇒ FAIL**; policy
+trivially-permissive e contagem de policies. O `03-validar-f4-08-mutacoes.sql`
+prova que cada regra DETECTA a regressão correspondente (introduz → FAIL →
+reverte → PASS), sem `WHEN OTHERS` mascarando causa.
 
 ### 26.8 Limitações/adiamentos
 
@@ -637,6 +644,7 @@ sem `security_invoker`, policy trivially-permissive e contagem de policies.
 
 - `npm test`: 55 arquivos / **748 testes** passaram.
 - `npm run build`: OK. `npm run lint`: sem erros. `git diff --check`: limpo.
-- Supabase local: **56 `[PASS]`**, 0 falhas.
+- Supabase local: **57 `[PASS]`** (validação RLS/schema guard) + **8 mutation
+  tests** do schema guard, 0 falhas.
 - CI (GitHub Actions): `quality` (test/build/lint/diff-check) + `supabase-local`
-  (`db start` + `db reset` + cenário + validação RLS/schema guard).
+  (`db start` + `db reset` + cenário + validação RLS/schema guard + mutation tests).

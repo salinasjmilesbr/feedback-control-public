@@ -50,6 +50,21 @@ begin
   select count(*) into v_n
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
   cross join lateral aclexplode(coalesce(p.proacl, acldefault('f'::"char", p.proowner))) a
+  where n.nspname='public' and p.prosecdef
+    and a.privilege_type='EXECUTE'
+    and (a.grantee = 0 or a.grantee = 'anon'::regrole or a.grantee = 'authenticated'::regrole);
+  if v_n <> 0 then
+    raise exception '[FAIL] EXECUTE indevido em SECURITY DEFINER (public/anon/authenticated): %', v_n;
+  end if;
+  raise notice '[PASS] 4 SECURITY DEFINER sem EXECUTE para public/anon/authenticated (privilegios efetivos)';
+end $$;
+
+do $$
+declare v_n int;
+begin
+  select count(*) into v_n
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  cross join lateral aclexplode(coalesce(p.proacl, acldefault('f'::"char", p.proowner))) a
   where n.nspname='public'
     and p.proname in (
       'organizacao_resolver_responsavel_posicao','organizacao_resolver_gestor_direto',
@@ -230,36 +245,37 @@ end $$;
 do $$
 declare v_t text;
 begin
-  select string_agg(c.table_name, ', ') into v_t
-  from information_schema.columns c
-  where c.table_schema='public' and c.column_name='organization_id'
-    and c.table_name not in (
+  select string_agg(c.relname, ', ' order by c.relname) into v_t
+  from pg_class c join pg_namespace n on n.oid=c.relnamespace
+  where n.nspname='public' and c.relkind in ('r','p')
+    and c.relname not in (
       'collaborators','collaborator_identifiers','job_roles','seniority_levels',
       'organizational_units','organizational_unit_parent_periods','organizational_positions',
       'position_reporting_lines','occupations','temporary_responsibilities',
       'collegiate_configurations','collegiate_configuration_members',
-      'cycle_evaluation_responsibilities','collegiate_cycle_snapshots',
-      'collegiate_cycle_snapshot_positions','collegiate_cycle_snapshot_members',
-      'evaluation_succession_events','access_roles','user_organization_memberships',
+      'cycle_evaluation_responsibilities','collaborator_status_periods',
+      'organizations','user_profiles','user_organization_memberships',
+      'collegiate_cycle_snapshots','collegiate_cycle_snapshot_positions',
+      'collegiate_cycle_snapshot_members','evaluation_succession_events',
+      'capabilities','access_roles','access_role_capabilities',
       'membership_access_role_assignments','membership_collaborator_links',
       'access_role_assignment_scopes','access_role_assignment_unit_targets');
   if v_t is not null then
-    raise exception '[FAIL] tabela tenant-specific nao classificada (D16): %', v_t;
+    raise exception '[FAIL] tabela public nao classificada (D16 — catalogacao explicita obrigatoria): %', v_t;
   end if;
-  raise notice '[PASS] nenhuma tabela tenant-specific fora do catalogo F2/F3/F4 (D16)';
+  raise notice '[PASS] todas as 28 tabelas public estao explicitamente classificadas (D16)';
 end $$;
 
 do $$
 declare v_t text;
 begin
-  select string_agg(c.relname, ', ') into v_t
+  select string_agg(c.relname, ', ' order by c.relname) into v_t
   from pg_class c join pg_namespace n on n.oid=c.relnamespace
-  where n.nspname='public' and c.relkind='v'
-    and (c.reloptions is null or not ('security_invoker=on' = any(c.reloptions)));
+  where n.nspname='public' and c.relkind in ('v','m');
   if v_t is not null then
-    raise exception '[FAIL] view public sem security_invoker (D19): %', v_t;
+    raise exception '[FAIL] view/materialized view public nao aprovada (D19 — contrato atual nao preve views): %', v_t;
   end if;
-  raise notice '[PASS] nenhuma view public sem security_invoker (D19)';
+  raise notice '[PASS] nenhuma view/materialized view public nao aprovada (D19)';
 end $$;
 
 do $$
