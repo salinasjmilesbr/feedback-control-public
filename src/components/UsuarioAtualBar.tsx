@@ -1,5 +1,6 @@
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import { useBranding } from "../contexts/BrandingContext";
+import { useAuth } from "../auth/AuthContext";
 import AuthStatus from "../auth/AuthStatus";
 
 function obterIniciais(nome: string) {
@@ -19,6 +20,7 @@ function UsuarioAtualBar() {
     simulacaoDevAtiva,
   } = useUsuarioAtual();
   const { branding } = useBranding();
+  const { organizacoesDisponiveis, organizacaoAtivaId, selecionarOrganizacao } = useAuth();
 
   // F2-09: o seletor de identidade é impersonação DEV (colaboradores sintéticos
   // do seed local). Fora de DEV explícito não é renderizado — a identidade real
@@ -52,6 +54,24 @@ function UsuarioAtualBar() {
 
       <div className="app-header__user">
         <AuthStatus />
+
+        {organizacoesDisponiveis.length > 1 && (
+          <div className="app-header__user-control">
+            <label htmlFor="organizacao-ativa">Organização</label>
+            <select
+              id="organizacao-ativa"
+              aria-label="Organização ativa"
+              value={organizacaoAtivaId ?? ""}
+              onChange={(event) => selecionarOrganizacao(event.target.value)}
+            >
+              {organizacoesDisponiveis.map((organizacao) => (
+                <option key={organizacao.id} value={organizacao.id}>
+                  {organizacao.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {impersonacaoDevVisivel && (
           <div className="app-header__user-control">

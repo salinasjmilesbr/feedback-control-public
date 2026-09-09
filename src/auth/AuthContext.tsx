@@ -1,5 +1,6 @@
 import { createContext, useContext } from "react";
 import type { EstadoSessao } from "./controladorSessao";
+import type { OrganizacaoResolvida } from "./tipos";
 
 export type AuthContextValue = {
   estado: EstadoSessao;
@@ -15,6 +16,14 @@ export type AuthContextValue = {
   reconhecerExpiracao: () => void;
   /** F5-01 (Q1): reintenta a revalidação da sessão (ex.: tela de indisponibilidade). */
   revalidar: () => Promise<void>;
+  /** F5-03: organização efetiva atual (implícita se N=1; selecionada se N>1; null se nenhuma). */
+  organizacaoAtivaId: string | null;
+  /** F5-03: organizações disponíveis (memberships ativas) — lista soberana (snapshot). */
+  organizacoesDisponiveis: OrganizacaoResolvida[];
+  /** F5-03: seleciona a organização (intenção de UX); no-op se inválida. */
+  selecionarOrganizacao: (organizationId: string) => void;
+  /** F5-03: versão de troca de organização (sinal de invalidação de caches por tenant). */
+  organizacaoVersao: number;
 };
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined);

@@ -9,6 +9,11 @@ import { TechnicalError } from "../errors/applicationErrors";
 import { criarAutenticador, criarRepositorioIdentidade } from "./adaptadores";
 import { criarArmazenamentoInicioSessaoLocal } from "./armazenamentoSessao";
 import { AuthContext } from "./AuthContext";
+import {
+  criarArmazenamentoUltimaOrganizacaoLocal,
+  organizacaoEfetiva,
+  selecaoValida,
+} from "./organizacaoAtiva";
 import { criarClienteAuthSupabase } from "./cliente";
 import { mapearErroConvite } from "./conviteAdministrativo";
 import { criarControladorSessao, type EstadoSessao } from "./controladorSessao";
@@ -38,6 +43,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const armazenamentoInicioSessao = useMemo(
     () => criarArmazenamentoInicioSessaoLocal(),
     []
+  );
+  const armazenamentoUltimaOrganizacao = useMemo(
+    () => criarArmazenamentoUltimaOrganizacaoLocal(),
+    []
+  );
+
+  // F5-03: organização ativa = intenção de UX, nunca autoridade de tenant.
+  const [organizacaoSelecionadaId, setOrganizacaoSelecionadaId] = useState<string | null>(null);
+  const [organizacaoVersao, setOrganizacaoVersao] = useState(0);
+
+  const identidade =
+    estado.status === "autenticado" ||
+    estado.status === "semOrganizacao" ||
+    estado.status === "aguardandoSelecao"
+      ? estado.identidade
+      : undefined;
+
+  const organizacoesDisponiveis = identidade?.organizacoes ?? [];
+
+  // F5-03: restaura a última escolha (conveniência de UX) sem efeito — usa a
+  // seleção explícita do usuário ou, na ausência dela, o marcador persistido do
+  // usuário; `organizacaoEfetiva` valida tudo (inválida ⇒ null ⇒ fail-closed).
+  const organizacaoSelecionadaEfetiva =
+    organizacaoSelecionadaId ??
+    (identidade ? armazenamentoUltimaOrganizacao.ler(identidade.authUserId) : null);
+  const organizacaoAtivaId = organizacaoEfetiva(identidade, organizacaoSelecionadaEfetiva);
+
+  const selecionarOrganizacao = useCallback(
+    (organizationId: string) => {
+      if (!identidade) return;
+      if (!selecaoValida(identidade, organizationId)) return; // fail-closed
+      setOrganizacaoSelecionadaId(organizationId);
+      setOrganizacaoVersao((versao) => versao + 1); // invalida caches por tenant
+      armazenamentoUltimaOrganizacao.definir(identidade.authUserId, organizationId);
+    },
+    [identidade, armazenamentoUltimaOrganizacao]
   );
 
   const controlador = useMemo(
@@ -107,8 +148,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const sair = useCallback(async () => {
+    const userId = identidade?.authUserId ?? null;
     await controlador.sair();
-  }, [controlador]);
+    setOrganizacaoSelecionadaId(null);
+    if (userId) armazenamentoUltimaOrganizacao.remover(userId);
+  }, [controlador, identidade, armazenamentoUltimaOrganizacao]);
 
   const reconhecerExpiracao = useCallback(() => {
     controlador.reconhecerExpiracao();
@@ -164,6 +208,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         convidarUsuario,
         reconhecerExpiracao,
         revalidar,
+        organizacaoAtivaId,
+        organizacoesDisponiveis,
+        selecionarOrganizacao,
+        organizacaoVersao,
       }}
     >
       {children}

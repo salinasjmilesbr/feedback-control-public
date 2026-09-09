@@ -18,6 +18,10 @@ function contexto(estado: EstadoSessao): AuthContextValue {
     convidarUsuario: async () => ({ userId: "uuid-1" }),
     reconhecerExpiracao: () => {},
     revalidar: async () => {},
+    organizacaoAtivaId: null,
+    organizacoesDisponiveis: [],
+    selecionarOrganizacao: () => {},
+    organizacaoVersao: 0,
   };
 }
 
