@@ -38,35 +38,44 @@ function obterDescendentes(
   return resultado;
 }
 
+/**
+ * F4-09 (D2/D3): alcance derivado dos DADOS (cadeia `gestorDiretoMatricula` e
+ * colegiado), nunca de `funcao`. A raiz (sem gestor) enxerga os descendentes;
+ * o gestor de 1º nível enxerga seus diretos + colegiado; demais não enxergam
+ * ninguém (fail-closed).
+ */
 export function getColaboradoresVisiveis(
   usuarioAtual: Colaborador,
   colaboradores: Colaborador[]
 ): Colaborador[] {
-  if (usuarioAtual.funcao === "GERENTE") {
+  const ehRaiz = !usuarioAtual.gestorDiretoMatricula;
+
+  if (ehRaiz) {
     return obterDescendentes(usuarioAtual.matricula, colaboradores);
   }
 
-  if (usuarioAtual.funcao === "COORDENADOR") {
-    const subordinadosDiretos = colaboradores.filter(
-      (colaborador) =>
-        colaborador.gestorDiretoMatricula === usuarioAtual.matricula
-    );
+  const subordinadosDiretos = colaboradores.filter(
+    (colaborador) =>
+      colaborador.gestorDiretoMatricula === usuarioAtual.matricula
+  );
 
-    const participantesColegiado = colaboradores.filter(
-      (colaborador) =>
-        colaborador.avaliadoresColegiadoMatriculas?.includes(
-          usuarioAtual.matricula
-        ) ?? false
-    );
+  const participantesColegiado = colaboradores.filter(
+    (colaborador) =>
+      colaborador.avaliadoresColegiadoMatriculas?.includes(
+        usuarioAtual.matricula
+      ) ?? false
+  );
 
-    const unicos = new Map<number, Colaborador>();
-
-    [...subordinadosDiretos, ...participantesColegiado].forEach(
-      (colaborador) => unicos.set(colaborador.matricula, colaborador)
-    );
-
-    return Array.from(unicos.values());
+  if (
+    subordinadosDiretos.length === 0 &&
+    participantesColegiado.length === 0
+  ) {
+    return [];
   }
 
-  return [];
+  const unicos = new Map<number, Colaborador>();
+  [...subordinadosDiretos, ...participantesColegiado].forEach(
+    (colaborador) => unicos.set(colaborador.matricula, colaborador)
+  );
+  return Array.from(unicos.values());
 }

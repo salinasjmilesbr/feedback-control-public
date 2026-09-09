@@ -9,6 +9,10 @@ import {
   criarProvidersMundoLocal,
   LOCAL_ORGANIZATION_ID,
 } from "../authorization/providers/localWorld";
+import {
+  autorizar as autorizarFuncional,
+  dominioPermite,
+} from "../authorization/autorizacaoFuncional";
 
 const STORAGE_KEY = "feedback-control-metas";
 
@@ -157,11 +161,11 @@ function getGerenteResponsavelNoCiclo(
       ciclo,
       colaboradores
     );
-    if (gestor.funcao === "GERENTE") return gestor;
     atual = gestor;
   }
 
-  return undefined;
+  // F4-09 (D2/D3): responsável = raiz da cadeia (dado), nunca `funcao`.
+  return atual;
 }
 
 export function metaExigeAprovacaoCoordenador(
@@ -215,21 +219,15 @@ export function podeAprovarMetaNoCiclo(
     colaboradores
   );
 
-  if (aprovador.funcao === "COORDENADOR") {
-    return efetivo.gestorDiretoMatricula === aprovador.matricula;
-  }
+  // F4-09 (D2/D3): coordenador = gestor direto (dado); gerente = raiz da
+  // cadeia (dado). Nunca `funcao`.
+  const ehCoordenadorDireto =
+    efetivo.gestorDiretoMatricula === aprovador.matricula;
+  const ehGerenteResponsavel =
+    getGerenteResponsavelNoCiclo(colaborador, colaboradores, ciclo)?.matricula ===
+    aprovador.matricula;
 
-  if (aprovador.funcao === "GERENTE") {
-    return (
-      getGerenteResponsavelNoCiclo(
-        colaborador,
-        colaboradores,
-        ciclo
-      )?.matricula === aprovador.matricula
-    );
-  }
-
-  return false;
+  return ehCoordenadorDireto || ehGerenteResponsavel;
 }
 
 export function criarMeta(
@@ -398,7 +396,22 @@ export function aprovarMeta(
   const agora = new Date().toISOString();
   const colaboradores = getColaboradores();
 
-  if (aprovador.funcao === "COORDENADOR") {
+  // F4-09 (Q7/D10): mutação administrativa exige authorize() (capability +
+  // relação/scope) + domainState. O estado já foi validado acima (ciclo ATIVO).
+  autorizarFuncional(aprovador, colaboradores, {
+    capability: "goal.approve",
+    sujeitoMatricula: colaborador.matricula,
+    domainState: dominioPermite(true),
+    cicloId: ciclo.id,
+  });
+
+  const ehCoordenadorDireto =
+    colaborador.gestorDiretoMatricula === aprovador.matricula;
+  const ehGerenteResponsavel =
+    getGerenteResponsavelNoCiclo(colaborador, colaboradores, ciclo)?.matricula ===
+    aprovador.matricula;
+
+  if (ehCoordenadorDireto) {
     if (!podeAprovarMetaNoCiclo(aprovador, colaborador, colaboradores, ciclo)) {
       throw new Error(
         "Somente o coordenador direto responsável neste ciclo pode aprovar esta meta."
@@ -434,7 +447,7 @@ export function aprovarMeta(
     return;
   }
 
-  if (aprovador.funcao === "GERENTE") {
+  if (ehGerenteResponsavel) {
     if (!podeAprovarMetaNoCiclo(aprovador, colaborador, colaboradores, ciclo)) {
       throw new Error(
         "Somente o gerente responsável neste ciclo pode aprovar esta meta."

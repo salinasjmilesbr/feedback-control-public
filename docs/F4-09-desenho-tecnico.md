@@ -540,3 +540,55 @@ Histórico das questões abertas no desenho, agora **fechadas**:
   `Closes #96`**; **sem merge**.
 - Q1–Q7 fechadas (§17); D1–D12 fechadas (§18); matriz §7 consistente com o
   vocabulário canônico (§6.3); nenhum texto interno contradiz as decisões.
+
+## 20. Implementação — registro de entrega (Issue #96, PR #156bis)
+
+> **Status:** implementado. PR de implementação **`Closes #96`**, sem merge.
+
+### 20.1 Arquitetura implementada
+
+- **Vocabulário canônico (Q1):** `Capability.ts` agora lista o catálogo de AÇÃO
+  (§6.3) e mantém os aliases legados como depreciados; `canonical.ts`
+  (`canonicalizarCapability`) faz a reconciliação alias→canônico.
+  `capabilityTarget.ts` inclui os códigos canônicos.
+- **Mundo funcional local (D2/D3/Q2):** `mundoFuncional.ts` deriva relações de
+  `gestorDiretoMatricula`/`avaliadoresColegiadoMatriculas` (nunca `funcao`) e
+  `derivarBindingsDev` constrói o binding DEV-only EXPLÍCITO por estrutura
+  (raiz→gestão, gestor de 1º nível→coordenação, colegiado→ASSIGNED, demais→SELF).
+- **Facade (D1/Q7):** `autorizacaoFuncional.ts` — `autorizar` (enforcement),
+  `pode` (UX), `alvosPermitidos` (listagem, limit-then-aggregate base) e
+  `dominioPermite` (domainState). Alvo sempre derivado do recurso (sujeito
+  colaborador), nunca de ids do cliente.
+- **Superfícies legadas retiradas da decisão por cargo:** `permissaoAvaliacao.ts`
+  (gerente = raiz da cadeia; coordenador = gestor direto), `visibilidadeColaboradores.ts`
+  (raiz→descendentes; não-raiz→diretos+colegiado), `metaStorage.podeAprovarMetaNoCiclo`
+  e `aprovarMeta` (authorize via engine + `goal.approve`) e
+  `relatorioService.aplicarEscopoRelatorio` (coordenador não-raiz→equipe direta).
+
+### 20.2 Pontos de authorize adicionados
+
+- `metaStorage.aprovarMeta` (goal.approve + relação/scope + domainState) — mutação
+  administrativa com `authorize()` + estado (Q7).
+- `metaStorage` (metas próprias) já usava `authorize` (goal.write + SELF) desde a
+  F4-03 — preservado.
+- Demais pontos de mutação (cancelar/reabrir avaliação/ciclo) já passam por
+  `authorizationPolicy.authorize` (legado) e terão migração incremental ao facade
+  conforme §20.3.
+
+### 20.3 Limitações pré-F5 e caminho remanescente
+
+- `authorizationPolicy.ts` permanece como adaptador de compatibilidade (não
+  ampliado); a migração integral de cada página/componente para o facade do
+  engine continua incremental (o engine e o mundo funcional já são a fonte
+  canônica de decisão e estão testados).
+- Sem tabelas novas, sem novo SECURITY DEFINER, sem FORCE RLS (D9). RLS funcional
+  real é F5.
+
+### 20.4 Testes
+
+- Novo `f4-09-functional.test.ts` (12 testes): A→B DENY; SELF só CONCLUIDA;
+  coordenador/gerente/colegiado por relação; alterar `funcao` sem mudar relação
+  NÃO concede; capability removida ⇒ DENY imediato; ID manipulado ⇒ TARGET_INVALID;
+  metas/observações; listAllowedTargets limita dataset.
+- Total: **760 testes** (56 arquivos); build e lint OK; `git diff --check` limpo;
+  validação Supabase local F4-08 reexecutada (sem regressão de tenant/security).

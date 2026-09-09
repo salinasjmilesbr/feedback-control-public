@@ -48,12 +48,12 @@ function encontrarGerenteResponsavel(
 
     if (!gestorBase) return undefined;
     const gestor = efetivo(gestorBase, colaboradores, ciclo);
-    if (gestor.funcao === "GERENTE") return gestor;
-
     atual = gestor;
   }
 
-  return undefined;
+  // F4-09 (D2/D3): o "gerente responsável" é a RAIZ da cadeia (dado
+  // estrutural `gestorDiretoMatricula`), nunca `funcao`.
+  return atual;
 }
 
 export function obterPermissoesAvaliacao(
@@ -84,12 +84,10 @@ export function obterPermissoesAvaliacao(
   );
 
   const podeAvaliarComoGerente =
-    usuarioAtual.funcao === "GERENTE" &&
     gerenteResponsavel?.matricula === usuarioAtual.matricula;
 
   const podeAvaliarComoCoordenador =
     funcaoUsaEstruturaAvaliacaoAnalista(colaboradorEfetivo.funcao) &&
-    usuarioAtual.funcao === "COORDENADOR" &&
     colaboradorEfetivo.gestorDiretoMatricula === usuarioAtual.matricula;
 
   const podeAvaliarComoColegiado =
