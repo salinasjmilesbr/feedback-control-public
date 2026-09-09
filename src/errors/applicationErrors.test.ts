@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AuthorizationError as LegacyAuthorizationError } from "../authorization/authorizationError";
 import { authorize } from "../authorization/authorizationPolicy";
 import {
+  AccessNotProvisionedError,
   ApplicationError,
   AuthorizationError,
   ConflictError,
@@ -17,6 +18,7 @@ describe("taxonomia comum de erros", () => {
   it.each([
     [new ValidationError(), "ValidationError", "VALIDATION_ERROR", "validation"],
     [new InvalidCredentialsError(), "InvalidCredentialsError", "INVALID_CREDENTIALS", "authentication"],
+    [new AccessNotProvisionedError(), "AccessNotProvisionedError", "ACCESS_NOT_PROVISIONED", "authentication"],
     [new AuthorizationError("settings.manage"), "AuthorizationError", "FORBIDDEN", "authorization"],
     [new ForbiddenError(), "ForbiddenError", "FORBIDDEN", "authorization"],
     [new ConflictError(), "ConflictError", "CONFLICT", "conflict"],
@@ -53,7 +55,7 @@ describe("taxonomia comum de erros", () => {
     }
   });
 
-  it.each([ValidationError, InvalidCredentialsError, ForbiddenError, ConflictError, NotFoundError, TechnicalError])(
+  it.each([ValidationError, InvalidCredentialsError, AccessNotProvisionedError, ForbiddenError, ConflictError, NotFoundError, TechnicalError])(
     "%s preserva contexto interno sem expô-lo na projeção", (ErrorClass) => {
       const cause = new Error("Detalhe interno fictício que não deve aparecer na UI");
       const error = new ErrorClass({ cause, errorId: "correlacao-ficticia-001" });

@@ -64,6 +64,26 @@ describe("LayoutAutenticado (F2-04)", () => {
     expect(html).not.toContain(CARREGANDO);
   });
 
+  it("estado semOrganizacao renderiza tela dedicada e bloqueia o conteúdo funcional", () => {
+    const html = renderizar(
+      {
+        status: "semOrganizacao",
+        sessao: { usuario: { id: "uuid-1" } },
+        identidade: {
+          authUserId: "uuid-1",
+          perfil: { id: "uuid-1", status: "active" },
+          memberships: [],
+          organizacoes: [],
+        },
+      },
+      false
+    );
+
+    expect(html).toContain("Sem organização");
+    expect(html).not.toContain(CONTEUDO);
+    expect(html).not.toContain(CARREGANDO);
+  });
+
   it("durante a verificação renderiza apenas o carregamento (sem conteúdo protegido)", () => {
     const html = renderizar({ status: "verificando" }, false);
 

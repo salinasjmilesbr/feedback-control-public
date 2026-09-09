@@ -12,6 +12,7 @@ import {
   motivoDeExpiracao,
   type MotivoExpiracaoSessao,
 } from "./politicaSessao";
+import { classificarErroValidacaoSessao } from "./erros";
 import {
   entrar as entrarServico,
   obterSessaoInicial,
@@ -30,7 +31,9 @@ import type {
  * Estados:
  * - `verificando`: bootstrap inicial ainda em andamento;
  * - `naoAutenticado`: sem sessão (login pendente);
- * - `autenticado`: sessão válida + identidade resolvida;
+ * - `autenticado`: sessão válida + identidade resolvida (com ≥1 membership);
+ * - `semOrganizacao` (F5-01/Q2 aprovada): sessão válida + identidade resolvida,
+ *   mas sem membership ativa — área funcional bloqueada;
  * - `acessoNegado`: sessão existe, mas o perfil interno não é válido (erro
  *   seguro de acesso) — o usuário deve sair;
  * - `indisponivel`: Supabase não configurado (em DEV a simulação segue
@@ -56,6 +59,7 @@ export type EstadoSessao =
   | { status: "verificando" }
   | { status: "naoAutenticado" }
   | { status: "autenticado"; sessao: SessaoAuth; identidade: IdentidadeResolvida }
+  | { status: "semOrganizacao"; sessao: SessaoAuth; identidade: IdentidadeResolvida }
   | { status: "acessoNegado"; erro: PublicApplicationError }
   | { status: "indisponivel" }
   | { status: "sessaoExpirada"; motivo: MotivoExpiracaoSessao };
@@ -213,7 +217,14 @@ export function criarControladorSessao(
         ultimaAtividadeMs = agoraMs();
       }
       sessaoOperante = true;
-      notificar({ status: "autenticado", sessao, identidade });
+      // F5-01 (Q2 aprovada/D12): perfil ativo sem membership ativa entra em
+      // estado dedicado `semOrganizacao` (área funcional bloqueada), sem
+      // inventar tenant nem escolher organização silenciosamente.
+      if (identidade.memberships.length === 0) {
+        notificar({ status: "semOrganizacao", sessao, identidade });
+      } else {
+        notificar({ status: "autenticado", sessao, identidade });
+      }
     } catch (erro) {
       if (gen !== geracao) return;
       sessaoOperante = false;
@@ -330,10 +341,21 @@ export function criarControladorSessao(
 
       const { data, error } = await autenticador.validarSessaoAtual();
       if (error || !data) {
-        encerrarVigenciaSessao(ultimoUserId);
-        ultimoUserId = null;
-        sessaoOperante = false;
-        notificar({ status: "naoAutenticado" });
+        // F5-01 (Q1 aprovada/D11): distingue sessão efetivamente
+        // inválida/revogada (401/ban/usuário removido) de falha transitória de
+        // transporte/5xx.
+        const classificacao = error
+          ? classificarErroValidacaoSessao(error)
+          : "sessaoInvalida";
+        if (classificacao === "sessaoInvalida") {
+          encerrarVigenciaSessao(ultimoUserId);
+          ultimoUserId = null;
+          sessaoOperante = false;
+          notificar({ status: "naoAutenticado" });
+        }
+        // falhaTransitoria: mantém a sessão local e o estado atual; a próxima
+        // verificação (intervalo/foco) reintenta. Nenhuma operação dependente
+        // de autorização/server-side é liberada por confiança no estado local.
         return;
       }
 

@@ -1,4 +1,8 @@
-import { ForbiddenError, TechnicalError } from "../errors/applicationErrors";
+import {
+  AccessNotProvisionedError,
+  ForbiddenError,
+  TechnicalError,
+} from "../errors/applicationErrors";
 import type { Autenticador, RepositorioIdentidade } from "./contratos";
 import { mapearErroDeLogin, mapearErroTecnico } from "./erros";
 import type { IdentidadeResolvida, SessaoAuth, UsuarioAuth } from "./tipos";
@@ -77,12 +81,14 @@ export function validarNovaSenha(novaSenha: string, confirmacao: string): string
 /**
  * Resolve perfil + memberships ativas pelo `auth.uid()`, nunca por e-mail.
  *
- * - auth user sem perfil interno, ou com perfil desabilitado, é erro de acesso
- *   seguro (`ForbiddenError`);
+ * - auth user sem perfil interno é "acesso ainda não provisionado"
+ *   (`AccessNotProvisionedError`, mensagem neutra — Q3 aprovada);
+ * - perfil com status diferente de `active` (desabilitado/inconsistente) é erro
+ *   de acesso seguro (`ForbiddenError`, mensagem genérica — fail-closed);
  * - perfil válido sem membership ativa é autenticação válida com zero
- *   organizações (sem inventar organização);
+ *   organizações (o controlador converte para o estado `semOrganizacao` — Q2);
  * - múltiplas memberships são preservadas integralmente, sem seleção
- *   silenciosa de organização.
+ *   silenciosa de organização (Q4).
  */
 export async function resolverIdentidade(
   authUserId: string,
@@ -90,7 +96,10 @@ export async function resolverIdentidade(
 ): Promise<IdentidadeResolvida> {
   const perfil = await repositorio.buscarPerfil(authUserId);
 
-  if (!perfil || perfil.status !== "active") {
+  if (!perfil) {
+    throw new AccessNotProvisionedError();
+  }
+  if (perfil.status !== "active") {
     throw new ForbiddenError();
   }
 

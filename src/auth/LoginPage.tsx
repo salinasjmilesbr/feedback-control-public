@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { toPublicError } from "../errors/applicationErrors";
 import { useAuth } from "./AuthContext";
 import { mensagemDeExpiracao } from "./politicaSessao";
+import SemOrganizacao from "./SemOrganizacao";
 import "../styles/auth.css";
 
 function LoginPage() {
@@ -53,6 +54,10 @@ function LoginPage() {
         </section>
       </div>
     );
+  }
+
+  if (estado.status === "semOrganizacao") {
+    return <SemOrganizacao />;
   }
 
   if (estado.status === "autenticado") {

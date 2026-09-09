@@ -55,6 +55,16 @@ function mapearEventoAuth(evento: string): EventoMudancaSessao {
   }
 }
 
+/**
+ * F5-01 (D10/G7): status só é considerado ativo quando literalmente "active".
+ * Qualquer outro valor (desconhecido/corrompido) vira inativo — fail-closed em
+ * defesa em profundidade (o CHECK do banco já limita o domínio; esta é a
+ * segunda camada, nunca default ativo).
+ */
+export function normalizarStatus(status: string): "active" | "disabled" {
+  return status === "active" ? "active" : "disabled";
+}
+
 export function criarAutenticador(cliente: SupabaseClient): Autenticador {
   return {
     async entrarComSenha(email, senha) {
@@ -122,7 +132,7 @@ export function criarRepositorioIdentidade(cliente: SupabaseClient): Repositorio
       const linha = data as LinhaPerfil;
       const perfil: PerfilAutenticado = {
         id: linha.id,
-        status: linha.status === "disabled" ? "disabled" : "active",
+        status: normalizarStatus(linha.status),
       };
       return perfil;
     },
@@ -140,7 +150,7 @@ export function criarRepositorioIdentidade(cliente: SupabaseClient): Repositorio
       const memberships: MembershipAutenticada[] = linhas.map((linha) => ({
         id: linha.id,
         organizationId: linha.organization_id,
-        status: linha.status === "disabled" ? "disabled" : "active",
+        status: normalizarStatus(linha.status),
       }));
       return memberships;
     },

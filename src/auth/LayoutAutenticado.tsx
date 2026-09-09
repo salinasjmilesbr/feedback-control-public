@@ -2,6 +2,7 @@ import { Navigate, Outlet } from "react-router-dom";
 import { simulacaoDevPermitida } from "../config/ambiente";
 import { useAuth } from "./AuthContext";
 import { decidirAcessoARotasFuncionais } from "./rotasProtegidas";
+import SemOrganizacao from "./SemOrganizacao";
 
 /**
  * Guard/layout autenticado (F2-04), centralizado para todas as rotas
@@ -35,6 +36,10 @@ export default function LayoutAutenticado({
 
   if (decisao.tipo === "redirecionarLogin") {
     return <Navigate to="/login" replace />;
+  }
+
+  if (decisao.tipo === "semOrganizacao") {
+    return <SemOrganizacao />;
   }
 
   return <Outlet />;

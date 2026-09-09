@@ -60,8 +60,10 @@ function criarAutenticadorFalso(opcoes: {
 function repositorioFalso(parcial: Partial<RepositorioIdentidade> = {}): RepositorioIdentidade {
   return {
     buscarPerfil: vi.fn(async () => ({ id: "uuid-1", status: "active" as const })),
-    buscarMembershipsAtivas: vi.fn(async () => []),
-    buscarOrganizacoes: vi.fn(async () => []),
+    buscarMembershipsAtivas: vi.fn(async () => [
+      { id: "m1", organizationId: "org-1", status: "active" as const },
+    ]),
+    buscarOrganizacoes: vi.fn(async () => [{ id: "org-1", name: "Organização A" }]),
     ...parcial,
   };
 }
@@ -105,7 +107,12 @@ describe("controlador de sessão (F2-03)", () => {
     const fake = criarAutenticadorFalso({
       sessaoInicial: { id: "uuid-1", email: "pessoa@example.invalid" },
     });
-    const repositorio = repositorioFalso();
+    // F5-01 (Q2): sem membership ativa, o bootstrap resolve a identidade e
+    // entra no estado dedicado `semOrganizacao`.
+    const repositorio = repositorioFalso({
+      buscarMembershipsAtivas: vi.fn(async () => []),
+      buscarOrganizacoes: vi.fn(async () => []),
+    });
     const estados: EstadoSessao[] = [];
 
     const controlador = criarControladorSessao({
@@ -117,7 +124,7 @@ describe("controlador de sessão (F2-03)", () => {
     await controlador.inicializar();
 
     expect(ultimo(estados)).toEqual({
-      status: "autenticado",
+      status: "semOrganizacao",
       sessao: { usuario: { id: "uuid-1", email: "pessoa@example.invalid" } },
       identidade: {
         authUserId: "uuid-1",
@@ -232,8 +239,10 @@ describe("controlador de sessão (F2-03)", () => {
     const estado = ultimo(estados);
     expect(estado.status).toBe("acessoNegado");
     if (estado.status === "acessoNegado") {
-      expect(estado.erro.code).toBe("FORBIDDEN");
-      expect(estado.erro.message).toBe("Você não tem permissão para realizar esta operação.");
+      expect(estado.erro.code).toBe("ACCESS_NOT_PROVISIONED");
+      expect(estado.erro.message).toBe(
+        "Seu acesso ainda não foi liberado. Fale com o administrador."
+      );
     }
   });
 
@@ -329,7 +338,7 @@ describe("revalidação de sessão (F2-07)", () => {
     await controlador.inicializar();
     vi.mocked(fake.autenticador.validarSessaoAtual).mockResolvedValue({
       data: null,
-      error: new Error("revogado"),
+      error: { status: 401 },
     });
 
     await controlador.revalidar();
@@ -591,5 +600,115 @@ describe("política de sessão (F2-08)", () => {
 
     expect(ultimo(estados).status).toBe("autenticado");
     expect(marcador.definir).toHaveBeenCalledWith("uuid-1", tempo.relogio());
+  });
+});
+
+describe("estado semOrganizacao (F5-01, Q2 aprovada)", () => {
+  it("perfil ativo sem membership ativa entra em semOrganizacao", async () => {
+    const fake = criarAutenticadorFalso({ sessaoInicial: null });
+    const repositorio = repositorioFalso({
+      buscarMembershipsAtivas: vi.fn(async () => []),
+      buscarOrganizacoes: vi.fn(async () => []),
+    });
+    const estados: EstadoSessao[] = [];
+    const controlador = criarControladorSessao({
+      autenticador: fake.autenticador,
+      repositorio,
+      notificar: (estado) => estados.push(estado),
+    });
+
+    await controlador.inicializar();
+    await controlador.entrar("pessoa@example.invalid", "senha-secreta");
+
+    const estado = ultimo(estados);
+    expect(estado.status).toBe("semOrganizacao");
+    if (estado.status === "semOrganizacao") {
+      expect(estado.identidade.memberships).toEqual([]);
+      expect(estado.identidade.organizacoes).toEqual([]);
+    }
+  });
+
+  it("revalidação que resolve para zero memberships transita para semOrganizacao", async () => {
+    const fake = criarAutenticadorFalso({ sessaoInicial: { id: "uuid-1" } });
+    const repositorio = repositorioFalso();
+    const estados: EstadoSessao[] = [];
+    const controlador = criarControladorSessao({
+      autenticador: fake.autenticador,
+      repositorio,
+      notificar: (estado) => estados.push(estado),
+    });
+
+    await controlador.inicializar();
+    expect(ultimo(estados).status).toBe("autenticado");
+
+    vi.mocked(repositorio.buscarMembershipsAtivas).mockResolvedValue([]);
+    await controlador.revalidar();
+
+    expect(ultimo(estados).status).toBe("semOrganizacao");
+  });
+});
+
+describe("revalidação × falha transitória (F5-01, Q1 aprovada)", () => {
+  function montar() {
+    const fake = criarAutenticadorFalso({ sessaoInicial: { id: "uuid-1" } });
+    const estados: EstadoSessao[] = [];
+    const controlador = criarControladorSessao({
+      autenticador: fake.autenticador,
+      repositorio: repositorioFalso(),
+      notificar: (estado) => estados.push(estado),
+    });
+    return { fake, estados, controlador };
+  }
+
+  it("falha transitória de transporte (sem status) mantém a sessão autenticada", async () => {
+    const { fake, estados, controlador } = montar();
+    await controlador.inicializar();
+    expect(ultimo(estados).status).toBe("autenticado");
+
+    vi.mocked(fake.autenticador.validarSessaoAtual).mockResolvedValue({
+      data: null,
+      error: new TypeError("fetch failed"),
+    });
+    await controlador.revalidar();
+
+    expect(ultimo(estados).status).toBe("autenticado");
+    expect(fake.autenticador.sair).not.toHaveBeenCalled();
+  });
+
+  it("falha 5xx mantém a sessão (sem logout automático)", async () => {
+    const { fake, estados, controlador } = montar();
+    await controlador.inicializar();
+    vi.mocked(fake.autenticador.validarSessaoAtual).mockResolvedValue({
+      data: null,
+      error: { status: 503 },
+    });
+    await controlador.revalidar();
+
+    expect(ultimo(estados).status).toBe("autenticado");
+    expect(fake.autenticador.sair).not.toHaveBeenCalled();
+  });
+
+  it("sessão revogada (401) encerra o acesso", async () => {
+    const { fake, estados, controlador } = montar();
+    await controlador.inicializar();
+    vi.mocked(fake.autenticador.validarSessaoAtual).mockResolvedValue({
+      data: null,
+      error: { status: 401 },
+    });
+    await controlador.revalidar();
+
+    expect(ultimo(estados)).toEqual({ status: "naoAutenticado" });
+  });
+
+  it("usuário banido/removido (403) encerra o acesso", async () => {
+    const { fake, estados, controlador } = montar();
+    await controlador.inicializar();
+    vi.mocked(fake.autenticador.validarSessaoAtual).mockResolvedValue({
+      data: null,
+      error: { status: 403 },
+    });
+    await controlador.revalidar();
+
+    expect(ultimo(estados)).toEqual({ status: "naoAutenticado" });
   });
 });

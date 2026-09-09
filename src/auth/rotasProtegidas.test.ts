@@ -39,6 +39,20 @@ describe("decisão de acesso às rotas funcionais (F2-04)", () => {
     });
   });
 
+  it("usuário sem organização tem a área funcional bloqueada (semOrganizacao)", () => {
+    const estadoSemOrganizacao: EstadoSessao = {
+      status: "semOrganizacao",
+      sessao: { usuario: { id: "uuid-1" } },
+      identidade: identidadeValida,
+    };
+    expect(decidirAcessoARotasFuncionais(estadoSemOrganizacao, true)).toEqual({
+      tipo: "semOrganizacao",
+    });
+    expect(decidirAcessoARotasFuncionais(estadoSemOrganizacao, false)).toEqual({
+      tipo: "semOrganizacao",
+    });
+  });
+
   it("visitante sem sessão é direcionado ao login", () => {
     expect(decidirAcessoARotasFuncionais({ status: "naoAutenticado" }, false)).toEqual({
       tipo: "redirecionarLogin",

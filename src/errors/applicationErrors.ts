@@ -1,6 +1,7 @@
 const publicErrors = {
   VALIDATION_ERROR: { category: "validation", message: "Verifique os dados informados e tente novamente." },
   INVALID_CREDENTIALS: { category: "authentication", message: "E-mail ou senha inválidos." },
+  ACCESS_NOT_PROVISIONED: { category: "authentication", message: "Seu acesso ainda não foi liberado. Fale com o administrador." },
   FORBIDDEN: { category: "authorization", message: "Você não tem permissão para realizar esta operação." },
   CONFLICT: { category: "conflict", message: "Não foi possível concluir a operação devido a um conflito." },
   NOT_FOUND: { category: "not_found", message: "O item solicitado não foi encontrado." },
@@ -49,6 +50,17 @@ export class InvalidCredentialsError extends ApplicationError<"INVALID_CREDENTIA
   constructor(options?: ApplicationErrorOptions) {
     super("INVALID_CREDENTIALS", options);
     this.name = "InvalidCredentialsError";
+  }
+}
+
+/**
+ * F5-01 (Q3 aprovada): conta autenticada sem `user_profile` — acesso ainda não
+ * provisionado. Mensagem neutra/orientativa, sem expor detalhes internos.
+ */
+export class AccessNotProvisionedError extends ApplicationError<"ACCESS_NOT_PROVISIONED"> {
+  constructor(options?: ApplicationErrorOptions) {
+    super("ACCESS_NOT_PROVISIONED", options);
+    this.name = "AccessNotProvisionedError";
   }
 }
 
