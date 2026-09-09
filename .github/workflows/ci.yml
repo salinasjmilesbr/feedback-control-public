@@ -59,3 +59,44 @@ jobs:
             fi
             git diff --check "$BASE_SHA" "$HEAD_SHA"
           fi
+
+  supabase-local:
+    name: Supabase local — RLS/policy validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # Apenas o banco local (roles.sql + auth.uid() + migrations). Sem rede
+      # remota: tudo em containers efêmeros do runner (docker).
+      - name: Start local Supabase database
+        run: npx --yes supabase@2.116.0 db start --yes
+
+      - name: Apply migrations (db reset)
+        run: npx --yes supabase@2.116.0 db reset --local --yes
+
+      - name: Seed F4-08 scenario
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/01-cenario-f4-08.sql
+
+      - name: Run F4-08 validation (RLS + schema guard)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/02-validar-f4-08.sql

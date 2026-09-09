@@ -146,4 +146,18 @@ describe("configuração central de ambiente", () => {
       ).toThrow("VITE_SUPABASE_ANON_KEY");
     }
   );
+
+  it.each([
+    { rotulo: "service_role", chave: "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.fake" },
+    { rotulo: "authenticated", chave: "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYXV0aGVudGljYXRlZCJ9.fake" },
+    { rotulo: "role ausente", chave: "eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSJ9.fake" },
+  ] as const)("rejeita chave com role privilegiada ou ausente ($rotulo)", async ({ chave }) => {
+    const { resolverConfiguracaoAmbiente } = await import("./ambiente");
+    expect(() =>
+      resolverConfiguracaoAmbiente({
+        VITE_SUPABASE_URL: "https://projeto-ficticio.supabase.co",
+        VITE_SUPABASE_ANON_KEY: chave,
+      })
+    ).toThrow("VITE_SUPABASE_ANON_KEY");
+  });
 });

@@ -306,8 +306,21 @@ begin
     from public.access_roles r
    where r.id = new.access_role_id;
 
-  if v_role_organization_id is not null
-     and v_role_organization_id <> new.organization_id then
+  -- Caso 1: role INEXISTENTE — lookup sem linha NÃO é system role (NULL ≠
+  -- wildcard). Fail-closed.
+  if not found then
+    raise exception
+      'F4-01: access_role inexistente (id %), atribuicao negada (fail-closed)',
+      new.access_role_id;
+  end if;
+
+  -- Caso 2: system role válida — organization_id NULL é explícito, não wildcard.
+  if v_role_organization_id is null then
+    return new;
+  end if;
+
+  -- Caso 3: tenant role válida — deve pertencer à MESMA organização da membership.
+  if v_role_organization_id <> new.organization_id then
     raise exception 'F4-01: access_role pertence a outra organizacao (cross-tenant negado)';
   end if;
 

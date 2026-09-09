@@ -67,4 +67,5 @@ Não se aplica.
 - [ ] Regras de autorização não foram duplicadas fora da policy central.
 - [ ] Não houve mudança não documentada de regra de negócio ou UX.
 - [ ] Testes automatizados e validações obrigatórias foram executados e registrados.
+- [ ] Novas tabelas tenant-specific cumprem D16: `ENABLE RLS` + tenant ownership explícito + policy adequada + teste cross-tenant + FK/`organization_id` coerente.
 - [ ] Evidências e limitações foram documentadas quando aplicável.
