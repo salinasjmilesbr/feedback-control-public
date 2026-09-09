@@ -17,6 +17,7 @@ function contexto(estado: EstadoSessao): AuthContextValue {
     redefinirSenha: async () => {},
     convidarUsuario: async () => ({ userId: "uuid-1" }),
     reconhecerExpiracao: () => {},
+    revalidar: async () => {},
   };
 }
 
@@ -82,6 +83,37 @@ describe("LayoutAutenticado (F2-04)", () => {
     expect(html).toContain("Sem organização");
     expect(html).not.toContain(CONTEUDO);
     expect(html).not.toContain(CARREGANDO);
+  });
+
+  it("estado aguardandoSelecao bloqueia o conteúdo funcional", () => {
+    const html = renderizar(
+      {
+        status: "aguardandoSelecao",
+        sessao: { usuario: { id: "uuid-1" } },
+        identidade: {
+          authUserId: "uuid-1",
+          perfil: { id: "uuid-1", status: "active" },
+          memberships: [
+            { id: "m1", organizationId: "org-1", status: "active" },
+            { id: "m2", organizationId: "org-2", status: "active" },
+          ],
+          organizacoes: [],
+        },
+      },
+      false
+    );
+
+    expect(html).toContain("Selecione a organização");
+    expect(html).not.toContain(CONTEUDO);
+    expect(html).not.toContain(CARREGANDO);
+  });
+
+  it("estado sessaoIndisponivel bloqueia o conteúdo funcional e permite tentar novamente", () => {
+    const html = renderizar({ status: "sessaoIndisponivel" }, false);
+
+    expect(html).toContain("Verificação indisponível");
+    expect(html).toContain("Tentar novamente");
+    expect(html).not.toContain(CONTEUDO);
   });
 
   it("durante a verificação renderiza apenas o carregamento (sem conteúdo protegido)", () => {

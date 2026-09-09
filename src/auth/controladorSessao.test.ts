@@ -269,8 +269,10 @@ describe("controlador de sessão (F2-03)", () => {
     await controlador.entrar("pessoa@example.invalid", "senha-secreta");
 
     const estado = ultimo(estados);
-    expect(estado.status).toBe("autenticado");
-    if (estado.status === "autenticado") {
+    expect(estado.status).toBe("aguardandoSelecao");
+    if (estado.status === "aguardandoSelecao") {
+      // N>1: nenhuma organização é escolhida silenciosamente — ambas são
+      // preservadas, aguardando seleção explícita (F5-03).
       expect(estado.identidade.organizacoes.map((o) => o.id)).toEqual(["org-1", "org-2"]);
       expect(estado.identidade.memberships).toHaveLength(2);
     }
@@ -660,7 +662,7 @@ describe("revalidação × falha transitória (F5-01, Q1 aprovada)", () => {
     return { fake, estados, controlador };
   }
 
-  it("falha transitória de transporte (sem status) mantém a sessão autenticada", async () => {
+  it("falha transitória de transporte (sem status) preserva a sessão e bloqueia (sessaoIndisponivel)", async () => {
     const { fake, estados, controlador } = montar();
     await controlador.inicializar();
     expect(ultimo(estados).status).toBe("autenticado");
@@ -671,11 +673,11 @@ describe("revalidação × falha transitória (F5-01, Q1 aprovada)", () => {
     });
     await controlador.revalidar();
 
-    expect(ultimo(estados).status).toBe("autenticado");
+    expect(ultimo(estados).status).toBe("sessaoIndisponivel");
     expect(fake.autenticador.sair).not.toHaveBeenCalled();
   });
 
-  it("falha 5xx mantém a sessão (sem logout automático)", async () => {
+  it("falha 5xx preserva a sessão e bloqueia (sem logout automático)", async () => {
     const { fake, estados, controlador } = montar();
     await controlador.inicializar();
     vi.mocked(fake.autenticador.validarSessaoAtual).mockResolvedValue({
@@ -684,8 +686,24 @@ describe("revalidação × falha transitória (F5-01, Q1 aprovada)", () => {
     });
     await controlador.revalidar();
 
-    expect(ultimo(estados).status).toBe("autenticado");
+    expect(ultimo(estados).status).toBe("sessaoIndisponivel");
     expect(fake.autenticador.sair).not.toHaveBeenCalled();
+  });
+
+  it("após revalidação bem-sucedida, o acesso retorna (sai de sessaoIndisponivel)", async () => {
+    const { fake, estados, controlador } = montar();
+    await controlador.inicializar();
+    expect(ultimo(estados).status).toBe("autenticado");
+
+    vi.mocked(fake.autenticador.validarSessaoAtual).mockResolvedValueOnce({
+      data: null,
+      error: new TypeError("fetch failed"),
+    });
+    await controlador.revalidar();
+    expect(ultimo(estados).status).toBe("sessaoIndisponivel");
+
+    await controlador.revalidar();
+    expect(ultimo(estados).status).toBe("autenticado");
   });
 
   it("sessão revogada (401) encerra o acesso", async () => {

@@ -53,6 +53,29 @@ describe("decisão de acesso às rotas funcionais (F2-04)", () => {
     });
   });
 
+  it("usuário com múltiplas organizações aguarda seleção (não permite)", () => {
+    const estadoAguardando: EstadoSessao = {
+      status: "aguardandoSelecao",
+      sessao: { usuario: { id: "uuid-1" } },
+      identidade: identidadeValida,
+    };
+    expect(decidirAcessoARotasFuncionais(estadoAguardando, true)).toEqual({
+      tipo: "aguardandoSelecao",
+    });
+    expect(decidirAcessoARotasFuncionais(estadoAguardando, false)).toEqual({
+      tipo: "aguardandoSelecao",
+    });
+  });
+
+  it("revalidação não confirmada (sessão indisponível) bloqueia a área funcional", () => {
+    expect(decidirAcessoARotasFuncionais({ status: "sessaoIndisponivel" }, true)).toEqual({
+      tipo: "indisponivelTemporaria",
+    });
+    expect(decidirAcessoARotasFuncionais({ status: "sessaoIndisponivel" }, false)).toEqual({
+      tipo: "indisponivelTemporaria",
+    });
+  });
+
   it("visitante sem sessão é direcionado ao login", () => {
     expect(decidirAcessoARotasFuncionais({ status: "naoAutenticado" }, false)).toEqual({
       tipo: "redirecionarLogin",

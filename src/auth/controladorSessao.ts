@@ -31,9 +31,16 @@ import type {
  * Estados:
  * - `verificando`: bootstrap inicial ainda em andamento;
  * - `naoAutenticado`: sem sessão (login pendente);
- * - `autenticado`: sessão válida + identidade resolvida (com ≥1 membership);
+ * - `autenticado`: sessão válida + identidade resolvida com EXATAMENTE 1
+ *   membership ativa (organização única, sem inventar tenant);
  * - `semOrganizacao` (F5-01/Q2 aprovada): sessão válida + identidade resolvida,
  *   mas sem membership ativa — área funcional bloqueada;
+ * - `aguardandoSelecao` (F5-01/Q4 aprovada): sessão válida + identidade
+ *   resolvida com N>1 memberships — nenhuma escolha silenciosa; área funcional
+ *   bloqueada até a F5-03 fornecer seleção explícita;
+ * - `sessaoIndisponivel` (F5-01/Q1 aprovada): revalidação não confirmada por
+ *   falha transitória (rede/5xx) — a sessão local é preservada (sem logout),
+ *   mas a área funcional permanece bloqueada (fail-closed) até revalidar;
  * - `acessoNegado`: sessão existe, mas o perfil interno não é válido (erro
  *   seguro de acesso) — o usuário deve sair;
  * - `indisponivel`: Supabase não configurado (em DEV a simulação segue
@@ -60,6 +67,8 @@ export type EstadoSessao =
   | { status: "naoAutenticado" }
   | { status: "autenticado"; sessao: SessaoAuth; identidade: IdentidadeResolvida }
   | { status: "semOrganizacao"; sessao: SessaoAuth; identidade: IdentidadeResolvida }
+  | { status: "aguardandoSelecao"; sessao: SessaoAuth; identidade: IdentidadeResolvida }
+  | { status: "sessaoIndisponivel" }
   | { status: "acessoNegado"; erro: PublicApplicationError }
   | { status: "indisponivel" }
   | { status: "sessaoExpirada"; motivo: MotivoExpiracaoSessao };
@@ -219,9 +228,13 @@ export function criarControladorSessao(
       sessaoOperante = true;
       // F5-01 (Q2 aprovada/D12): perfil ativo sem membership ativa entra em
       // estado dedicado `semOrganizacao` (área funcional bloqueada), sem
-      // inventar tenant nem escolher organização silenciosamente.
+      // inventar tenant. (Q4 aprovada/D4/D8): com N>1 memberships, nenhuma
+      // escolha é feita silenciosamente — entra em `aguardandoSelecao`, com a
+      // área funcional bloqueada até a F5-03 fornecer seleção explícita.
       if (identidade.memberships.length === 0) {
         notificar({ status: "semOrganizacao", sessao, identidade });
+      } else if (identidade.memberships.length > 1) {
+        notificar({ status: "aguardandoSelecao", sessao, identidade });
       } else {
         notificar({ status: "autenticado", sessao, identidade });
       }
@@ -352,10 +365,13 @@ export function criarControladorSessao(
           ultimoUserId = null;
           sessaoOperante = false;
           notificar({ status: "naoAutenticado" });
+        } else {
+          // F5-01 (Q1 aprovada/D11): falha transitória (rede/5xx) preserva a
+          // sessão local (sem logout), MAS bloqueia a área funcional até a
+          // revalidação ser confirmada — fail-closed, sem confiança no estado
+          // local para liberar qualquer operação server-side.
+          notificar({ status: "sessaoIndisponivel" });
         }
-        // falhaTransitoria: mantém a sessão local e o estado atual; a próxima
-        // verificação (intervalo/foco) reintenta. Nenhuma operação dependente
-        // de autorização/server-side é liberada por confiança no estado local.
         return;
       }
 
