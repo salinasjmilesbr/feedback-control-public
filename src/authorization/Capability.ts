@@ -32,4 +32,5 @@ export type Capability =
   | "observation.delete"
   | "report.view"
   | "settings.manage"
-  | "exceptional_access.grant";
+  | "exceptional_access.grant"
+  | "pilot_full_access.grant";

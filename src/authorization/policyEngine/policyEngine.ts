@@ -25,6 +25,13 @@ import type {
  * allowlist fechada de exceção e o alvo é soberanamente classificado como
  * confidencial. C nunca é avaliada antes de A/B, nunca substitui a avaliação
  * normal e não participa de listAllowedTargets (D6/D7/D8/D16/D18).
+ *
+ * F4-07 (Issue #94) adiciona a ORIGEM D — Pilot Full Access — como fallback
+ * pontual SOMENTE quando A/B DENY e o alvo NÃO é confidencial; D é development-
+ * only, baseada em perfil versionado fechado (PILOT_PROFILE_V1), nunca cobre
+ * conteúdo confidencial nem capabilities de segurança, e preserva origem
+ * `pilot:<grantId>` (D1–D18). C e D nunca se misturam; D nunca é fallback para
+ * confidencial.
  */
 
 function negar(
@@ -75,9 +82,9 @@ export function decidir(
     : false;
 
   if (!hasMembershipCapability && !eligibleTemporarily) {
-    // A/B negam por capability: a origem C (F4-06) só pode elevar pontualmente.
-    if (providers.exceptional) {
-      return autorizarOrigemExcepcional(request, providers, "CAPABILITY_MISSING");
+    // A/B negam por capability: as origens derivadas (C/D) só elevam pontualmente.
+    if (providers.exceptional || providers.pilot) {
+      return autorizarOrigemDerivada(request, providers, "CAPABILITY_MISSING");
     }
     return negar("CAPABILITY_MISSING");
   }
@@ -117,9 +124,9 @@ export function decidir(
   );
 
   if (!matchedScope && temporaryGrants.length === 0) {
-    // A/B negam por scope/relação: a origem C só pode elevar pontualmente.
-    if (providers.exceptional) {
-      return autorizarOrigemExcepcional(request, providers, "SCOPE_INSUFFICIENT");
+    // A/B negam por scope/relação: as origens derivadas (C/D) só elevam pontualmente.
+    if (providers.exceptional || providers.pilot) {
+      return autorizarOrigemDerivada(request, providers, "SCOPE_INSUFFICIENT");
     }
     return negar("SCOPE_INSUFFICIENT");
   }
@@ -144,11 +151,66 @@ export function decidir(
 }
 
 /**
- * Origem C — acesso excepcional (F4-06, contrato fechado D6/D7/D8/D16/D17).
- * Só é chamada quando A/B DENY. Não substitui os gates globais (1–4, 5.1, 8, 9):
- * tenant, contrato capability×target, data explícita e estado do domínio
- * continuam soberanos. Fail-closed: 0 grants ⇒ mantém a negação original;
- * >1 grant sem identificação inequívoca ⇒ DENY.
+ * Dispatcher das origens derivadas (C — exceptional / D — Pilot Full Access),
+ * chamado SOMENTE quando A/B DENY. Reaplica os gates globais compartilhados
+ * (5.1 capability×target, 8 data, 9 DOMAIN_STATE) e roteia pela classificação
+ * soberana de confidencialidade (D7): confidencial ⇒ C; não confidencial ⇒ D;
+ * indeterminado ⇒ DENY (fail-closed). D nunca é fallback para confidencial.
+ */
+function autorizarOrigemDerivada(
+  request: AuthorizationRequest,
+  providers: PolicyEngineProviders,
+  fallbackReason: DenialReason
+): AuthorizationDecision {
+  const { actor, capability, target, context } = request;
+
+  // 5.1 compartilhado (D4 F4-04/F4-07): nunca tornar combinação inválida válida.
+  if (!isCapabilityTargetCompatible(capability, target)) {
+    return negar("TARGET_INCOMPATIBLE");
+  }
+
+  // 8) contexto temporal explícito (compartilhado).
+  if (!context.date) return negar("INDETERMINATE");
+
+  // 9) estado do domínio (compartilhado): C e D não furam regra de domínio.
+  if (!request.domainState) return negar("INDETERMINATE");
+  if (!request.domainState.allows(capability)) {
+    return negar("DOMAIN_STATE_INVALID");
+  }
+
+  // Classificação soberana (D7): quem fornece é o domínio/probe (mesma fonte
+  // da F4-06), nunca o caller.
+  const classifier =
+    providers.pilot?.isTargetConfidential ??
+    providers.exceptional?.isTargetConfidential;
+  const confidential = classifier
+    ? classifier(target, context.cycleId, actor.organizationId)
+    : undefined;
+
+  // Confidencial ⇒ somente C (F4-06); D NÃO participa.
+  if (confidential === true) {
+    if (providers.exceptional) {
+      return autorizarOrigemExcepcional(request, providers, fallbackReason);
+    }
+    return negar(fallbackReason);
+  }
+
+  // Não confidencial ⇒ somente D (F4-07).
+  if (confidential === false) {
+    if (providers.pilot) {
+      return autorizarOrigemPilot(request, providers, fallbackReason);
+    }
+    return negar(fallbackReason);
+  }
+
+  // Indeterminado/ausente ⇒ fail-closed (nem C, nem D).
+  return negar(fallbackReason);
+}
+
+/**
+ * Origem C — acesso excepcional (F4-06, D6/D8/D16/D17). Só é chamada quando
+ * A/B DENY e o alvo é CONFIDENCIAL. Gates globais já reaplicados no dispatcher.
+ * Fail-closed: 0 grants ⇒ mantém a negação; >1 grant ⇒ DENY.
  */
 function autorizarOrigemExcepcional(
   request: AuthorizationRequest,
@@ -163,26 +225,6 @@ function autorizarOrigemExcepcional(
     return negar(fallbackReason);
   }
 
-  // 5.1 compartilhado: C não fura o contrato capability × tipo de alvo (F4-04).
-  if (!isCapabilityTargetCompatible(capability, target)) {
-    return negar("TARGET_INCOMPATIBLE");
-  }
-
-  // D7: classificação soberana (domínio/probe). false/undefined ⇒ DENY (o
-  // caller nunca informa confidencialidade; indeterminação é fail-closed).
-  if (exceptional.isTargetConfidential(target, context.cycleId, actor.organizationId) !== true) {
-    return negar(fallbackReason);
-  }
-
-  // 8) contexto temporal explícito (compartilhado).
-  if (!context.date) return negar("INDETERMINATE");
-
-  // 9) estado do domínio (compartilhado): C não fura regra de domínio.
-  if (!request.domainState) return negar("INDETERMINATE");
-  if (!request.domainState.allows(capability)) {
-    return negar("DOMAIN_STATE_INVALID");
-  }
-
   const grants = exceptional.resolveExceptionalGrants(
     actor.actorId,
     actor.organizationId,
@@ -192,17 +234,12 @@ function autorizarOrigemExcepcional(
     context.cycleId
   );
 
-  // 0 grants: C não autoriza; preserva a negação A/B original.
   if (grants.length === 0) return negar(fallbackReason);
-
-  // D16: >1 grant aplicável sem identificação inequívoca ⇒ DENY fail-closed
-  // (nunca escolher arbitrariamente; nunca o caller escolhe).
-  if (grants.length > 1) return negar(fallbackReason);
+  if (grants.length > 1) return negar(fallbackReason); // D16: ambiguidade ⇒ DENY
 
   const grant = grants[0];
   const origin = `exceptional:${grant.id}`;
 
-  // D12/Q3: evento de uso efetivo — somente quando C transforma DENY em ALLOW.
   exceptional.recordUsage?.({
     grantId: grant.id,
     organizationId: grant.organizationId,
@@ -217,6 +254,57 @@ function autorizarOrigemExcepcional(
   return {
     allowed: true,
     diagnostics: { exceptionalGrant: { id: grant.id, origin } },
+  };
+}
+
+/**
+ * Origem D — Pilot Full Access (F4-07, D1/D6/D7/D13/D22). Só é chamada quando
+ * A/B DENY e o alvo NÃO é confidencial. Gates globais já reaplicados no
+ * dispatcher. Fail-closed: ambiente não-development ⇒ DENY; capability fora do
+ * perfil ⇒ DENY; 0 grants ⇒ negação original; >1 grant ⇒ DENY.
+ */
+function autorizarOrigemPilot(
+  request: AuthorizationRequest,
+  providers: PolicyEngineProviders,
+  fallbackReason: DenialReason
+): AuthorizationDecision {
+  const pilot = providers.pilot!;
+  const { actor, capability, target, context } = request;
+
+  // D13: D é exclusiva de development (gate no provider, fail-closed).
+  if (!pilot.isEnvironmentEligible()) return negar(fallbackReason);
+
+  // D1/D3: capability ∈ perfil versionado fechado (PILOT_PROFILE_V1).
+  if (!pilot.isCapabilityPilotEligible(capability)) return negar(fallbackReason);
+
+  const grants = pilot.resolvePilotFullAccessGrants(
+    actor.actorId,
+    actor.organizationId,
+    capability,
+    context.date
+  );
+
+  if (grants.length === 0) return negar(fallbackReason);
+  if (grants.length > 1) return negar(fallbackReason); // D22: ambiguidade ⇒ DENY
+
+  const grant = grants[0];
+  const origin = `pilot:${grant.id}`;
+
+  pilot.recordUsage?.({
+    grantId: grant.id,
+    organizationId: grant.organizationId,
+    beneficiaryUserProfileId: grant.beneficiaryUserProfileId,
+    capability,
+    target,
+    cycleId: context.cycleId,
+    date: context.date,
+    profileVersion: grant.profileVersion,
+    origin,
+  });
+
+  return {
+    allowed: true,
+    diagnostics: { pilotGrant: { id: grant.id, origin } },
   };
 }
 
@@ -246,15 +334,18 @@ export function authorize(
  * Serviço AUXILIAR de listagem/resolução de alvos (D5 = A ajustada).
  * NÃO é fonte de decisão: uma mutação nunca considera "estar na lista" como
  * substituto de authorize(). F4-06 D18: a origem C NÃO participa desta
- * listagem — não descobre/lista conteúdo confidencial.
+ * listagem. F4-07 D8: a origem D participa apenas para capabilities
+ * pilot-eligible em alvo NÃO confidencial (o engine mantém o gate).
  */
 export function listAllowedTargets(
   request: Omit<AuthorizationRequest, "target">,
   providers: PolicyEngineProviders,
   candidateTargets: readonly TargetRef[]
 ): TargetRef[] {
-  // D18: remove a origem excepcional para que a listagem não revele inventário
-  // de targets confidenciais; authorize() continua sendo a única decisão real.
+  // Remove a origem excepcional (C) para que a listagem não revele inventário
+  // de targets confidenciais; a origem D (pilot) permanece, mas só lista alvos
+  // não confidenciais pilot-eligible (fail-closed por ambiente/perfil).
+  // authorize() continua sendo a única decisão real.
   const providersSemExcecao: PolicyEngineProviders = {
     ...providers,
     exceptional: undefined,

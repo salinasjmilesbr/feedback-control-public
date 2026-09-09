@@ -48,6 +48,7 @@ const ALLOWED_TARGETS: Record<Capability, readonly TargetType[]> = {
   "report.view": ["collaborator", "cycle", "evaluation"],
   "settings.manage": ["cycle"],
   "exceptional_access.grant": ["evaluation"],
+  "pilot_full_access.grant": ["collaborator", "cycle", "goal", "observation"],
 };
 
 export function isCapabilityTargetCompatible(
