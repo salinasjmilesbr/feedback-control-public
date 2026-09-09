@@ -903,6 +903,68 @@ local, CLI 2.116.0, PostgreSQL 17.6; repetida após um segundo `db reset`, com o
 mesmo resultado). Detalhes na seção "Validação executada (F4-02)" do
 `supabase/README.md`.
 
+## F5-02 — Vínculo usuário autenticado ↔ colaborador (Issue #161)
+
+Validação estrutural contra o **Supabase local** das migrations F5-02
+(`20260909000000_f5_02_hardening_resolver_collaborador.sql`,
+`20260909010000_f5_02_link_active_uniqueness.sql` e
+`20260909020000_f5_02_link_mutation_functions.sql`): resolver endurecido
+(profile ativo), cardinalidade/histórico (múltiplas linhas por membership, no
+máx. 1 ativa — Q6=B), unicidade do vínculo ativo por colaborador+organização
+(Q3=B) e mutações server-side transacionais (criar/desativar/trocar — D9),
+mantendo a tabela e os resolvers fechados a `authenticated` (Q1=A).
+
+### Como reproduzir
+
+Requisitos: Docker Desktop em execução e o CLI Supabase da raiz
+(`npx --yes supabase@2.116.0`).
+
+```powershell
+# 1) subir a stack local (rebuild limpo: migrations em ordem + seed)
+npx --yes supabase@2.116.0 start
+
+# 2) aplicar o cenário sintético no banco local (idempotente)
+Get-Content supabase/validacao/01-cenario-f5-02.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+
+# 3) executar a validação (exit code 0 = todas as verificações passaram)
+Get-Content supabase/validacao/02-validar-f5-02.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+```
+
+Observações:
+
+- os scripts **não tocam projeto remoto**, **não alteram nenhuma policy RLS** e
+  removem ao final os dados sintéticos do cenário (banco local limpo);
+- `01-cenario-f5-02.sql` insere via superuser local (equivalente a service_role)
+  apenas UUIDs fixos com prefixo `d2`, sem colidir com os cenários anteriores;
+- a regressão F4-02/F4-08 é preservada: as validações `02-validar-f4-02.sql` e
+  `02-validar-f4-08.sql` continuam aplicáveis (a F4-02 teve a expectativa de
+  constraints ajustada: o unique total `uq_membership_collaborator_links_membership`
+  foi substituído por dois unique indexes parciais de vínculo ativo).
+
+### O que é verificado (02-validar-f5-02.sql)
+
+1. **Estrutura**: os dois unique indexes parciais (1 `active` por membership e 1
+   `active` por colaborador+organização) presentes; o unique total removido; 4
+   funções F5-02 presentes e `SECURITY INVOKER` (sem novo `SECURITY DEFINER`);
+   mutações sem `EXECUTE` para `public/anon/authenticated` e com `EXECUTE`
+   somente `service_role`.
+2. **Resolução (Q4=A)**: vínculo ativo resolve; profile desabilitado, membership
+   desabilitada, sem vínculo ativo e organização sem membership ativa resolvem
+   vazio (fail-closed).
+3. **Q5=A**: colaborador em `leave`/`inactive` continua sendo a âncora de
+   identidade (o vínculo resolve; o status não remapeia identidade).
+4. **Fechado para authenticated (Q1=A)**: sem SELECT direto, sem INSERT/UPDATE
+   direto e sem `EXECUTE` no resolver/nas mutações (permission denied).
+5. **Mutações server-side (D9)**: cross-tenant bloqueado; Q3 (segundo active para
+   mesmo colaborador+organização) bloqueado; Q6 (segundo active para a mesma
+   membership) bloqueado; troca A→B preserva A como `disabled` (histórico) e cria
+   B `active`, sem sobrescrever `collaborator_id`; rollback da troca (Q3 e
+   cross-tenant) não deixa estado intermediário inválido; desativar torna o link
+   histórico.
+6. **Limpeza**: cenário sintético removido ao final.
+
 ## Limitações e notas registradas
 
 - **JWT é stateless**: após logout, o refresh token é revogado, mas um access

@@ -46,7 +46,6 @@ begin
   where conname in (
     'uq_membership_access_role_assignments_id_organization',
     'pk_membership_collaborator_links',
-    'uq_membership_collaborator_links_membership',
     'fk_membership_collaborator_links_memberships',
     'fk_membership_collaborator_links_membership_organization',
     'fk_membership_collaborator_links_collaborators',
@@ -64,10 +63,10 @@ begin
     'fk_access_role_assignment_unit_targets_scopes',
     'fk_access_role_assignment_unit_targets_units'
   );
-  if v_n <> 19 then
-    raise exception '[FAIL] constraints F4-02 esperadas=19, encontradas=%', v_n;
+  if v_n <> 18 then
+    raise exception '[FAIL] constraints F4-02 esperadas=18, encontradas=%', v_n;
   end if;
-  raise notice '[PASS] constraints pk/unique/fk/check esperadas presentes (19)';
+  raise notice '[PASS] constraints pk/unique/fk/check esperadas presentes (18)';
 end $$;
 
 do $$
@@ -510,8 +509,8 @@ set role authenticated;
 
 do $$
 declare
-  v_n int;
   v_tabela text;
+  v_ok boolean;
   v_tabelas text[] := array[
     'membership_collaborator_links',
     'access_role_assignment_scopes',
@@ -519,25 +518,33 @@ declare
   ];
 begin
   foreach v_tabela in array v_tabelas loop
-    execute format('select count(*) from public.%I', v_tabela) into v_n;
-    if v_n <> 0 then
-      raise exception '[FAIL] authenticated enxergou linhas de %', v_tabela;
+    v_ok := false;
+    begin
+      execute format('select count(*) from public.%I', v_tabela);
+    exception when insufficient_privilege then
+      v_ok := true;
+    end;
+    if not v_ok then
+      raise exception '[FAIL] authenticated leu a tabela fechada %', v_tabela;
     end if;
   end loop;
-  raise notice '[PASS] RLS: authenticated nao le linhas das tres tabelas F4-02';
+  raise notice '[PASS] RLS/grants: authenticated sem leitura das tres tabelas F4-02 (permission denied)';
 end $$;
 
 do $$
 declare
-  v_n int;
+  v_ok boolean := false;
 begin
-  select count(*) into v_n
-  from public.resolver_capabilities_escopos_efetivas(
-    'd1b00000-0000-0000-0000-0000000000a2', 'd1a00000-0000-0000-0000-0000000000a1');
-  if v_n <> 0 then
-    raise exception '[FAIL] authenticated resolveu capabilities/escopos (RLS deveria negar)';
+  begin
+    perform 1 from public.resolver_capabilities_escopos_efetivas(
+      'd1b00000-0000-0000-0000-0000000000a2', 'd1a00000-0000-0000-0000-0000000000a1');
+  exception when insufficient_privilege then
+    v_ok := true;
+  end;
+  if not v_ok then
+    raise exception '[FAIL] authenticated executou resolver de escopo (deveria ser negado)';
   end if;
-  raise notice '[PASS] RLS: resolvers INVOKER retornam vazio para authenticated (deny-by-default)';
+  raise notice '[PASS] RLS/grants: resolvers de escopo sem EXECUTE para authenticated (deny-by-default)';
 end $$;
 
 reset role;
@@ -546,11 +553,17 @@ do $$
 declare
   v_n int;
 begin
-  select count(*) into v_n from pg_policies p where p.schemaname='public';
+  select count(*) into v_n from pg_policies p
+  where p.schemaname='public'
+    and p.policyname in (
+      'user_profiles_select_own',
+      'user_organization_memberships_select_own',
+      'organizations_select_via_membership'
+    );
   if v_n <> 3 then
-    raise exception '[FAIL] quantidade de policies alterada (esperado 3, encontrado %)', v_n;
+    raise exception '[FAIL] policies de identidade/sessao da F2 ausentes (esperado 3, encontrado %)', v_n;
   end if;
-  raise notice '[PASS] 3 policies de identidade/sessao da F2 inalteradas';
+  raise notice '[PASS] 3 policies de identidade/sessao da F2 presentes (total de policies evolui com F4-08)';
 end $$;
 
 -- ============================================================================

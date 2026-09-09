@@ -1,4 +1,5 @@
 import type {
+  ColaboradorVinculado,
   MembershipAutenticada,
   OrganizacaoResolvida,
   PerfilAutenticado,
@@ -64,4 +65,19 @@ export interface RepositorioIdentidade {
   buscarPerfil(authUserId: string): Promise<PerfilAutenticado | null>;
   buscarMembershipsAtivas(authUserId: string): Promise<MembershipAutenticada[]>;
   buscarOrganizacoes(ids: string[]): Promise<OrganizacaoResolvida[]>;
+}
+
+/**
+ * F5-02 (contrato de vínculo — Q1 = A fechada): porta de resolução do
+ * colaborador vinculado a partir da identidade autenticada, a ser consumida
+ * pela F5-05 (ActorContext). NÃO há implementação runtime nem superfície
+ * executável pelo frontend nesta F5-02: a resolução real é server-side
+ * (resolver_collaborador_vinculado endurecido, caminho interno/service_role).
+ */
+export interface VinculoIdentityResolver {
+  /** 0..1; null = sem vínculo ativo (usuário sem colaborador na organização). */
+  resolverColaborador(
+    authUserId: string,
+    organizationId: string
+  ): Promise<ColaboradorVinculado | null>;
 }

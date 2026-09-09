@@ -55,3 +55,21 @@ export interface IdentidadeResolvida {
  * são etapas posteriores e NÃO são implementadas nesta atividade.
  */
 export type AuthIdentity = IdentidadeResolvida;
+
+/**
+ * F5-02 (contrato de vínculo): colaborador vinculado a uma membership ativa do
+ * usuário na organização. É o resultado da resolução `auth.uid → user_profile →
+ * membership → link → colaborador`, sempre por (authUserId, organizationId) e
+ * nunca por e-mail/matrícula/nome/cargo. Consumido por F5-05 (ActorContext);
+ * NÃO há superfície executável pelo frontend nesta F5-02 (Q1 = A).
+ */
+export interface ColaboradorVinculado {
+  /** Membership ativa origem do vínculo. */
+  membership: MembershipAutenticada;
+  /** id do link ativo (único por membership — Q6 = B). */
+  linkId: string;
+  /** collaborators.id (UUID técnico imutável). */
+  colaboradorId: string;
+  /** === membership.organizationId (tenant confirmado server-side). */
+  organizationId: string;
+}
