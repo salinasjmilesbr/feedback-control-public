@@ -63,8 +63,10 @@ const estagiario = colaborador(5, "Estagiario", {
 const todos = [gerente, coordenador, analistaA, analistaB, estagiario];
 
 describe("F4-10 — validação integrada da matriz de autorização (gate Fase 4)", () => {
-  it("PIPE-001/ATTACK-006: tenant divergente/target forjado ⇒ DENY antes de capability", () => {
-    // Alvo inexistente (id forjado) ⇒ TARGET_INVALID; leitura não vaza existência.
+  it("PIPE-001/ATTACK-006 (cross-tenant provado em F4-08/engine): target forjado ⇒ TARGET_INVALID sem vazar existência", () => {
+    // Este teste exercita target FORJADO (TARGET_INVALID). A propriedade
+    // cross-tenant real é provada em Supabase local F4-08 (TENANT-001..004) e em
+    // policyEngine.test.ts ("cross-tenant ⇒ DENY com público NOT_FOUND").
     const decisao = pode(gerente, todos, {
       capability: "evaluation.read",
       sujeitoMatricula: 999,
