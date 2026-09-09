@@ -648,6 +648,14 @@ ALLOW `pilot:<grantId>` + `recordUsage`; >1 ⇒ DENY). A/B ALLOW ⇒ C/D não
 consumidos. `listAllowedTargets` remove C (F4-06 D18) e mantém D (F4-07 D8):
 D só lista alvos não confidenciais pilot-eligible.
 
+**D9 fail-closed estrutural no provider (`grantJanelaEstruturalValida`):** a
+resolução valida, na fronteira de segurança, que o grant possui janela
+estruturalmente válida — datas válidas, `validTo > validFrom` e duração ≤ 30
+dias — antes do gate de vigência por data. Grant malformado ⇒ **não aplicável**
+(DENY), sem normalizar/truncar e sem confiar apenas no serviço de criação;
+retroatividade permanece restrição de CONCESSÃO (não rejeitada no provider).
+A mesma validação protege `listAllowedTargets`.
+
 ### 24.3 PILOT_PROFILE_V1 e exclusões
 
 Perfil fechado/versionado `PILOT_PROFILE_V1` = 20 capabilities funcionais não

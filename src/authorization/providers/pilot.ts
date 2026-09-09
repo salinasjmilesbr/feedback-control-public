@@ -70,6 +70,30 @@ export interface PilotFullAccessProviderInput {
   recordUsage?: (record: PilotUsageRecord) => void;
 }
 
+/** Duração máxima de um grant D (D9/Q2): 30 dias. */
+export const PILOT_MAX_DURATION_DAYS = 30;
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+export const PILOT_MAX_DURATION_MS = PILOT_MAX_DURATION_DAYS * MS_PER_DAY;
+
+function isDataValida(d: Date): boolean {
+  return d instanceof Date && !Number.isNaN(d.getTime());
+}
+
+/**
+ * D9/D13 — fail-closed ESTRUTURAL na fronteira de segurança (provider): o grant
+ * só é aplicável se possuir janela estruturalmente válida. Não confia que o
+ * grant foi criado pelo serviço atual (na F5 virá de fonte persistida); não
+ * normaliza, não corrige silenciosamente, não trunca para 30 dias.
+ * Retroatividade é restrição de CONCESSÃO — NÃO é rejeitada aqui.
+ */
+export function grantJanelaEstruturalValida(grant: PilotFullAccessGrant): boolean {
+  if (!isDataValida(grant.validFrom) || !isDataValida(grant.validTo)) return false;
+  if (!(grant.validTo > grant.validFrom)) return false;
+  return grant.validTo.getTime() - grant.validFrom.getTime() <= PILOT_MAX_DURATION_MS;
+}
+
 export function createPilotFullAccessProvider(
   input: PilotFullAccessProviderInput
 ): PilotFullAccessProvider {
@@ -94,6 +118,9 @@ export function createPilotFullAccessProvider(
         if (g.organizationId !== organizationId) return false;
         if (g.beneficiaryUserProfileId !== beneficiaryId) return false;
         if (g.status !== "active") return false;
+        // D9 fail-closed estrutural: janela válida (datas válidas, validTo >
+        // validFrom, duração <= 30 dias). Grant malformado ⇒ não aplicável.
+        if (!grantJanelaEstruturalValida(g)) return false;
         // D13 janela fechada [validFrom, validTo); futuro/expirado não autoriza.
         if (date < g.validFrom || date >= g.validTo) return false;
         // D16: perfil desconhecido/inelegível ⇒ não aplicável (fail-closed).

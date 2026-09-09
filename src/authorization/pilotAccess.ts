@@ -6,7 +6,12 @@ import type {
   PolicyEngineProviders,
   TargetRef,
 } from "./policyEngine/types";
-import { PILOT_PROFILES } from "./providers/pilot";
+import {
+  PILOT_MAX_DURATION_MS,
+  PILOT_PROFILES,
+} from "./providers/pilot";
+
+export { PILOT_MAX_DURATION_DAYS } from "./providers/pilot";
 
 /**
  * Serviço de administração do Pilot Full Access (F4-07, Issue #94). Contrato
@@ -19,11 +24,6 @@ import { PILOT_PROFILES } from "./providers/pilot";
  * é PROIBIDA, justificativa obrigatória, janela fechada (máx. 30 dias), sem
  * retroatividade e sem extensão in-place.
  */
-
-/** Duração máxima de um grant D (D9/Q2): 30 dias. */
-export const PILOT_MAX_DURATION_DAYS = 30;
-
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /** Eventos de auditoria da origem D (D14): granted/revoked/relinquished. */
 export type PilotAuditEvent =
@@ -81,7 +81,7 @@ export function concederPilotFullAccess(
   // D9/Q2: duração máxima 30 dias
   if (
     input.validTo.getTime() - input.validFrom.getTime() >
-    PILOT_MAX_DURATION_DAYS * MS_PER_DAY
+    PILOT_MAX_DURATION_MS
   ) {
     throw new ValidationError();
   }

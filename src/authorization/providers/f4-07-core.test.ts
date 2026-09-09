@@ -61,8 +61,8 @@ function pilotGrant(overrides: Partial<PilotFullAccessGrant> = {}): PilotFullAcc
     beneficiaryUserProfileId: "ben1",
     grantedByUserProfileId: "granter1",
     justification: "validação do piloto",
-    validFrom: new Date("2026-01-01T00:00:00Z"),
-    validTo: new Date("2026-02-28T00:00:00Z"),
+    validFrom: new Date("2026-01-15T00:00:00Z"),
+    validTo: new Date("2026-02-14T00:00:00Z"),
     status: "active",
     profileVersion: "PILOT_PROFILE_V1",
     createdAt: D,
@@ -397,8 +397,8 @@ describe("F4-07 — origem D no Policy Engine (resolução de grant)", () => {
   it("44. novo grant após expiração funciona de forma independente", () => {
     const providers = makeProviders({
       pilot: makePilot([
-        pilotGrant({ id: "exp", validTo: new Date("2026-01-15T00:00:00Z") }),
-        pilotGrant({ id: "novo", validFrom: new Date("2026-01-20T00:00:00Z"), validTo: new Date("2026-02-20T00:00:00Z") }),
+        pilotGrant({ id: "exp", validFrom: new Date("2026-01-01T00:00:00Z"), validTo: new Date("2026-01-15T00:00:00Z") }),
+        pilotGrant({ id: "novo", validFrom: new Date("2026-01-20T00:00:00Z"), validTo: new Date("2026-02-19T00:00:00Z") }),
       ]),
     });
     const decision = decidir(req(), providers);
@@ -448,9 +448,148 @@ describe("F4-07 — origem D no Policy Engine (resolução de grant)", () => {
   });
 
   it("can() devolve decisão estruturada sem lançar para DENY da origem D", () => {
-    const providers = makeProviders({ pilot: makePilot([pilotGrant({ validTo: new Date("2026-01-15T00:00:00Z") })]) });
+    const providers = makeProviders({
+      pilot: makePilot([
+        pilotGrant({
+          validFrom: new Date("2026-01-01T00:00:00Z"),
+          validTo: new Date("2026-01-15T00:00:00Z"),
+        }),
+      ]),
+    });
     expect(() => can(req(), providers)).not.toThrow();
     expect(can(req(), providers).allowed).toBe(false);
+  });
+});
+
+describe("F4-07 — D9 fail-closed estrutural no provider", () => {
+  function prov(grants: PilotFullAccessGrant[]) {
+    return createPilotFullAccessProvider({
+      organizationId: ORG,
+      grants,
+      environment: "development",
+      isTargetConfidential: defaultClassify,
+    });
+  }
+
+  it("58. grant persistido com duração de 31 dias ⇒ não aplicável (DENY)", () => {
+    const p = prov([
+      pilotGrant({
+        validFrom: new Date("2026-01-01T00:00:00Z"),
+        validTo: new Date("2026-02-01T00:00:00Z"), // 31 dias
+      }),
+    ]);
+    expect(
+      p.resolvePilotFullAccessGrants("ben1", ORG, "goal.write", new Date("2026-01-15T00:00:00Z"))
+    ).toEqual([]);
+  });
+
+  it("59. grant persistido com duração muito superior a 30 dias ⇒ não aplicável", () => {
+    const p = prov([
+      pilotGrant({
+        validFrom: new Date("2026-01-01T00:00:00Z"),
+        validTo: new Date("2026-04-01T00:00:00Z"), // ~90 dias
+      }),
+    ]);
+    expect(
+      p.resolvePilotFullAccessGrants("ben1", ORG, "goal.write", new Date("2026-01-15T00:00:00Z"))
+    ).toEqual([]);
+  });
+
+  it("60. validTo == validFrom ⇒ não aplicável", () => {
+    const d = new Date("2026-01-15T00:00:00Z");
+    const p = prov([pilotGrant({ validFrom: d, validTo: d })]);
+    expect(p.resolvePilotFullAccessGrants("ben1", ORG, "goal.write", d)).toEqual([]);
+  });
+
+  it("61. validTo < validFrom ⇒ não aplicável", () => {
+    const p = prov([
+      pilotGrant({
+        validFrom: new Date("2026-02-10T00:00:00Z"),
+        validTo: new Date("2026-01-15T00:00:00Z"),
+      }),
+    ]);
+    expect(
+      p.resolvePilotFullAccessGrants("ben1", ORG, "goal.write", new Date("2026-01-20T00:00:00Z"))
+    ).toEqual([]);
+  });
+
+  it("62. datas inválidas ⇒ não aplicável", () => {
+    const p = prov([
+      pilotGrant({
+        validFrom: new Date("invalida"),
+        validTo: new Date("2026-02-14T00:00:00Z"),
+      }),
+    ]);
+    expect(p.resolvePilotFullAccessGrants("ben1", ORG, "goal.write", D)).toEqual([]);
+  });
+
+  it("63. grant exatamente com 30 dias ⇒ aplicável", () => {
+    const p = prov([
+      pilotGrant({
+        validFrom: new Date("2026-01-01T00:00:00Z"),
+        validTo: new Date("2026-01-31T00:00:00Z"), // 30 dias
+      }),
+    ]);
+    expect(
+      p.resolvePilotFullAccessGrants("ben1", ORG, "goal.write", new Date("2026-01-15T00:00:00Z"))
+    ).toHaveLength(1);
+  });
+
+  it("64. grant menor que 30 dias ⇒ aplicável", () => {
+    const p = prov([
+      pilotGrant({
+        validFrom: new Date("2026-01-20T00:00:00Z"),
+        validTo: new Date("2026-02-10T00:00:00Z"),
+      }),
+    ]);
+    expect(p.resolvePilotFullAccessGrants("ben1", ORG, "goal.write", D)).toHaveLength(1);
+  });
+
+  it("65. grant com validFrom já passado e ainda dentro da janela ⇒ aplicável", () => {
+    const p = prov([
+      pilotGrant({
+        validFrom: new Date("2026-01-20T00:00:00Z"),
+        validTo: new Date("2026-02-10T00:00:00Z"),
+      }),
+    ]);
+    // validFrom (2026-01-20) < data (2026-02-01) < validTo → aplicável.
+    expect(p.resolvePilotFullAccessGrants("ben1", ORG, "goal.write", D)).toHaveLength(1);
+  });
+
+  it("66. engine: grant malformado ⇒ DENY", () => {
+    const providers = makeProviders({
+      pilot: makePilot([
+        pilotGrant({
+          validFrom: new Date("2026-01-01T00:00:00Z"),
+          validTo: new Date("2026-02-01T00:00:00Z"), // 31 dias
+        }),
+      ]),
+    });
+    expect(
+      decidir(req({ context: { date: new Date("2026-01-15T00:00:00Z") } }), providers).allowed
+    ).toBe(false);
+  });
+
+  it("67. listAllowedTargets também protegida (grant malformado não lista via D)", () => {
+    const providers = makeProviders({
+      pilot: makePilot([
+        pilotGrant({
+          validFrom: new Date("2026-01-01T00:00:00Z"),
+          validTo: new Date("2026-02-01T00:00:00Z"), // 31 dias
+        }),
+      ]),
+    });
+    const listados = listAllowedTargets(
+      {
+        actor: { actorId: "ben1", organizationId: ORG },
+        capability: "goal.write",
+        context: { date: new Date("2026-01-15T00:00:00Z") },
+        domainState: semprePermite,
+      },
+      providers,
+      [COL_1]
+    );
+    expect(listados).toEqual([]);
   });
 });
 
