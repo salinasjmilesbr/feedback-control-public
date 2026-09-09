@@ -5,8 +5,8 @@
 -- Propósito (contrato F4-08 §9/§11/§12.3):
 --   - criar o ÚNICO helper conceitual `user_has_active_membership(org_id)`,
 --     SECURITY INVOKER, STABLE, search_path=public, sem DEFINER e sem recursão
---     (raiz do grafo acíclico de policies: consulta somente
---     user_organization_memberships, cuja policy usa apenas auth.uid());
+--     (raiz do grafo acíclico de policies: consulta somente user_profiles e
+--     user_organization_memberships, cujas policies usam apenas auth.uid());
 --   - REVOKE EXECUTE FROM PUBLIC nas 16 funções INVOKER de resolução/RPC e
 --     GRANT EXECUTE somente a service_role (uso interno/futuro server-side);
 --     não confiar no "RLS bloqueia tudo" atual.
@@ -35,19 +35,23 @@ as $$
   select exists (
     select 1
     from public.user_organization_memberships m
+    join public.user_profiles up
+      on up.id = m.user_profile_id
     where m.organization_id = p_organization_id
       and m.user_profile_id = auth.uid()
       and m.status = 'active'
+      and up.status = 'active'
   );
 $$;
 
 comment on function public.user_has_active_membership(uuid) is
   'F4-08 (Issue #95): responde se o usuario autenticado (auth.uid()) possui '
-  'membership ATIVA na organizacao informada. SECURITY INVOKER, STABLE, '
-  'search_path=public; raiz do grafo aciclico de policies (consulta somente '
-  'user_organization_memberships, cuja policy usa apenas auth.uid()). Nunca '
-  'aceita organizacao vinda do frontend como prova — apenas correlaciona o id '
-  'da linha com a membership soberana do banco.';
+  'user_profile ATIVO + membership ATIVA na organizacao informada (fronteira '
+  'soberana D1: auth.uid + profile ativo + membership ativa). SECURITY INVOKER, '
+  'STABLE, search_path=public; raiz do grafo aciclico de policies (consulta '
+  'somente user_profiles e user_organization_memberships, cujas policies usam '
+  'apenas auth.uid()). Nunca aceita organizacao vinda do frontend como prova. '
+  'Profile inativo => false (fail-closed), mesmo com membership ativa.';
 
 revoke execute on function public.user_has_active_membership(uuid) from public, anon;
 grant execute on function public.user_has_active_membership(uuid) to authenticated;

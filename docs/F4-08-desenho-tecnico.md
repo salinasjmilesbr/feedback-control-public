@@ -517,3 +517,87 @@ F5; persistências C/D = F5/F4-09+.
 Nenhum código, migration, policy RLS, helper SQL, grant ou view foi produzido —
 somente `docs/F4-08-desenho-tecnico.md`. Issue #95 permanece aberta (PR sem
 `Closes`). Sem merge.
+
+## 26. Implementação — registro de entrega (Issue #95, PR #154)
+
+> **Status:** implementado e validado no Supabase local; **PR #154 (Closes #95)**
+> aberto, **sem merge**. Contrato D1–D22/Q1–Q8 (§23/§24) seguido integralmente.
+> Nenhum FORCE RLS, nenhum novo SECURITY DEFINER, sem service role no cliente,
+> sem Supabase remoto.
+
+### 26.1 Migrations (incrementais, igual-ou-mais-restritivas)
+
+1. `20260908100000_f4_08_helpers_function_grants.sql` — helper único +
+   revoke/grant das funções INVOKER.
+2. `20260908110000_f4_08_rls_select_own_tenant.sql` — policies SELECT own-tenant
+   + grants.
+3. `20260908120000_f4_08_capabilities_read_only.sql` — capabilities global
+   read-only.
+4. `20260908130000_f4_08_hardening.sql` — `registrar_sucessao_avaliador` + triggers.
+
+### 26.2 Helper
+
+`public.user_has_active_membership(uuid)` — SECURITY INVOKER, STABLE,
+`set search_path = public`, sem DEFINER e sem recursão. Verifica a fronteira
+soberana D1 COMPLETA: `auth.uid()` + user_profile ATIVO + membership ATIVA
+(`join user_profiles` com `status='active'`). Grafo acíclico: consulta somente
+`user_profiles` e `user_organization_memberships`, cujas policies usam apenas
+`auth.uid()` (nenhuma chama o helper). EXECUTE somente a `authenticated`
+(revoke de `public, anon`). Profile inativo ⇒ `false` (fail-closed).
+
+### 26.3 Policies (18 novas → 21 no total)
+
+- SELECT own-tenant (`<tabela>_select_same_tenant`) em 13 tabelas estruturais
+  (A) + 3 snapshots F3-08 (E) + `collaborator_status_periods` (B, via EXISTS em
+  `collaborators`);
+- `capabilities_select_authenticated` (catálogo global read-only);
+- 7 tabelas fechadas permanecem sem policy (6 de segurança F4-01/F4-02 +
+  `evaluation_succession_events` de auditoria).
+
+### 26.4 Grants/revokes
+
+- 16 funções INVOKER de resolução/RPC (F3-07/F3-09/F4-02): `revoke execute from
+  public, anon, authenticated` + `grant execute to service_role` (Supabase
+  concede EXECUTE por default privileges a `public/anon/authenticated` — mesmo
+  padrão da F4-01).
+- 4 SECURITY DEFINER existentes mantidos (EXECUTE `service_role`, sem ampliar).
+- Grants SELECT mínimos a `authenticated` somente nas 18 tabelas legíveis.
+
+### 26.5 Hardening de funções/triggers
+
+- `registrar_sucessao_avaliador`: guard soberano de `organization_id` (todas as
+  responsabilidades no mesmo tenant; cross-tenant = DENY fail-closed).
+- Triggers F3-04/05/06: `if not found then raise` (fail-closed).
+- Triggers F4-01/F4-02: `set search_path = public`.
+
+### 26.6 Testes locais (Supabase local, docker/psql)
+
+`supabase db reset` + `supabase/validacao/01-cenario-f4-08.sql` +
+`02-validar-f4-08.sql` — **32 verificações `[PASS]`**, incluindo:
+- schema guard (sem FORCE RLS; RLS global; exatamente 4 DEFINER; sem EXECUTE
+  indevido; 18 legíveis/7 fechadas; 21 policies);
+- **profile inativo + membership ativa = DENY** (helper + RLS own-tenant);
+- membership inativa / sem membership = DENY; multi-membership (Alfa+Beta, não
+  Gama); cross-tenant por ID direto = DENY; anon sem acesso;
+- DML direto negado; resolvers/RPC sem EXECUTE para authenticated;
+- triggers fail-closed; `registrar_sucessao_avaliador` cross-tenant = DENY.
+
+### 26.7 Schema guard
+
+Em `02-validar-f4-08.sql` (§1): detecta FORCE RLS, tabela `public` sem RLS,
+SECURITY DEFINER além dos 4, EXECUTE indevido (`public/anon/authenticated`) nas
+funções de negócio, tabela legível sem policy SELECT, tabela fechada com policy
+e contagem total de policies.
+
+### 26.8 Limitações/adiamentos
+
+- Resolvers `language sql STABLE` podem ser inlined pelo PostgreSQL; o revoke de
+  EXECUTE é reforçado pelo RLS (resultado restrito ao próprio tenant), sem
+  escalation cross-tenant.
+- Persistências C/D e domínios `localStorage` permanecem para F5/F4-09+.
+
+### 26.9 Resultados finais
+
+- `npm test`: 55 arquivos / 745 testes passaram.
+- `npm run build`: OK. `npm run lint`: sem erros. `git diff --check`: limpo.
+- Supabase local: **32 `[PASS]`**, 0 falhas.

@@ -8,7 +8,8 @@
 --   - três organizações sintéticas (Alfa, Beta e Gama F4-08);
 --   - identidades/perfis sintéticos: USER_A (só Alfa), USER_B (só Beta),
 --     USER_AB (Alfa + Beta — multi-tenant), USER_INACTIVE (membership Alfa
---     disabled), USER_NONE (sem membership) e AUTHOR (autor do evento de
+--     disabled), USER_PROFILE_INACTIVE (profile disabled + membership Alfa
+--     active), USER_NONE (sem membership) e AUTHOR (autor do evento de
 --     sucessão);
 --   - estrutura F3 mínima por org (job_role, unidade, posição, colaborador,
 --     status) para provar leitura own-tenant e deny cross-tenant;
@@ -94,6 +95,9 @@ values
    '{}'::jsonb, '{}'::jsonb, now(), now()),
   ('d8b00000-0000-0000-0000-0000000000a6', '00000000-0000-0000-0000-000000000000',
    'authenticated', 'authenticated', 'author.f4-08@example.invalid', 'x', now(),
+   '{}'::jsonb, '{}'::jsonb, now(), now()),
+  ('d8b00000-0000-0000-0000-0000000000a7', '00000000-0000-0000-0000-000000000000',
+   'authenticated', 'authenticated', 'profileinactive.f4-08@example.invalid', 'x', now(),
    '{}'::jsonb, '{}'::jsonb, now(), now());
 
 insert into public.user_profiles (id, status) values
@@ -102,7 +106,8 @@ insert into public.user_profiles (id, status) values
   ('d8b00000-0000-0000-0000-0000000000a3', 'active'),
   ('d8b00000-0000-0000-0000-0000000000a4', 'active'),
   ('d8b00000-0000-0000-0000-0000000000a5', 'active'),
-  ('d8b00000-0000-0000-0000-0000000000a6', 'active');
+  ('d8b00000-0000-0000-0000-0000000000a6', 'active'),
+  ('d8b00000-0000-0000-0000-0000000000a7', 'disabled');
 
 -- ----------------------------------------------------------------------------
 -- Memberships sintéticas
@@ -112,7 +117,8 @@ insert into public.user_organization_memberships (id, user_profile_id, organizat
   ('d8d00000-0000-0000-0000-0000000000a2', 'd8b00000-0000-0000-0000-0000000000a2', 'd8a00000-0000-0000-0000-0000000000b1', 'active'),  -- USER_B -> Beta
   ('d8d00000-0000-0000-0000-0000000000a3', 'd8b00000-0000-0000-0000-0000000000a3', 'd8a00000-0000-0000-0000-0000000000a1', 'active'),  -- USER_AB -> Alfa
   ('d8d00000-0000-0000-0000-0000000000a4', 'd8b00000-0000-0000-0000-0000000000a3', 'd8a00000-0000-0000-0000-0000000000b1', 'active'),  -- USER_AB -> Beta
-  ('d8d00000-0000-0000-0000-0000000000a5', 'd8b00000-0000-0000-0000-0000000000a4', 'd8a00000-0000-0000-0000-0000000000a1', 'disabled'); -- USER_INACTIVE -> Alfa (disabled)
+  ('d8d00000-0000-0000-0000-0000000000a5', 'd8b00000-0000-0000-0000-0000000000a4', 'd8a00000-0000-0000-0000-0000000000a1', 'disabled'), -- USER_INACTIVE -> Alfa (membership disabled)
+  ('d8d00000-0000-0000-0000-0000000000a6', 'd8b00000-0000-0000-0000-0000000000a7', 'd8a00000-0000-0000-0000-0000000000a1', 'active');  -- USER_PROFILE_INACTIVE -> Alfa (profile disabled, membership active)
 
 -- ----------------------------------------------------------------------------
 -- job_roles, unidades, posições e colaboradores sintéticos (F3)

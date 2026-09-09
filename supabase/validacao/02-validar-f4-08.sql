@@ -601,6 +601,41 @@ end $$;
 reset role;
 
 -- ============================================================================
+-- 6b) USER_PROFILE_INACTIVE (profile disabled + membership Alfa active) => DENY
+-- ============================================================================
+
+select set_config('request.jwt.claim.sub', 'd8b00000-0000-0000-0000-0000000000a7', false);
+set role authenticated;
+
+do $$
+declare
+  v_ok boolean;
+  v_n int;
+begin
+  -- Helper fail-closed: profile inativo => false, mesmo com membership ativa.
+  select public.user_has_active_membership('d8a00000-0000-0000-0000-0000000000a1') into v_ok;
+  if v_ok is not false then
+    raise exception '[FAIL] helper deveria retornar false para profile inativo + membership ativa';
+  end if;
+
+  -- RLS em execução: zero acesso às tabelas own-tenant.
+  select count(*) into v_n from public.collaborators;
+  if v_n <> 0 then
+    raise exception '[FAIL] profile inativo ainda leu estrutura own-tenant (% linha(s))', v_n;
+  end if;
+
+  -- Profile inativo não lê nem o próprio profile (user_profiles_select_own exige status=active).
+  select count(*) into v_n from public.user_profiles;
+  if v_n <> 0 then
+    raise exception '[FAIL] profile inativo leu o proprio perfil (% linha(s))', v_n;
+  end if;
+
+  raise notice '[PASS] profile inativo + membership ativa = DENY (helper + RLS own-tenant)';
+end $$;
+
+reset role;
+
+-- ============================================================================
 -- 7) anon sem acesso a dados privados
 -- ============================================================================
 
