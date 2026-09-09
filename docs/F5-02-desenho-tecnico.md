@@ -1,9 +1,9 @@
 # F5-02 — Vínculo usuário autenticado ↔ colaborador (contrato arquitetural e desenho)
 
 > Documento de desenho técnico — **etapa de auditoria e desenho, sem código funcional**.
-> Estado: **revisado (PR #161)** — Q1, Q3, Q4 e Q5 **FECHADAS/APROVADAS**; Q2
-> **N/A (adiada para F5-05)**; Q6 **ABERTA** aguardando validação. Decisões
-> D1–D14 revisadas; **D8 permanece ABERTA** enquanto Q6 estiver aberta.
+> Estado: **FECHADO — contrato pronto para implementação** (PR #161). Q1–Q6
+> **todas resolvidas**: Q1, Q3, Q4, Q5 e Q6 **FECHADAS/APROVADAS**; Q2 **N/A
+> (adiada para F5-05)**. Decisões D1–D14 **FECHADAS**.
 >
 > Fase: 5 — Identidade e Multiusuário · Atividade: F5-02 · Complexidade: Alta · Risco: Crítico
 
@@ -18,7 +18,7 @@ confiável** entre a identidade autenticada e o colaborador organizacional:
 usuário autenticado (auth.uid())
   → user_profile (conta habilitada no Virtus)
   → membership (alcance de tenant)
-  → MembershipCollaboratorLink (vínculo 1:0..1)
+  → MembershipCollaboratorLink (vínculo 1:0..1 ativo; histórico por linhas)
   → colaborador (entidade de domínio organizacional — F3)
 ```
 
@@ -48,10 +48,10 @@ do e-mail/matrícula/cargo uma chave de vínculo.
 - fail-closed; tenant mismatch = DENY; RLS F4-08 e isolamento entre tenants
   permanecem vigentes;
 - F4-02 (decisões **fechadas**) já definiu: vínculo em **tabela própria**
-  (`membership_collaborator_links`), 1 vínculo ativo por (usuário, organização),
-  FK composta de tenant, ADMIN/usuários sem colaborador usam scopes não
-  estruturais (D17) e resolvers `SECURITY INVOKER`/bootstrap DEFINER restrito a
-  `service_role` (D18 — **inalterado nesta atividade**).
+  (`membership_collaborator_links`), FK composta de tenant, ADMIN/usuários sem
+  colaborador usam scopes não estruturais (D17) e resolvers `SECURITY INVOKER`/
+  bootstrap DEFINER restrito a `service_role` (D18 — **inalterado nesta
+  atividade**).
 
 ### 1.2 O que a F5-02 entrega e o que deixa para etapas posteriores
 
@@ -79,7 +79,7 @@ Criada em `supabase/migrations/20260908010000_authorization_scopes_membership_co
 | Aspecto | Estado verificado |
 | --- | --- |
 | Colunas | `id uuid PK` · `membership_id uuid` · `organization_id uuid` · `collaborator_id uuid` · `status text (active/disabled)` · `created_at/updated_at/version` |
-| 1 vínculo por membership | `uq_membership_collaborator_links_membership` unique (membership_id) — **vale inclusive quando a linha está `disabled`** (1 única linha por membership em qualquer status) |
+| 1 vínculo por membership | `uq_membership_collaborator_links_membership` unique (membership_id) — **vale inclusive quando a linha está `disabled`** (1 única linha por membership em qualquer status). **Este contrato muda na implementação (Q6 = B):** passa a ser unicidade **parcial** (no máx. 1 `active` por membership), permitindo linhas `disabled` históricas. |
 | Tenant da membership | FK composta `(membership_id, organization_id)` → `user_organization_memberships(id, organization_id)` RESTRICT |
 | Tenant do colaborador | FK composta `(collaborator_id, organization_id)` → `collaborators(id, organization_id)` RESTRICT |
 | Reativação no lugar | `status active/disabled`; sem exclusão física; histórico preservado na linha |
@@ -91,7 +91,7 @@ Criada em `supabase/migrations/20260908010000_authorization_scopes_membership_co
 
 | Função | Modo | Estado |
 | --- | --- | --- |
-| `resolver_collaborador_vinculado(user_profile_id, organization_id)` → `collaborator_id` | `SECURITY INVOKER`, STABLE | Une membership **ativa** (`m.status='active'`) × link **ativo** (`l.status='active'`) pelo `membership_id`; filtrado por `user_profile_id` e `organization_id`. **Não junta `user_profiles` (profile ativo não é verificado aqui)** — divergência de defesa em profundidade vs. `resolver_capabilities_escopos_efetivas`, que junta `up.status='active'` (G2). |
+| `resolver_collaborador_vinculado(user_profile_id, organization_id)` → `collaborator_id` | `SECURITY INVOKER`, STABLE | Une membership **ativa** (`m.status='active'`) × link **ativo** (`l.status='active'`) pelo `membership_id`; filtrado por `user_profile_id` e `organization_id`. **Não junta `user_profiles` (profile ativo não é verificado aqui)** — divergência de defesa em profundidade vs. `resolver_capabilities_escopos_efetivas`, que junta `up.status='active'` (G2; corrigido na implementação por Q4 = A). |
 | `resolver_capabilities_escopos_efetivas(user_profile_id, organization_id)` | INVOKER, STABLE | Exige profile ativo + membership ativa + assignments/roles/scopes ativos (fail-closed) |
 | `resolver_alvos_escopo(user_profile_id, organization_id, scope, unit, data)` | INVOKER, STABLE | SELF/DIRECT_REPORTS/DESCENDANTS partem de `resolver_collaborador_vinculado` → resolvers F3-07; ORGANIZATIONAL_UNIT/ORGANIZATION; ASSIGNED = vazio (F4-03/F4-05) |
 | Grants (F4-08) | — | `EXECUTE` desses resolvers **revogado** de `public/anon/authenticated`; concedido **somente a `service_role`** (uso interno/server-side) |
@@ -157,10 +157,10 @@ Criada em `supabase/migrations/20260908010000_authorization_scopes_membership_co
 | G4 | Sem testes automatizados (TS ou validação SQL) para os estados inválidos do vínculo: profile desabilitado × link, membership revogada × link, colaborador inativo/inexistente | validação F4-02 testa apenas o caso feliz do `resolver_collaborador_vinculado` + `resolver_capabilities_escopos_efetivas` p/ disabled | Regressões silenciosas quando o vínculo entrar em runtime | F5-02 (estratégia de testes — caminhos internos/service_role) |
 | G5 | Não há definição formal de “colaborador inativo” × vínculo (status temporal F3-01) no contrato de resolução | F3-01 status `active/leave/inactive`; link só tem `active/disabled` | SELF/hierarquia podem divergir sobre licença/desligado | F5-02 (Q5 FECHADA — âncora independente de status) |
 | G6 | Possibilidade de um mesmo colaborador estar vinculado a **mais de um** membership **ativo** da mesma organização (usuários distintos): `unique` é só por `membership_id` | constraint F4-02 | Ambiguidade de SELF para o colaborador na organização | F5-02 (Q3 FECHADA — unique parcial do ativo) |
-| G7 | Sem tratamento executável de “mudança de colaborador”/“mudança de organização” com histórico | modelo só tem status active/disabled e **UNIQUE(membership_id)** (impede 2ª linha histórica na mesma membership) | Mudanças administrativas sem caminho consistente e sem auditoria | F5-02 (Q6 ABERTA — análise A/B/C) |
+| G7 | Sem tratamento executável de “mudança de colaborador” com histórico (UNIQUE(membership_id) impede 2ª linha histórica na mesma membership) | modelo só tem status active/disabled e **UNIQUE(membership_id)** | Mudanças administrativas sem caminho consistente e sem auditoria | F5-02 (**Q6 FECHADA = B** — múltiplas linhas históricas, 1 ativa por membership) |
 | G8 | `membership` não tem coluna `collaborator_id` (por decisão F4-02 D1 = A); há risco de alguém reintroduzir vínculo por e-mail/matrícula no futuro | F2-02/migração F4-02 | Anti-pattern de identidade (regressão ao vínculo por chave de negócio) | F5-02 (contrato/regra permanente) |
 | G9 | Mundo DEV usa matrícula como `actorId`; a semântica real (`auth.uid()`) ainda não está conectada aos providers estruturais | `mundoFuncional.ts`, `authorizationPolicy.ts` | Transição DEV→real exige o mapa (actorId, org) → colaborador via vínculo | F5-02 (seam) + F5-04/05 |
-| G10 | Sem contrato de “quem pode criar/mover/remover vínculo” (path administrativo) e sem auditoria do vínculo | sem função/RPC de gestão do vínculo além da tabela | Mutação direta poderia virar caminho (proibido: F4-08 mutações só por RPC/transação) | F5-02 (D9; implementação) |
+| G10 | Sem caminho server-side/transacional de mutação do vínculo (criar/trocar/desativar) com auditoria | sem função/RPC de gestão do vínculo além da tabela | Mutação direta poderia virar caminho (proibido: F4-08 mutações só por RPC/transação) | F5-02 (D9; implementação) |
 
 ---
 
@@ -174,7 +174,7 @@ auth.uid()  ──1:1──▶  user_profiles.id        (conta habilitada)
    ▼ (profile ativo + membership ativa, confirmada server-side)
 user_organization_memberships.user_profile_id   (alcance de tenant)
    │
-   ▼ (1:0..1 ativo)
+   ▼ (no máx. 1 link ativo por membership; linhas disabled = histórico)
 membership_collaborator_links                   (o vínculo)
    │
    ▼ (FK composta — mesmo tenant)
@@ -190,17 +190,18 @@ a colaborador” fora de uma organização.
 | Relação | Cardinalidade | Como é garantida |
 | --- | --- | --- |
 | user_profile → membership | 1 → N | unique (user_profile_id, organization_id) F2-02 |
-| membership → colaborador (via link) | 1 → **0..1** | no máx. 1 link **ativo** por membership (hoje 1 linha por membership em qualquer status — UNIQUE(membership_id); forma do histórico depende de Q6) |
-| colaborador → membership (via link) | 1 → 0..1 **ativo** por organização | **Q3 FECHADA (B):** unique parcial do link ativo por `(collaborator_id, organization_id)` |
+| membership → colaborador (via link) | 1 → **0..1 ativo** | unique **parcial** (1 `active` por membership) — Q6 = B; linhas `disabled` históricas são permitidas |
+| colaborador → membership (via link) | 1 → 0..1 **ativo** por organização | unique **parcial** (1 `active` por `(collaborator_id, organization_id)`) — Q3 = B |
 | link → tenant | 1 organização | FKs compostas (membership e colaborador) |
 
 Formas válidas por (usuário, organização):
-- membership ativa **sem** link → usuário da organização **sem colaborador**
-  (ADMIN/administrativo; D17 F4-02);
+- membership ativa **sem** link ativo → usuário da organização **sem
+  colaborador** (ADMIN/administrativo; D17 F4-02) ou com vínculo desativado
+  (histórico);
 - membership ativa **com** link ativo → usuário com colaborador (SELF e raiz de
   escopos estruturais);
-- link `disabled` → equivale a “sem vínculo ativo” para fins de resolução
-  (fail-closed), preservando o histórico da linha.
+- linhas `disabled` → **histórico preservado** (mudança de colaborador = nova
+  linha ativa); nunca sobrescrever `collaborator_id` de linha histórica.
 
 ### 4.3 Invariantes do modelo
 
@@ -208,17 +209,21 @@ Formas válidas por (usuário, organização):
    `user_profiles` do dono da membership está ativo (D1/F4-08 — G2);
 2. `link.organization_id` = `membership.organization_id` = `collaborator.organization_id`
    (FKs compostas — indecomponível no banco);
-3. no máximo **1 link ativo por membership** e, por decisão Q3 (B), no máximo
-   **1 link ativo por `(collaborator_id, organization_id)`** (mesmo colaborador
-   não representado por 2 contas/memberships ativas na mesma organização);
-4. `collaborators.id` é UUID técnico imutável; matrícula/nome/e-mail **nunca**
+3. no máximo **1 link `active` por membership** (unique parcial — Q6 = B);
+   múltiplas linhas `disabled` por membership são históricas;
+4. no máximo **1 link `active` por `(collaborator_id, organization_id)`**
+   (Q3 = B): um colaborador não é representado por duas contas/memberships ativas
+   na mesma organização;
+5. `collaborators.id` é UUID técnico imutável; matrícula/nome/e-mail **nunca**
    participam do vínculo;
-5. sem vínculo ativo ⇒ scopes SELF/estruturais **não resolvem** (vazio = DENY);
-6. link `disabled`/membership `disabled`/profile `disabled` ⇒ resolução vazia
+6. sem vínculo ativo ⇒ scopes SELF/estruturais **não resolvem** (vazio = DENY);
+7. link `disabled`/membership `disabled`/profile `disabled` ⇒ resolução vazia
    (fail-closed), sem exclusão física de histórico;
-7. o formato exato de linhas históricas (1 linha única com troca controlada vs.
-   múltiplas linhas históricas) depende de **Q6 (ABERTA)** — invariantes 3 e 6
-   permanecem válidos em qualquer opção.
+8. **mudança de colaborador é transacional:** desativar o link ativo atual +
+   inserir nova linha ativa para o novo colaborador, na mesma transação — nunca
+   `UPDATE` de `collaborator_id` em linha existente (histórica ou ativa);
+9. **sem `valid_from`/`valid_to`** no vínculo nesta fase (Q6 = B, item 5):
+   temporalidade explícita completa fica adiada até existir necessidade concreta.
 
 ---
 
@@ -240,13 +245,15 @@ resolveCollaborator(authUid, organizationId):
   1. profile = user_profiles(authUid)              → ausente/inativo ⇒ vazio
   2. membership = memberships ativas(authUid, org) → ausente (sem membership
                                                      ativa no tenant) ⇒ vazio
-  3. link = links ativos(membership.id)            → ausente/disabled ⇒ vazio
+  3. link = link active da membership              → sem link ativo ⇒ vazio
+     (a linha disabled histórica NÃO resolve)
   4. colaborador = collaborators(link.collaborator_id)
   5. ⇒ { colaborador, membership, link } (0 ou 1)
 ```
 
 Regras:
-- retorna **no máximo 1** colaborador por (authUid, organizationId);
+- retorna **no máximo 1** colaborador por (authUid, organizationId) — somente o
+  link **ativo** resolve; linhas `disabled` são histórico e **nunca** resolvem;
 - a organização é **parâmetro de contexto** (intenção do chamador), **nunca**
   derivada da sessão/JWT; a validade é confirmada contra a membership ativa do
   `auth.uid()` naquele tenant (sem membership ativa ⇒ DENY/vazio);
@@ -267,6 +274,9 @@ Regras:
   membership **ativa do `auth.uid()`** naquela organização; sem membership ativa
   no tenant ⇒ vazio/DENY; `resolver_alvos_escopo` e
   `resolver_capabilities_escopos_efetivas` já seguem esse padrão.
+- **Mudança de colaborador (Q6 = B):** a troca preserva tenant correlation — as
+  novas linhas são inseridas com a mesma `organization_id`, garantida pelas FKs
+  compostas existentes.
 - **Frontend:** nunca transporta prova; transporta apenas `organization_id` como
   intenção (validada no servidor contra membership ativa).
 - **Regra:** vínculo cross-tenant = impossível no banco e DENY na resolução
@@ -280,7 +290,7 @@ Regras:
 | --- | --- | --- | --- |
 | AuthIdentity (F5-01) | Conta autenticada (`auth.uid()` + sessão) | Fonte de colaborador/tenant/role; `organization_id` não é claim da sessão | `user_profile.id = auth.uid()` |
 | membership | Alcance de tenant da conta | Vínculo com colaborador; papel | 1 conta → N memberships |
-| MembershipCollaboratorLink | **O vínculo**: associa uma membership a ≤1 colaborador no mesmo tenant | Credencial; papel; cadastro da pessoa | no máx. 1 ativo por membership; Q3: no máx. 1 ativo por (colaborador, org); FKs compostas |
+| MembershipCollaboratorLink | **O vínculo**: associa uma membership a ≤1 colaborador ativo no mesmo tenant; linhas `disabled` = histórico | Credencial; papel; cadastro da pessoa | 1 `active` por membership (Q6); 1 `active` por (colaborador, org) (Q3); FKs compostas |
 | colaborador (F3) | Pessoa organizacional com lifecycle temporal | Identidade da conta | Vincula-se por membership, nunca por e-mail/matrícula |
 | ActorContext (F5-05) | Ator efetivo do engine, derivado de AuthIdentity + membership + vínculo | Estado global de UI | Consome o resultado da F5-02; não implementado aqui |
 
@@ -298,24 +308,41 @@ resolver Vínculo (por organização — caminho interno/server-side na F5-02):
     → user_profiles ativo?        não ⇒ ∅ (sem vínculo; acesso já negado na F5-01)
     → membership ativa em org?     não ⇒ ∅ (sem membership ativa no tenant ⇒ DENY;
                                    organização do parâmetro é intenção, nunca claim)
-    → link ativo p/ membership?    não ⇒ ∅ (usuário sem colaborador — D17)
+    → link active da membership?   não ⇒ ∅ (usuário sem colaborador — D17; linha
+                                   disabled histórica não resolve)
     → colaborador existe?          não ⇒ ∅ (inconsistência — nunca heurística)
     → resultado: { colaborador, membership, link }  (0..1)
 ```
+
+Fluxo de **mudança de colaborador** (Q6 = B; transacional, server-side — D9):
+
+```
+trocarColaborador(membership, novoCollaboratorId, autor) [transação]:
+  1. valida tenant: membership e novo colaborador na MESMA organization_id
+     (FKs compostas; cross-tenant ⇒ erro/rollback)
+  2. desativa o link ACTIVE atual  (status = 'disabled')   ← linha preservada
+  3. insere NOVA linha ACTIVE (membership_id, organization_id, novo colaborador)
+  4. Q3: falha se já existir outro link ACTIVE para (novo colaborador, org)
+  5. Q6: falha se já existir outro link ACTIVE para a membership
+  ⇒ ou tudo (2+3) ou nada (rollback)
+```
+
+---
 
 ## 9. Estados inválidos
 
 | Caso | Resolução prevista | Estado/comportamento |
 | --- | --- | --- |
-| Usuário sem vínculo (sem link) | `∅` | Sem SELF estrutural; ADMIN usa ORGANIZATION (D17); sem erro — é forma válida |
-| Colaborador inexistente (órfão de FK impossível; porém migração/dados) | `∅` | Fail-closed; registrar inconsistência (Q6) |
-| Colaborador em `inactive`/`leave` (status temporal) | `∅`? **não** — âncora preservada (Q5 FECHADA = A) | O vínculo continua resolvendo quem é o colaborador; regras funcionais de SELF/fluxos consideram o estado temporal no domínio/engine — status **não** remapeia identidade |
+| Usuário sem vínculo ativo (sem link ativo) | `∅` | Sem SELF estrutural; ADMIN usa ORGANIZATION (D17); sem erro — forma válida; linhas `disabled` (histórico) não resolvem |
+| Colaborador inexistente (órfão de FK impossível; porém migração/dados) | `∅` | Fail-closed; registrar inconsistência |
+| Colaborador em `inactive`/`leave` (status temporal) | âncora preservada (Q5 FECHADA = A) | O vínculo continua resolvendo quem é o colaborador; regras funcionais de SELF/fluxos consideram o estado temporal no domínio/engine — status **não** remapeia identidade |
 | Link para outro tenant | impossível (FK) | DENY garantido no banco; testes de regressão obrigatórios |
-| Vínculo duplicado ativo (2 links ativos por membership ou 2 ativos por colaborador+org) | impossível (Q3 + UNIQUE atuais) | DENY garantido no banco |
+| 2 links `active` para a mesma membership | impossível (unique parcial Q6) | DENY garantido no banco; rollback transacional |
+| 2 links `active` para o mesmo `(collaborator_id, organization_id)` | impossível (unique parcial Q3) | DENY garantido no banco |
 | Membership revogada/`disabled` | `∅` | Resolução vazia; sem conteúdo estrutural (F4-08) |
-| Link `disabled` | `∅` | Reativação no lugar (no modelo atual: na única linha); histórico preservado |
-| Mudança de colaborador (usuário passa a ser outra pessoa organizacional) | **Q6 (ABERTA)** — ver análise A/B/C na §21 | Não executável hoje como “desabilitar + abrir nova na mesma membership” (UNIQUE(membership_id)); troca controlada ou linhas históricas a decidir |
-| Mudança de organização do colaborador (reorganização) | não existe hoje (id imutável + FK RESTRICT) | Requer fluxo explícito futuro (Q6); vínculo antigo tratado antes |
+| Link `disabled` (histórico) | `∅` | Não resolve; preservado como histórico; reativação = nova linha `active` (ou reativar a linha se for o mesmo colaborador e não houver outra ativa) |
+| Mudança de colaborador (usuário passa a ser outra pessoa organizacional) | **Q6 = B:** desativar link ativo + inserir nova linha ativa, transacional; linha antiga permanece `disabled`; nunca sobrescrever `collaborator_id` | Auditoria/histórico na própria tabela |
+| Mudança de organização do colaborador (reorganização) | não existe hoje (id imutável + FK RESTRICT) | Requer fluxo explícito futuro; vínculo antigo tratado antes |
 | Inconsistência histórica (períodos de status sobrepostos, link órfão em snapshot) | fail-closed | Preservar histórico; registrar para auditoria |
 
 ---
@@ -323,7 +350,8 @@ resolver Vínculo (por organização — caminho interno/server-side na F5-02):
 ## 10. Fail-closed
 
 - Resolução retorna **vazio** em qualquer elo ausente/inativo/inconsistente —
-  nunca “chute”, nunca e-mail/matrícula como fallback, nunca cargo;
+  nunca “chute”, nunca e-mail/matrícula como fallback, nunca cargo; linhas
+  `disabled` (histórico) **nunca** resolvem;
 - perfil inativo, membership inativa/revogada (ou inexistente no tenant),
   link desabilitado ou colaborador inexistente ⇒ sem vínculo resolvido ⇒ scopes
   SELF/estruturais não autorizam;
@@ -332,9 +360,9 @@ resolver Vínculo (por organização — caminho interno/server-side na F5-02):
   (F4-02/F4-08 preservados); a resolução do próprio vínculo ocorre apenas por
   caminhos internos/`service_role`; a necessidade de uma superfície adicional é
   reavaliada somente na F5-05 (Q2 N/A);
-- mutações do vínculo **nunca** por DML direto de `authenticated`
-  (deny-by-default + sem grants); somente caminho administrativo server-side
-  (RPC/Edge), ainda a implementar (D9);
+- mutações do vínculo (criar/trocar/desativar) **nunca** por DML direto de
+  `authenticated` (deny-by-default + sem grants); somente caminho administrativo
+  **server-side/transacional** (RPC/Edge — D9), com rollback atômico (Q6 = B);
 - nenhum estado novo degrada para identidade simulada/DEV fora do gate DEV.
 
 ---
@@ -397,9 +425,10 @@ Impactos diretos:
 - **Q2 (N/A nesta etapa):** a decisão INVOKER vs. DEFINER para uma eventual
   superfície de leitura será **reavaliada somente na F5-05**, se o ActorContext
   precisar; **não altera** o contrato fechado F4-02 D18.
-- **Q3 (FECHADA = B):** garantir no banco a unicidade do vínculo **ativo** por
-  `(collaborator_id, organization_id)`; a mecânica exata da constraint e o
-  tratamento de histórico dependem de **Q6 (ABERTA)** — ver §21/§15.
+- **Q3 (FECHADA = B) + Q6 (FECHADA = B):** no banco, no máximo **1 link `active`
+  por membership** e no máximo **1 link `active` por `(collaborator_id,
+  organization_id)`** — ambos por unicidade **parcial** sobre `status='active'`;
+  linhas `disabled` permanecem como histórico.
 
 ### 13.2 Typescript (contrato p/ F5-05 consumir)
 
@@ -408,7 +437,7 @@ Impactos diretos:
 // superfície executável pelo frontend — Q1 = A FECHADA).
 export interface ColaboradorVinculado {
   readonly membership: MembershipAutenticada; // membership ativa origem
-  readonly linkId: string;                    // id do link ativo
+  readonly linkId: string;                    // id do link ativo (único por membership)
   readonly colaboradorId: string;             // collaborators.id (uuid)
   readonly organizationId: string;            // === membership.organizationId
 }
@@ -430,15 +459,16 @@ export interface VinculoIdentityResolver {
 **Estado atual:** tabela fechada (RLS sem policy, sem grant); resolvers sem
 `EXECUTE` para `authenticated`; default privileges endurecidos (F4-08).
 
-**Alvo (conforme Q1/Q2/Q3/Q4):**
+**Alvo (conforme Q1/Q2/Q3/Q4/Q6):**
 - manter a tabela **fechada** para leitura ampla (sem policy SELECT por
   `authenticated` — impede enumeração de vínculos de terceiros) **e não expor
   função do próprio vínculo nesta F5-02** (Q1 = A; reavaliação em F5-05 — Q2 N/A);
 - endurecer o resolver INVOKER com perfil ativo (Q4 = A), sem mudar grants;
-- (Q3 = B) garantir no banco no máx. 1 vínculo **ativo** por
-  `(collaborator_id, organization_id)` — forma final combinada com Q6;
-- mutações somente por caminho administrativo server-side (D9), seguindo o
-  padrão F4-08 (funções transacionais; sem DML direto).
+- unicidade **parcial** do link ativo: 1 por membership (Q6 = B) e 1 por
+  `(collaborator_id, organization_id)` (Q3 = B);
+- mutações (inclusive a troca A→B) somente por caminho administrativo
+  **server-side/transacional** (D9), seguindo o padrão F4-08 (funções
+  transacionais; sem DML direto de `authenticated`).
 
 ---
 
@@ -447,28 +477,40 @@ export interface VinculoIdentityResolver {
 **Nesta etapa de desenho: NÃO** — nenhuma migration é criada agora (somente este
 documento; validações não são alteradas).
 
-**Para a implementação da F5-02** (conforme decisões fechadas Q1/Q3/Q4/Q5 e Q6
-em aberto), a previsão **revisada** de migrations aditivas (sem coluna/tabela
-nova de vínculo e sem reescrita de `user_organization_memberships`):
+**Para a implementação da F5-02** (decisões Q1/Q2/Q3/Q4/Q5/Q6 já fechadas), a
+previsão **definitiva** de migrations aditivas (sem coluna/tabela nova de vínculo
+e sem reescrita de `user_organization_memberships`):
 
-1. `create or replace function public.resolver_collaborador_vinculado(...)` com
+1. **Q4 (= A) — resolver:** `create or replace function
+   public.resolver_collaborador_vinculado(...)` com
    `join user_profiles up on up.id = m.user_profile_id and up.status = 'active'`
-   — paridade D1/F4-08 (Q4 = A; corrige G2). **Sem** mudança de grants
-   (permanece sem `EXECUTE` para `authenticated`).
-2. **NÃO** haverá `resolver_meu_colaborador_vinculado` nem função
-   `SECURITY DEFINER` para `authenticated` nesta F5-02 (Q1 = A; Q2 N/A → F5-05).
-3. **Q3 (FECHADA = B):** unicidade do vínculo **ativo** por
-   `(collaborator_id, organization_id)`. A mecânica exata é **condicionada à
-   decisão de Q6 (ABERTA)**:
-   - se Q6 = A (1 linha por membership com troca controlada): manter
-     `uq_membership_collaborator_links_membership` e adicionar unique **parcial**
-     do ativo por `(collaborator_id, organization_id)`;
-   - se Q6 = B (múltiplas linhas históricas por membership): substituir o unique
-     total por unique parcial (1 ativo por membership) **e** unique parcial (1
-     ativo por `(collaborator_id, organization_id)`).
-   Em ambos os casos: validar/consolidar os dados existentes (backfill) antes de
-   criar a constraint e registrar rollback (recreate do unique anterior).
+   (paridade D1/F4-08; corrige G2). **Sem** mudança de grants (permanece sem
+   `EXECUTE` para `authenticated`).
+2. **Q1/Q2:** **não** há `resolver_meu_colaborador_vinculado` nem função
+   `SECURITY DEFINER` para `authenticated` nesta F5-02.
+3. **Q6 (= B) — unicidade por membership:** `drop constraint
+   uq_membership_collaborator_links_membership` e criar **unique index parcial**
+   (1 `active` por `membership_id`): `create unique index
+   uq_membership_collaborator_links_active_membership on ... (membership_id)
+   where status = 'active';` — permite múltiplas linhas `disabled` históricas por
+   membership.
+4. **Q3 (= B) — unicidade por colaborador+org:** `create unique index
+   uq_membership_collaborator_links_active_collaborator on ...
+   (collaborator_id, organization_id) where status = 'active';` — impede duas
+   contas/memberships ativas representando o mesmo colaborador no mesmo tenant.
+   > Nota: unicidade **parcial** exige índice único com predicado (constraint
+   `UNIQUE` não aceita `WHERE`); o nome/forma segue a convenção de constraints
+   únicas da F1-02, documentando a exceção do predicado.
+5. **Pré-condição/backfill antes das migrations 3–4:** validar que não existem
+   dados atuais violando as novas regras (1 `active` por membership e 1 `active`
+   por `(collaborator, organization)`); nenhum backfill destrutivo é esperado
+   (fixtures atuais têm 1 linha por membership).
+6. **Rollback:** recriar `uq_membership_collaborator_links_membership` (unique
+   total) após consolidar (1 linha por membership) e dropar os dois unique
+   indexes parciais.
 
+**Não há** `valid_from`/`valid_to` no vínculo nesta fase (Q6 = B, item 5):
+temporalidade explícita completa fica adiada até existir necessidade concreta.
 Nenhuma coluna/tabela nova de vínculo; nenhuma reescrita de
 `user_organization_memberships` (G8 permanece proibido: vínculo não volta a ser
 coluna de membership).
@@ -479,15 +521,17 @@ coluna de membership).
 
 1. Endurecer `resolver_collaborador_vinculado` (Q4 = A) com validação SQL via
    **caminhos internos/`service_role`** (perfil desabilitado/ausente/
-   desconhecido ⇒ vazio; membership desabilitada ⇒ vazio; link desabilitado ⇒
+   desconhecido ⇒ vazio; membership desabilitada ⇒ vazio; link `disabled` ⇒
    vazio);
 2. **Não** criar função de leitura do próprio vínculo (Q1 = A);
-3. Aplicar a unicidade do vínculo **ativo** (Q3 = B) na forma definida após a
-   decisão de Q6 (migration aditiva com backfill/rollback);
+3. Migration de unicidade (Q6 = B + Q3 = B): drop do unique total + 2 unique
+   indexes parciais do ativo, com backfill/rollback documentados (§15);
 4. Tipos/contrato TS `ColaboradorVinculado`/`VinculoIdentityResolver` **sem
    consumidores** e sem chamada pelo frontend;
-5. Registrar o seam DEV→real (G9) para F5-04/05;
-6. Fluxo GitHub por PR com `npm test`, `npm run build`, `npm run lint`,
+5. Caminho server-side/transacional de mutação (RPC/Edge — D9) para criar/
+   trocar/desativar vínculo (a troca A→B usa desativar + inserir, atômico);
+6. Registrar o seam DEV→real (G9) para F5-04/05;
+7. Fluxo GitHub por PR com `npm test`, `npm run build`, `npm run lint`,
    `git diff --check`.
 
 ---
@@ -495,18 +539,21 @@ coluna de membership).
 ## 17. Estratégia de testes
 
 **Unitário (TS puro — futuro):**
-- `VinculoIdentityResolver`: vínculo ativo → 1; sem link → null; link disabled →
-  null; membership inativa → null; organização sem membership ativa → null.
+- `VinculoIdentityResolver`: vínculo ativo → 1; sem link → null; link `disabled`
+  (histórico) → null; membership inativa → null; organização sem membership
+  ativa → null.
 
 **Integração (validação SQL — `supabase/validacao`, estilo F4-02/F4-08),**
-**sempre pelos caminhos internos/`service_role` já previstos — sem abrir a
-tabela a `authenticated` (Q1 = A):**
+**sempre pelos caminhos internos/`service_role` — sem abrir a tabela a
+`authenticated` (Q1 = A):**
+
+Resolução:
 - vínculo feliz: MANAGER resolve exatamente 1 colaborador (manter cenário atual,
   executado como `service_role`);
 - perfil ausente/inativo/desconhecido + membership ativa + link ativo ⇒
   **vazio** (Q4 = A);
-- membership `disabled` ⇒ vazio; link `disabled` ⇒ vazio; reativação no lugar ⇒
-  volta a resolver;
+- membership `disabled` ⇒ vazio; link `disabled` (histórico) ⇒ vazio (não
+  resolve);
 - **sem superfície para `authenticated`:** SELECT direto na tabela ⇒ permission
   denied; `EXECUTE` dos resolvers ⇒ negado; inexistência de função própria de
   leitura (schema guard — nada novo exposto);
@@ -514,11 +561,23 @@ tabela a `authenticated` (Q1 = A):**
   com organização sem membership ativa do `auth.uid()` ⇒ vazio;
 - **IDOR/forjado:** INSERT/UPDATE direto de link por `authenticated` ⇒ negado;
   tentativa de vincular colaborador de outro tenant ⇒ violação de FK;
-- **(Q3):** segunda membership **ativa** ligada ao mesmo colaborador na mesma
-  organização ⇒ violação da unique parcial (após a constraint);
 - **colaborador inativo/licença (Q5 = A):** o vínculo continua resolvendo o
   colaborador; o uso funcional bloqueado por `inactive` é testado no
-  domínio/Policy Engine (regressão TS F4);
+  domínio/Policy Engine (regressão TS F4).
+
+Unicidade e troca (Q3/Q6 = B):
+- **troca válida A→B na mesma membership** (RPC transacional, `service_role`):
+  linha A fica `disabled`, nova linha B `active`;
+- **linha antiga permanece `disabled`** (histórico preservado; `collaborator_id`
+  da linha antiga não é sobrescrito);
+- **exatamente uma linha `active` por membership** após a troca;
+- **segundo vínculo `active` para a mesma membership falha** (unique parcial
+  Q6);
+- **segundo vínculo `active` para o mesmo `(collaborator_id, organization_id)`
+  falha** (unique parcial Q3);
+- **cross-tenant continua impossível** (FKs compostas) mesmo na troca;
+- **rollback transacional:** forçar falha no meio da troca ⇒ **nenhum estado
+  intermediário inválido** (link antigo continua `active`; nenhuma linha nova);
 - regressão: rotas/auth F5-01 e suítes F4 continuam verdes.
 
 ---
@@ -526,20 +585,22 @@ tabela a `authenticated` (Q1 = A):**
 ## 18. Critérios de aceite
 
 1. Contrato do vínculo aprovado: chave `(auth.uid → membership)`; 1 membership →
-   0..1 colaborador; nunca por e-mail/matrícula/nome/cargo;
+   0..1 colaborador ativo; nunca por e-mail/matrícula/nome/cargo;
 2. G2 corrigido no resolver (perfil ativo exigido — Q4 = A) com validação SQL;
 3. **Nenhuma superfície de leitura criada** para `authenticated` nesta F5-02
    (Q1 = A); reavaliação INVOKER vs. DEFINER registrada para F5-05 (Q2 N/A);
-4. Unicidade do vínculo **ativo** por `(collaborator_id, organization_id)`
-   garantida no banco (Q3 = B) na forma definida após Q6;
-5. Status temporal do colaborador **não** remapeia identidade (Q5 = A);
-6. **Q6 permanece aberta** com análise A/B/C registrada; **D8 não é fechada**
-   enquanto Q6 estiver aberta;
-7. Nenhuma regra por cargo/job_role/função; engine, `authorize`, `can`,
+4. **Q6 = B aplicada:** no máx. 1 link `active` por membership (unique parcial);
+   linhas `disabled` preservadas como histórico; troca de colaborador
+   transacional (desativar + inserir), sem `UPDATE` de `collaborator_id`;
+5. **Q3 = B aplicada:** no máx. 1 link `active` por `(collaborator_id,
+   organization_id)`;
+6. Status temporal do colaborador **não** remapeia identidade (Q5 = A);
+7. Sem `valid_from`/`valid_to` no vínculo nesta fase (Q6 = B, item 5);
+8. Nenhuma regra por cargo/job_role/função; engine, `authorize`, `can`,
    RLS F4-08, F4-02 D18 e origens C/D inalterados;
-8. Testes dos estados inválidos (seção 17) presentes e verdes;
-9. `npm test`, `npm run build`, `npm run lint` e `git diff --check` verdes no PR
-   de implementação.
+9. Testes das seções 17 (incluindo troca, unicidade e rollback) verdes;
+10. `npm test`, `npm run build`, `npm run lint` e `git diff --check` verdes no PR
+    de implementação.
 
 ---
 
@@ -553,8 +614,9 @@ tabela a `authenticated` (Q1 = A):**
 | Perfil/membership/link desabilitado ainda resolvendo | Endurecimento G2 (Q4) + fail-closed em todos os elos |
 | Expor leitura do vínculo e virar enumerador de terceiros | Q1 = A: nada exposto; tabela/resolvers fechados; reavaliação só em F5-05 (Q2) |
 | DEV (matrícula) contaminar runtime real | Gate DEV; seam explícito (G9) |
-| Troca de vínculo sem caminho executável (UNIQUE(membership_id)) | Q6 ABERTA — análise A/B/C antes de fechar D8/migration |
-| Migration de unicidade (Q3) quebrar dados existentes | Backfill + rollback documentados; banco local antes de aplicar |
+| Troca de colaborador com estado intermediário inválido | Q6 = B: transação única (desativar + inserir) com rollback atômico; testes de rollback |
+| Mudança de constraint da F4-02 (drop do unique total) quebrar dependências | Migration aditiva com backfill/rollback documentados; banco local antes de aplicar; validadores atualizados |
+| Migration de unicidade (Q3/Q6) com dados existentes conflitantes | Backfill/consolidação prévia + rollback documentados (§15) |
 
 ---
 
@@ -567,6 +629,8 @@ tabela a `authenticated` (Q1 = A):**
 - UI de administração do vínculo (fase posterior, caminho server-side);
 - superfície de leitura do próprio vínculo para o frontend (Q1 = A: não nesta
   F5-02; avaliar em F5-05 — Q2 N/A);
+- validade temporal explícita (`valid_from`/`valid_to`) no vínculo (Q6 = B, item
+  5 — adiada até necessidade concreta);
 - novas capabilities, mudanças no engine ou em F3-estrutura.
 
 ---
@@ -626,13 +690,10 @@ tabela a `authenticated` (Q1 = A):**
   simultaneamente por duas memberships/contas ativas na mesma organização**;
   garantir no banco a unicidade do vínculo **ativo** por
   `(collaborator_id, organization_id)`. A constraint considera **apenas vínculos
-  ativos** e preserva histórico, se o modelo histórico final (Q6) permitir
-  múltiplas linhas.
-- **Interação registrada:** a mecânica exata da constraint depende da decisão de
-  **Q6 (ABERTA)** — revisar a interação antes de fechar a migration (ver §15 e
-  Q6).
-- **Impacto/risco:** migration aditiva (unique parcial) com backfill/rollback;
-  impacta provisioning.
+  ativos** e preserva histórico, conforme o modelo final da Q6 (= B, múltiplas
+  linhas).
+- **Impacto/risco:** unique index parcial (migration aditiva) com
+  backfill/rollback; impacta provisioning.
 - **Seções dependentes:** 3 (G6), 4, 15, 17, 18, Q6.
 
 ### Q4 — Endurecer `resolver_collaborador_vinculado` com profile ativo: sempre? — **FECHADA (alternativa A APROVADA)**
@@ -667,135 +728,88 @@ tabela a `authenticated` (Q1 = A):**
   domínio.
 - **Seções dependentes:** 3 (G5), 8, 12, 17.
 
-### Q6 — Mudança de colaborador/ligação e histórico — **ABERTA (nova análise; aguarda validação)**
+### Q6 — Mudança de colaborador/ligação e histórico — **FECHADA (alternativa B APROVADA)**
 
-- **Contexto / incompatibilidade identificada:** o desenho anterior recomendava
-  “desabilitar o link antigo + criar novo link na mesma membership” para trocar o
-  colaborador de um usuário. **Isso não é executável no schema atual**: existe
-  `UNIQUE(membership_id)`, que permite **uma única linha por membership,
-  inclusive quando a linha antiga está `disabled`** — a segunda linha violaria a
-  constraint. Além disso, **Q3 (fechada)** passou a exigir no máximo 1 vínculo
-  **ativo** por `(collaborator_id, organization_id)`, e a interação Q3×Q6 define
-  o modelo histórico final.
+- **Contexto / incompatibilidade resolvida:** o desenho anterior recomendava
+  “desabilitar o link antigo + criar novo link na mesma membership”, o que **não
+  era executável** com `UNIQUE(membership_id)` (1 única linha por membership,
+  inclusive `disabled`). A Q6 fecha esse ponto optando por **múltiplas linhas
+  históricas** com no máximo **1 linha `active` por membership**.
 - **Por que:** mudanças administrativas (“este usuário agora representa outro
-  colaborador”, reorganizações) precisam de um caminho consistente que preserve
-  histórico/auditoria e respeite as constraints.
-- **Alternativas analisadas** (para cada uma: histórico, constraints, resolvers,
-  RLS, testes, compatibilidade F4-02, migration estrutural, risco de duas
-  identidades simultâneas, rollback/migração de dados):
-
-**A) Uma linha por membership com troca controlada de `collaborator_id`**
-
-- Histórico: a linha guarda apenas o vínculo corrente; a troca é registrada em
-  **mecanismo separado de auditoria** (append-only), padrão já usado no
-  repositório (ex.: `evaluation_succession_events`).
-- Constraints: mantém `UNIQUE(membership_id)`; adiciona unique parcial do ativo
-  por `(collaborator_id, organization_id)` (Q3). Nenhuma mudança no unique atual.
-- Resolvers: inalterados (leem a única linha ativa).
-- RLS: inalterado (tabela fechada; troca via RPC server-side).
-- Testes: troca via RPC transacional; auditoria registra antigo→novo; resolver
-  reflete o novo.
-- Compatibilidade F4-02: preserva D1 (1 linha por membership) e D17/D18; a
-  operação de troca é nova (antes inexistente).
-- Migration estrutural: **sim, mínima** — unique parcial (Q3) e, quando existir
-  o caminho de mutação, tabela de eventos de auditoria (ou reuso de mecanismo
-  futuro); sem coluna nova na tabela do vínculo.
-- Risco de duas identidades simultâneas: baixo (Q3 impede 2 ativos por
-  colaborador+org; a troca é atômica na transação).
-- Rollback/migração de dados: dados atuais permanecem; auditoria retroativa não é
-  gerada; rollback = desfazer a RPC e reverter a auditoria (ou registrar
-  compensação).
-
-**B) Múltiplas linhas históricas por membership (1 ativa)**
-
-- Histórico: histórico **na própria tabela** — trocar = `disabled` da linha atual
-  + INSERT de nova linha `active` na mesma membership (as linhas antigas ficam
-  legíveis como histórico).
-- Constraints: **substituir** `UNIQUE(membership_id)` por unique **parcial** (1
-  `active` por membership) e adicionar unique parcial (1 `active` por
-  `(collaborator_id, organization_id)` — Q3).
-- Resolvers: lógica inalterada (já filtram `l.status='active'`); garantem no
-  máximo 1 ativo.
-- RLS: inalterado (tabela fechada).
-- Testes: INSERT de 2ª linha com 1 ativa ⇒ violação; desabilitar + abrir nova ⇒
-  ok; resolver devolve o ativo.
-- Compatibilidade F4-02: altera a **constraint** da F4-02 (drop + partial unique);
-  a semântica D1 (“1 vínculo ativo por (usuário, organização)”) permanece; o
-  desenho D1 já admitia validade temporal/histórica “se necessário”.
-- Migration estrutural: **sim** (drop do unique total + 2 partial uniques) —
-  maior alteração de constraint herdada da F4-02.
-- Risco de duas identidades: eliminado (1 ativo por membership + Q3).
-- Rollback/migração: consolidar os atuais (1 linha por membership) → backfill
-  trivial; rollback = recriar o unique total após nova consolidação.
-
-**C) Validade temporal explícita no vínculo (`valid_from`/`valid_to`)**
-
-- Histórico: modela períodos sobrepostos/planejados (ex.: troca agendada).
-- Constraints: colunas temporais + exclusion constraint (`btree_gist` já
-  habilitado na F3) — mudança significativa do modelo; Q3 vira “1 ativo na data”.
-- Resolvers: passam a receber **data de contexto** (mais mudanças em
-  `resolver_alvos_escopo`, etc.).
-- RLS: inalterado.
-- Testes: períodos, sobreposição, resolução na data.
-- Compatibilidade F4-02: maior desvio (amplia a tabela e os resolvers).
-- Migration estrutural: **sim, maior** (colunas + exclusion).
-- Risco de duas identidades: mitigado por constraints temporais (na data).
-- Rollback/migração: complexo; só se a F5-03/gestão de pessoas exigir trocas
-  agendadas/sobreposições — **não recomendada agora**.
-
-- **Nova recomendação (preliminar): A** — mantém o `UNIQUE(membership_id)`
-  herdado da F4-02 intacto (menor mudança de contrato), preserva histórico via
-  **mecanismo separado de auditoria** (consistente com o padrão do repositório) e
-  combina com Q3 por um único unique parcial novo. **B** é a alternativa
-  preferível se o produto exigir histórico **consultável na própria linha** do
-  vínculo (sem mecanismo separado) — ela implica alterar a constraint da F4-02
-  (drop + partial). **C** fica descartada nesta fase.
-- **Status: ABERTA** — aguarda validação (em especial a escolha entre “auditoria
-  separada (A)” vs. “histórico na própria linha (B)”). D8 e a forma final da
-  migration de Q3 **não são fechadas** até esta decisão.
-- **Seções dependentes:** 3 (G7/G10), 4 (invariantes), 9, 15, 18, 19, D8, Q3.
+  colaborador”) precisam de um caminho consistente que preserve histórico e
+  respeite as constraints, interagindo com a Q3 (1 ativo por colaborador+org).
+- **Alternativas avaliadas:** (A) uma linha por membership com troca controlada +
+  auditoria separada; (B) múltiplas linhas históricas por membership (1 ativa);
+  (C) validade temporal explícita (`valid_from`/`valid_to`). Análise completa em
+  revisões anteriores deste documento (histórico, constraints, resolvers, RLS,
+  testes, compatibilidade F4-02, migration estrutural, risco de duas identidades,
+  rollback).
+- **Decisão adotada (B):** adotar **múltiplas linhas históricas** em
+  `membership_collaborator_links`, mantendo **no máximo 1 linha `ACTIVE` por
+  membership**. Contrato final:
+  1. substituir a unicidade total atual de `membership_id` por unicidade
+     **parcial** para vínculos ativos (no máximo 1 link `status='active'` por
+     membership);
+  2. preservar as linhas `disabled` como **histórico**; mudança de colaborador
+     ocorre de forma **transacional**: desativar o vínculo ativo atual; criar
+     nova linha ativa para o novo colaborador; **nunca sobrescrever
+     `collaborator_id`** da linha histórica;
+  3. aplicar também a Q3 (fechada): no máximo 1 vínculo ativo por
+     `(collaborator_id, organization_id)` — impedir que duas contas/memberships
+     ativas representem simultaneamente o mesmo colaborador no mesmo tenant;
+  4. a troca preserva tenant correlation pelas **FKs compostas existentes**;
+  5. **não introduzir `valid_from`/`valid_to`** nesta fase — temporalidade
+     explícita completa fica adiada até existir necessidade concreta;
+  6. o caminho de mutação é **server-side/transacional** conforme D9; **não**
+     conceder DML direto a `authenticated`;
+  7. testes previstos: troca válida A→B na mesma membership; linha antiga
+     permanece `disabled`; exatamente uma linha `active` por membership; segundo
+     vínculo `active` para a mesma membership falha; segundo vínculo `active`
+     para o mesmo `(collaborator+organization)` falha; cross-tenant impossível;
+     rollback transacional sem estado intermediário inválido.
+- **Impacto/risco:** migration aditiva (drop do unique total + 2 unique indexes
+  parciais do ativo) com backfill/rollback documentados; testes de validação
+  atualizados (validações F4-02/F4-08 que inserem links continuam válidas, com
+  ajuste dos casos que dependiam do unique total).
+- **Seções dependentes:** 3 (G7), 4 (invariantes), 6, 8, 9, 10, 13, 14, 15, 16,
+  17, 18, D2/D8/D9/D13, Q3.
 
 ---
 
-## 22. Decisões arquiteturais (D1–D14 — revisadas no PR #161)
+## 22. Decisões arquiteturais (D1–D14 — FECHADAS)
 
 | # | Decisão | Conteúdo | Status |
 | --- | --- | --- | --- |
 | D1 | Chave soberana do vínculo | `user_profile_id` (= `auth.uid()`, da sessão) + `organization_id` **confirmado server-side contra membership ativa** do `auth.uid()`; nunca e-mail, matrícula, nome ou cargo; `organization_id` não é claim da sessão/JWT | FECHADA |
-| D2 | Cardinalidade | 1 membership → 0..1 colaborador ativo; ausência = sem vínculo/ADMIN (D17); reativação no lugar; sem exclusão física. Forma exata das linhas históricas depende de Q6 | FECHADA (núcleo) · nota Q6 |
-| D3 | Tenant correlation | FKs compostas mantêm membership e colaborador no mesmo tenant; `organization_id` é intenção do chamador, confirmada contra membership ativa do `auth.uid()`; cross-tenant DENY | FECHADA |
+| D2 | Cardinalidade e histórico | 1 membership → 0..1 colaborador **ativo**; **múltiplas linhas históricas por membership** (no máx. 1 `active`) — Q6 = B; ausência de link ativo = sem vínculo/ADMIN (D17); sem exclusão física | FECHADA |
+| D3 | Tenant correlation | FKs compostas mantêm membership e colaborador no mesmo tenant; `organization_id` é intenção do chamador, confirmada contra membership ativa do `auth.uid()`; cross-tenant DENY (inclusive na troca) | FECHADA |
 | D4 | Vínculo não é identidade da conta | colaborador nunca identifica a conta; e-mail/matrícula nunca são chave; vínculo por tabela própria (F4-02 D1 = A) permanece | FECHADA |
-| D5 | Porta de resolução | `resolver_collaborador_vinculado` endurecido (profile ativo — Q4 = A) é a origem **interna/server-side**; runtime real mapeia `(actorId=auth.uid(), organizationId confirmado) → colaborador` no consumo F5-05; **sem superfície nova nesta F5-02** (Q1 = A) | FECHADA |
-| D6 | Sem vínculo = sem escopo estrutural | SELF/DR/DESCENDANTS/UNIT exigem vínculo ativo (D17 F4-02); sem vínculo resolvem vazio; ADMIN usa ORGANIZATION | FECHADA |
+| D5 | Porta de resolução | `resolver_collaborador_vinculado` endurecido (profile ativo — Q4 = A) é a origem **interna/server-side**; resolve apenas o link `active` (histórico não resolve); runtime real mapeia `(actorId=auth.uid(), organizationId confirmado) → colaborador` no consumo F5-05; **sem superfície nova nesta F5-02** (Q1 = A) | FECHADA |
+| D6 | Sem vínculo ativo = sem escopo estrutural | SELF/DR/DESCENDANTS/UNIT exigem vínculo ativo (D17 F4-02); sem vínculo resolvem vazio; ADMIN usa ORGANIZATION | FECHADA |
 | D7 | Status do colaborador × vínculo | Vínculo é âncora de identidade independente de `collaborator_status_periods` (Q5 = A); status nunca remapeia identidade; regras funcionais no domínio/engine | FECHADA |
-| D8 | Mudanças de vínculo | **ABERTA** — forma de trocar o colaborador (auditoria separada A vs. linhas históricas B vs. validade temporal C) depende de Q6; não fechar enquanto Q6 estiver aberta | **ABERTA (Q6)** |
-| D9 | Mutações server-side | Criação/remoção/desativação/troca do vínculo somente por caminho administrativo server-side (RPC/Edge); sem DML direto de `authenticated` | FECHADA |
+| D8 | Mudanças de vínculo | **Q6 = B FECHADA:** troca transacional = desativar link ativo (linha vira histórico `disabled`) + inserir nova linha `active`; nunca `UPDATE` de `collaborator_id` em linha existente; sem `valid_from`/`valid_to` nesta fase | FECHADA |
+| D9 | Mutações server-side | Criação/remoção/desativação/**troca** do vínculo somente por caminho administrativo **server-side/transacional** (RPC/Edge, rollback atômico); sem DML direto de `authenticated` | FECHADA |
 | D10 | Superfície de leitura mínima | **Nenhuma** superfície nova (Q1 = A): tabela e resolvers permanecem fechados a `authenticated`; reavaliação INVOKER vs. DEFINER só na F5-05 (Q2 N/A) | FECHADA |
-| D11 | Falha em qualquer elo = vazio | profile/membership/link ausente, inativo ou inconsistente ⇒ resolução vazia (fail-closed); nunca heurística | FECHADA |
+| D11 | Falha em qualquer elo = vazio | profile/membership/link ausente, inativo ou inconsistente ⇒ resolução vazia (fail-closed); linhas `disabled` (histórico) nunca resolvem; nunca heurística | FECHADA |
 | D12 | Engine intacto | F5-02 não altera o Policy Engine; define o seam (actorId real → colaborador por (actorId, org confirmada)); origens C/D independentes do vínculo | FECHADA |
-| D13 | Migrations na implementação | Sem migration no desenho; implementação: (1) `create or replace` do resolver (Q4); (2) **sem** função DEFINER p/ `authenticated` (Q1/Q2); (3) unique parcial do vínculo ativo (Q3) com forma condicionada a Q6; sem tabela/coluna nova | FECHADA (forma de Q3 aguarda Q6) |
+| D13 | Migrations na implementação | Sem migration no desenho. Implementação: (1) `create or replace` do resolver (Q4); (2) **sem** função DEFINER p/ `authenticated` (Q1/Q2); (3) **Q6 = B**: drop do unique total + unique index parcial (1 `active` por membership); (4) **Q3 = B**: unique index parcial (1 `active` por `(collaborator_id, organization_id)`); com backfill/rollback; sem coluna/tabela nova e sem `valid_from`/`valid_to` | FECHADA |
 | D14 | Seam DEV → real | Mundo DEV (matrícula) permanece isolado por gate; runtime real só usa a cadeia soberana (G9) | FECHADA |
 
 ---
 
 ## 23. Confirmações desta atividade
 
-- Revisão incorporada ao **mesmo documento**, na **mesma branch**
-  (`docs/f5-02-vinculo-usuario-colaborador`) e no **mesmo PR #161**.
-- Status das questões: **Q1, Q3, Q4 e Q5 FECHADAS/APROVADAS**; **Q2 N/A (adiada
-  para F5-05)**; **Q6 ABERTA** com nova análise (alternativas A/B/C) e
-  recomendação preliminar A.
-- Decisões D1–D14 revisadas; **D8 permanece ABERTA** enquanto Q6 estiver aberta.
-- Fronteira de `organization_id` corrigida nas seções dependentes (D1/D3/D5,
-  princípios, §5, §6, §7, §8): `organization_id` **não** é derivado da sessão —
-  é intenção confirmada contra membership ativa do `auth.uid()`.
-- Removida da implementação prevista qualquer criação de função
-  `SECURITY DEFINER` para `authenticated` (Q1/Q2); F4-02 D18 inalterado.
+- **Q1–Q6 todas resolvidas:** Q1 (A), Q3 (B), Q4 (A), Q5 (A) e Q6 (B)
+  **FECHADAS/APROVADAS**; Q2 **N/A — adiada para F5-05** (F4-02 D18 inalterado).
+- **D1–D14 FECHADAS**, incluindo **D8** (fechada com Q6 = B) e **D13** (migration
+  definitiva: resolver endurecido + drop do unique total + 2 unique indexes
+  parciais do ativo, sem temporalidade).
+- Contrato da F5-02: **FECHADO e pronto para implementação** (PR próprio, sem UI
+  de gestão, sem F5-03/04/05).
+- Fronteira de `organization_id` mantida conforme a F5-01 nas seções e decisões:
+  intenção confirmada contra membership ativa do `auth.uid()`.
 - Nenhuma alteração funcional: o diff continua **somente documental**
   (`docs/F5-02-desenho-tecnico.md`).
-- Próximos passos: validar Q6 (A vs. B) para então fechar D8 e a forma da
-  migration de Q3; implementação do contrato em PR próprio (sem UI de gestão,
-  sem F5-03/04/05).
 
 ---
 
