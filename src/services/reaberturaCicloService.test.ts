@@ -20,7 +20,7 @@ import {
 import { reabrirCiclo } from "./reaberturaCicloService";
 
 const gerente: Colaborador = { matricula: 1, status: "ATIVO", nome: "Gerente Fictício", email: "gerente@example.com", cargo: "Gerente", area: "Área fictícia", funcao: "GERENTE", respondePara: "" };
-const coordenador: Colaborador = { ...gerente, matricula: 2, nome: "Coordenador Fictício", email: "coordenador@example.com", funcao: "COORDENADOR" };
+const coordenador: Colaborador = { ...gerente, matricula: 2, nome: "Coordenador Fictício", email: "coordenador@example.com", funcao: "COORDENADOR", gestorDiretoMatricula: gerente.matricula };
 const encerrado: CicloAvaliacao = {
   id: "ciclo-encerrado", ano: 2026, ciclo: 1, status: "ENCERRADO",
   dataInicio: "2026-01-01", dataFim: "2026-06-30",

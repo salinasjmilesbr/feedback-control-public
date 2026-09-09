@@ -51,6 +51,7 @@ const CAPABILIDADES_GESTAO: readonly Capability[] = [
 
 /** Ações de coordenação (gestor de 1º nível) — scope DIRECT_REPORTS. */
 const CAPABILIDADES_COORDENACAO: readonly Capability[] = [
+  "collaborator.read",
   "cycle.read",
   "evaluation.read",
   "evaluation.create",
@@ -183,10 +184,12 @@ export function criarProvidersMundoFuncional(
     return porMatricula.get(matricula);
   }
 
+  const ehRaiz = !actor.gestorDiretoMatricula;
   const scopes: ScopeType[] = ["SELF"];
   if (meusSubordinados.length > 0) scopes.push("DIRECT_REPORTS");
   if (meusDescendentes.size > 0) scopes.push("DESCENDANTS");
   if (ehColegiadoDeAlguem) scopes.push("ASSIGNED");
+  if (ehRaiz) scopes.push("ORGANIZATION");
 
   return {
     identity: {
@@ -216,12 +219,17 @@ export function criarProvidersMundoFuncional(
           if (target.id === actorId) return LOCAL_ORGANIZATION_ID;
           return colaboradorAlvo(target.id) ? LOCAL_ORGANIZATION_ID : undefined;
         }
-        // Demais alvos são derivados pelo serviço para "collaborator" (sujeito).
+        // Alvos de domínio (ciclo) pertencem ao tenant sintético único (pré-F5).
+        if (target.type === "cycle") return LOCAL_ORGANIZATION_ID;
         return undefined;
       },
     },
     relations: {
       isTargetInScope: (_id, _org, scope, target) => {
+        // ORGANIZATION cobre SOMENTE alvos de domínio (ciclo), nunca
+        // colaboradores: evita que a gestão de cadeia (raiz) vaze para relações
+        // de avaliação/meta/observação (D6/D10).
+        if (scope === "ORGANIZATION") return target.type !== "collaborator";
         if (target.type !== "collaborator") return false;
         if (target.id === actorId && scope === "SELF") return true;
 
@@ -238,9 +246,6 @@ export function criarProvidersMundoFuncional(
           return (
             alvo.avaliadoresColegiadoMatriculas?.includes(actor.matricula) ?? false
           );
-        }
-        if (scope === "ORGANIZATION") {
-          return true;
         }
         return false;
       },

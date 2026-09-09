@@ -6,6 +6,7 @@ import {
   getCiclosAvaliacao,
   persistirReaberturaCicloAuditadaInterno,
 } from "./cicloAvaliacaoStorage";
+import { getColaboradores } from "./colaboradorStorage";
 
 export function reabrirCiclo(
   cicloId: string,
@@ -25,7 +26,15 @@ export function reabrirCiclo(
       status: autor.status,
     },
   };
-  authorize(context, "cycle.reopen.manager", { kind: "cycle", cycle: ciclo });
+  const colaboradores = getColaboradores();
+  const mundo = colaboradores.some((c) => c.matricula === autor.matricula)
+    ? colaboradores
+    : [autor, ...colaboradores];
+  authorize(context, "cycle.reopen.manager", {
+    kind: "cycle",
+    cycle: ciclo,
+    collaborators: mundo,
+  });
 
   return persistirReaberturaCicloAuditadaInterno(
     ciclo.id,

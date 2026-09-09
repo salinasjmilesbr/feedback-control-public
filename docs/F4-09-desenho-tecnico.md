@@ -541,48 +541,70 @@ Histórico das questões abertas no desenho, agora **fechadas**:
 - Q1–Q7 fechadas (§17); D1–D12 fechadas (§18); matriz §7 consistente com o
   vocabulário canônico (§6.3); nenhum texto interno contradiz as decisões.
 
-## 20. Implementação — registro de entrega (Issue #96, PR #156bis)
+## 20. Implementação — registro de entrega (Issue #96, PR #157)
 
-> **Status:** implementado. PR de implementação **`Closes #96`**, sem merge.
+> **Status:** implementado (migração funcional INTEGRAL em runtime). PR de
+> implementação **`Closes #96`**, sem merge.
 
 ### 20.1 Arquitetura implementada
 
-- **Vocabulário canônico (Q1):** `Capability.ts` agora lista o catálogo de AÇÃO
-  (§6.3) e mantém os aliases legados como depreciados; `canonical.ts`
-  (`canonicalizarCapability`) faz a reconciliação alias→canônico.
-  `capabilityTarget.ts` inclui os códigos canônicos.
+- **Vocabulário canônico (Q1):** `Capability.ts` lista o catálogo de AÇÃO (§6.3)
+  e mantém os aliases legados como depreciados; `canonical.ts`
+  (`canonicalizarCapability`) reconcilia alias→canônico; `capabilityTarget.ts`
+  inclui os códigos canônicos.
 - **Mundo funcional local (D2/D3/Q2):** `mundoFuncional.ts` deriva relações de
-  `gestorDiretoMatricula`/`avaliadoresColegiadoMatriculas` (nunca `funcao`) e
+  `gestorDiretoMatricula`/`avaliadoresColegiadoMatriculas` (nunca `funcao`);
   `derivarBindingsDev` constrói o binding DEV-only EXPLÍCITO por estrutura
-  (raiz→gestão, gestor de 1º nível→coordenação, colegiado→ASSIGNED, demais→SELF).
+  (raiz→gestão, gestor de 1º nível→coordenação, colegiado→ASSIGNED, demais→SELF);
+  resolve alvos `collaborator` e `cycle` no tenant sintético e adiciona
+  `ORGANIZATION` (raiz) restrita a alvos de domínio (ciclo) — nunca a colaborador
+  (D6/D10: não vaza para relações de avaliação/meta/observação).
 - **Facade (D1/Q7):** `autorizacaoFuncional.ts` — `autorizar` (enforcement),
-  `pode` (UX), `alvosPermitidos` (listagem, limit-then-aggregate base) e
-  `dominioPermite` (domainState). Alvo sempre derivado do recurso (sujeito
-  colaborador), nunca de ids do cliente.
-- **Superfícies legadas retiradas da decisão por cargo:** `permissaoAvaliacao.ts`
-  (gerente = raiz da cadeia; coordenador = gestor direto), `visibilidadeColaboradores.ts`
-  (raiz→descendentes; não-raiz→diretos+colegiado), `metaStorage.podeAprovarMetaNoCiclo`
-  e `aprovarMeta` (authorize via engine + `goal.approve`) e
-  `relatorioService.aplicarEscopoRelatorio` (coordenador não-raiz→equipe direta).
+  `pode` (UX), `alvosPermitidos` (listagem, base do limit-then-aggregate) e
+  `dominioPermite` (domainState). Alvo sempre derivado do recurso, nunca de ids
+  do cliente.
+- **`authorizationPolicy.ts` é AGORA um adaptador de compatibilidade que DELEGA ao
+  engine** (`policyEngine.decidir` via `can`/`authorize`). Não possui regra
+  soberana, nem derivação por `funcao`/`cargo`, nem bypass: apenas traduz o
+  vocabulário legado (capability + resource) para a requisição do engine
+  (capability canônica + target + domainState). Todos os call sites de runtime
+  (`can`/`authorize`/`scopeCollaborators`) passam pelo engine.
 
-### 20.2 Pontos de authorize adicionados
+### 20.2 Superfícies de runtime migradas (decisão integral via engine)
 
-- `metaStorage.aprovarMeta` (goal.approve + relação/scope + domainState) — mutação
-  administrativa com `authorize()` + estado (Q7).
-- `metaStorage` (metas próprias) já usava `authorize` (goal.write + SELF) desde a
-  F4-03 — preservado.
-- Demais pontos de mutação (cancelar/reabrir avaliação/ciclo) já passam por
-  `authorizationPolicy.authorize` (legado) e terão migração incremental ao facade
-  conforme §20.3.
+| Domínio | Operações | Enforcement |
+| --- | --- | --- |
+| Avaliação | create/edit/cancel/reopen/read | `authorizationPolicy` → engine (`evaluation.*` + scope + domainState de ciclo/status) |
+| Meta | approve/own (write/read) | `metaStorage.aprovarMeta` (engine) e `authorizationPolicy` (`goal.approve`/`goal.write` + cadeia de gestão/SELF) |
+| Observação | create/edit/delete/read | `authorizationPolicy` → engine (`observation.*` + ciclo ATIVO + status do alvo) |
+| Relatório | read (escopo) | `authorizationPolicy` → engine (`report.read`) + `relatorioService.aplicarEscopoRelatorio`/`visibilidadeColaboradores` (dados) |
+| Ciclo | cancel/reopen/period.correct | `cancelamentoCicloService`/`reaberturaCicloService`/`correcaoPeriodoCicloService` carregam e passam `collaborators` → engine (`cycle.*` + domainState) |
+| Colaborador | create/edit/list | `authorizationPolicy` → engine (`collaborator.*`) |
 
-### 20.3 Limitações pré-F5 e caminho remanescente
+- `permissaoAvaliacao.ts` (gerente = raiz da cadeia; coordenador = gestor direto),
+  `visibilidadeColaboradores.ts` (raiz→descendentes; não-raiz→diretos+colegiado),
+  `metaStorage.podeAprovarMetaNoCiclo` e `relatorioService.aplicarEscopoRelatorio`
+  deixaram de ser fonte de decisão por cargo: são derivados de dados e/ou
+  consumidos pelo domínio (workflow/papel exibido), nunca ALLOW/DENY por `funcao`.
+- **Colapso Q1 aplicado:** `evaluation.edit.manager/coordinator/board` →
+  `evaluation.write`; `goal.approve.manager/coordinator` → `goal.approve`;
+  `goal.*.own` → `goal.write` (SELF); `cycle.management.view`/`cycle.coordinator.list`/
+  `cycle.team.panel.view` → `cycle.read`; `report.view` → `report.read`;
+  `collaborator.list` → `collaborator.read`. O papel é resolvido por
+  capability + scope + relação + domainState, nunca pelo nome da capability.
 
-- `authorizationPolicy.ts` permanece como adaptador de compatibilidade (não
-  ampliado); a migração integral de cada página/componente para o facade do
-  engine continua incremental (o engine e o mundo funcional já são a fonte
-  canônica de decisão e estão testados).
-- Sem tabelas novas, sem novo SECURITY DEFINER, sem FORCE RLS (D9). RLS funcional
-  real é F5.
+### 20.3 Limitações genuínas pré-F5 (fora do escopo de #96)
+
+- **Temporalidade histórica (Q5) é fail-closed no engine:** o engine usa a relação
+  corrente (`gestorDiretoMatricula`); `historico-organizacional` NÃO concede
+  autorização (ex-gestor ⇒ DENY; novo gestor sem relação corrente ⇒ DENY). A
+  temporalidade por ciclo é responsabilidade do domínio (pré-F5), nunca do engine.
+- **Scope é por ator (não capability×scope):** a granularidade capability×scope
+  fecha na F5. No mundo local, casos de vazamento entre scopes são contidos por
+  domainState soberano (ex.: `goal.approve` exige `estaNaCadeiaDeGestao`;
+  `goal.write` exige `ator === owner`; `ORGANIZATION` não cobre colaborador).
+- Sem tabelas novas, sem novo SECURITY DEFINER, sem FORCE RLS (D9). O RLS
+  funcional real é F5.
 
 ### 20.4 Testes
 
@@ -590,5 +612,15 @@ Histórico das questões abertas no desenho, agora **fechadas**:
   coordenador/gerente/colegiado por relação; alterar `funcao` sem mudar relação
   NÃO concede; capability removida ⇒ DENY imediato; ID manipulado ⇒ TARGET_INVALID;
   metas/observações; listAllowedTargets limita dataset.
-- Total: **760 testes** (56 arquivos); build e lint OK; `git diff --check` limpo;
+- `authorizationPolicy.test.ts` atualizado para o mundo derivado de dados:
+  colapso Q1, `goal.approve`/`goal.write` com domainState de cadeia/SELF e
+  histórico fail-closed (ex-gestor DENY / gestor atual ALLOW).
+- Total: **758 testes** (56 arquivos); build e lint OK; `git diff --check` limpo;
   validação Supabase local F4-08 reexecutada (sem regressão de tenant/security).
+
+### 20.5 Ausência estática de autorização por cargo
+
+- `grep -nE "funcao ===|funcao !==|\.funcao ===" src/authorization` não retorna
+  ALLOW/DENY por `funcao`/`cargo`/nome de papel: `funcao` permanece apenas em
+  UX/apresentação e em regra de DOMÍNIO sobre o AVALIADO
+  (`funcaoUsaEstruturaAvaliacaoAnalista`), nunca como fonte de autorização do ator.

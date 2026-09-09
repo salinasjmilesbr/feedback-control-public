@@ -7,9 +7,12 @@ import {
   pode,
 } from "./autorizacaoFuncional";
 import {
+  criarProvidersMundoFuncional,
   derivarBindingsDev,
   estaNaCadeiaDeGestao,
+  LOCAL_ORGANIZATION_ID,
 } from "./mundoFuncional";
+import { can as canEngine } from "./policyEngine/policyEngine";
 
 function colaborador(
   matricula: number,
@@ -212,5 +215,69 @@ describe("F4-09 — autorização funcional (Policy Engine, sem cargo)", () => {
     expect(estaNaCadeiaDeGestao(coordenador, analistaA, todos)).toBe(true);
     expect(estaNaCadeiaDeGestao(gerente, analistaA, todos)).toBe(true);
     expect(estaNaCadeiaDeGestao(analistaB, analistaA, todos)).toBe(false);
+  });
+
+  it("ciclo (Q7): mutação administrativa exige capability E domainState", () => {
+    const providerGerente = criarProvidersMundoFuncional({
+      actor: gerente,
+      colaboradores: todos,
+    });
+    const providerCoordenador = criarProvidersMundoFuncional({
+      actor: coordenador,
+      colaboradores: todos,
+    });
+    const base = {
+      actor: {
+        actorId: String(gerente.matricula),
+        organizationId: LOCAL_ORGANIZATION_ID,
+      },
+      target: { type: "cycle" as const, id: "ciclo-1" },
+      context: { date: new Date(), cycleId: "ciclo-1" },
+    };
+
+    // capability + estado ATIVO ⇒ ALLOW
+    const comCapEEstado = canEngine(
+      { ...base, capability: "cycle.cancel", domainState: dominioPermite(true) },
+      providerGerente
+    );
+    // capability sem estado (ciclo não elegível) ⇒ DENY
+    const semEstado = canEngine(
+      { ...base, capability: "cycle.cancel", domainState: dominioPermite(false) },
+      providerGerente
+    );
+    // estado ok sem capability (coordenador não tem cycle.cancel) ⇒ DENY
+    const semCap = canEngine(
+      {
+        ...base,
+        actor: {
+          actorId: String(coordenador.matricula),
+          organizationId: LOCAL_ORGANIZATION_ID,
+        },
+        capability: "cycle.cancel",
+        domainState: dominioPermite(true),
+      },
+      providerCoordenador
+    );
+
+    expect(comCapEEstado.allowed).toBe(true);
+    expect(semEstado.allowed).toBe(false);
+    expect(semCap.allowed).toBe(false);
+  });
+
+  it("revogação: remover o colegiado (ASSIGNED) ⇒ DENY sem logout", () => {
+    const analistaASemColegiado = colaborador(3, "AnalistaA", {
+      funcao: "ANALISTA",
+      gestorDiretoMatricula: 2,
+      avaliadoresColegiadoMatriculas: [], // colegiado revogado
+    });
+    const mundo = todos.map((c) =>
+      c.matricula === analistaA.matricula ? analistaASemColegiado : c
+    );
+    const decisao = pode(analistaB, mundo, {
+      capability: "evaluation.write",
+      sujeitoMatricula: analistaA.matricula,
+      domainState: dominioPermite(true),
+    }, derivarBindingsDev(mundo));
+    expect(decisao.allowed).toBe(false);
   });
 });

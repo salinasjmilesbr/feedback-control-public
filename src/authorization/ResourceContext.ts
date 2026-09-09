@@ -5,6 +5,8 @@ import type { StatusFeedback } from "../types/Feedback";
 
 export type GlobalResource = Readonly<{
   kind: "global";
+  /** Opcional (compat): quando ausente, a policy deriva o mundo do storage. */
+  collaborators?: readonly Colaborador[];
 }>;
 
 export type CollaboratorListResource = Readonly<{
@@ -15,11 +17,15 @@ export type CollaboratorListResource = Readonly<{
 export type CycleResource = Readonly<{
   kind: "cycle";
   cycle: CicloAvaliacao;
+  /** Opcional (compat): quando ausente, a policy deriva o mundo do storage. */
+  collaborators?: readonly Colaborador[];
 }>;
 
 export type CollaboratorResource = Readonly<{
   kind: "collaborator";
   collaborator: Colaborador;
+  /** Opcional (compat): quando ausente, a policy deriva o mundo do storage. */
+  collaborators?: readonly Colaborador[];
 }>;
 
 export type EvaluationResource = Readonly<{
@@ -42,6 +48,8 @@ export type ObservationResource = Readonly<{
   collaborator: Colaborador;
   observation?: Observacao;
   cycle?: CicloAvaliacao;
+  /** Opcional (compat): quando ausente, a policy deriva o mundo do storage. */
+  collaborators?: readonly Colaborador[];
 }>;
 
 export type AuthorizationResource =

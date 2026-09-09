@@ -27,6 +27,7 @@ const coordenador: Colaborador = {
   nome: "Coordenador Fictício",
   email: "coordenador@example.com",
   funcao: "COORDENADOR",
+  gestorDiretoMatricula: gerente.matricula,
 };
 
 function renderizarCiclos(
@@ -35,6 +36,10 @@ function renderizarCiclos(
   usuario: Colaborador = gerente
 ): string {
   localStorage.setItem("feedback-control-ciclos", JSON.stringify(ciclos));
+  localStorage.setItem(
+    "feedback-control-colaboradores",
+    JSON.stringify([gerente, coordenador])
+  );
 
   return renderToStaticMarkup(
     <UsuarioAtualContext.Provider

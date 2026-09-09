@@ -6,6 +6,7 @@ import {
   getCiclosAvaliacao,
   persistirCancelamentoCicloAuditadoInterno,
 } from "./cicloAvaliacaoStorage";
+import { getColaboradores } from "./colaboradorStorage";
 
 export function cancelarCiclo(
   cicloId: string,
@@ -25,7 +26,15 @@ export function cancelarCiclo(
       status: autor.status,
     },
   };
-  authorize(context, "cycle.cancel.manager", { kind: "cycle", cycle: ciclo });
+  const colaboradores = getColaboradores();
+  const mundo = colaboradores.some((c) => c.matricula === autor.matricula)
+    ? colaboradores
+    : [autor, ...colaboradores];
+  authorize(context, "cycle.cancel.manager", {
+    kind: "cycle",
+    cycle: ciclo,
+    collaborators: mundo,
+  });
 
   return persistirCancelamentoCicloAuditadoInterno(
     ciclo.id,

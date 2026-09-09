@@ -28,6 +28,7 @@ const coordenador: Colaborador = {
   nome: "Coordenador Fictício",
   email: "coordenador@example.com",
   funcao: "COORDENADOR",
+  gestorDiretoMatricula: gerente.matricula,
 };
 const cicloAtivo: CicloAvaliacao = {
   id: "ciclo-ativo",
