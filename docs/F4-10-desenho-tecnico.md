@@ -1,13 +1,17 @@
 # F4-10 — Contrato de validação integrada da matriz de autorização (Issue #97)
 
-> **Status: DESENHO TÉCNICO — contrato em revisão de desenho.** Esta atividade é
-> **somente documentação**: nenhum código, nenhuma migration, nenhuma alteração
-> de banco, nenhum teste foi produzido. A Issue #97 **permanece aberta**; o PR
-> desta atividade é somente documentação e **NÃO usa `Closes #97`**; **sem merge**.
+> **Status: CONTRATO FECHADO PARA IMPLEMENTAÇÃO/VALIDAÇÃO.**
+> Q1–Q3 **FECHADAS** (§25); D1–D12 **FECHADAS** (§27, incluindo D11 — IDs da
+> matriz são cenários rastreáveis, não arquivos de teste individuais — e D12 —
+> priorização P0/P1/P2); critérios de saída (§23) e matriz (§§7–20) revisados
+> para consistência.
 >
 > **Implementação da F4-10 ocorre somente após F4-08 e F4-09 implementadas.**
 > A F4-08 (PR #154) ainda não foi mergeada; este desenho usa o CONTRATO fechado da
 > F4-08 como referência arquitetural, sem presumir código não mergeado na main.
+> Esta atividade é **somente documentação**: nenhum código, nenhuma migration,
+> nenhuma alteração de banco, nenhum teste foi produzido. A Issue #97 **permanece
+> aberta**; o PR é somente documentação e **NÃO usa `Closes #97`**; **sem merge**.
 
 ## 1. Objetivo
 
@@ -417,6 +421,12 @@ IDs estáveis por prefixo: `AUTH-*`, `PIPE-*`, `TENANT-*`, `CAP-*`, `SCOPE-*`,
 `MUT-*` (mutation/security regression do schema guard). Cada cenário terá
 "Automatizável?" e "Bloqueador de release?" explícitos.
 
+> **D11:** os IDs representam **cenários/riscos rastreáveis**, não
+> obrigatoriamente um arquivo ou teste automatizado individual. A implementação
+> pode agrupar (parametrizado, table-driven, fixtures, suites por propriedade,
+> mutation agrupado) desde que cada ID **P0/P1** tenha evidência de execução e a
+> cobertura registrada evite duplicação (§23/§27).
+
 ## 22. Níveis de teste
 
 Classificação por nível e regras:
@@ -441,12 +451,13 @@ Supabase local).
 
 Saída exige TODOS os itens abaixo:
 
-1. nenhuma questão arquitetural aberta;
+1. nenhuma questão arquitetural aberta (Q1–Q3 fechadas; nenhuma nova em aberto);
 2. F4-01…F4-09 implementadas;
-3. matriz integrada executada;
-4. todos os testes críticos PASS;
-5. nenhum CRÍTICO/ALTO conhecido de autorização aberto;
-6. tenant isolation validado (F4-08);
+3. matriz integrada executada — **todos os cenários P0 e P1 com evidência
+   rastreável (D11)**; P2 executado conforme agrupamento por risco (D12);
+4. todos os testes críticos PASS (P0/P1);
+5. nenhum CRÍTICO/ALTO bloqueador de autorização aberto (severidade conforme Q2);
+6. tenant isolation validado (F4-08, Supabase local);
 7. confidencialidade interna validada (F4-09);
 8. avaliações históricas protegidas;
 9. revogações validadas (sem exigir logout);
@@ -461,11 +472,34 @@ Saída exige TODOS os itens abaixo:
     e Supabase local quando o domínio estiver no banco);
 18. documentação reflete a implementação final.
 
-**Achados MÉDIOS:** podem permitir saída somente quando (a) não ampliam o
-alcance de dados (apenas UX/legibilidade), ou (b) estão documentados como
-limitação aceita com teste/guard de regressão associado e um item explícito no
-backlog da fase seguinte. Achados com impacto em confidencialidade/isolamento/
-revogação são tratados como ALTO/CRÍTICO e bloqueiam a saída.
+**Severidade bloqueadora (Q2 fechada):** CRÍTICO ou ALTO relacionado a
+autorização, confidencialidade, tenant isolation, revogação, privilege
+escalation ou bypass do Policy Engine ⇒ **BLOQUEIA** o encerramento da Fase 4.
+
+**Achados MÉDIOS** podem ser aceitos somente se **todas** as condições forem
+verdadeiras: (1) não permite acesso ou mutação indevida; (2) não enfraquece
+tenant isolation; (3) não expõe conteúdo confidencial; (4) há
+mitigação/documentação; (5) há backlog explícito com responsável/fase-alvo; (6)
+o aceite fica registrado na evidência de saída.
+
+**BAIXO/INFORMATIVO** não bloqueia, salvo composição com outro achado.
+
+**Priorização de execução (D12):** P0 = bloqueadores de segurança (tenant
+isolation, confidencialidade de avaliação, privilege escalation, bypass,
+revogação crítica) — **nenhum P0 pode ser omitido por custo/tempo**; P1 = regras
+centrais (scope, hierarquia, temporalidade, C/D, SELF/domainState, histórico,
+relatórios) — executados para saída; P2 = hardening/completude (disclosure
+secundário, UX-safe errors, bordas não exploráveis) — agrupáveis e priorizados
+por risco.
+
+**Distribuição P0/P1/P2 por prefixo da matriz (orientativa; a classificação por
+linha fica no registro de execução):**
+
+| Prioridade | Prefixos predominantes |
+|---|---|
+| P0 (bloqueadores) | PIPE-*, TENANT-*, REV-*, EXC-*, PILOT-*, ATTACK-* (bypass/escalation) e DISC-* de confidencial |
+| P1 (regras centrais) | CAP-*, SCOPE-*, PE-*, HIER-*, TEMP-*, EVAL-*, OBS-*, GOAL-*, CYCLE-*, REPORT-*, HIST-*, POS-* |
+| P2 (hardening/completude) | AUTH-* (bordas de sessão), DISC-* secundário e demais bordas/UX-safe errors |
 
 ## 24. Risco residual / F5
 
@@ -485,31 +519,30 @@ Separação explícita:
   restrito por estado; mutação respeita estado; nenhuma segunda regra paralela;
   limit-then-aggregate.
 
-## 25. Questões para validação
+## 25. Questões para validação — Q1–Q3 (TODAS FECHADAS)
 
-Se surgir decisão real, registra-se nesta seção (ID, contexto, decisão
-necessária, alternativas, recomendação, riscos/impacto, seções dependentes) —
-nunca assumida silenciosamente. Questões abertas em aberto ao fim do desenho
-são permitidas, mas bloqueiam a declaração de saída (critério 1, §23). Questões
-atuais (preenchidas na revisão de desenho):
+Histórico das questões abertas no desenho, agora **fechadas**:
 
-1. **Q1 — Escopo de automatização do Supabase local para domínios funcionais
-   ainda em localStorage.** Contexto: RLS só cobre tabelas estruturais; domínios
-   funcionais são aplicação. Decisão necessária: os cenários F4-09 (EVAL/OBS/
-   GOAL/CYCLE/REPORT) devem ser validados como integration no mundo local
-   (engine) — sem exigir Supabase local? Alternativas: (a) integration local +
-   engine; (b) esperar F5. Recomendação: (a); Supabase local permanece para os
-   cenários de tenant/grants (TENANT-*, CAP-*, MUT-*). Seções: §15, §22, §24.
-2. **Q2 — Definição de "teste crítico" e "bloqueador de release".** Contexto:
-   critério 4/5 exige que testes críticos PASS e nenhum ALTO aberto. Decisão:
-   quais categorias são bloqueadoras (confidencialidade, isolamento, revogação,
-   precedência de camadas) e quais podem ser não-bloqueadoras. Recomendação:
-   bloquear CRÍTICO/ALTO de confidencialidade/isolamento/revogação; MÉDIOS
-   conforme §23. Seções: §21, §23.
-3. **Q3 — Timing/information disclosure.** Contexto: timing pode revelar
-   existência em leitura confidencial. Decisão: exigir mitigação de timing nesta
-   fase? Recomendação: não-bloqueador; registrar limitação (DISC-007); mitigação
-   real junto à persistência F5. Seções: §17, §23.
+1. **Q1 — Nível de teste Supabase × localStorage — FECHADA.** **Não exigir
+   Supabase local para propriedade que existe somente no mundo
+   localStorage/aplicação.** Usar unit/Policy Engine/provider/service/integration
+   para propriedades locais; **Supabase local obrigatório** para propriedades que
+   dependem de banco, grants, policies, constraints ou RLS; após F5, os
+   invariantes funcionais equivalentes devem ser **reexecutados contra a
+   persistência real**. Não usar mocks para afirmar propriedade de RLS/banco.
+2. **Q2 — Severidade bloqueadora da Fase 4 — FECHADA.** CRÍTICO ou ALTO
+   relacionado a autorização, confidencialidade, tenant isolation, revogação,
+   privilege escalation ou bypass do Policy Engine ⇒ **BLOQUEIA** o encerramento
+   da Fase 4. MÉDIO aceito somente com TODAS as condições (§23): sem acesso/
+   mutação indevida; sem enfraquecer tenant isolation; sem expor confidencial;
+   mitigação/documentação; backlog explícito com responsável/fase-alvo; aceite
+   registrado na evidência de saída. BAIXO/INFORMATIVO não bloqueia salvo
+   composição com outro achado.
+3. **Q3 — Timing disclosure — FECHADA.** Timing side-channel avançado **não é
+   critério bloqueador** da Fase 4. Nesta fase valida-se disclosure **lógico**
+   por resposta, status/reason, NOT_FOUND/FORBIDDEN, listas, counts, filtros,
+   autocomplete, relatórios, exports e metadata. Análise estatística de
+   timing/performance side-channel fica para hardening/pentest posterior.
 
 ## 26. Fora de escopo (evitar overengineering)
 
@@ -518,7 +551,7 @@ temporalidade/revogação/disclosure). **Não ampliar** para: infraestrutura, DD
 malware, segurança física, backup/DR, SSO, produção, secrets management
 completo, segurança de rede, compliance integral — temas de fases posteriores.
 
-## 27. Decisões arquiteturais (D1…)
+## 27. Decisões arquiteturais — D1–D12 (TODAS FECHADAS)
 
 1. **D1 — F4-10 valida integração; não cria regra nova.** Toda regra ausente/
    ambígua revelada na matriz vira questão/defeito do contrato F4-01…F4-09.
@@ -529,17 +562,41 @@ completo, segurança de rede, compliance integral — temas de fases posteriores
 4. **D4 — Vocabulário canônico (F4-09 §6.3): capability = ação; aliases legados
    não criam autorização paralela.**
 5. **D5 — Negativos e positivos obrigatórios** em cada regra crítica (§20).
-6. **D6 — Testes dependentes de banco/RLS exigem Supabase local** (sem mocks).
+6. **D6 — Testes dependentes de banco/RLS exigem Supabase local** (sem mocks);
+   propriedades apenas do mundo localStorage/aplicação usam unit/engine/provider/
+   service/integration (Q1).
 7. **D7 — Leitura confidencial não autorizada = equivalente a inexistente**
    (vazio/NOT_FOUND) quando o contrato determina; mutação pode ser explícita.
 8. **D8 — Revogação tem efeito imediato; logout não é requisito de segurança.**
 9. **D9 — Dados totalmente sintéticos** em qualquer fixture (nenhum dado real).
-10. **D10 — Critérios de saída objetivos** (§23); achados MÉDIOS só liberam sob
-    condições; CRÍTICO/ALTO de confidencialidade/isolamento/revogação bloqueiam.
+10. **D10 — Critérios de saída objetivos** (§23) com severidade Q2 (CRÍTICO/ALTO
+    de autorização/confidencialidade/tenant/revogação/escalation/bypass bloqueiam;
+    MÉDIOS sob condições; BAIXO não bloqueia salvo composição).
+11. **D11 — Matriz NÃO significa ~190 testes isolados.** Os IDs da matriz
+    representam **cenários/riscos rastreáveis**, não obrigatoriamente um arquivo
+    ou teste automatizado individual. A implementação pode usar testes
+    parametrizados, table-driven tests, fixtures compartilhadas, suites por
+    propriedade e mutation tests agrupados, desde que **cada ID crítico (P0/P1)
+    possua evidência rastreável de execução**. Não duplicar teste se uma mesma
+    execução prova vários IDs, desde que a evidência registre essa cobertura —
+    máxima cobertura com mínima redundância/custo.
+12. **D12 — Priorização de execução P0/P1/P2.** P0 = bloqueadores de segurança
+    (tenant isolation, confidencialidade de avaliação, privilege escalation,
+    bypass, revogação crítica) — **nenhum P0 pode ser omitido por custo/tempo**;
+    P1 = regras centrais (scope, hierarquia, temporalidade, C/D, SELF/domainState,
+    histórico, relatórios) — executados para saída; P2 = hardening/completude
+    (disclosure secundário, UX-safe errors, bordas) — agrupados e priorizados por
+    risco. Distribuição P0/P1/P2 na §23.
 
 ## 28. Confirmações da atividade
 
-Nenhum código, nenhuma migration, nenhuma alteração de banco, nenhum teste foi
-produzido — somente `docs/F4-10-desenho-tecnico.md`. Issue #97 permanece aberta;
-o PR é somente documentação e **não usa `Closes #97`**; **sem merge**. A
-implementação da F4-10 ocorre somente após F4-08 e F4-09 implementadas.
+- **Contrato fechado para implementação/validação.** Q1–Q3 fechadas (§25);
+  D1–D12 fechadas (§27); critérios de saída (§23) e matriz (§§7–20) revisados e
+  consistentes; ~190 IDs de cenários mantidos e rastreáveis (D11); priorização
+  P0/P1/P2 definida (D12/§23).
+- **Somente documentação:** nenhum código, nenhuma migration, nenhuma alteração
+  de banco, nenhum teste foi produzido — somente `docs/F4-10-desenho-tecnico.md`.
+- Issue #97 **permanece aberta**; o PR é somente documentação e **não usa
+  `Closes #97`**; **sem merge**.
+- A implementação da F4-10 ocorre somente após F4-08 (PR #154) e F4-09
+  implementadas.
