@@ -1,8 +1,8 @@
 # F5-03 — Organização ativa / seleção de organização (desenho técnico)
 
 > Documento de desenho técnico — **etapa de auditoria e desenho, sem código funcional**.
-> Estado: **PROPOSTA para revisão** — decisões D1–D13 propostas e questões Q1–Q5
-> registradas para validação (podem permanecer abertas no PR).
+> Estado: **FECHADO — contrato pronto para implementação** (revisão no PR).
+> Q1–Q5 **FECHADAS/APROVADAS**; D1–D13 **FECHADAS**.
 >
 > Fase: 5 — Identidade e Multiusuário · Atividade: F5-03 · Base: `main` (F5-01 e F5-02 concluídas)
 
@@ -10,7 +10,7 @@
 
 ## 1. Objetivo
 
-Desenhar como o Virtus **determina, representa, troca e invalida a ORGANIZAÇÃO
+Definir como o Virtus **determina, representa, troca e invalida a ORGANIZAÇÃO
 ATIVA** de um usuário autenticado quando ele possui uma ou mais memberships
 ativas — sem jamais transformar essa seleção em autoridade de tenant.
 
@@ -102,11 +102,11 @@ o estado conforme o número de memberships ativas:
 3. **Disponibilidade soberana:** só aparecem como selecionáveis organizações com
    membership ativa (profile ativo + membership ativa — F4-08 D1).
 4. **Sem escolha silenciosa:** com N>1 não há default arbitrário; a seleção é
-   explícita e, se a escolha persistida não estiver mais disponível, cai para
-   “exige seleção”.
+   explícita (tela dedicada + switcher — Q2 = A) e, se a escolha persistida não
+   estiver mais disponível, cai para “exige seleção”.
 5. **N=1 não é escolha:** com exatamente 1 membership, o tenant é o único valor
-   válido — não há ambiguidade a resolver.
-6. **Deny no presente:** uma seleção validada em T0 **não** autoriza em T2> T0;
+   válido — organização implícita, sem tela de escolha (Q2 = A).
+6. **Deny no presente:** uma seleção validada em T0 **não** autoriza em T2 > T0;
    a revogação entre T0 e T2 é capturada pela revalidação server-side da
    operação (RLS + Policy Engine + resolvers), jamais por confiança no cliente.
 7. **Dados por tenant:** dados funcionais carregados são válidos somente para a
@@ -118,16 +118,18 @@ o estado conforme o número de memberships ativas:
    organizacional (membership → role → capability).
 9. **Fail-closed:** qualquer dúvida (sem membership, seleção obsoleta, mismatch,
    indisponibilidade de revalidação) ⇒ bloqueio, nunca default de tenant.
+10. **URL não transporta tenant:** rotas funcionais não carregam `organizationId`
+    nesta fase (Q4 = A); a intenção de organização vive no contexto de sessão.
 
 ---
 
-## 4. Modelo proposto
+## 4. Modelo
 
 ### 4.1 Conceitos: solicitada × validada × efetiva
 
 | Conceito | Onde vive | Papel | Autoridade? |
 | --- | --- | --- | --- |
-| **Organização solicitada (intenção)** | Cliente: estado de sessão, localStorage, URL/query (se usada), corpo de requisição | Expressa em qual tenant o usuário quer operar | **Não** |
+| **Organização solicitada (intenção)** | Cliente: estado de sessão; localStorage (última escolha) | Expressa em qual tenant o usuário quer operar | **Não** |
 | **Organização disponível** | Servidor/RLS: memberships ativas do `auth.uid()` (snapshot F5-01) | Define o conjunto selecionável e o que o servidor aceita | Soberana (fonte) |
 | **Organização validada** | Servidor: `user_has_active_membership(org)` / resolução da identidade por `(auth.uid(), org)` | Confirma a intenção contra membership ativa | Soberana (resultado) |
 | **Organização efetiva** | Servidor (autorização): Policy Engine `ActorRef.organizationId` + RLS | Tenant usado na decisão e nas queries | **= validada**; divergência ⇒ DENY |
@@ -136,15 +138,15 @@ Regra: **efetiva = validada**. A “solicitada” só vira “efetiva” depois 
 confirmada no servidor no momento do uso. Não existe “cachê de validação” que
 sobreviva entre operações.
 
-### 4.2 Representação no cliente (contrato, sem implementação nesta atividade)
+### 4.2 Representação no cliente (contrato)
 
 - Estado de sessão do frontend: `organizacaoSolicitada` (id) + o snapshot
   soberano `identidade.organizacoes` (disponíveis).
-- Marcador persistido opcional (conveniência): última organização escolhida, por
-  usuário, em `localStorage` (ex.: `virtus.auth.ultimaOrganizacao`, mapa
-  userId→org), **somente como pré-seleção de intenção** — nunca como prova.
-- Rota funcional pode, no máximo, **sugerir** intenção via parâmetro opcional;
-  o servidor ignora como autoridade.
+- **Persistência da última organização: somente no cliente, por usuário**
+  (Q1 = A), em `localStorage` (`virtus.auth.ultimaOrganizacao`, mapa
+  userId→org), como **conveniência de UX** — pré-seleção de intenção validada ao
+  carregar; nunca como prova. **Sem persistência server-side nesta fase.**
+- **URLs/rotas funcionais não transportam `organizationId`** (Q4 = A).
 
 ### 4.3 Derivando o estado funcional (composição)
 
@@ -171,7 +173,8 @@ o snapshot — o servidor decide de fato.
 
 1. Login/restauração resolve a identidade ⇒ `aguardandoSelecao` (snapshot com N
    organizações disponíveis).
-2. Frontend restaura a última escolha (localStorage), se existir **e** ainda
+2. O usuário vê a **tela dedicada de seleção inicial** (Q2 = A); o frontend pode
+   pré-selecionar a última escolha (localStorage) se existir **e** ainda
    pertencer às disponíveis; senão, nenhuma pré-seleção.
 3. Usuário escolhe explicitamente (lista soberana); a intenção passa a compor o
    contexto; a área funcional é liberada apenas como UX, com todas as operações
@@ -181,11 +184,11 @@ o snapshot — o servidor decide de fato.
 
 ### 5.2 Switch de organização
 
-1. Usuário troca a intenção (seletor no shell/header — UX a definir, Q2).
+1. O usuário troca a intenção pelo **switcher persistente no header** (Q2 = A).
 2. **Invalidação local:** qualquer cache/estado de domínio carregado para a
    organização anterior é descartado/limpo (memória, repositórios, dados por
    tenant) antes de carregar a nova.
-3. Novo snapshot é revalidado no servidor na próxima operação; nenhum “endpoint
+3. O novo tenant é revalidado no servidor na próxima operação; nenhum “endpoint
    de ativação” confere autoridade persistente.
 4. Se a nova organização não estiver disponível ⇒ bloqueio
    (`aguardandoSelecao`), nunca fallback para a anterior.
@@ -201,13 +204,13 @@ o snapshot — o servidor decide de fato.
 
 ### 5.4 Revogação mid-session (membership desabilitada / removida)
 
-1. Revalidação periódica (60 s / foco) re-resolve ⇒ o conjunto de memberships
-   muda: a organização ativa deixa de existir ⇒ o estado transiciona
-   (`autenticado` → `aguardandoSelecao`/`semOrganizacao` conforme restante) e a
-   intenção é limpa.
-2. Independentemente do estado do cliente, **toda operação é negada no servidor**
-   enquanto não houver membership ativa no tenant solicitado (helper + RLS +
-   engine) — ver §6 (TOCTOU).
+1. Revalidação de UI a cada **60 s + retorno de foco** (Q3 = A) re-resolve ⇒ o
+   conjunto de memberships muda: a organização ativa deixa de existir ⇒ o estado
+   transiciona (`autenticado` → `aguardandoSelecao`/`semOrganizacao` conforme
+   restante) e a intenção é limpa.
+2. **A segurança não depende desse intervalo (Q3 = A):** independentemente do
+   estado do cliente, **toda operação funcional revalida membership/tenant no
+   servidor no momento da operação** (helper + RLS + engine) — ver §6 (TOCTOU).
 3. Nenhum dado carregado sob a organização revogada continua sendo exibido como
    autorizado após a detecção; a UI reflete o bloqueio na próxima revalidação.
 
@@ -226,7 +229,7 @@ lifecycle, a mesma revalidação cobre.)
 confirmada); em T1 a membership é desabilitada; em T2 o usuário dispara uma
 operação funcional em O.
 
-O desenho **não** pode aceitar a validação de T0 como “ticket” para T2, porque:
+O desenho **não** aceita a validação de T0 como “ticket” para T2, porque:
 
 1. **Autorização é função do estado presente:** cada `authorize()`/consulta
    avalia `auth.uid()` + profile ativo + membership ativa **naquele momento**
@@ -261,18 +264,19 @@ existente na F5-01) e a intenção de UX, ambos revalidados no uso.
 
 Fronteira de confiança: `organization_id` atravessa a fronteira **apenas como
 intenção**; toda validação é server-side e por operação. JWT metadata/claims não
-carregam tenant.
+carregam tenant; URLs/rotas não transportam org (Q4 = A).
 
 ---
 
 ## 8. Persistência
 
-- **Servidor:** nenhuma coluna/tabela/estado de “organização ativa” nesta etapa
-  (ver D5/D11; alternativa de persistência server-side discutida em Q1).
-- **Cliente (localStorage):** marcador opcional da última organização escolhida,
-  por usuário (`virtus.auth.ultimaOrganizacao`), no padrão do marcador
+- **Servidor:** **nenhuma** coluna/tabela/estado de “organização ativa” —
+  persistência da última organização é **somente no cliente** (Q1 = A).
+- **Cliente (localStorage):** marcador da última organização escolhida, por
+  usuário (`virtus.auth.ultimaOrganizacao`), no padrão do marcador
   `virtus.auth.inicioSessao`; removido no logout; tratado exclusivamente como
-  pré-seleção de intenção; validado contra o snapshot soberano ao carregar.
+  conveniência de UX (pré-seleção de intenção), validado contra o snapshot
+  soberano ao carregar.
 - **Sessão do provedor (Supabase):** não é alterada; nada de org em claims.
 - **DEV:** o marcador de impersonação (`feedback-control-usuario-atual`) permanece
   isolado e exclusivo de DEV.
@@ -283,8 +287,9 @@ carregam tenant.
   de tenant após uma mudança de membership.
 - Dados funcionais: **chaves de cache por organização** ou limpeza completa no
   switch (invariante 7); nenhum dataset é compartilhado entre tenants.
-- Multi-tab: eventos de `storage`/visibilidade podem sincronizar a intenção e
-  forçar revalidação (foco já dispara `revalidar()`); decisão de UX em Q6/Q4.
+- Multi-tab: eventos de `storage`/visibilidade sincronizam a intenção e forçam
+  revalidação (o retorno de foco já dispara `revalidar()`); detalhe de
+  implementação da UI, sem impacto de segurança.
 
 ---
 
@@ -305,13 +310,14 @@ carregam tenant.
 - **Tenant spoofing:** a intenção pode ser falsificada; a autoridade nunca é
   falsificável (membership no banco). Testes obrigatórios de IDOR e spoofing.
 - **Nenhuma prova em claims/URL/localStorage:** proibido usar qualquer um como
-  fonte de tenant; JWT metadata não carrega org.
+  fonte de tenant; JWT metadata não carrega org; URLs/rotas não transportam org
+  (Q4 = A).
 - **Sem endpoint de autoridade:** “ativar organização” é mudança de contexto de
   UX; não existe endpoint que persista autorização por org.
 - **Fail-closed:** ausência de membership ⇒ DENY, estado bloqueado, sem default.
 - **Menor privilégio:** nenhum novo grant genérico a `authenticated`; nenhum novo
-  `SECURITY DEFINER` sem necessidade (não há necessidade nesta etapa — validação
-  usa helpers/resolvers existentes e RLS).
+  `SECURITY DEFINER` (não há necessidade — validação usa helpers/resolvers
+  existentes e RLS).
 - **C/D e confidencialidade:** intactos — a seleção de org não altera
   classificação de confidencialidade nem grants excepcionais.
 
@@ -319,14 +325,13 @@ carregam tenant.
 
 ## 11. Impacto em RLS
 
-- Nenhuma policy/tabela nova nesta atividade (a seleção é contexto de UX).
+- Nenhuma policy/tabela nova (a seleção é contexto de UX).
 - As políticas F2-03/F4-08 já entregam: própria membership legível; organizações
-  somente com membership ativa; future tabelas funcionais seguirão o padrão
+  somente com membership ativa; futuras tabelas funcionais seguirão o padrão
   F4-08 D16 (own-tenant via `user_has_active_membership(organization_id)`).
-- **Recomendação de contrato:** qualquer consulta funcional futura não recebe
-  “org ativa” como filtro confiável do cliente — o tenant vem da linha do
-  recurso sob RLS; o parâmetro de intenção pode no máximo restringir a
-  apresentação, nunca ampliar.
+- **Contrato:** qualquer consulta funcional futura não recebe “org ativa” como
+  filtro confiável do cliente — o tenant vem da linha do recurso sob RLS; o
+  parâmetro de intenção pode no máximo restringir a apresentação, nunca ampliar.
 
 ---
 
@@ -345,20 +350,19 @@ carregam tenant.
   confirmada contra membership ativa — nunca direto da UI. F5-03 deixa o seam:
   interface de “intenção de organização” no contexto de sessão e contrato de
   validação server-side; ResourceContext dos domínios usará o mesmo princípio.
+- **Q5 (diferido para F5-05):** a identidade organizacional (nome/avatar do
+  collaborator vinculado à organização ativa) **poderá ser apresentada quando
+  F5-05 expuser de forma segura** o collaborator vinculado. Nesta F5-03 **não se
+  abre resolver** e **não se implementa** essa apresentação.
 
 ---
 
 ## 13. Migrations previstas
 
-**Nesta etapa: NENHUMA** — não há tabela/coluna/índice/função nova necessária
-para representar a organização ativa (D5/D11). A validação reutiliza
-`user_has_active_membership`, a RLS F2-03/F4-08 e o snapshot de identidade.
-
-Condicional (somente se uma questão aberta decidir diferente):
-- **Q1 = persistência server-side da última organização** ⇒ migration aditiva
-  (coluna opcional em `user_profiles` ou tabela própria de preferências por
-  usuário), justificada apenas por requisito multidispositivo — não recomendada
-  nesta fase.
+**Nenhuma.** Não há tabela/coluna/índice/função nova necessária para representar
+a organização ativa (D5/D11; persistência server-side descartada — Q1 = A). A
+validação reutiliza `user_has_active_membership`, a RLS F2-03/F4-08 e o snapshot
+de identidade.
 
 ---
 
@@ -367,17 +371,18 @@ Condicional (somente se uma questão aberta decidir diferente):
 **Unitário (TS):**
 - derivar estado por N (0/1/>1); transições de revalidação
   (`autenticado`→`semOrganizacao`, `autenticado`→`aguardandoSelecao` quando a org
-  ativa é revogada); intenção ausente/inválida ⇒ bloqueio; regressão F5-01/F5-02.
+  ativa é revogada); intenção ausente/inválida ⇒ bloqueio; pré-seleção
+  (localStorage) ignorada quando fora das disponíveis; regressão F5-01/F5-02.
 
 **Integração/validação SQL (Supabase local — padrão `supabase/validacao`):**
 - revogação de membership **durante** uma sessão: usuário perde a org e passa a
   não resolver organização (reuso dos cenários F4-08/f2-10);
 - cross-tenant: selecionar/solicitar organização de outro usuário/tenant ⇒
   DENY/vazio (RLS e resolvers);
-- **IDOR/spoofing:** forjar `organization_id` em chamadas/rotas ⇒ servidor não
-  entrega nada sem membership ativa; intenção nunca amplia;
+- **IDOR/spoofing:** forjar `organization_id` em chamadas ⇒ servidor não entrega
+  nada sem membership ativa; intenção nunca amplia;
 - ADMIN sem colaborador: seleção de org válida; scopes estruturais vazios;
-  capabilities organizacionais resolvem (F4-01/02).
+  capabilities organizacionais resolvem (F4-01/02);
 - **TOCTOU (simulado):** validar T0, desabilitar membership (T1), operar em T2 ⇒
   DENY (nenhum ALLOW cacheado) — cenário em `02-validar-*.sql`.
 
@@ -389,9 +394,9 @@ Condicional (somente se uma questão aberta decidir diferente):
 | --- | --- |
 | Transformar seleção em autoridade | Invariantes 1/2; revalidação por operação |
 | Vazamento entre tenants via cache | Cache por tenant/limpeza no switch (invariante 7) |
-| Revogação mid-session com estado obsoleto | Revalidação 60 s/foco + DENY server-side (TOCTOU §6) |
+| Revogação mid-session com estado obsoleto | Revalidação 60 s/foco (UX) + DENY server-side por operação (TOCTOU §6; Q3 = A) |
 | Persistir org em claims/JWT/localStorage como prova | Proibido; marcador é só intenção |
-| UX confusa com N>1 (default silencioso) | Sem default; seleção explícita; estado `aguardandoSelecao` |
+| UX confusa com N>1 (default silencioso) | Sem default; seleção explícita (tela inicial + switcher — Q2 = A) |
 | Regressão de F5-01 (estados) / F5-02 (vínculo) | Contratos preservados; testes de regressão |
 
 ---
@@ -401,112 +406,117 @@ Condicional (somente se uma questão aberta decidir diferente):
 - Implementação funcional (documento apenas);
 - vínculo usuário↔colaborador (F5-02 — concluída);
 - roles/capabilities efetivas em runtime (F5-04);
-- ActorContext/ResourceContext (F5-05);
+- ActorContext/ResourceContext e apresentação do collaborator vinculado (F5-05 —
+  Q5 diferido);
+- persistência server-side da última organização (Q1 = A — descartada);
 - persistência remota dos domínios funcionais; migração de `localStorage`;
 - hardening geral (F6); hosting/observabilidade/backup;
 - mudanças no Policy Engine, em RLS de domínios ou em estrutura organizacional.
 
 ---
 
-## 17. Decisões arquiteturais (D1–D13 — PROPOSTAS para revisão)
+## 17. Decisões arquiteturais (D1–D13 — FECHADAS)
 
 | # | Decisão | Conteúdo | Status |
 | --- | --- | --- | --- |
-| D1 | Organização ativa = contexto de UX (intenção/lente) | Nunca autoridade; tenant efetivo sempre derivado da membership ativa do `auth.uid()` na operação | PROPOSTA |
-| D2 | Fonte soberana de disponibilidade | Memberships ativas do `auth.uid()` (profile ativo + membership ativa), refletidas no snapshot F5-01/RLS | PROPOSTA |
-| D3 | Comportamento por cardinalidade | 0 ⇒ `semOrganizacao`; 1 ⇒ `autenticado` com tenant único implícito (sem tela de seleção — não é escolha); >1 ⇒ `aguardandoSelecao` + seleção explícita | PROPOSTA |
-| D4 | Representação da intenção | Estado de sessão do frontend + marcador localStorage por usuário (última escolha), como conveniência validada ao carregar | PROPOSTA |
-| D5 | Sem estado server-side de org ativa | Nenhum endpoint/coluna que confira autoridade; “ativar” é contexto de UX; validação por operação | PROPOSTA |
-| D6 | Revalidação por operação | Toda fronteira (helper/resolver, RLS, engine, RPC) revalida (auth.uid, org) contra membership ativa; DENY se ausente | PROPOSTA |
-| D7 | Revogação mid-session | Revalidação periódica re-deriva estado; intenção limpa; servidor nega qualquer operação no tenant revogado (§6) | PROPOSTA |
-| D8 | Anti-spoofing | Claims/JWT metadata/URL/localStorage nunca provam tenant; cross-tenant DENY; testes IDOR | PROPOSTA |
-| D9 | Switch = invalidação | Troca de org descarta cache/dados do tenant anterior antes de carregar o novo | PROPOSTA |
-| D10 | ADMIN sem colaborador | Seleção normal; scopes estruturais vazios; capabilities organizacionais válidas (D17 F4-02) | PROPOSTA |
-| D11 | Sem migration nesta etapa | Nenhuma estrutura nova; reuso de helper/RLS/snapshot (condição Q1 documentada) | PROPOSTA |
-| D12 | Fail-closed de estado | Sem default de tenant; dúvida/ausência ⇒ bloqueio com tela dedicada (estados F5-01) | PROPOSTA |
-| D13 | Seam para F5-05 | F5-03 entrega a “intenção de organização” + validação server-side; ActorContext consumirá `(auth.uid, org validada)` | PROPOSTA |
+| D1 | Organização ativa = contexto de UX (intenção/lente) | Nunca autoridade; tenant efetivo sempre derivado da membership ativa do `auth.uid()` na operação | FECHADA |
+| D2 | Fonte soberana de disponibilidade | Memberships ativas do `auth.uid()` (profile ativo + membership ativa), refletidas no snapshot F5-01/RLS | FECHADA |
+| D3 | Comportamento por cardinalidade | 0 ⇒ `semOrganizacao`; 1 ⇒ `autenticado` com organização implícita única (sem tela — Q2 = A); >1 ⇒ `aguardandoSelecao` + seleção explícita | FECHADA |
+| D4 | Representação da intenção e persistência | Estado de sessão do frontend + marcador localStorage por usuário (última escolha) como conveniência de UX (Q1 = A); validado ao carregar | FECHADA |
+| D5 | Sem estado server-side de org ativa | Nenhum endpoint/coluna que confira autoridade; “ativar” é contexto de UX; validação por operação | FECHADA |
+| D6 | Revalidação por operação | Toda fronteira (helper/resolver, RLS, engine, RPC) revalida (auth.uid, org) contra membership ativa; DENY se ausente | FECHADA |
+| D7 | Revogação mid-session | Revalidação de UI 60 s/foco re-deriva estado; intenção limpa; servidor nega qualquer operação no tenant revogado (§6 — segurança não depende do intervalo) | FECHADA |
+| D8 | Anti-spoofing | Claims/JWT metadata/localStorage nunca provam tenant; URLs não transportam org (Q4 = A); cross-tenant DENY; testes IDOR | FECHADA |
+| D9 | Switch = invalidação | Troca de org descarta cache/dados do tenant anterior antes de carregar o novo | FECHADA |
+| D10 | ADMIN sem colaborador | Seleção normal; scopes estruturais vazios; capabilities organizacionais válidas (D17 F4-02) | FECHADA |
+| D11 | Sem migration | Nenhuma estrutura nova; reuso de helper/RLS/snapshot (Q1 = A — sem persistência server-side) | FECHADA |
+| D12 | Fail-closed de estado | Sem default de tenant; dúvida/ausência ⇒ bloqueio com tela dedicada (estados F5-01) | FECHADA |
+| D13 | Seam para F5-05 | F5-03 entrega a “intenção de organização” + validação server-side; ActorContext consumirá `(auth.uid, org validada)`; Q5 (apresentação do collaborator) diferido para F5-05 | FECHADA |
 
 ---
 
-## 18. Questões para validação
+## 18. Questões para validação (Q1–Q5 — FECHADAS)
 
-### Q1 — Persistência da última organização: só cliente ou também servidor?
+### Q1 — Persistência da última organização: só cliente ou também servidor? — **FECHADA (alternativa A APROVADA)**
 
-- **Contexto:** a restauração após refresh usa localStorage (por dispositivo). A
-  F5-03 decide se deve também persistir no servidor para restaurar em outros
-  dispositivos.
-- **Por que:** define se há migration/estado server-side (contraria D5/D11) e a
-  superfície de privacidade/dados.
-- **Alternativas:** (A) apenas cliente (localStorage por usuário) —
-  recomendado; (B) servidor (coluna/tabela de preferência + endpoint) —
-  consistência multidispositivo.
-- **Recomendação:** (A) nesta fase; (B) apenas se produto exigir
-  multidispositivo.
-- **Impacto/risco:** (A) sem migration/estado; (B) migration + sincronização +
-  mais superfície (segurança/privacidade).
-- **Seções dependentes:** 8, 13, D5, D11.
+- **Contexto:** a restauração após refresh usa localStorage (por dispositivo).
+- **Por que:** definir se há estado/migration server-side e superfície de
+  privacidade.
+- **Alternativas:** (A) apenas cliente (localStorage por usuário); (B) servidor
+  (coluna/tabela de preferência + endpoint).
+- **Decisão adotada (A):** persistência da última organização **somente no
+  cliente, por usuário, como conveniência de UX**. **Não criar persistência
+  server-side nesta fase.**
+- **Impacto/risco:** sem migration/estado; sem sincronização multidispositivo
+  (aceito nesta fase).
+- **Seções dependentes:** 8, 13, D4, D5, D11.
 
-### Q2 — UX de seleção inicial e switcher (escopo F5-03)
+### Q2 — UX de seleção inicial e switcher — **FECHADA (alternativa A APROVADA)**
 
-- **Contexto:** hoje `AguardandoSelecao` bloqueia com mensagem; o switcher no
-  shell ainda não existe.
-- **Por que:** F5-03 precisa fechar onde/p como o usuário seleciona (tela de
-  primeira escolha + seletor no header) e o que acontece com N=1 (indicador de
-  tenant).
-- **Alternativas:** (A) tela dedicada na primeira entrada (N>1) + seletor no
-  header; (B) apenas seletor no header; (C) lista modal central.
-- **Recomendação:** (A) — tela de entrada explícita e seletor persistente.
-- **Impacto/risco:** decisão de UX/IA; sem impacto de segurança (independe).
+- **Contexto:** hoje `AguardandoSelecao` bloqueia com mensagem; não há switcher.
+- **Por que:** fechar como o usuário seleciona (primeira escolha + troca) e o
+  comportamento com N=1.
+- **Alternativas:** (A) tela dedicada na primeira entrada (N>1) + switcher
+  persistente no header; (B) apenas seletor no header; (C) lista modal central.
+- **Decisão adotada (A):** para N>1, **tela dedicada de seleção inicial +
+  switcher persistente no header**. Para N=1, **organização implícita, sem tela
+  de escolha**.
+- **Impacto/risco:** decisão de UX; sem impacto de segurança.
 - **Seções dependentes:** 5, 8, D3, D4.
 
-### Q3 — Latência de detecção de revogação: 60 s/foco é suficiente?
+### Q3 — Latência de detecção de revogação — **FECHADA (alternativa A APROVADA)**
 
-- **Contexto:** a revalidação periódica (60 s + foco) limita a “janela” de UI
-  obsoleta após revogação.
-- **Por que:** produto pode exigir detecção mais rápida (SSE/websocket/polling
-  curto).
-- **Alternativas:** (A) manter 60 s+foco (recomendado — fail-closed no servidor
-  torna a latência de UX aceitável e sem custo); (B) polling agressivo/SSE.
-- **Recomendação:** (A).
-- **Impacto/risco:** latência de UX de até ~60 s na UI, mas zero risco de acesso
+- **Contexto:** a revalidação periódica limita a “janela” de UI obsoleta.
+- **Por que:** produto pode exigir detecção mais rápida.
+- **Alternativas:** (A) manter 60 s + retorno de foco; (B) polling
+  agressivo/SSE.
+- **Decisão adotada (A):** revalidação de UI a cada **60 segundos + retorno de
+  foco**. **IMPORTANTE:** isso é apenas atualização de UX; **a segurança não
+  depende desse intervalo** — toda operação funcional revalida
+  membership/tenant no servidor no momento da operação.
+- **Impacto/risco:** latência de UX de até ~60 s na UI; zero risco de acesso
   (servidor nega antes).
-- **Seções dependentes:** 5.4, 6, 14.
+- **Seções dependentes:** 5.4, 6, 14, D7.
 
-### Q4 — Rotas/URLs devem transportar `organizationId`?
+### Q4 — Rotas/URLs devem transportar `organizationId`? — **FECHADA (alternativa A APROVADA)**
 
-- **Contexto:** deep-links/URLs poderiam carregar org; o contrato proíbe URL como
-  autoridade.
-- **Por que:** decidir se rotas funcionais levam org (ex.: `/org/:orgId/...`) ou
-  permanecem sem tenant na URL.
-- **Alternativas:** (A) sem org na URL (recomendado — RLS + contexto);
-  (B) org na URL só como intenção/deep-link, revalidada.
-- **Recomendação:** (A); se (B), documentar que nunca amplia.
-- **Impacto/risco:** (B) aumenta superfície de interpretação e testes.
-- **Seções dependentes:** 4, 10, 14.
+- **Contexto:** deep-links/URLs poderiam carregar org; URL nunca é autoridade.
+- **Por que:** decidir se rotas funcionais levam org ou permanecem sem tenant na
+  URL.
+- **Alternativas:** (A) sem org na URL; (B) org na URL só como intenção/
+  deep-link, revalidada.
+- **Decisão adotada (A):** **não transportar `organizationId` nas URLs/rotas
+  funcionais nesta fase.**
+- **Impacto/risco:** sem superfície de interpretação de URLs; deep-links de
+  tenant ficam para depois.
+- **Seções dependentes:** 4, 7, 10, 14, D8.
 
-### Q5 — Apresentação da identidade por organização (nome/avatar do colaborador)
+### Q5 — Apresentação da identidade por organização (collaborator vinculado) — **FECHADA (alternativa A — diferida para F5-05)**
 
-- **Contexto:** com vínculo F5-02, cada organização pode ter um colaborador (e um
-  perfil de apresentação) diferente para o mesmo usuário.
+- **Contexto:** com o vínculo F5-02, cada organização pode ter um colaborador
+  (perfil de apresentação) diferente para o mesmo usuário.
 - **Por que:** a barra/UX por tenant pode precisar exibir o colaborador vinculado
-  à organização ativa (ex.: “você está operando como Fulano na Org X”).
-- **Alternativas:** (A) exibir identidade organizacional (colaborador vinculado)
-  somente na organização ativa, quando existir vínculo; (B) manter apenas
-  identidade de conta nesta fase.
-- **Recomendação:** (A) futuramente, quando F5-05 expor a resolução; nesta F5-03
-  registrar o requisito de UI sem implementar.
-- **Impacto/risco:** depende de exposição server-side da F5-05 (Q1/Q2 F5-02 =
+  à organização ativa.
+- **Alternativas:** (A) exibir a identidade organizacional somente quando F5-05
+  expuser o collaborator de forma segura; (B) manter apenas identidade de conta.
+- **Decisão adotada (A, diferida):** registrar que a identidade organizacional
+  **poderá ser apresentada quando F5-05 expuser de forma segura** o collaborator
+  vinculado à organização ativa. **Não abrir resolver nem implementar na F5-03.**
+- **Impacto/risco:** nenhuma superfície nova nesta fase (alinhado a Q1/Q2 F5-02 =
   manter fechado por enquanto).
-- **Seções dependentes:** 12, D10, F5-02 Q1/Q2.
+- **Seções dependentes:** 12, D10, D13, F5-02 Q1/Q2.
 
 ---
 
 ## 19. Confirmações desta atividade
 
-- **Nenhuma implementação funcional** foi feita; **somente** este documento.
+- **Nenhuma implementação funcional** foi feita; **somente** este documento
+  (atualização no mesmo branch/PR da F5-03).
+- Q1–Q5 **FECHADAS/APROVADAS** (A1/A2/A3/A4/A5) e incorporadas às seções
+  dependentes; Q5 registrada como **diferida para F5-05**.
+- D1–D13 **FECHADAS**; nenhuma linguagem de proposta/indefinição remanescente.
 - Base: `main` com F5-01 (#159/#160) e F5-02 (#161/#162) mergeadas — estado do
   código verificado (estados de sessão, guard, RLS F2-03/F4-08, vínculo F5-02).
-- Decisões D1–D13 **propostas**; questões Q1–Q5 registradas e podem permanecer
-  abertas no PR.
-- Próximos passos: revisar D1–D13 e responder Q1–Q5; só então implementar a
-  seleção/switcher da F5-03 (PR próprio).
+- **O contrato da F5-03 está pronto para implementação** (seleção inicial +
+  switcher, representação da intenção, invalidação no switch e revalidação
+  server-side por operação), em PR próprio.
