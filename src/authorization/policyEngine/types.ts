@@ -89,6 +89,8 @@ export interface AuthorizationDecision {
     temporaryOrigins?: string[];
     /** Grant excepcional que autorizou a decisão (F4-06), ex.: exceptional:<grantId>. */
     exceptionalGrant?: { id: string; origin: string };
+    /** Grant de Pilot Full Access que autorizou a decisão (F4-07), ex.: pilot:<grantId>. */
+    pilotGrant?: { id: string; origin: string };
   };
 }
 
@@ -229,6 +231,73 @@ export interface ExceptionalProvider {
   recordUsage?(record: ExceptionalUsageRecord): void;
 }
 
+/**
+ * Grant de Pilot Full Access (F4-07, contrato fechado D1–D18). Tenant-scoped,
+ * development-only, perfil versionado fechado (PILOT_PROFILE_V1), máx. 30 dias,
+ * sem confidencial/segurança. Nunca é informado/forçado pelo caller.
+ */
+export interface PilotFullAccessGrant {
+  id: string;
+  organizationId: string;
+  beneficiaryUserProfileId: string;
+  grantedByUserProfileId: string;
+  justification: string;
+  validFrom: Date;
+  validTo: Date;
+  status: "active" | "revoked";
+  revokedAt?: Date;
+  revokedBy?: string;
+  revocationMotive?: string;
+  /** Perfil versionado fechado de capabilities pilot-eligible (ex.: "PILOT_PROFILE_V1"). */
+  profileVersion: string;
+  createdAt?: Date;
+  version?: number;
+}
+
+/** Registro de uso efetivo da origem D (D14): somente quando D autoriza. */
+export interface PilotUsageRecord {
+  grantId: string;
+  organizationId: string;
+  beneficiaryUserProfileId: string;
+  capability: Capability;
+  target: TargetRef;
+  cycleId?: string;
+  date: Date;
+  profileVersion: string;
+  origin: string;
+}
+
+/**
+ * Origem D — Pilot Full Access (F4-07, D6/D7/D13). Exclusiva de development;
+ * consultada SOMENTE quando A/B DENY e o alvo NÃO é confidencial; perfil
+ * versionado fechado; mais de um grant aplicável sem identificação inequívoca
+ * ⇒ DENY. Nunca cobre conteúdo confidencial nem capabilities de segurança.
+ */
+export interface PilotFullAccessProvider {
+  /** Ambiente elegível? D só produz ALLOW em "development" (D13). */
+  isEnvironmentEligible(): boolean;
+  /** Capability pertence a algum perfil versionado suportado (PILOT_PROFILE_V1)? */
+  isCapabilityPilotEligible(capability: Capability): boolean;
+  /**
+   * Classificação soberana do recurso (mesma fonte da F4-06): true =
+   * confidencial; false = não confidencial; undefined = indeterminado.
+   */
+  isTargetConfidential(
+    target: TargetRef,
+    cycleId: string | undefined,
+    organizationId: string
+  ): boolean | undefined;
+  /** Grants de Pilot Full Access aplicáveis (beneficiário/tenant/capability/data/status/perfil). */
+  resolvePilotFullAccessGrants(
+    beneficiaryId: string,
+    organizationId: string,
+    capability: Capability,
+    date: Date
+  ): PilotFullAccessGrant[];
+  /** Evento de uso efetivo — invocado pelo engine quando D autoriza. */
+  recordUsage?(record: PilotUsageRecord): void;
+}
+
 export interface PolicyEngineProviders {
   identity: IdentityProvider;
   capabilities: CapabilityProvider;
@@ -239,4 +308,6 @@ export interface PolicyEngineProviders {
   temporary?: TemporaryProvider;
   /** Origem excepcional (F4-06); ausente = sem acesso excepcional (retrocompatível). */
   exceptional?: ExceptionalProvider;
+  /** Origem Pilot Full Access (F4-07); ausente = sem pilot (retrocompatível). */
+  pilot?: PilotFullAccessProvider;
 }

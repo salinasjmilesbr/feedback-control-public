@@ -601,3 +601,96 @@ RLS/DEFINER, sem cargo/job_role e sem antecipar F4-08.
 
 Nenhum código, migration, RLS ou `SECURITY DEFINER` foi produzido — somente
 `docs/F4-07-desenho-tecnico.md`. Issue #94 permanece aberta (PR sem `Closes`).
+
+## 24. Implementação e finalização (Issue #94)
+
+> Implementado o **core testável** da F4-07 (origem D — Pilot Full Access),
+> integrado ao Policy Engine. Sem migration, sem RLS, sem `SECURITY DEFINER`,
+> sem conexão ao Supabase remoto e sem migração de fluxos de página (runtime
+> pré-F5, mesmo condicionamento das F4-04/F4-05/F4-06). D1–D18 e Q1–Q9
+> permanecem fechados.
+
+### 24.1 Arquivos implementados
+
+- **Alterado** `src/authorization/Capability.ts` — nova capability runtime
+  `pilot_full_access.grant` (administrativa de concessão/revogação; **fora** de
+  PILOT_PROFILE_V1; dívida de alinhamento SQL×runtime mantida);
+- **Alterado** `src/authorization/policyEngine/capabilityTarget.ts` — entrada
+  fechada `"pilot_full_access.grant": ["collaborator", "cycle", "goal",
+  "observation"]` (domínios funcionais não confidenciais do piloto);
+- **Alterado** `src/authorization/policyEngine/types.ts` — contratos
+  `PilotFullAccessGrant`, `PilotUsageRecord`, `PilotFullAccessProvider`,
+  `PolicyEngineProviders.pilot?` e diagnóstico `pilotGrant` (`{ id, origin }`);
+- **Alterado** `src/authorization/policyEngine/policyEngine.ts` — dispatcher das
+  origens derivadas (A/B DENY → confidencial?C:não-confidencial?D), gates
+  globais (capability×target, data, DOMAIN_STATE) reaplicados uma única vez,
+  origem `pilot:<grantId>`, D development-only, fail-closed (0/>1 grants ⇒ DENY);
+- **Criado** `src/authorization/providers/pilot.ts` — `PILOT_PROFILE_V1`
+  (20 capabilities fechadas), `PILOT_PROFILES` e `createPilotFullAccessProvider`
+  (ambiente, perfil, tenant, beneficiário, vigência, status; fail-closed);
+- **Criado** `src/authorization/pilotAccess.ts` — serviço de
+  concessão/revogação/renúncia (auto-concessão proibida, justificativa, janela
+  fechada, máx. 30 dias, sem retroatividade, profileVersion suportado,
+  autorização do concedente via `pilot_full_access.grant`) + eventos
+  `granted`/`revoked`/`relinquished`/`used` (event sink);
+- **Criado** `src/authorization/providers/f4-07-core.test.ts` — 50 testes da
+  matriz (§18) + extras.
+
+### 24.2 Integração no Policy Engine
+
+`autorizarOrigemDerivada` (dispatcher) é chamada somente quando A/B negam por
+capability ou scope/relação, e apenas se `providers.exceptional` ou
+`providers.pilot` existe. Ordem: capability×target (TARGET_INCOMPATIBLE) →
+data → DOMAIN_STATE → classificação soberana (confidencial ⇒ C; não confidencial
+⇒ D; indeterminado ⇒ DENY). D: `isEnvironmentEligible` (development only) →
+`isCapabilityPilotEligible` (perfil) → resolução de grants (0 ⇒ negação; 1 ⇒
+ALLOW `pilot:<grantId>` + `recordUsage`; >1 ⇒ DENY). A/B ALLOW ⇒ C/D não
+consumidos. `listAllowedTargets` remove C (F4-06 D18) e mantém D (F4-07 D8):
+D só lista alvos não confidenciais pilot-eligible.
+
+**D9 fail-closed estrutural no provider (`grantJanelaEstruturalValida`):** a
+resolução valida, na fronteira de segurança, que o grant possui janela
+estruturalmente válida — datas válidas, `validTo > validFrom` e duração ≤ 30
+dias — antes do gate de vigência por data. Grant malformado ⇒ **não aplicável**
+(DENY), sem normalizar/truncar e sem confiar apenas no serviço de criação;
+retroatividade permanece restrição de CONCESSÃO (não rejeitada no provider).
+A mesma validação protege `listAllowedTargets`.
+
+### 24.3 PILOT_PROFILE_V1 e exclusões
+
+Perfil fechado/versionado `PILOT_PROFILE_V1` = 20 capabilities funcionais não
+confidenciais (colaboradores, ciclos, metas, observações). Exclusões: toda
+`evaluation.*` + `report.view` (confidencial), `settings.manage` +
+`exceptional_access.grant` + `pilot_full_access.grant` (segurança/concessão),
+`goal.approve.manager`/`goal.approve.coordinator` (variante legada). Lista
+explícita; sem "*", sem "todas exceto", sem prefixo; nova capability não entra
+sem revisão/nova versão.
+
+### 24.4 Ambiente, auditoria e limitações
+
+- **Ambiente:** `PilotFullAccessProvider.isEnvironmentEligible()` (gate central
+  injetado na composição; core puro) — só `development`; HOMOLOG/PROD ⇒ DENY.
+- **Auditoria:** `granted`/`revoked`/`relinquished` (serviço) e `used` (engine,
+  via `recordUsage`, com `profileVersion` e origem `pilot:<grantId>`); expiração
+  derivada por data; posse ≠ consumo; A/B ou C ALLOW ⇒ sem evento `used` D.
+- **Pré-F5:** core/provider testável com entrada F3/F4-shaped e event sink
+  in-memory; sem hardcode de identidade, sem cargo, sem allowlist fake, sem
+  localStorage soberano; fonte persistente/operacional condicionada à F5.
+- **Adiados:** F4-08 (RLS/policies), integração de páginas/serviços legados
+  (F5), renovação automática (não implementada; novo grant manual) e alinhamento
+  SQL×runtime de capabilities.
+
+### 24.5 Validação
+
+- `npm test` → **735 testes / 55 arquivos aprovados** (+50 da F4-07);
+- `npm run build` → aprovado (`tsc -b` + `vite build`);
+- `npm run lint` → aprovado;
+- `git diff --check` → aprovado.
+
+### 24.6 Confirmações
+
+- Nenhuma migration, RLS ou `SECURITY DEFINER`;
+- Nenhum uso de cargo/job_role no novo caminho;
+- `pilot_full_access.grant` fora de PILOT_PROFILE_V1 e não concedida por D;
+  D nunca cobre confidencial nem segurança; development-only; máx. 30 dias;
+- Issue #94 será fechada pelo merge desta PR (não realizado aqui).
