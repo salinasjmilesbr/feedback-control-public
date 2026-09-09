@@ -110,4 +110,62 @@ describe("getRelatorioVisaoGeral", () => {
       )?.situacao
     ).toBe("CANCELADA");
   });
+
+  it("LIMIT → THEN → AGGREGATE: agregações usam apenas o dataset autorizado (não vaza nota de fora do escopo)", () => {
+    // Coordenador consolida somente sua equipe direta. Se a implementação
+    // agregar ANTES de limitar, a nota 5 de "fora" contaminaria a média.
+    const gerente = pessoa(900001, "GERENTE");
+    const coordenador = pessoa(900002, "COORDENADOR", gerente.matricula);
+    const direto = pessoa(10, "ANALISTA", coordenador.matricula);
+    const fora = pessoa(12, "ANALISTA", gerente.matricula); // irmão, fora do scope do coordenador
+    const colaboradores = [gerente, coordenador, direto, fora];
+
+    const feedbackDireto: Feedback = {
+      id: "fb-direto",
+      colaboradorId: direto.matricula,
+      colaboradorNome: direto.nome,
+      status: "CONCLUIDA",
+      data: "2026-03-01T00:00:00.000Z",
+      ano: ciclo.ano,
+      ciclo: ciclo.ciclo,
+      notaMedia: 2,
+      competencias: [],
+    };
+    const feedbackFora: Feedback = {
+      id: "fb-fora",
+      colaboradorId: fora.matricula,
+      colaboradorNome: fora.nome,
+      status: "CONCLUIDA",
+      data: "2026-03-01T00:00:00.000Z",
+      ano: ciclo.ano,
+      ciclo: ciclo.ciclo,
+      notaMedia: 5,
+      competencias: [],
+    };
+
+    localStorage.setItem(
+      "feedback-control-colaboradores",
+      JSON.stringify(colaboradores)
+    );
+    localStorage.setItem(
+      "feedback-control-feedbacks",
+      JSON.stringify([feedbackDireto, feedbackFora])
+    );
+
+    const relatorio = getRelatorioVisaoGeral(ciclo, coordenador);
+
+    // 1) dataset limitado primeiro: só o direto entra (contagem).
+    expect(relatorio.colaboradores.map(({ matricula }) => matricula)).toEqual([
+      direto.matricula,
+    ]);
+    expect(relatorio.totalElegiveis).toBe(1);
+    expect(relatorio.avaliacoesComNota).toBe(1);
+
+    // 2) agregações calculadas DEPOIS, só sobre o autorizado: média = 2 (não 3,5).
+    expect(relatorio.mediaEquipe).toBe(2);
+
+    // 3) distribuição não contém a nota 5 de "fora".
+    const quantidades = relatorio.distribuicao.map((item) => item.quantidade);
+    expect(quantidades.reduce((soma, q) => soma + q, 0)).toBe(1);
+  });
 });
