@@ -577,7 +577,7 @@ Histórico das questões abertas no desenho, agora **fechadas**:
 | Avaliação | create/edit/cancel/reopen/read | `authorizationPolicy` → engine (`evaluation.*` + scope + domainState de ciclo/status) |
 | Meta | approve/own (write/read) | `metaStorage.aprovarMeta` (engine) e `authorizationPolicy` (`goal.approve`/`goal.write` + cadeia de gestão/SELF) |
 | Observação | create/edit/delete/read | `authorizationPolicy` → engine (`observation.*` + ciclo ATIVO + status do alvo) |
-| Relatório | read (escopo) | `authorizationPolicy` → engine (`report.read`) + `relatorioService.aplicarEscopoRelatorio`/`visibilidadeColaboradores` (dados) |
+| Relatório / listagem | read (escopo) | `scopeCollaborators`: candidatos (`getColaboradoresVisiveis`/`aplicarEscopoRelatorio`) → decisão FINAL via `listAllowedTargets`/`alvosPermitidos` (`report.read` / `collaborator.read` + scope + relação + domainState) |
 | Ciclo | cancel/reopen/period.correct | `cancelamentoCicloService`/`reaberturaCicloService`/`correcaoPeriodoCicloService` carregam e passam `collaborators` → engine (`cycle.*` + domainState) |
 | Colaborador | create/edit/list | `authorizationPolicy` → engine (`collaborator.*`) |
 
@@ -592,6 +592,13 @@ Histórico das questões abertas no desenho, agora **fechadas**:
   `cycle.team.panel.view` → `cycle.read`; `report.view` → `report.read`;
   `collaborator.list` → `collaborator.read`. O papel é resolvido por
   capability + scope + relação + domainState, nunca pelo nome da capability.
+- **`scopeCollaborators` não é autorização por hierarquia:** `getColaboradoresVisiveis`
+  e `aplicarEscopoRelatorio` são apenas DESCOBERTA de candidatos/transformação/UX;
+  a decisão FINAL dos targets passa pelo Policy Engine
+  (`listAllowedTargets`/`alvosPermitidos`) com capability canônica
+  (`report.read` para REPORT, `collaborator.read` para OPERATIONAL_TEAM) + scope +
+  relação + domainState. Relação hierárquica sem capability ⇒ lista vazia
+  (fail-closed).
 
 ### 20.3 Limitações genuínas pré-F5 (fora do escopo de #96)
 

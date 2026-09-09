@@ -11,6 +11,8 @@ import type { Observacao } from "../types/Observacao";
 import type { AuthorizationContext } from "./AuthorizationContext";
 import { AuthorizationError } from "./authorizationError";
 import { authorize, can, scopeCollaborators } from "./authorizationPolicy";
+import { dominioPermite } from "./autorizacaoFuncional";
+import { derivarBindingsDev } from "./mundoFuncional";
 import type {
   CollaboratorResource,
   EvaluationResource,
@@ -1270,6 +1272,94 @@ describe("authorizationPolicy", () => {
         contexto(actorAusente),
         { purpose: "REPORT", collaborators }
       )
+    ).toEqual([]);
+  });
+
+  it("scopeCollaborators: hierarquia válida sem report.read ⇒ lista vazia", () => {
+    const bindings = derivarBindingsDev(collaborators);
+    const capsCoordenador = new Set(bindings.get(coordenador.matricula)!);
+    capsCoordenador.delete("report.read");
+    const semReport = new Map(bindings);
+    semReport.set(coordenador.matricula, capsCoordenador);
+
+    expect(
+      scopeCollaborators(contexto(coordenador), {
+        purpose: "REPORT",
+        collaborators,
+        bindingsDev: semReport,
+      })
+    ).toEqual([]);
+  });
+
+  it("scopeCollaborators: report.read presente ⇒ somente targets ALLOW", () => {
+    const resultado = scopeCollaborators(contexto(coordenador), {
+      purpose: "REPORT",
+      collaborators,
+    });
+
+    expect(resultado.map((c) => c.matricula)).toEqual([direto.matricula]);
+    expect(resultado).not.toContainEqual(apenasColegiado);
+    expect(resultado).not.toContainEqual(externo);
+  });
+
+  it("scopeCollaborators: capability presente + domainState inválido ⇒ vazio", () => {
+    expect(
+      scopeCollaborators(contexto(coordenador), {
+        purpose: "REPORT",
+        collaborators,
+        domainState: dominioPermite(false),
+      })
+    ).toEqual([]);
+  });
+
+  it("scopeCollaborators: target fora do scope/relação é excluído", () => {
+    const resultado = scopeCollaborators(contexto(coordenador), {
+      purpose: "OPERATIONAL_TEAM",
+      collaborators,
+    });
+
+    expect(resultado.map((c) => c.matricula).sort()).toEqual(
+      [direto.matricula, apenasColegiado.matricula].sort()
+    );
+    expect(resultado).not.toContainEqual(externo);
+    expect(resultado).not.toContainEqual(outroCoordenador);
+  });
+
+  it("scopeCollaborators: alterar funcao/cargo sem alterar relação não muda o resultado", () => {
+    const promovido: Colaborador = {
+      ...coordenador,
+      funcao: "GERENTE",
+      cargo: "Gerente",
+    };
+
+    const antes = scopeCollaborators(contexto(coordenador), {
+      purpose: "REPORT",
+      collaborators,
+    });
+    const depois = scopeCollaborators(contexto(promovido), {
+      purpose: "REPORT",
+      collaborators,
+    });
+
+    expect(depois).toEqual(antes);
+  });
+
+  it("scopeCollaborators: helpers de candidato não são prova final de autorização", () => {
+    const candidatos = getColaboradoresVisiveis(coordenador, [...collaborators]);
+    expect(candidatos.length).toBeGreaterThan(0); // descoberta por hierarquia
+
+    const bindings = derivarBindingsDev(collaborators);
+    const capsCoordenador = new Set(bindings.get(coordenador.matricula)!);
+    capsCoordenador.delete("report.read");
+    const semReport = new Map(bindings);
+    semReport.set(coordenador.matricula, capsCoordenador);
+
+    expect(
+      scopeCollaborators(contexto(coordenador), {
+        purpose: "REPORT",
+        collaborators,
+        bindingsDev: semReport,
+      })
     ).toEqual([]);
   });
 });

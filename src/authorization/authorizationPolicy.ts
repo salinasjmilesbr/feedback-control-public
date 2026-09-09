@@ -3,6 +3,7 @@ import { aplicarEscopoRelatorio } from "../services/relatorioService";
 import { getColaboradoresVisiveis } from "../services/visibilidadeColaboradores";
 import type { Colaborador } from "../types/Colaborador";
 import type { AuthorizationContext } from "./AuthorizationContext";
+import { alvosPermitidos } from "./autorizacaoFuncional";
 import { canonicalizarCapability } from "./canonical";
 import type { Capability } from "./Capability";
 import {
@@ -375,17 +376,32 @@ export function scopeCollaborators(
   const actor = resolverAtor(context, input.collaborators);
   if (!actor) return [];
 
+  // 1) Descoberta de CANDIDATOS (dados/hierarquia + UX). NÃO é autorização.
   const visiveis = getColaboradoresVisiveis(
     actor,
     [...input.collaborators]
   );
+  const candidatos =
+    input.purpose === "REPORT"
+      ? aplicarEscopoRelatorio(
+          visiveis.map((colaborador) => ({ colaborador })),
+          actor
+        ).map(({ colaborador }) => colaborador)
+      : visiveis;
 
-  if (input.purpose === "REPORT") {
-    return aplicarEscopoRelatorio(
-      visiveis.map((colaborador) => ({ colaborador })),
-      actor
-    ).map(({ colaborador }) => colaborador);
-  }
+  // 2) Decisão FINAL via Policy Engine (capability + target + scope + relação +
+  //    domainState). Somente ALLOW permanece (fail-closed).
+  const capability: Capability =
+    input.purpose === "REPORT" ? "report.read" : "collaborator.read";
+  const permitidos = alvosPermitidos(
+    actor,
+    [...input.collaborators],
+    capability,
+    input.domainState ?? dominioPermite(true),
+    input.cicloId,
+    input.bindingsDev
+  );
+  const idsPermitidos = new Set(permitidos.map((c) => c.matricula));
 
-  return visiveis;
+  return candidatos.filter((c) => idsPermitidos.has(c.matricula));
 }
