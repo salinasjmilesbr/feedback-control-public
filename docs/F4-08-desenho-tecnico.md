@@ -517,3 +517,134 @@ F5; persistências C/D = F5/F4-09+.
 Nenhum código, migration, policy RLS, helper SQL, grant ou view foi produzido —
 somente `docs/F4-08-desenho-tecnico.md`. Issue #95 permanece aberta (PR sem
 `Closes`). Sem merge.
+
+## 26. Implementação — registro de entrega (Issue #95, PR #154)
+
+> **Status:** implementado e validado no Supabase local; **PR #154 (Closes #95)**
+> aberto, **sem merge**. Contrato D1–D22/Q1–Q8 (§23/§24) seguido integralmente.
+> Nenhum FORCE RLS, nenhum novo SECURITY DEFINER, sem service role no cliente,
+> sem Supabase remoto.
+
+### 26.1 Migrations (incrementais, igual-ou-mais-restritivas)
+
+1. `20260908100000_f4_08_helpers_function_grants.sql` — helper único +
+   revoke/grant das funções INVOKER.
+2. `20260908110000_f4_08_rls_select_own_tenant.sql` — policies SELECT own-tenant
+   + grants.
+3. `20260908120000_f4_08_capabilities_read_only.sql` — capabilities global
+   read-only.
+4. `20260908130000_f4_08_hardening.sql` — `registrar_sucessao_avaliador` +
+   triggers + role lookup fail-closed.
+5. `20260908140000_f4_08_revoke_excess_table_privileges.sql` — least privilege de
+   tabela (revoga TRUNCATE/TRIGGER/REFERENCES/etc. de anon/authenticated) +
+   default privileges endurecidos.
+6. `20260908150000_f4_08_organizations_profile_active.sql` — `organizations`
+   passa a exigir profile ativo (D1 completa).
+
+### 26.2 Helper
+
+`public.user_has_active_membership(uuid)` — SECURITY INVOKER, STABLE,
+`set search_path = public`, sem DEFINER e sem recursão. Verifica a fronteira
+soberana D1 COMPLETA: `auth.uid()` + user_profile ATIVO + membership ATIVA
+(`join user_profiles` com `status='active'`). Grafo acíclico: consulta somente
+`user_profiles` e `user_organization_memberships`, cujas policies usam apenas
+`auth.uid()` (nenhuma chama o helper). EXECUTE somente a `authenticated`
+(revoke de `public, anon`). Profile inativo ⇒ `false` (fail-closed).
+
+### 26.3 Policies (18 novas → 21 no total)
+
+- SELECT own-tenant (`<tabela>_select_same_tenant`) em 13 tabelas estruturais
+  (A) + 3 snapshots F3-08 (E) + `collaborator_status_periods` (B, via EXISTS em
+  `collaborators`);
+- `capabilities_select_authenticated` (catálogo global read-only);
+- `organizations_select_via_membership` reescrita para usar o helper (profile
+  ativo + membership ativa; a versão F2-03 foi removida, sem OR de policies);
+- 7 tabelas fechadas permanecem sem policy (6 de segurança F4-01/F4-02 +
+  `evaluation_succession_events` de auditoria).
+
+### 26.4 Grants/revokes (least privilege)
+
+- 16 funções INVOKER de resolução/RPC (F3-07/F3-09/F4-02): `revoke execute from
+  public, anon, authenticated` + `grant execute to service_role`.
+- `revoke all on all tables/sequences in schema public from anon, authenticated`
+  + regrant SELECT a `authenticated` somente nas 21 tabelas legíveis (remove
+  TRUNCATE/TRIGGER/REFERENCES/INSERT/UPDATE/DELETE herdados por default
+  privileges).
+- Default privileges de `postgres` endurecidos (tables/sequences/functions sem
+  grant a anon/authenticated). `supabase_admin`: limitação documentada (ver
+  §26.8) — mitigada pelo schema guard de privilégios efetivos no CI.
+- 4 SECURITY DEFINER existentes mantidos (EXECUTE `service_role`, sem ampliar).
+
+### 26.5 Hardening de funções/triggers
+
+- `registrar_sucessao_avaliador`: guard soberano de `organization_id` (todas as
+  responsabilidades no mesmo tenant; cross-tenant = DENY fail-closed).
+- Triggers F3-04/05/06: `if not found then raise` (fail-closed).
+- Triggers F4-01/F4-02: `set search_path = public`.
+- `enforce_membership_role_within_organization`: role INEXISTENTE agora é
+  fail-closed (`if not found then raise`) — NULL de lookup ≠ system role; system
+  role (org NULL) e tenant role (org própria) são tratados explicitamente.
+
+### 26.6 Testes locais (Supabase local, docker/psql)
+
+`supabase db reset` + `supabase/validacao/01-cenario-f4-08.sql` +
+`02-validar-f4-08.sql` — **57 verificações `[PASS]`** + `03-validar-f4-08-mutacoes.sql`
+(**8 mutation tests** do schema guard), incluindo:
+- schema guard (FORCE RLS; RLS global; 4 DEFINER + **EXECUTE efetivo dos
+  DEFINER**; EXECUTE indevido; policies; **privilégios efetivos via
+  `has_table_privilege`** para anon/authenticated; **catálogo completo D16**
+  (toda tabela `public` explicitamente classificada); **view/materialized view
+  não aprovadas**; policy trivially-permissive);
+- **profile inativo + membership ativa = DENY** (estrutura, `organizations` por
+  listagem e por ID direto, e perfil);
+- membership inativa / sem membership = DENY; multi-membership (Alfa+Beta, não
+  Gama); cross-tenant por ID direto = DENY; anon sem acesso; joins sem vazamento;
+- DML/TRUNCATE/capabilities/identity/memberships/auditoria/snapshots negados;
+  troca `organization_id` A→B e parent/FK A→B negados;
+- **`registrar_sucessao_avaliador`**: A isolada válida; B isolada válida;
+  [A,B]/[B,A] rejeitados pelo guard de organization com causa ESPECÍFICA (sem
+  `WHEN OTHERS`); ID inexistente; array com NULL; B em contexto indevido;
+- triggers e role lookup com validação de causa específica (SQLERRM).
+
+### 26.7 Schema guard
+
+Em `02-validar-f4-08.sql` (§1): FORCE RLS; tabela `public` sem RLS (inclui
+particionadas); SECURITY DEFINER além dos 4; **EXECUTE efetivo dos 4 DEFINER**
+(public/anon/authenticated proibidos); EXECUTE indevido nas funções de negócio;
+privilégios efetivos (`has_table_privilege`: SELECT/INSERT/UPDATE/DELETE/
+TRUNCATE/REFERENCES/TRIGGER) para anon/authenticated; **catálogo completo D16**
+(toda tabela `public` deve ser explicitamente classificada — nova tabela não
+classificada ⇒ FAIL); **view/materialized view não aprovadas ⇒ FAIL**; policy
+trivially-permissive e contagem de policies. O `03-validar-f4-08-mutacoes.sql`
+prova que cada regra DETECTA a regressão correspondente (introduz → FAIL →
+reverte → PASS), sem `WHEN OTHERS` mascarando causa.
+
+### 26.8 Limitações/adiamentos
+
+- **Correção sobre inlining:** os resolvers `language sql STABLE` POSSUEM
+  `set search_path = public`, o que impede o inlining pelo PostgreSQL (funções
+  com `SET`/proconfig não são inlined); portanto o `REVOKE EXECUTE` é EFETIVO e
+  `authenticated` recebe `permission denied` (validado em teste real). A premissa
+  anterior de "RLS como proteção complementar ao inlining" estava incorreta e foi
+  removida.
+- **Default privileges de `supabase_admin`:** não são alteráveis pela role de
+  migration (`postgres`, não-superuser no Supabase local). Permanencem gerenciados
+  pelo `roles.sql` do Supabase e afetam apenas objetos criados POR
+  `supabase_admin`. Mitigação: o schema guard de privilégios efetivos falha o CI
+  para QUALQUER tabela `public` com grant excedente a anon/authenticated,
+  independentemente do criador.
+- **Edge Functions (`convidar-usuario`/`gerenciar-usuario`)** permanecem como
+  administração global privilegiada via allowlist + `service_role`
+  (`verify_jwt=false`), exceção transitória aceita em Q6. NÃO redesenhadas na
+  F4-08; risco residual (fronteira privilegiada/transitória) documentado para
+  tratamento na fase apropriada.
+- Persistências C/D e domínios `localStorage` permanecem para F5/F4-09+.
+
+### 26.9 Resultados finais
+
+- `npm test`: 55 arquivos / **748 testes** passaram.
+- `npm run build`: OK. `npm run lint`: sem erros. `git diff --check`: limpo.
+- Supabase local: **57 `[PASS]`** (validação RLS/schema guard) + **8 mutation
+  tests** do schema guard, 0 falhas.
+- CI (GitHub Actions): `quality` (test/build/lint/diff-check) + `supabase-local`
+  (`db start` + `db reset` + cenário + validação RLS/schema guard + mutation tests).

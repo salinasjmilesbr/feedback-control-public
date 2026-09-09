@@ -16,6 +16,25 @@ export interface ConfiguracaoAmbiente {
   readonly supabaseAnonKey?: string;
 }
 
+/**
+ * Extrai a claim `role` do payload (base64url) de uma chave JWT, sem validar
+ * assinatura — suficiente para rejeitar chave privilegiada (service_role) no
+ * bundle do cliente. Retorna `undefined` se o payload for ilegível (fail-closed
+ * no chamador). F4-08 (Issue #95): a chave de cliente deve ser a chave `anon`.
+ */
+function roleDoAnonKey(chaveJwt: string): string | undefined {
+  try {
+    const segmento = chaveJwt.split(".")[1];
+    if (!segmento) return undefined;
+    const base64 = segmento.replace(/-/g, "+").replace(/_/g, "/");
+    const preenchido = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    const payload = JSON.parse(atob(preenchido)) as { role?: unknown };
+    return typeof payload.role === "string" ? payload.role : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function resolverConfiguracaoAmbiente(
   variaveis: VariaveisAmbiente
 ): ConfiguracaoAmbiente {
@@ -60,8 +79,15 @@ export function resolverConfiguracaoAmbiente(
       throw new Error("VITE_SUPABASE_URL deve usar HTTP(S), sem credenciais na URL.");
     }
   }
-  if (supabaseAnonKey && !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(supabaseAnonKey)) {
-    throw new Error("VITE_SUPABASE_ANON_KEY deve ser uma chave anônima pública no formato JWT.");
+  if (supabaseAnonKey) {
+    if (!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(supabaseAnonKey)) {
+      throw new Error("VITE_SUPABASE_ANON_KEY deve ser uma chave anônima pública no formato JWT.");
+    }
+    if (roleDoAnonKey(supabaseAnonKey) !== "anon") {
+      throw new Error(
+        "VITE_SUPABASE_ANON_KEY deve ser uma chave anônima (role anon), nunca uma chave privilegiada (service_role)."
+      );
+    }
   }
 
   return Object.freeze({ ambiente, urlApiPublica, supabaseUrl, supabaseAnonKey });
