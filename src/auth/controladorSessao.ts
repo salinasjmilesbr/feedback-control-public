@@ -12,6 +12,7 @@ import {
   motivoDeExpiracao,
   type MotivoExpiracaoSessao,
 } from "./politicaSessao";
+import { classificarErroValidacaoSessao } from "./erros";
 import {
   entrar as entrarServico,
   obterSessaoInicial,
@@ -30,7 +31,16 @@ import type {
  * Estados:
  * - `verificando`: bootstrap inicial ainda em andamento;
  * - `naoAutenticado`: sem sessão (login pendente);
- * - `autenticado`: sessão válida + identidade resolvida;
+ * - `autenticado`: sessão válida + identidade resolvida com EXATAMENTE 1
+ *   membership ativa (organização única, sem inventar tenant);
+ * - `semOrganizacao` (F5-01/Q2 aprovada): sessão válida + identidade resolvida,
+ *   mas sem membership ativa — área funcional bloqueada;
+ * - `aguardandoSelecao` (F5-01/Q4 aprovada): sessão válida + identidade
+ *   resolvida com N>1 memberships — nenhuma escolha silenciosa; área funcional
+ *   bloqueada até a F5-03 fornecer seleção explícita;
+ * - `sessaoIndisponivel` (F5-01/Q1 aprovada): revalidação não confirmada por
+ *   falha transitória (rede/5xx) — a sessão local é preservada (sem logout),
+ *   mas a área funcional permanece bloqueada (fail-closed) até revalidar;
  * - `acessoNegado`: sessão existe, mas o perfil interno não é válido (erro
  *   seguro de acesso) — o usuário deve sair;
  * - `indisponivel`: Supabase não configurado (em DEV a simulação segue
@@ -56,6 +66,9 @@ export type EstadoSessao =
   | { status: "verificando" }
   | { status: "naoAutenticado" }
   | { status: "autenticado"; sessao: SessaoAuth; identidade: IdentidadeResolvida }
+  | { status: "semOrganizacao"; sessao: SessaoAuth; identidade: IdentidadeResolvida }
+  | { status: "aguardandoSelecao"; sessao: SessaoAuth; identidade: IdentidadeResolvida }
+  | { status: "sessaoIndisponivel" }
   | { status: "acessoNegado"; erro: PublicApplicationError }
   | { status: "indisponivel" }
   | { status: "sessaoExpirada"; motivo: MotivoExpiracaoSessao };
@@ -213,7 +226,18 @@ export function criarControladorSessao(
         ultimaAtividadeMs = agoraMs();
       }
       sessaoOperante = true;
-      notificar({ status: "autenticado", sessao, identidade });
+      // F5-01 (Q2 aprovada/D12): perfil ativo sem membership ativa entra em
+      // estado dedicado `semOrganizacao` (área funcional bloqueada), sem
+      // inventar tenant. (Q4 aprovada/D4/D8): com N>1 memberships, nenhuma
+      // escolha é feita silenciosamente — entra em `aguardandoSelecao`, com a
+      // área funcional bloqueada até a F5-03 fornecer seleção explícita.
+      if (identidade.memberships.length === 0) {
+        notificar({ status: "semOrganizacao", sessao, identidade });
+      } else if (identidade.memberships.length > 1) {
+        notificar({ status: "aguardandoSelecao", sessao, identidade });
+      } else {
+        notificar({ status: "autenticado", sessao, identidade });
+      }
     } catch (erro) {
       if (gen !== geracao) return;
       sessaoOperante = false;
@@ -330,10 +354,24 @@ export function criarControladorSessao(
 
       const { data, error } = await autenticador.validarSessaoAtual();
       if (error || !data) {
-        encerrarVigenciaSessao(ultimoUserId);
-        ultimoUserId = null;
-        sessaoOperante = false;
-        notificar({ status: "naoAutenticado" });
+        // F5-01 (Q1 aprovada/D11): distingue sessão efetivamente
+        // inválida/revogada (401/ban/usuário removido) de falha transitória de
+        // transporte/5xx.
+        const classificacao = error
+          ? classificarErroValidacaoSessao(error)
+          : "sessaoInvalida";
+        if (classificacao === "sessaoInvalida") {
+          encerrarVigenciaSessao(ultimoUserId);
+          ultimoUserId = null;
+          sessaoOperante = false;
+          notificar({ status: "naoAutenticado" });
+        } else {
+          // F5-01 (Q1 aprovada/D11): falha transitória (rede/5xx) preserva a
+          // sessão local (sem logout), MAS bloqueia a área funcional até a
+          // revalidação ser confirmada — fail-closed, sem confiança no estado
+          // local para liberar qualquer operação server-side.
+          notificar({ status: "sessaoIndisponivel" });
+        }
         return;
       }
 

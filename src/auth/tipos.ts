@@ -45,3 +45,13 @@ export interface IdentidadeResolvida {
   /** Organizações alcançáveis pelas memberships ativas. */
   organizacoes: OrganizacaoResolvida[];
 }
+
+/**
+ * F5-01: raiz de confiança formalizada. `AuthIdentity` é o nome de contrato da
+ * identidade autenticada resolvida (`IdentidadeResolvida`), com as invariantes:
+ * `authUserId === user_profile.id === auth.uid()`; perfil ativo; memberships
+ * somente ativas; organizações derivadas, sem seleção. F5-02 (vínculo),
+ * F5-03 (organização ativa), F5-04 (roles/capabilities) e F5-05 (ActorContext)
+ * são etapas posteriores e NÃO são implementadas nesta atividade.
+ */
+export type AuthIdentity = IdentidadeResolvida;

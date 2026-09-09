@@ -14,6 +14,7 @@ function contexto(estado: EstadoSessao): AuthContextValue {
     redefinirSenha: async () => {},
     convidarUsuario: async () => ({ userId: "uuid-1" }),
     reconhecerExpiracao: () => {},
+    revalidar: async () => {},
   };
 }
 

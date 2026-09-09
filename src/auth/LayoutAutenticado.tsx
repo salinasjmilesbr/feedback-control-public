@@ -2,6 +2,9 @@ import { Navigate, Outlet } from "react-router-dom";
 import { simulacaoDevPermitida } from "../config/ambiente";
 import { useAuth } from "./AuthContext";
 import { decidirAcessoARotasFuncionais } from "./rotasProtegidas";
+import AguardandoSelecao from "./AguardandoSelecao";
+import SemOrganizacao from "./SemOrganizacao";
+import SessaoIndisponivel from "./SessaoIndisponivel";
 
 /**
  * Guard/layout autenticado (F2-04), centralizado para todas as rotas
@@ -35,6 +38,18 @@ export default function LayoutAutenticado({
 
   if (decisao.tipo === "redirecionarLogin") {
     return <Navigate to="/login" replace />;
+  }
+
+  if (decisao.tipo === "semOrganizacao") {
+    return <SemOrganizacao />;
+  }
+
+  if (decisao.tipo === "aguardandoSelecao") {
+    return <AguardandoSelecao />;
+  }
+
+  if (decisao.tipo === "indisponivelTemporaria") {
+    return <SessaoIndisponivel />;
   }
 
   return <Outlet />;

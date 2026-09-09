@@ -13,6 +13,8 @@ export type AuthContextValue = {
   convidarUsuario: (email: string, organizationId: string) => Promise<{ userId: string }>;
   /** F2-08: reconhece o aviso de sessão expirada e volta à tela de login comum. */
   reconhecerExpiracao: () => void;
+  /** F5-01 (Q1): reintenta a revalidação da sessão (ex.: tela de indisponibilidade). */
+  revalidar: () => Promise<void>;
 };
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined);

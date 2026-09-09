@@ -9,6 +9,13 @@ import type { EstadoSessao } from "./controladorSessao";
  *   protegido é renderizado (sem flicker);
  * - `permitir`: sessão real autenticada, ou DEV com simulação preservada
  *   (Supabase ausente e ambiente de desenvolvimento);
+ * - `semOrganizacao` (F5-01/Q2 aprovada): autenticado sem membership ativa —
+ *   área funcional bloqueada com tela dedicada (não é login nem conteúdo);
+ * - `aguardandoSelecao` (F5-01/Q4 aprovada): autenticado com N>1 memberships —
+ *   nenhuma escolha silenciosa; área funcional bloqueada até a seleção (F5-03);
+ * - `indisponivelTemporaria` (F5-01/Q1 aprovada): revalidação não confirmada
+ *   por falha transitória — a sessão local é preservada, mas a área funcional
+ *   permanece bloqueada (fail-closed);
  * - `redirecionarLogin`: usuário sem sessão, sessão expirada (F2-08), acesso
  *   negado ou HOMOLOG/PROD sem autenticação configurada (falha segura, sem
  *   fallback simulado).
@@ -16,6 +23,9 @@ import type { EstadoSessao } from "./controladorSessao";
 export type DecisaoRotaFuncional =
   | { tipo: "carregando" }
   | { tipo: "permitir" }
+  | { tipo: "semOrganizacao" }
+  | { tipo: "aguardandoSelecao" }
+  | { tipo: "indisponivelTemporaria" }
   | { tipo: "redirecionarLogin" };
 
 export function decidirAcessoARotasFuncionais(
@@ -28,6 +38,15 @@ export function decidirAcessoARotasFuncionais(
 
     case "autenticado":
       return { tipo: "permitir" };
+
+    case "semOrganizacao":
+      return { tipo: "semOrganizacao" };
+
+    case "aguardandoSelecao":
+      return { tipo: "aguardandoSelecao" };
+
+    case "sessaoIndisponivel":
+      return { tipo: "indisponivelTemporaria" };
 
     case "indisponivel":
       // Só o contexto DEV com a simulação preservada mantém o acesso sem auth

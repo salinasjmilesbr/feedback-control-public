@@ -3,7 +3,7 @@ import {
   InvalidCredentialsError,
   TechnicalError,
 } from "../errors/applicationErrors";
-import { mapearErroDeLogin, mapearErroTecnico } from "./erros";
+import { classificarErroValidacaoSessao, mapearErroDeLogin, mapearErroTecnico } from "./erros";
 
 describe("mapeamento de erros de autenticação (F2-03)", () => {
   it("converte credencial inválida para erro público seguro da taxonomia F0-05", () => {
@@ -39,5 +39,27 @@ describe("mapeamento de erros de autenticação (F2-03)", () => {
     const erro = mapearErroTecnico(causa);
     expect(erro).toBeInstanceOf(TechnicalError);
     expect(erro.cause).toBe(causa);
+  });
+});
+
+describe("classificação de erro de revalidação (F5-01, Q1 aprovada)", () => {
+  it("erros 4xx (sessão inválida/ban/removido) são classificados como sessão inválida", () => {
+    expect(classificarErroValidacaoSessao({ status: 401 })).toBe("sessaoInvalida");
+    expect(classificarErroValidacaoSessao({ status: 403 })).toBe("sessaoInvalida");
+  });
+
+  it("AuthSessionMissingError é sessão inválida", () => {
+    expect(classificarErroValidacaoSessao({ name: "AuthSessionMissingError" })).toBe(
+      "sessaoInvalida"
+    );
+  });
+
+  it("falha de transporte (sem status) e 5xx são falhas transitórias", () => {
+    expect(classificarErroValidacaoSessao(new TypeError("fetch failed"))).toBe(
+      "falhaTransitoria"
+    );
+    expect(classificarErroValidacaoSessao({ status: 500 })).toBe("falhaTransitoria");
+    expect(classificarErroValidacaoSessao({ status: 503 })).toBe("falhaTransitoria");
+    expect(classificarErroValidacaoSessao({})).toBe("falhaTransitoria");
   });
 });

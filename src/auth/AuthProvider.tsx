@@ -114,6 +114,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     controlador.reconhecerExpiracao();
   }, [controlador]);
 
+  const revalidar = useCallback(() => controlador.revalidar(), [controlador]);
+
   const solicitarRecuperacaoDeSenha = useCallback(
     async (email: string) => {
       if (!autenticador) throw new TechnicalError();
@@ -161,6 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         redefinirSenha,
         convidarUsuario,
         reconhecerExpiracao,
+        revalidar,
       }}
     >
       {children}

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  AccessNotProvisionedError,
   ForbiddenError,
   InvalidCredentialsError,
   TechnicalError,
@@ -93,13 +94,13 @@ describe("serviço de autenticação (F2-03)", () => {
     });
   });
 
-  it("auth user sem perfil interno é erro de acesso seguro", async () => {
+  it("auth user sem perfil interno é acesso ainda não provisionado (mensagem neutra)", async () => {
     const repositorio = repositorioFalso({
       buscarPerfil: vi.fn<RepositorioIdentidade["buscarPerfil"]>(async () => null),
     });
 
     await expect(resolverIdentidade("uuid-auth-1", repositorio)).rejects.toBeInstanceOf(
-      ForbiddenError
+      AccessNotProvisionedError
     );
   });
 
@@ -108,6 +109,19 @@ describe("serviço de autenticação (F2-03)", () => {
       buscarPerfil: vi.fn<RepositorioIdentidade["buscarPerfil"]>(async () => ({
         id: "uuid-auth-1",
         status: "disabled",
+      })),
+    });
+
+    await expect(resolverIdentidade("uuid-auth-1", repositorio)).rejects.toBeInstanceOf(
+      ForbiddenError
+    );
+  });
+
+  it("perfil com status inconsistente é negado (fail-closed, nunca ativo)", async () => {
+    const repositorio = repositorioFalso({
+      buscarPerfil: vi.fn<RepositorioIdentidade["buscarPerfil"]>(async () => ({
+        id: "uuid-auth-1",
+        status: "pending" as never,
       })),
     });
 
