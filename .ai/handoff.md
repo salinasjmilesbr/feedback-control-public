@@ -35,39 +35,32 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 > Atualizar ao final de cada atividade.
 
 - **Atividade:** F5-06 — Avaliações no PostgreSQL (Issue #103).
-- **Branch:** `feat/f5-06-avaliacoes-postgresql` (sem PR aberto; sem merge).
+- **Branch:** `feat/f5-06-avaliacoes-postgresql` (sem PR; sem merge).
 - **Último commit:** consultar `git log --oneline -1` na branch.
-- **Push:** o push da branch conclui sem a limitação de `GIT_ASKPASS` no
-  ambiente atual.
-- **PR:** não aberto por decisão explícita do responsável (aguarda auditoria).
-- **Estado (SQL e fronteira — completo e validado):**
-  - migrations F5-06 (schema, funções e `20260911020000_f5_06_cutover_leitura_e_ciclo.sql`);
-  - `evaluation_resolver_ciclo` (ano+ciclo → UUID soberano, fail-closed em zero,
-    múltiplos ou ciclo cancelado, sempre dentro do tenant validado);
-  - `evaluation_painel_participante` (leitura de EDIÇÃO do próprio participante:
-    somente a ocorrência do ator + catálogo congelado; nunca voto/nota de
-    terceiros; ocorrência resolvida server-side pelo vínculo F5-02 + vigência);
-  - Edge Function `avaliacoes` com ActorContext/ResourceContext reais, Policy
-    Engine (capability × scope), ASSIGNED por operação (F3-08/F3-09) e ponte
-    matrícula → UUID (F3-01);
-  - cutover ESTRUTURAL: a origem de cada registro vem de evidência do caminho
-    novo (UUID de escrita confirmada), nunca de data; legado é somente leitura.
-  - Validadores SQL executados com exit 0: `02-validar-f5-06.sql`,
-    `03-validar-f5-06-cutover.sql`, `02-validar-f4-08.sql` e
-    `03-validar-f4-08-mutacoes.sql`.
-- **Pendência real (bloqueia declarar a F5-06 concluída no produto):** as TELAS
-  ainda escrevem avaliação nova em `localStorage`:
-  `NovoFeedbackPage` (`saveFeedback`), `EditarFeedbackPage` (`updateFeedback`),
-  `cicloEquipeService` (criação automática no ciclo e recálculo no
+- **PR:** não aberto por decisão explícita do responsável.
+- **Estado — SQL e fronteira (completo e validado):** migrations F5-06
+  (schema, funções e `20260911020000_f5_06_cutover_leitura_e_ciclo.sql` com
+  `evaluation_resolver_ciclo` e `evaluation_painel_participante`); Edge
+  Function `avaliacoes` com ActorContext/ResourceContext reais, Policy Engine
+  (capability × scope), ASSIGNED por operação (F3-08/F3-09) e ponte
+  matrícula → UUID (F3-01) resolvida ANTES do engine; cutover ESTRUTURAL por
+  evidência (nunca por data). Validadores SQL com exit 0:
+  `02-validar-f5-06.sql`, `03-validar-f5-06-cutover.sql`,
+  `02-validar-f4-08.sql`, `03-validar-f4-08-mutacoes.sql`.
+- **Estado — caminho TS (pronto para consumo):** repository/service/controlador/
+  hook/apresentação, incluindo as operações `painelParticipante` e
+  `resolverCiclo` e o `cutoverAvaliacoesService` (criarNova, carregarPainel,
+  gravarNotas/ComentarioDoPainel, concluir, cancelar, reabrir, lerStatus) sem
+  cálculo oficial no cliente e sem escrita em `localStorage`.
+- **PENDÊNCIA REAL (bloqueia "Supabase como única fonte de verdade"):** as TELAS
+  ainda não consomem esse caminho. Continuam escrevendo avaliação nova em
+  `localStorage`: `NovoFeedbackPage` (`saveFeedback`), `EditarFeedbackPage`
+  (`updateFeedback`), `cicloEquipeService` (criação no ciclo e conclusão no
   encerramento), `cancelamentoAvaliacaoService` e
-  `reaberturaAvaliacaoService` (persistências internas auditadas).
-  O caminho soberano está pronto para ser consumido (repository/service/
-  controlador/hook/apresentação + as duas operações novas de leitura e de
-  ciclo), inclusive a ponte matrícula → UUID; o que falta é a troca de autoridade
-  dentro dessas telas/serviços, que exige refatoração de render síncrono para
-  assíncrono e a remontagem do estado do formulário a partir do painel do
-  participante.
-- **Contexto do repositório:** `main` contém os contratos F4 (encerrada) e
-  F5-01..F5-05; a F5-06 é a atividade em curso nesta branch.
-- **Próximos passos:** migrar as telas/serviços acima para o caminho soberano →
-  nova auditoria → PR → revisão → squash merge.
+  `reaberturaAvaliacaoService` (persistências internas). Nenhuma delas faz
+  dual-write, mas a autoridade de escrita ainda é local nessas telas.
+- **Contexto do repositório:** `main` contém F4 e F5-01..F5-05; a F5-06 é a
+  atividade em curso nesta branch.
+- **Próximos passos:** migrar as telas/serviços listados para o caminho soberano
+  (usando `cutoverAvaliacoesService`), tornar `feedbackStorage` somente leitura
+  para o legado, atualizar os testes acoplados e rodar o gate final.
