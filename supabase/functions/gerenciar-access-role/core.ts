@@ -2,22 +2,21 @@
 // revogação de access roles (D16).
 //
 // Compartilhado entre a Edge Function (Deno) e os testes (Vitest). NÃO contém
-// APIs de runtime (Deno/Node) — as dependências (resolver o chamador e executar
-// o RPC) são INJETADAS, o que permite testar o fluxo de produção sem simulação
-// privilegiada de `request.jwt.claim.sub`.
+// APIs de runtime (Deno/Node) — as dependências são INJETADAS.
 //
-// Fluxo de produção (D16):
+// MODELO DE PRODUÇÃO (identidade × execução privilegiada SEPARADAS):
+//
 //   usuário autenticado (JWT no header `Authorization`)
-//   → componente server-side (Edge Function): service_role SOMENTE para elevar
-//     privilégios/BYPASSRLS — nunca para definir o ator;
-//   → identidade soberana resolvida via `auth.getUser(JWT)`  [resolveCaller];
-//   → RPC administrativo invocado com o MESMO JWT preservado no header
-//     `Authorization` → `auth.uid()` resolve para o usuário autenticado;
-//   → validação de tenant (membership ativa do ator na organização alvo);
-//   → grant/revoke + trilha append-only (D18).
+//   → [resolveCaller] identidade SOBERANA via `auth.getUser(JWT)` (Gotrue);
+//   → [executarRpc] operação privilegiada via credencial service_role, SEM o
+//     JWT do usuário no `Authorization` (o PostgREST assumiria `authenticated`
+//     e perderia o EXECUTE de service_role — por isso o JWT NÃO é propagado);
+//   → o ator verificado (user.id) é passado como parâmetro ao RPC, derivado
+//     EXCLUSIVAMENTE de identidade autenticada verificada server-side — jamais
+//     de payload do cliente (actor_id no corpo é REJEITADO).
 //
-// Nenhum `actor_id`/`actor_user_profile_id` é aceito do cliente: a presença
-// desses campos no corpo é REJEITADA — a identidade vem do JWT, nunca do payload.
+// O RPC revalida o ator contra o banco (perfil/membership/tenant + autoridade
+// administrativa) e grava a trilha D18 com autoria soberana = user.id.
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -35,12 +34,16 @@ export interface ErroRpc {
 export interface DepsGerenciarAcessoRole {
   /** Resolve a identidade soberana a partir do JWT (Authorization) via auth.getUser. */
   resolveCaller(authHeader: string): Promise<string | null>;
-  /** Executa o RPC administrativo preservando o JWT do usuário (auth.uid()). */
+  /**
+   * Executa o RPC administrativo com a credencial service_role. O JWT do usuário
+   * NÃO é propagado (para não rebaixar a role para `authenticated`); o ator é o
+   * user.id verificado por `resolveCaller`.
+   */
   executarRpc(
-    authHeader: string,
     action: AcaoAcessoRole,
     membershipId: string,
-    accessRoleId: string
+    accessRoleId: string,
+    actorUserId: string
   ): Promise<ErroRpc | null>;
 }
 
@@ -74,6 +77,7 @@ export async function gerenciarAcessoRole(
     return erro("NOT_AUTHORIZED", "Não autorizado.", 401);
   }
 
+  // 1) identidade soberana (auth.getUser).
   const callerId = await deps.resolveCaller(authHeader);
   if (!callerId) {
     return erro("NOT_AUTHORIZED", "Não autorizado.", 401);
@@ -116,14 +120,16 @@ export async function gerenciarAcessoRole(
     return erro("INVALID_INPUT", "Parâmetros inválidos.", 400);
   }
 
+  // 2) execução privilegiada com o ator VERIFICADO (nunca o JWT, nunca actor_id).
   const rpcError = await deps.executarRpc(
-    authHeader,
     action,
     membershipId,
-    accessRoleId
+    accessRoleId,
+    callerId
   );
   if (rpcError) {
-    // Self-escalation/cross-tenant/tenant inválido => 403 (fail-closed).
+    // Self-escalation/cross-tenant/tenant inválido/sem autoridade administrativa
+    // => 403 (fail-closed).
     return erro(
       rpcError.code ?? "FORBIDDEN",
       rpcError.message ?? "Operação negada.",

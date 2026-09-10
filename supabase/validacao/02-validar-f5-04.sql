@@ -10,9 +10,9 @@
 --   Get-Content supabase/validacao/02-validar-f5-04.sql -Raw -Encoding UTF8 |
 --     docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
 --
--- Saída determinística: um `[PASS]` por verificação; falha aborta (código
--- não-zero). NÃO toca projeto remoto, NÃO altera policies e remove ao final os
--- dados sintéticos do cenário.
+-- Cobre D14 (catálogo), D15 (plano administrativo), D16 (RPC soberana com
+-- autorização administrativa e separação identidade × execução privilegiada),
+-- D17 (revogação) e D18 (trilha append-only imutável).
 -- ============================================================================
 
 \set ON_ERROR_STOP on
@@ -67,12 +67,13 @@ begin
   join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public' and p.proname in (
     'conceder_acesso_role_rpc', 'revogar_acesso_role_rpc',
+    'usuario_eh_administrador',
     'enforce_role_capability_grantable', 'enforce_privilege_audit_append_only'
   );
-  if v_n <> 4 then
-    raise exception '[FAIL] funcoes F5-04 esperadas=4, encontradas=%', v_n;
+  if v_n <> 5 then
+    raise exception '[FAIL] funcoes F5-04 esperadas=5, encontradas=%', v_n;
   end if;
-  raise notice '[PASS] funcoes F5-04 presentes (rpc grant/revoke + triggers D15/D18)';
+  raise notice '[PASS] funcoes F5-04 presentes (rpc grant/revoke + admin + triggers D15/D18)';
 end $$;
 
 do $$
@@ -82,12 +83,12 @@ begin
   select count(*) into v_n from pg_proc p
   join pg_namespace n on n.oid = p.pronamespace
   where n.nspname='public'
-    and p.proname in ('conceder_acesso_role_rpc', 'revogar_acesso_role_rpc')
+    and p.proname in ('conceder_acesso_role_rpc', 'revogar_acesso_role_rpc', 'usuario_eh_administrador')
     and p.prosecdef;
   if v_n <> 0 then
-    raise exception '[FAIL] RPC administrativo deveria ser SECURITY INVOKER (sem DEFINER novo — AC7)';
+    raise exception '[FAIL] funcao F5-04 deveria ser SECURITY INVOKER (sem DEFINER novo — AC7)';
   end if;
-  raise notice '[PASS] RPCs administrativos sao SECURITY INVOKER (nenhum DEFINER novo)';
+  raise notice '[PASS] RPCs/helper administrativos sao SECURITY INVOKER (nenhum DEFINER novo)';
 end $$;
 
 do $$
@@ -98,13 +99,13 @@ begin
   join pg_namespace n on n.oid = p.pronamespace
   cross join lateral aclexplode(coalesce(p.proacl, acldefault('f'::"char", p.proowner))) a
   where n.nspname='public'
-    and p.proname in ('conceder_acesso_role_rpc','revogar_acesso_role_rpc')
+    and p.proname in ('conceder_acesso_role_rpc','revogar_acesso_role_rpc','usuario_eh_administrador')
     and a.privilege_type='EXECUTE'
     and (a.grantee = 0 or a.grantee = 'anon'::regrole or a.grantee = 'authenticated'::regrole);
   if v_n <> 0 then
-    raise exception '[FAIL] EXECUTE indevido (public/anon/authenticated) nos RPCs F5-04: %', v_n;
+    raise exception '[FAIL] EXECUTE indevido (public/anon/authenticated) nas funcoes F5-04: %', v_n;
   end if;
-  raise notice '[PASS] RPCs administrativos sem EXECUTE para public/anon/authenticated';
+  raise notice '[PASS] RPCs/helper administrativos sem EXECUTE para public/anon/authenticated';
 end $$;
 
 do $$
@@ -115,13 +116,13 @@ begin
   join pg_namespace n on n.oid = p.pronamespace
   cross join lateral aclexplode(coalesce(p.proacl, acldefault('f'::"char", p.proowner))) a
   where n.nspname='public'
-    and p.proname in ('conceder_acesso_role_rpc','revogar_acesso_role_rpc')
+    and p.proname in ('conceder_acesso_role_rpc','revogar_acesso_role_rpc','usuario_eh_administrador')
     and a.privilege_type='EXECUTE'
     and a.grantee = 'service_role'::regrole;
-  if v_n <> 2 then
-    raise exception '[FAIL] EXECUTE service_role ausente nos RPCs F5-04 (esperado=2, encontrado=%)', v_n;
+  if v_n <> 3 then
+    raise exception '[FAIL] EXECUTE service_role ausente nas funcoes F5-04 (esperado=3, encontrado=%)', v_n;
   end if;
-  raise notice '[PASS] RPCs administrativos com EXECUTE somente para service_role';
+  raise notice '[PASS] RPCs/helper administrativos com EXECUTE somente para service_role';
 end $$;
 
 -- ============================================================================
@@ -148,7 +149,7 @@ begin
     raise exception '[FAIL] controle (nao-concedivel) deveria ser 4, encontrado %', v_control;
   end if;
   if v_grant <> 25 then
-    raise exception '[FAIL] concediveis deveriam ser 25, encontrado %', v_grant;
+    raise exception '[FAIL] efetivamente concediveis deveriam ser 25, encontrado %', v_grant;
   end if;
   raise notice '[PASS] catalogo reconciliado: 31 linhas (29 canonicas, 25 concediveis, 4 controle, 2 deprecadas)';
 end $$;
@@ -262,18 +263,64 @@ begin
 end $$;
 
 -- ============================================================================
--- 5) D16: RPC soberana (auth.uid), tenant revalidado, anti-self-escalation
+-- 5) D16: caminho de produção — identidade × execução privilegiada separadas,
+--    autorização administrativa, anti-self-escalation, cross-tenant, tenant.
 -- ============================================================================
+--
+-- Regressão detectada em 5.1: JWT de usuário no `Authorization` faz o PostgREST
+-- assumir `authenticated`; como o RPC tem EXECUTE só service_role, a chamada
+-- falha por permissão. Provamos isso com `set role authenticated`.
+--
+-- A execução real (service_role) está nas seções seguintes; o ator é o
+-- `p_actor_user_profile_id` VERIFICADO server-side (auth.getUser na Edge
+-- Function), nunca derivado de payload do cliente.
 
--- 5.1) Concessão válida (ADMIN_A concede a USER_A)
-select set_config('request.jwt.claim.sub', 'd5b00000-0000-0000-0000-0000000000a1', false);
+-- 5.1) Regressão: authenticated (JWT de usuário) NÃO executa o RPC.
+set role authenticated;
+do $$
+declare v_ok boolean := false;
+begin
+  begin
+    perform public.conceder_acesso_role_rpc(
+      'd5d00000-0000-0000-0000-0000000000a2',
+      'd5f00000-0000-0000-0000-0000000000f1',
+      'd5b00000-0000-0000-0000-0000000000a1'
+    );
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then
+    raise exception '[FAIL] authenticated executou o RPC administrativo (regressao de role)';
+  end if;
+  raise notice '[PASS] authenticated (JWT de usuario) NAO executa o RPC — EXECUTE so service_role (regressao detectada)';
+end $$;
+reset role;
+
+-- 5.2) Autorização administrativa: USER_A (não-admin) não concede.
+set role service_role;
+do $$
+declare v_ok boolean := false;
+begin
+  begin
+    perform public.conceder_acesso_role_rpc(
+      'd5d00000-0000-0000-0000-0000000000a1',  -- membership do ADMIN_A
+      'd5f00000-0000-0000-0000-0000000000f1',  -- avaliadores
+      'd5b00000-0000-0000-0000-0000000000a2'   -- ator = USER_A (nao-admin)
+    );
+  exception when raise_exception then v_ok := true; end;
+  if not v_ok then
+    raise exception '[FAIL] nao-admin concedeu role (autoridade administrativa ausente)';
+  end if;
+  raise notice '[PASS] autorizacao administrativa: nao-admin NAO concede (D16/Q3)';
+end $$;
+
+-- 5.3) Concessão válida (ADMIN_A concede avaliadores a USER_A) + trilha.
 do $$
 declare
   v_n int;
 begin
   perform public.conceder_acesso_role_rpc(
     'd5d00000-0000-0000-0000-0000000000a2',
-    'd5f00000-0000-0000-0000-0000000000f1'
+    'd5f00000-0000-0000-0000-0000000000f1',
+    'd5b00000-0000-0000-0000-0000000000a1'
   );
 
   select count(*) into v_n
@@ -284,14 +331,7 @@ begin
   if v_n <> 1 then
     raise exception '[FAIL] apos concessao USER_A deveria resolver 1 capability (%)', v_n;
   end if;
-  raise notice '[PASS] RPC concede role com ator soberano auth.uid() (USER_A resolve evaluation.read)';
-end $$;
 
--- 5.2) Trilha D18 registrada com autoria soberana
-do $$
-declare
-  v_n int;
-begin
   select count(*) into v_n
   from public.privilege_mutation_audit
   where membership_id = 'd5d00000-0000-0000-0000-0000000000a2'
@@ -302,17 +342,18 @@ begin
   if v_n <> 1 then
     raise exception '[FAIL] trilha grant nao registrada com autoria soberana (%)', v_n;
   end if;
-  raise notice '[PASS] trilha append-only registra grant com autoria soberana (D18)';
+  raise notice '[PASS] RPC concede role com ator verificado (service_role) e grava trilha D18 com autoria soberana';
 end $$;
 
--- 5.3) Self-escalation negada
+-- 5.4) Self-escalation negada.
 do $$
 declare v_ok boolean := false;
 begin
   begin
     perform public.conceder_acesso_role_rpc(
       'd5d00000-0000-0000-0000-0000000000a1',
-      'd5f00000-0000-0000-0000-0000000000f1'
+      'd5f00000-0000-0000-0000-0000000000f1',
+      'd5b00000-0000-0000-0000-0000000000a1'
     );
   exception when raise_exception then v_ok := true; end;
   if not v_ok then
@@ -321,14 +362,15 @@ begin
   raise notice '[PASS] self-escalation negada (ator nao concede a propria membership)';
 end $$;
 
--- 5.4) Cross-tenant negado (ator de Alfa concedendo em Beta)
+-- 5.5) Cross-tenant negado (ADMIN_A de Alfa concedendo em Beta).
 do $$
 declare v_ok boolean := false;
 begin
   begin
     perform public.conceder_acesso_role_rpc(
       'd5d00000-0000-0000-0000-0000000000a3',
-      'd5f00000-0000-0000-0000-0000000000f1'
+      'd5f00000-0000-0000-0000-0000000000f1',
+      'd5b00000-0000-0000-0000-0000000000a1'
     );
   exception when raise_exception then v_ok := true; end;
   if not v_ok then
@@ -337,15 +379,15 @@ begin
   raise notice '[PASS] cross-tenant negado (ator sem membership ativa na organizacao alvo)';
 end $$;
 
--- 5.5) Ator sem membership na org alvo negado
-select set_config('request.jwt.claim.sub', 'd5b00000-0000-0000-0000-0000000000a4', false);
+-- 5.6) Ator sem membership na org alvo negado (SEM_MEMBRO).
 do $$
 declare v_ok boolean := false;
 begin
   begin
     perform public.conceder_acesso_role_rpc(
       'd5d00000-0000-0000-0000-0000000000a2',
-      'd5f00000-0000-0000-0000-0000000000f1'
+      'd5f00000-0000-0000-0000-0000000000f1',
+      'd5b00000-0000-0000-0000-0000000000a4'
     );
   exception when raise_exception then v_ok := true; end;
   if not v_ok then
@@ -354,34 +396,35 @@ begin
   raise notice '[PASS] ator sem membership ativa na organizacao alvo negado (tenant revalidado)';
 end $$;
 
--- 5.6) Ator soberano ausente (auth.uid() null)
-select set_config('request.jwt.claim.sub', '', false);
+-- 5.7) Ator ausente (null).
 do $$
 declare v_ok boolean := false;
 begin
   begin
     perform public.conceder_acesso_role_rpc(
       'd5d00000-0000-0000-0000-0000000000a2',
-      'd5f00000-0000-0000-0000-0000000000f1'
+      'd5f00000-0000-0000-0000-0000000000f1',
+      null
     );
   exception when raise_exception then v_ok := true; end;
   if not v_ok then
-    raise exception '[FAIL] ator soberano ausente NAO foi negado';
+    raise exception '[FAIL] ator ausente NAO foi negado';
   end if;
-  raise notice '[PASS] ator soberano ausente (auth.uid() null) negado (fail-closed)';
+  raise notice '[PASS] ator ausente (null) negado (fail-closed)';
 end $$;
 
 -- ============================================================================
 -- 6) D17: revogação efetiva na operação subsequente
 -- ============================================================================
-select set_config('request.jwt.claim.sub', 'd5b00000-0000-0000-0000-0000000000a1', false);
+
 do $$
 declare
   v_n int;
 begin
   perform public.revogar_acesso_role_rpc(
     'd5d00000-0000-0000-0000-0000000000a2',
-    'd5f00000-0000-0000-0000-0000000000f1'
+    'd5f00000-0000-0000-0000-0000000000f1',
+    'd5b00000-0000-0000-0000-0000000000a1'
   );
 
   select count(*) into v_n
@@ -392,13 +435,7 @@ begin
   if v_n <> 0 then
     raise exception '[FAIL] revogacao deveria tornar o resolver vazio imediatamente (%)', v_n;
   end if;
-  raise notice '[PASS] revogacao efetiva na operacao subsequente (D17)';
-end $$;
 
-do $$
-declare
-  v_n int;
-begin
   select count(*) into v_n
   from public.privilege_mutation_audit
   where membership_id = 'd5d00000-0000-0000-0000-0000000000a2'
@@ -408,13 +445,13 @@ begin
   if v_n <> 1 then
     raise exception '[FAIL] trilha revoke nao registrada (%)', v_n;
   end if;
-  raise notice '[PASS] trilha append-only registra revoke com autoria soberana (D18)';
+  raise notice '[PASS] revogacao efetiva na operacao subsequente (D17) + trilha revoke (D18)';
 end $$;
 
-reset request.jwt.claim.sub;
+reset role;
 
 -- ============================================================================
--- 7) D18: append-only (UPDATE negado) e RLS deny-by-default
+-- 7) D18: append-only (UPDATE negado; service_role sem UPDATE/DELETE/TRUNCATE)
 -- ============================================================================
 
 do $$
@@ -433,7 +470,7 @@ do $$
 declare v_ok boolean := true;
 begin
   -- D18: a credencial do caminho de aplicação (service_role) só grava (INSERT)
-  -- e lê (SELECT) a trilha; UPDATE/DELETE são revogados (imutabilidade). A
+  -- e lê (SELECT) a trilha; UPDATE/DELETE/TRUNCATE são revogados. A
   -- higienização pertence ao proprietário/superuser (fora do runtime).
   if has_table_privilege('service_role', 'public.privilege_mutation_audit', 'UPDATE') then v_ok := false; end if;
   if has_table_privilege('service_role', 'public.privilege_mutation_audit', 'DELETE') then v_ok := false; end if;
@@ -453,19 +490,6 @@ begin
   begin perform 1 from public.privilege_mutation_audit; exception when insufficient_privilege then v_ok := true; end;
   if not v_ok then raise exception '[FAIL] authenticated leu a trilha fechada'; end if;
   raise notice '[PASS] authenticated sem SELECT na trilha privilege_mutation_audit';
-end $$;
-
-do $$
-declare v_ok boolean := false;
-begin
-  begin
-    perform public.conceder_acesso_role_rpc(
-      'd5d00000-0000-0000-0000-0000000000a2',
-      'd5f00000-0000-0000-0000-0000000000f1'
-    );
-  exception when insufficient_privilege then v_ok := true; end;
-  if not v_ok then raise exception '[FAIL] authenticated executou RPC administrativo'; end if;
-  raise notice '[PASS] authenticated sem EXECUTE nos RPCs administrativos';
 end $$;
 reset role;
 
@@ -529,5 +553,5 @@ end $$;
 do $$
 begin
   raise notice '============================================================';
-  raise notice 'F5-04: todas as verificacoes passaram (catalogo reconciliado, D14/D15, RPC soberana D16, revogacao D17, trilha D18, RLS fechado).';
+  raise notice 'F5-04: todas as verificacoes passaram (catalogo reconciliado, D14/D15, RPC soberana D16, autorizacao administrativa, revogacao D17, trilha D18, RLS fechado).';
 end $$;

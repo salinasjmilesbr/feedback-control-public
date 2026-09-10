@@ -106,3 +106,15 @@ jobs:
           docker exec -i supabase_db_feedback-control \
             psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
             < supabase/validacao/03-validar-f4-08-mutacoes.sql
+
+      - name: Seed F5-04 scenario
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/01-cenario-f5-04.sql
+
+      - name: Run F5-04 validation (access roles/capabilities — D14–D18)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/02-validar-f5-04.sql
