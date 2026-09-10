@@ -52,7 +52,35 @@ Regras detalhadas em `.ai/architecture-rules.md`. Síntese inegociável:
   documentação, commits ou PRs — somente dados fictícios.
 - Não altere contratos F4/F5 sem atividade explicitamente destinada a isso.
 
-## 4. Qualidade e validação
+## 4. Elevação de acesso: agrupar, nunca relaxar (síntese)
+
+Procedimento detalhado em `.ai/workflow.md` **§6**. Síntese inegociável:
+
+- **Aprovação técnica/arquitetural ≠ autorização de elevação de acesso.** A
+  primeira pertence ao fluxo (desenho FECHADO e auditoria independente); a segunda
+  é uma permissão do ambiente/host para executar. Uma **não** implica a outra:
+  desenho fechado não autoriza elevação, e elevação concedida não aprova decisão
+  arquitetural.
+- Com o desenho **FECHADO**, não peça nova aprovação técnica para decisões já
+  cobertas pelo contrato. Interrompa somente por: (a) contradição arquitetural
+  real; (b) decisão necessária **não coberta** pelo contrato (registrar nova `Q#`);
+  (c) risco de segurança; (d) ação irreversível que exija autorização.
+- Trabalhe em **lote**: ler/analisar → implementar em lote → autoauditoria
+  estática → correções em lote → **gate privilegiado integrado** → correções em
+  lote, se necessárias → gate final → auditoria independente. O antipadrão
+  `editar → elevar → testar` repetido é proibido.
+- Agrupe em **um ou poucos gates coerentes** tudo o que exige elevação: `npm test`,
+  `npm run build`, `npm run lint`, `git diff --check`, validações Supabase/Docker/
+  SQL e o `git add`/`commit`/`push` da atividade.
+- Se até comandos triviais exigirem elevação por limitação do host/sandbox,
+  reconheça a **limitação do ambiente**, agrupe operações e registre-a na entrega;
+  não trate elevação repetida como fluxo normal nem transforme cada comando em uma
+  nova interrupção.
+- **Proibido** para reduzir prompts: alterar PAT/credenciais, alterar
+  configurações de segurança/permissão, criar bypass ou reduzir controles
+  existentes (`.ai/architecture-rules.md` §4, `.ai/git-rules.md` §3).
+
+## 5. Qualidade e validação
 
 Antes de concluir uma alteração, execute e registre no Pull Request:
 
@@ -68,8 +96,11 @@ git diff --check
   escopo, registre claramente o comando, o resultado e a limitação no PR.
 - Revise `git status --short` e o diff final: somente arquivos previstos no
   escopo da Issue.
+- Comandos que exigem elevação de acesso devem ser **agrupados** em um ou poucos
+  gates coerentes, executados **depois** das correções consolidadas (§4 e
+  `.ai/workflow.md` §6).
 
-## 5. Fluxo GitHub
+## 6. Fluxo GitHub
 
 - Uma **branch por atividade**; desenho e implementação em branches separadas.
 - Desenho (documento de design) e implementação (código) **nunca** no mesmo PR;
