@@ -1,6 +1,13 @@
 # F5-07 — Colaboradores e histórico organizacional soberanos (contrato arquitetural e desenho)
 
-> **Estado:** ABERTO — contrato proposto para revisão e fechamento (há `Q1` em §19).
+> **Estado:** FECHADO — contrato arquitetural aprovado para implementação.
+> **Rodada de correção (Q1 fechada):** `org.structure.manage` e
+> `org.catalog.manage` permanecem no plano administrativo server-side já
+> estabelecido pela F5-04 (decisão **D19**); a allowlist do Policy Engine
+> funcional **não** foi estendida e **nenhuma** capability nova foi criada. O
+> roadmap foi renumerado: **F5-08** estrutura organizacional e catálogos,
+> **F5-09** ciclos, **F5-10** metas, **F5-11** observações, **F5-12** validação
+> integrada (§20).
 > **Atividade:** F5-07 (Etapa 5). **Issue:** ainda não vinculada; a atividade é
 > definida pelo diagnóstico da Etapa 5 (`auditoria-etapa-5-diagnostico.md`, §5 —
 > "F5-07 — Colaboradores e histórico organizacional PostgreSQL").
@@ -47,18 +54,18 @@ auditável.
 
 ### 1.3 Fora de escopo (F5-07)
 
-- **Ciclos de avaliação** (entidade e lifecycle): **F5-08**. A F5-07 apenas
-  registra o contrato mínimo de que necessita (§20.1) e referencia
+- **Ciclos de avaliação** (entidade e lifecycle): **F5-09**. A F5-07 apenas
+  registra o contrato mínimo de que necessita (§20.2) e referencia
   `evaluation_cycles.id` como ciclo de referência de uma movimentação.
-- **Metas** (F5-09) e **observações** (F5-10): consomem a estrutura entregue
-  aqui, mas não são migradas nesta atividade (§20.2/§20.3).
-- **Validação transversal final da Etapa 5** (F5-11) e **hardening de produção**
+- **Metas** (F5-10) e **observações** (F5-11): consomem a estrutura entregue
+  aqui, mas não são migradas nesta atividade (§20.3/§20.4).
+- **Validação transversal final da Etapa 5** (F5-12) e **hardening de produção**
   (Etapa 6).
 - **Administração da estrutura organizacional** (CRUD completo de
   `organizational_units`, `organizational_positions`,
   `organizational_unit_parent_periods`, `job_roles`, `seniority_levels`,
-  `collegiate_configurations`). A F5-07 **consome** essas estruturas; elas
-  precisam existir no banco (ver §20.5 — dependência registrada e
+  `collegiate_configurations`) — atividade própria **F5-08** (§20.1). A F5-07 **consome** essas estruturas; elas
+  precisam existir no banco (§20.1 — dependência registrada e
   `D16`/bootstrap mínimo).
 - **Importação histórica ampla** do `localStorage` (colaboradores, estrutura e
   movimentações legadas). A F5-07 **não** importa o acervo local: define o
@@ -267,7 +274,7 @@ decisivas para esta atividade:
 2. **Alocação estrutural**: ocupação (colaborador × posição), reporting line
    (posição × posição), responsabilidade temporária, colegiado e sucessão —
    apenas **escrita via RPC** e **leitura**; a administração dos catálogos e das
-   unidades/posições não pertence à F5-07 (§20.5).
+   unidades/posições não pertence à F5-07 (§20.1).
 3. **Histórico organizacional** soberano e auditável, incluindo o escopo por
    ciclo herdado do baseline.
 4. **Fronteira confiável**: Edge Function própria, ActorContext/ResourceContext
@@ -279,11 +286,11 @@ decisivas para esta atividade:
 
 ## 4. Fora de escopo (explícito)
 
-- Ciclos (F5-08), metas (F5-09), observações (F5-10), validação transversal
-  (F5-11), hardening (Etapa 6).
+- Ciclos (F5-09), metas (F5-10), observações (F5-11), validação transversal
+  (F5-12), hardening (Etapa 6).
 - CRUD de `organizational_units`, `organizational_unit_parent_periods`,
   `organizational_positions`, `job_roles`, `seniority_levels`,
-  `collegiate_configurations` (administração de estrutura/catálogo).
+  `collegiate_configurations` (administração de estrutura/catálogo — **atividade F5-08**, §20.1).
 - Importação do acervo legado de colaboradores/histórico/movimentações.
 - Redesign visual, novos fluxos de produto e mudanças de regra de negócio não
   exigidas pela soberania (ex.: reabertura de status de desligado).
@@ -568,7 +575,7 @@ matrícula→UUID, Policy Engine, executor, erro público). Operações nomeadas
 | Plano | Capacidades | Gate |
 | --- | --- | --- |
 | **Funcional (conteúdo sobre o colaborador)** | `collaborator.read`, `collaborator.create`, `collaborator.edit` | **Policy Engine** (`authorize()`) — targets `["collaborator"]` já compatíveis |
-| **Administrativo (estrutura/catálogo)** | `org.structure.manage` (e futuramente `org.catalog.manage`) | **plano administrativo já decidido na F5-04**: membership ativa + assignment ativa de role de sistema no tenant, server-side (`usuario_eh_administrador`, `20260910020000…:39-63`), com trilha append-only — ver `Q1` em §19 |
+| **Administrativo (estrutura/catálogo)** | `org.structure.manage` (e futuramente `org.catalog.manage`) | **plano administrativo já decidido na F5-04**: membership ativa + assignment ativa de role de sistema no tenant, server-side (`usuario_eh_administrador`, `20260910020000…:39-63`), com trilha append-only — ver `D19` em §18 |
 
 Isso **não** cria autorização paralela: o plano administrativo é o já fechado
 pela F4-01/F4-09 (plano administrativo de controle ≠ plano funcional) e
@@ -705,8 +712,8 @@ O baseline permite que uma movimentação valha "do ciclo atual em diante" ou
 `src/types/HistoricoOrganizacional.ts:14-16`;
 `historicoOrganizacionalStorage.ts:176-190`). A F5-07 **preserva** a regra
 registrando `cycle_scope` + `reference_cycle_id` no evento; a **aplicação** da
-regra a um ciclo concreto depende da entidade de ciclo soberana (**F5-08**) e
-fica registrada como contrato de dependência (§20.1). Enquanto isso, a leitura
+regra a um ciclo concreto depende da entidade de ciclo soberana (**F5-09**) e
+fica registrada como contrato de dependência (§20.2). Enquanto isso, a leitura
 de aplicabilidade por ciclo permanece no caminho legado **sem** adquirir
 autoridade (nada é escrito).
 
@@ -895,7 +902,7 @@ plano administrativo: criar/garantir `job_roles` (com `code`) e
 `seniority_levels` da organização a partir de uma lista explícita. **Não** cria
 unidades, posições nem reporting lines — fabricar hierarquia seria criar
 autoridade falsa (I4/I9). A administração de estrutura permanece dependência
-registrada (§20.5).
+registrada (§20.1).
 
 ### 14.8 Rollback
 
@@ -966,7 +973,7 @@ Hoje `authorizationPolicy.colaboradoresDoRecurso` cai em `getColaboradores()`
 
 - passam a consumir o **dataset soberano** de colaboradores (via porta única)
   para não reintroduzir `localStorage` como mundo funcional;
-- **não** têm sua própria persistência migrada aqui (F5-08/09/10);
+- **não** têm sua própria persistência migrada aqui (F5-09/10/11);
 - **não** ganham nenhuma nova autoridade local, e as decisões por `funcao` que
   hoje existem neles permanecem **rotuladas como UX/transitórias**, com a
   decisão real na fronteira. `geradorDadosTeste.ts:447-451` (negação por cargo
@@ -1064,7 +1071,7 @@ F5-06, que são sensíveis a tabela nova não catalogada.
 6. Sucessão e responsabilidades operando por RPC já existente/endurecida, com
    autoria.
 7. Política: `authorize()` antes de toda mutação de conteúdo; plano
-   administrativo para estrutura (Q1 fechada); nenhuma autorização paralela;
+   administrativo para estrutura (D19); nenhuma autorização paralela;
    nenhum DEFINER novo.
 8. RLS habilitada nas tabelas envolvidas, `SELECT` own-tenant, nenhuma policy de
    escrita, grants mínimos; guard F4-08 e teste de mutações atualizados e verdes.
@@ -1076,7 +1083,7 @@ F5-06, que são sensíveis a tabela nova não catalogada.
 11. Nenhuma alteração fora do escopo; nenhuma decisão fechada de F3/F4/F5
     reaberta; nenhuma capability nova.
 
-## 18. Decisões (D1–D18)
+## 18. Decisões (D1–D20)
 
 **D1 — PostgreSQL é a fonte soberana do colaborador e do histórico.**
 *Justificativa:* o diagnóstico da Etapa 5 classifica colaboradores e histórico
@@ -1146,7 +1153,7 @@ tabela nova nesse subdomínio; efeito autorizativo continua derivado por data
 *Justificativa:* `collaborator.*` tem target compatível no engine;
 `org.structure.manage` tem `[]` (DENY no engine) e pertence ao plano
 administrativo já implementado pela F5-04. *Consequência:* nenhuma capability
-nova, nenhuma lógica paralela, `Q1` (§19) confirma o caminho administrativo.
+nova, nenhuma lógica paralela, `D19` (§18) registra o caminho administrativo.
 *Alternativa rejeitada:* criar capability nova ou ampliar a allowlist do engine
 por conta própria.
 
@@ -1186,7 +1193,7 @@ mantê-lo como fallback (I13).
 *Justificativa:* sem catálogo não há como atribuir posição; fabricar
 unidades/posições/hierarquia criaria autoridade falsa. *Consequência:*
 organização sem estrutura opera colaboradores **sem alocação**; administração de
-estrutura fica como dependência (§20.5). *Alternativa rejeitada:* bootstrap que
+estrutura fica como dependência (§20.1). *Alternativa rejeitada:* bootstrap que
 cria unidades/posições e reporting lines sintéticas (inventaria hierarquia e, com
 ela, escopos).
 
@@ -1202,64 +1209,116 @@ do CI.**
 *Justificativa:* tabela nova não catalogada reprova o CI (F4-08); telas de
 colaborador não têm teste hoje. *Consequência:* matriz T-01…T-24 + validadores +
 testes de tela. *Alternativa rejeitada:* validar só por teste unitário.
+**D19 — `org.structure.manage` e `org.catalog.manage` são enforçadas pelo plano
+administrativo server-side (Q1 FECHADA — alternativa A).**
+*Justificativa:* as duas capabilities não têm target na allowlist do engine
+(DENY), pertencem ao plano administrativo de controle (F4-01/F4-09) e a F5-04 já
+implementou esse plano com `usuario_eh_administrador`. *Consequência:* nenhuma
+alteração de contrato F4, nenhuma capability nova e nenhuma lógica paralela; as
+operações estruturais passam por Edge/RPC transacional com ator derivado de
+`auth.uid()`, membership ativa revalidada, organização revalidada, assignment
+ativo de role administrativa, cross-tenant **DENY**, trilha auditável e
+revogação efetiva na **operação seguinte**. *Alternativas rejeitadas:* estender a
+allowlist da F4-04 (reabriria contrato fechado e o provider de escopos) e criar
+capability nova (ampliaria catálogo/bundle sem necessidade) — ver §19.
+
+**D20 — A administração de estrutura e catálogo é atividade própria (F5-08), não
+absorvida pela F5-07.**
+*Justificativa:* a F5-07 consome oito tabelas estruturais que ainda não têm CRUD
+soberano; absorvê-las misturaria escopos e ampliaria o risco da atividade.
+*Consequência:* roadmap reordenado — **F5-08** estrutura organizacional e
+catálogos, **F5-09** ciclos, **F5-10** metas, **F5-11** observações, **F5-12**
+validação integrada; a F5-07 entrega colaborador/histórico e registra a
+dependência com escopo explícito (§20.1), sem se apresentar como solução completa
+da administração estrutural. *Alternativa rejeitada:* incluir o CRUD estrutural na
+F5-07 (escopo creep e mistura de contratos).
 
 ## 19. Questões abertas
 
-### Q1 — Como `org.structure.manage` (e `org.catalog.manage`) é enforçada?
+**Questões abertas: nenhuma.**
 
-**Contexto.** A allowlist capability × target da F4-04 (D18) não prevê target
-para essas capabilities: `org.structure.manage` e `org.catalog.manage` têm `[]`
-em `src/authorization/policyEngine/capabilityTarget.ts:45-46`, o que faz o engine
-responder DENY para qualquer alvo. Elas pertencem ao **plano administrativo**
-(F4-01/F4-09), e a F5-04 já implementou esse plano para
-`membership.manage`/`access_role.manage` com `usuario_eh_administrador`
-(membership ativa + assignment ativa de role de sistema no tenant, server-side,
-com trilha append-only — `20260910020000_f5_04_admin_rpc_functions.sql:39-63`). A
-F4-08 (D7) determina que mutação estrutural seja **exclusivamente** por
-RPC/transação, mas **não** define qual gate a precede. A F5-07 precisa de um
-caminho de enforcement para ocupação, reporting line, responsabilidade e
-sucessão.
+### Q1 — Como `org.structure.manage` (e `org.catalog.manage`) é enforçada? — **FECHADA (alternativa A APROVADA)**
 
-**Alternativas.**
+**Contexto (registro).** A allowlist capability × target da F4-04 (decisão D18 daquela fase) não prevê
+target para essas capabilities: `org.structure.manage` e `org.catalog.manage` têm
+`[]` em `src/authorization/policyEngine/capabilityTarget.ts:45-46`, o que faz o
+engine responder DENY para qualquer alvo. A F4-08 (D7) determina que mutação
+estrutural seja **exclusivamente** por RPC/transação, mas não define qual gate a
+precede. A F5-07 precisa desse caminho para ocupação, reporting line,
+responsabilidade e sucessão.
 
-- **A (recomendada, adotada neste desenho):** plano administrativo já decidido —
-  a Edge monta o ActorContext de `auth.uid()` e exige, server-side, membership
-  ativa **e** assignment ativa de role de sistema que conceda
-  `org.structure.manage` no tenant, com trilha append-only; o Policy Engine
-  continua sendo o gate das operações de conteúdo (`collaborator.*`). *Custo:*
-  zero alteração em contrato fechado. *Risco:* convivem dois caminhos de gate
-  (funcional e administrativo), ambos já existentes e auditados.
-- **B:** estender a allowlist da F4-04 para `org.structure.manage` ×
-  `position`/`organizational_unit`/`collaborator` e resolver escopos estruturais
-  no provider. *Custo:* altera contrato fechado da F4-04/F4-09 e o provider de
-  escopos; exige nova validação da F4. *Benefício:* um único caminho de gate.
-- **C:** criar capability nova (ex.: `collaborator.structure.manage`). *Custo:*
-  amplia catálogo canônico e bundle; contraria a orientação de não criar
-  capability sem necessidade.
+**Decisão (D19, §18):** as duas capabilities **permanecem no PLANO
+ADMINISTRATIVO server-side** já estabelecido pela F5-04. **Não** se estende a
+allowlist capability × target do Policy Engine funcional e **não** se cria
+capability nova. O enforcement segue o padrão administrativo existente:
 
-**Recomendação:** **A**, exatamente como descrito em §9.1/§9.2. O desenho inteiro
-assume A; se a revisão fechar B ou C, §9.2 e §16 mudam (e B exige alteração de
-contrato F4).
+- ator soberano derivado de `auth.uid()`;
+- membership ativa revalidada server-side;
+- organização/tenant revalidado contra o recurso;
+- assignment ativo de role administrativa que conceda a capability exigida;
+- operação exclusivamente server-side e transacional;
+- trilha auditável (append-only) com autoria soberana;
+- cross-tenant = **DENY**;
+- revogação efetiva na **operação seguinte**.
 
-## 20. Dependências para F5-08/F5-09/F5-10 (e F5-11)
+**Alternativas rejeitadas (registro).** (B) Estender a allowlist da F4-04 para
+`org.structure.manage` × `position`/`organizational_unit`/`collaborator` —
+reabriria contrato fechado da F4-04/F4-09 e exigiria alterar o provider de
+escopos. (C) Criar capability nova (ex.: `collaborator.structure.manage`) —
+ampliaria o catálogo canônico e o bundle sem necessidade. Ambas foram descartadas
+em favor de A, que não altera nenhum contrato fechado.
 
-### 20.1 F5-08 — Ciclos de avaliação
+## 20. Roadmap e dependências das atividades seguintes
+
+| Atividade | Domínio |
+| --- | --- |
+| **F5-07** | Colaboradores e histórico organizacional soberanos (esta atividade) |
+| **F5-08** | Estrutura organizacional e catálogos soberanos |
+| **F5-09** | Ciclos de avaliação soberanos |
+| **F5-10** | Metas no PostgreSQL |
+| **F5-11** | Observações no PostgreSQL |
+| **F5-12** | Validação integrada e fechamento da Etapa 5 |
+
+### 20.1 F5-08 — Estrutura organizacional e catálogos soberanos (dependência direta da F5-07)
+
+A F5-07 **consome** a estrutura e os catálogos já existentes no PostgreSQL, mas
+**não** os administra: o CRUD soberano dessa camada é atividade própria (**F5-08**)
+e não é absorvido nesta atividade (D20). Escopo esperado da F5-08:
+
+- `organizational_units` e `organizational_unit_parent_periods`;
+- `organizational_positions` e `position_reporting_lines`;
+- `job_roles` e `seniority_levels`;
+- `collegiate_configurations` (e membros);
+- lifecycle temporal (fechar-e-abrir vigência, sem reescrever passado);
+- CRUD soberano por Edge + RPC transacional;
+- plano administrativo (`org.structure.manage`/`org.catalog.manage` — D19);
+- RLS, grants mínimos e catalogação no guard do CI;
+- auditoria append-only com autoria soberana;
+- concorrência (versão otimista + barreiras temporais + lock estrutural);
+- ausência de autoridade local ou sintética (nenhuma estrutura fabricada).
+
+Enquanto a F5-08 não existir, valem §14.6/§14.7: o colaborador existe **sem
+alocação**, o catálogo é suprido apenas pelo bootstrap mínimo (D16) e nenhuma
+estrutura sintética é criada. A F5-07 **não** deve ser lida como solução completa
+da administração estrutural.
+
+### 20.2 F5-09 — Ciclos de avaliação soberanos
 
 - A F5-07 grava `cycle_scope` + `reference_cycle_id` (FK para
   `evaluation_cycles`), **preservando** a regra de baseline "somente ciclos
   posteriores" (§11.2). A **aplicação** dessa regra a um ciclo concreto é da
-  F5-08, que passará a ser a autoridade do ciclo.
-- Contrato entregue à F5-08: (i) `evaluation_cycles` é a referência soberana de
+  F5-09, que passará a ser a autoridade do ciclo.
+- Contrato entregue à F5-09: (i) `evaluation_cycles` é a referência soberana de
   ciclo (já existe, mínima — F5-06 D15 —, extensível apenas aditivamente);
   (ii) o estado organizacional de uma data é resolvido pelas tabelas temporais
   (não pelo ciclo); (iii) a data de referência de um ciclo deve ser resolvida
   server-side (hoje é calculada no cliente,
-  `historicoOrganizacionalStorage.ts:192-209`) — a F5-08 passa a fornecer esse
+  `historicoOrganizacionalStorage.ts:192-209`) — a F5-09 passa a fornecer esse
   dado e a F5-07 não o duplica.
 - Nada da F5-07 depende da criação de ciclo para funcionar, exceto o
   preenchimento **opcional** de `reference_cycle_id`.
 
-### 20.2 F5-09 — Metas
+### 20.3 F5-10 — Metas no PostgreSQL
 
 - Consome o que a F5-07 entrega: `collaborator_id` (UUID), projeção vigente
   (unidade/posição/gestor derivado na data) e histórico.
@@ -1269,31 +1328,19 @@ contrato F4).
 - `metaStorage.ts` hoje monta o mundo funcional local: após a F5-07 deve usar o
   dataset soberano (não a chave local) e não ganha autoridade nova.
 
-### 20.3 F5-10 — Observações
+### 20.4 F5-11 — Observações no PostgreSQL
 
-- Mesmo contrato de identidade/estrutura da F5-09; autoria soberana por
+- Mesmo contrato de identidade/estrutura da F5-10; autoria soberana por
   `actor_user_profile_id` no padrão de evento (§12).
 - `ObservacoesColaborador.tsx` hoje usa `authorize` na criação e apenas `can` na
   edição/exclusão — a assimetria deve ser corrigida quando as observações forem
-  soberanas (registrada aqui como dívida a resolver na F5-10, não nesta
+  soberanas (registrada aqui como dívida a resolver na F5-11, não nesta
   atividade).
 
-### 20.4 F5-11 — Validação transversal final
+### 20.5 F5-12 — Validação integrada e fechamento da Etapa 5
 
-- A F5-11 poderá reutilizar diretamente: matriz T-01…T-24, projeção soberana,
+- A F5-12 poderá reutilizar diretamente: matriz T-01…T-24, projeção soberana,
   guard F4-08 atualizado e o contrato de evento, sem reabrir a F5-07.
-
-### 20.5 Dependência **da** F5-07: administração de estrutura e catálogo
-
-- A F5-07 **consome** unidades, posições, reporting lines, catálogos e colegiado;
-  **não** os administra (§4).
-- Contrato mínimo necessário para a F5-07 ser plenamente utilizável (atividade
-  própria, hoje inexistente): CRUD temporal de `organizational_units`,
-  `organizational_unit_parent_periods`, `organizational_positions`, `job_roles`,
-  `seniority_levels` e `collegiate_configurations`, sob o mesmo padrão desta
-  atividade (Edge + plano administrativo + RLS + auditoria).
-- Até que exista, valem §14.6/§14.7: colaborador sem alocação, catálogo via
-  bootstrap mínimo (D16), nunca estrutura sintética.
 
 ### 20.6 Importação do acervo legado
 
@@ -1328,4 +1375,4 @@ contrato F4).
 | V. Dados existentes no `localStorage` | §14.5, D15 |
 | W. Legado somente leitura | §14.5, §15.2, D15 |
 | X. Consumers que precisam mudar | §15.1–§15.8 |
-| Y. Preparação de F5-08/09/10 | §20.1–§20.4 |
+| Y. Roadmap e dependências das atividades seguintes (F5-08…F5-12) | §20.1–§20.6 |
