@@ -79,6 +79,46 @@ export interface EntradaCriarAvaliacao {
   readonly matriculaAvaliado?: number | string | null;
 }
 
+/** Projeção de EDIÇÃO: SOMENTE a ocorrência do próprio ator (decisão 1). */
+export interface PainelParticipante {
+  readonly evaluationId: string;
+  readonly organizationId: string;
+  readonly cycleId: string;
+  readonly configVersionId: string;
+  readonly status: string;
+  readonly evaluatedCollaboratorId: string;
+  /** Papéis atribuídos ao PRÓPRIO ator (nenhum papel de terceiros). */
+  readonly meusPapeis: readonly string[];
+  readonly participanteOcorrenciaId: string;
+  readonly participanteRoleType: string;
+  readonly participanteVigencia: {
+    readonly validFrom: string;
+    readonly validTo: string | null;
+  };
+  readonly criterios: readonly {
+    readonly code: string;
+    readonly name: string;
+    readonly position: number;
+  }[];
+  readonly subcriterios: readonly {
+    readonly code: string;
+    readonly name: string;
+    readonly position: number;
+    readonly criterionCode: string;
+  }[];
+  /** Notas da PRÓPRIA ocorrência (nunca de terceiros). */
+  readonly minhasNotas: readonly {
+    readonly subcriterionId: string;
+    readonly nota: number;
+  }[];
+  readonly meusComentarios: readonly {
+    readonly escopo: string;
+    readonly criterionId: string | null;
+    readonly texto: string;
+  }[];
+  readonly papeisComFeedbackFinal: readonly string[];
+}
+
 export interface EntradaGravarNotas {
   readonly organizationId: string;
   readonly evaluationId: string;

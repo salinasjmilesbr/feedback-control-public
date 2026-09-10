@@ -24,7 +24,9 @@ export type OperacaoAvaliacao =
   | "evaluation.reabrir"
   | "evaluation.cancelar"
   | "evaluation.participantes_realinhar"
-  | "evaluation.transparencia";
+  | "evaluation.transparencia"
+  | "evaluation.painel_participante"
+  | "evaluation.resolver_ciclo";
 
 /** Alvo autorizável (mesmo `TargetRef` do Policy Engine). */
 export interface AlvoAvaliacao {
@@ -51,6 +53,9 @@ export interface EntradaAvaliacao {
    * INTENÇÃO: o valor autoritativo é o UUID resolvido server-side.
    */
   readonly matricula_avaliado?: number | string;
+  /** Ano/ciclo pretendidos (INTENÇÃO) na resolução do ciclo soberano. */
+  readonly ano?: number;
+  readonly numero?: number;
 }
 
 export type CodigoPublico =
@@ -79,11 +84,18 @@ export const CAPABILITY_POR_OPERACAO: Readonly<Record<OperacaoAvaliacao, string>
   "evaluation.cancelar": "evaluation.cancel",
   "evaluation.participantes_realinhar": "evaluation.write",
   "evaluation.transparencia": "evaluation.read",
+  // Leitura de EDIÇÃO da própria ocorrência exige a capability de escrita: é a
+  // operação que habilita o participante a editar o que ele mesmo lançou.
+  "evaluation.painel_participante": "evaluation.write",
+  // Resolver ano+ciclo é pré-requisito de criação ⇒ mesma capability de criação.
+  "evaluation.resolver_ciclo": "evaluation.create",
 };
 
-/** Alvo autorizável de cada operação (criação usa o colaborador avaliado). */
+/** Alvo autorizável de cada operação (criação e resolução de ciclo usam o colaborador). */
 export function tipoAlvoDaOperacao(operacao: OperacaoAvaliacao): AlvoAvaliacao["type"] {
-  return operacao === "evaluation.criar" ? "collaborator" : "evaluation";
+  return operacao === "evaluation.criar" || operacao === "evaluation.resolver_ciclo"
+    ? "collaborator"
+    : "evaluation";
 }
 
 export const OPERACOES_AVALIACAO: readonly OperacaoAvaliacao[] = Object.keys(
@@ -149,6 +161,17 @@ export function validarEntradaAvaliacao(corpo: unknown): ResultadoValidacao {
 
   if (cru.cycle_id !== undefined && cru.cycle_id !== null && !ehUuid(cru.cycle_id)) {
     return { ok: false, code: "INVALID_INPUT", message: "cycle_id inválido." };
+  }
+  // Ano/ciclo são INTENÇÃO da tela (resolvidos server-side no tenant validado).
+  if (cru.ano !== undefined && cru.ano !== null) {
+    if (typeof cru.ano !== "number" || !Number.isInteger(cru.ano) || cru.ano <= 0) {
+      return { ok: false, code: "INVALID_INPUT", message: "ano inválido." };
+    }
+  }
+  if (cru.numero !== undefined && cru.numero !== null) {
+    if (typeof cru.numero !== "number" || ![1, 2, 3].includes(cru.numero)) {
+      return { ok: false, code: "INVALID_INPUT", message: "numero de ciclo inválido (1..3)." };
+    }
   }
   // Matrícula é INTENÇÃO (ponte resolvida server-side): aceita número inteiro
   // positivo ou sua forma textual; qualquer outro valor é recusado.

@@ -36,29 +36,38 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 - **Atividade:** F5-06 — Avaliações no PostgreSQL (Issue #103).
 - **Branch:** `feat/f5-06-avaliacoes-postgresql` (sem PR aberto; sem merge).
-- **Último commit:** consultar `git log --oneline -1` na branch (o SHA não é
-  copiado aqui para não ficar obsoleto).
-- **Push:** realizado no remoto da branch a cada rodada; a última tentativa
-  concluiu sem a limitação de `GIT_ASKPASS`.
+- **Último commit:** consultar `git log --oneline -1` na branch.
+- **Push:** o push da branch conclui sem a limitação de `GIT_ASKPASS` no
+  ambiente atual.
 - **PR:** não aberto por decisão explícita do responsável (aguarda auditoria).
-- **Estado:** F5-06 implementada de ponta a ponta no SQL e no caminho TypeScript
-  (repository/infraestrutura Supabase, Edge Function `avaliacoes` com
-  ActorContext/ResourceContext reais, Policy Engine com capability × scope,
-  ASSIGNED por operação via F3-08/F3-09, service/controlador/hook/apresentação).
-  Validadores SQL executados no Supabase local com exit 0 (F5-06, F4-08 e
-  mutações F4-08). O CUTOVER é ESTRUTURAL: a origem de cada registro vem de
-  evidência do caminho novo (UUID da escrita confirmada no banco), nunca de data;
-  registro legado permanece somente leitura e sem dual-write.
-- **Pendência real:** as TELAS antigas de avaliação
-  (`src/services/feedbackStorage.ts` e as páginas que o consomem: Novo/Editar
-  feedback, Minha avaliação e detalhes, painel de ciclo, detalhe de colaborador,
-  além dos serviços de cancelamento/reabertura/ciclo) ainda leem e escrevem
-  `localStorage`. A migração dessas telas para o caminho soberano exige a ponte
-  matrícula → UUID no cliente (hoje só existe server-side) e a decisão de produto
-  sobre o que a tela de edição pode ler por participante (D20 proíbe expor voto
-  individual do colegiado). O caminho novo está pronto e testado para ser
-  consumido; a troca da autoridade das telas é o que falta.
+- **Estado (SQL e fronteira — completo e validado):**
+  - migrations F5-06 (schema, funções e `20260911020000_f5_06_cutover_leitura_e_ciclo.sql`);
+  - `evaluation_resolver_ciclo` (ano+ciclo → UUID soberano, fail-closed em zero,
+    múltiplos ou ciclo cancelado, sempre dentro do tenant validado);
+  - `evaluation_painel_participante` (leitura de EDIÇÃO do próprio participante:
+    somente a ocorrência do ator + catálogo congelado; nunca voto/nota de
+    terceiros; ocorrência resolvida server-side pelo vínculo F5-02 + vigência);
+  - Edge Function `avaliacoes` com ActorContext/ResourceContext reais, Policy
+    Engine (capability × scope), ASSIGNED por operação (F3-08/F3-09) e ponte
+    matrícula → UUID (F3-01);
+  - cutover ESTRUTURAL: a origem de cada registro vem de evidência do caminho
+    novo (UUID de escrita confirmada), nunca de data; legado é somente leitura.
+  - Validadores SQL executados com exit 0: `02-validar-f5-06.sql`,
+    `03-validar-f5-06-cutover.sql`, `02-validar-f4-08.sql` e
+    `03-validar-f4-08-mutacoes.sql`.
+- **Pendência real (bloqueia declarar a F5-06 concluída no produto):** as TELAS
+  ainda escrevem avaliação nova em `localStorage`:
+  `NovoFeedbackPage` (`saveFeedback`), `EditarFeedbackPage` (`updateFeedback`),
+  `cicloEquipeService` (criação automática no ciclo e recálculo no
+  encerramento), `cancelamentoAvaliacaoService` e
+  `reaberturaAvaliacaoService` (persistências internas auditadas).
+  O caminho soberano está pronto para ser consumido (repository/service/
+  controlador/hook/apresentação + as duas operações novas de leitura e de
+  ciclo), inclusive a ponte matrícula → UUID; o que falta é a troca de autoridade
+  dentro dessas telas/serviços, que exige refatoração de render síncrono para
+  assíncrono e a remontagem do estado do formulário a partir do painel do
+  participante.
 - **Contexto do repositório:** `main` contém os contratos F4 (encerrada) e
   F5-01..F5-05; a F5-06 é a atividade em curso nesta branch.
-- **Próximos passos:** auditoria independente da branch → decisão sobre a
-  migração das telas → PR → revisão → squash merge.
+- **Próximos passos:** migrar as telas/serviços acima para o caminho soberano →
+  nova auditoria → PR → revisão → squash merge.
