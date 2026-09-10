@@ -1,35 +1,58 @@
-# Instruções permanentes para agentes
+# Instruções permanentes para agentes do Virtus
 
-## Projeto
+> Ponto de entrada obrigatório. **Leia integralmente antes de qualquer ação** no
+> repositório e volte a ele sempre que iniciar uma nova atividade ou retomar uma
+> entrega interrompida.
 
-Este repositório contém o Vivo Virtus (`feedback-control`), uma aplicação de gestão de avaliações, observações, metas e estrutura organizacional.
+## 1. Ordem de leitura obrigatória
 
-A stack principal é:
+Antes de desenhar, implementar, revisar ou auditar qualquer atividade, leia:
 
-- React;
-- TypeScript;
-- Vite;
-- React Router;
-- Vitest;
-- ESLint;
-- jsPDF.
+1. `AGENTS.md` (este arquivo);
+2. `.ai/virtus-context.md` — contexto persistente do projeto (identidade, stack, fases, mapa do repositório);
+3. `.ai/workflow.md` — fluxo oficial (Flash desenha → GPT revisa/fecha → Pro implementa → GPT audita → CI → squash merge) e responsabilidades por modo;
+4. `.ai/architecture-rules.md` — regras arquiteturais e trust boundaries permanentes;
+5. `.ai/git-rules.md` — regras de Git e limitação conhecida de push do sandbox;
+6. `.ai/handoff.md` — contexto operacional de retomada (estado da última entrega);
+7. A **Issue** correspondente e a discussão do **PR** (GitHub é a fonte de verdade);
+8. `docs/Fx-XX-desenho-tecnico.md` da atividade — **contrato específico da atividade**.
 
-O GitHub é a fonte de verdade para Issues, requisitos, histórico de mudanças e Pull Requests. Antes de implementar uma Issue, leia integralmente seu escopo, critérios de aceite e itens explicitamente fora do escopo.
+Se algum arquivo `.ai/` não existir em um checkout antigo, proceda sem ele e
+registre a ausência na entrega.
 
-## Regras de implementação
+## 2. Projeto
 
-- Preserve a compatibilidade com dados antigos persistidos em `localStorage`.
-- Não inclua dados pessoais ou corporativos reais em código, fixtures, testes, documentação, commits ou Pull Requests. Use somente dados fictícios.
-- Preserve os históricos e trilhas de auditoria de avaliações, observações, metas e estrutura organizacional.
-- Não duplique regras de autorização em páginas ou componentes. Use a policy e as capabilities centrais existentes em `src/authorization`.
-- Preserve a separação entre autorização, workflow, cálculos, persistência e auditoria.
-- Não trate ocultação de elementos na interface como autorização efetiva de uma operação.
-- Exiba notas sempre com uma casa decimal, reutilizando os formatadores existentes quando aplicável.
-- Evite alterações fora do escopo solicitado, refactors oportunistas e mudanças de comportamento não requeridas.
-- Preserve regras de negócio existentes, salvo quando uma mudança estiver explicitamente descrita e aprovada na Issue.
-- Prefira APIs públicas e padrões já adotados pelo projeto.
+Repositório do **Virtus (Vivo Virtus / `feedback-control`)**, aplicação de gestão
+de avaliações, observações, metas e estrutura organizacional. Stack principal:
+React, TypeScript, Vite, React Router, Vitest, ESLint, jsPDF; Supabase
+(Supabase Auth + Postgres/RLS). Detalhes estáveis em `.ai/virtus-context.md`.
 
-## Qualidade e validação
+O GitHub é a fonte de verdade para Issues, requisitos, histórico, decisões
+registradas em revisões e Pull Requests. `docs/Fx-XX-desenho-tecnico.md` é o
+contrato específico da atividade; decisões `D#` FECHADAS e questões `Q#`
+encerradas não se reabrem sem evidência técnica nova (ver `.ai/workflow.md`).
+
+## 3. Regras permanentes (síntese)
+
+Regras detalhadas em `.ai/architecture-rules.md`. Síntese inegociável:
+
+- `auth.uid()` é a raiz soberana de identidade; **tenant sempre validado
+  server-side**; frontend/JWT/localStorage/payload **não concedem autoridade**;
+  **fail-closed**; **cross-tenant DENY**.
+- O **Policy Engine** é o gate soberano de autorização; `authorize()` é
+  enforcement; `can()` serve somente à UX. Ocultar elemento na interface **não é**
+  autorização efetiva.
+- **RLS é barreira de segurança** (F4-08); tabelas autorizativas fechadas;
+  nenhum `SECURITY DEFINER` novo sem necessidade explícita.
+- Não duplique regras de autorização em páginas ou componentes; use a policy e
+  as capabilities centrais em `src/authorization`.
+- Preserve a separação entre autorização, workflow, cálculos, persistência e
+  auditoria; preserve históricos e trilhas de auditoria.
+- Não inclua dados pessoais ou corporativos reais em código, fixtures, testes,
+  documentação, commits ou PRs — somente dados fictícios.
+- Não altere contratos F4/F5 sem atividade explicitamente destinada a isso.
+
+## 4. Qualidade e validação
 
 Antes de concluir uma alteração, execute e registre no Pull Request:
 
@@ -41,14 +64,20 @@ git diff --check
 ```
 
 - Todos os comandos devem passar antes da entrega.
-- Se uma validação não puder ser executada ou falhar por motivo externo ao escopo, registre claramente o comando, o resultado e a limitação no Pull Request.
-- Adicione ou atualize testes proporcionais ao risco da mudança, preservando os testes de caracterização existentes.
-- Revise `git status --short` e o diff final para garantir que somente arquivos previstos estejam incluídos.
+- Se uma validação não puder ser executada ou falhar por motivo externo ao
+  escopo, registre claramente o comando, o resultado e a limitação no PR.
+- Revise `git status --short` e o diff final: somente arquivos previstos no
+  escopo da Issue.
 
-## Fluxo GitHub
+## 5. Fluxo GitHub
 
-- Trabalhe em uma branch específica para a Issue.
-- Use commits objetivos e compatíveis com o padrão do histórico do repositório.
-- Abra um Pull Request usando `.github/pull_request_template.md`.
-- Referencie a Issue com `Closes #<número>` na descrição do Pull Request quando a entrega resolver integralmente seu escopo.
-- Não faça merge do Pull Request sem solicitação explícita.
+- Uma **branch por atividade**; desenho e implementação em branches separadas.
+- Desenho (documento de design) e implementação (código) **nunca** no mesmo PR;
+  nenhuma implementação começa com decisão arquitetural aberta.
+- Use commits objetivos compatíveis com o histórico do repositório.
+- Abra Pull Request usando `.github/pull_request_template.md`; use `Closes #<n>`
+  somente quando a entrega resolver integralmente o escopo da Issue.
+- **Squash merge** em `main` com **CI verde** e **SHA auditado**.
+- Não faça merge sem solicitação explícita.
+- Dependabot e PRs de dependência ficam **fora** de atividades estruturais.
+- Regras de push e a limitação conhecida do sandbox DeepSeek: `.ai/git-rules.md`.
