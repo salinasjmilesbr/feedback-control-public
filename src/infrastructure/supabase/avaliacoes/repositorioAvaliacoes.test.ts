@@ -7,11 +7,12 @@ import {
   avaliacaoVinculadaAoBanco,
   CHAVE_AVALIACOES_CORTADAS,
   criarArmazenamentoMemoria,
-  INSTANTE_CUTOVER_AVALIACOES,
+  ehIdTecnicoPostgres,
   lerAvaliacoesCortadas,
-  origemDoRegistroLegado,
+  origemDoMarcador,
   registrarAvaliacaoCortada,
   separarAcervoLegado,
+  type MarcadorOrigem,
 } from "./cutover.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -212,29 +213,80 @@ describe("repositório de avaliações (caminho novo)", () => {
 });
 
 describe("cutover do domínio de avaliações (D12/§11)", () => {
-  it("classifica registros legados pela data de criação", () => {
-    expect(origemDoRegistroLegado({ dataCriacao: "2025-12-31T23:59:59.000Z" })).toBe(
+  // ADVERTÊNCIA DA AUDITORIA: a origem NÃO pode ser inferida por DATA. Um
+  // registro local criado "depois do cutover" continuaria sendo local; uma data
+  // arbitrária no código não é evidência de escrita no PostgreSQL.
+  const registrosLocais = [
+    { id: "local-2025", dataCriacao: "2025-01-01T00:00:00.000Z" },
+    { id: "local-2026", dataCriacao: "2026-12-31T23:59:59.000Z" },
+    { id: "local-sem-data" },
+    { id: "local-data-invalida", dataCriacao: "data-invalida" },
+  ];
+
+  it("NENHUM registro local é classificado como banco apenas pela data", () => {
+    const { legado, postgres } = separarAcervoLegado(
+      registrosLocais,
+      () => ({ origem: "LEGADO_LOCAL" }) as MarcadorOrigem
+    );
+
+    expect(postgres).toHaveLength(0);
+    expect(legado.map((r) => r.id)).toEqual([
+      "local-2025",
+      "local-2026",
+      "local-sem-data",
+      "local-data-invalida",
+    ]);
+  });
+
+  it("as quatro naturezas de registro local permanecem legado (2025, 2026, sem data, data inválida)", () => {
+    for (const registro of registrosLocais) {
+      // Sem marcador do caminho novo ⇒ legado, independentemente da data.
+      expect(origemDoMarcador(null)).toBe("LEGADO_LOCAL");
+      expect(origemDoMarcador({ origem: "LEGADO_LOCAL", evaluationId: registro.id })).toBe(
+        "LEGADO_LOCAL"
+      );
+    }
+  });
+
+  it("marcador POSTGRES exige id técnico (UUID) — id local não vira banco", () => {
+    expect(origemDoMarcador({ origem: "POSTGRES", evaluationId: AVALIACAO })).toBe("POSTGRES");
+    expect(origemDoMarcador({ origem: "POSTGRES", evaluationId: "avaliacao-local-1" })).toBe(
       "LEGADO_LOCAL"
     );
-    expect(origemDoRegistroLegado({ dataCriacao: INSTANTE_CUTOVER_AVALIACOES })).toBe("POSTGRES");
-    expect(origemDoRegistroLegado({ dataCriacao: "2026-05-01T00:00:00.000Z" })).toBe("POSTGRES");
+    expect(origemDoMarcador({ origem: "POSTGRES", evaluationId: "" })).toBe("LEGADO_LOCAL");
+    expect(ehIdTecnicoPostgres("avaliacao-local-1")).toBe(false);
+    expect(ehIdTecnicoPostgres(AVALIACAO)).toBe(true);
   });
 
-  it("sem data de criação ⇒ trate como LEGADO (não ingressa no caminho novo por omissão)", () => {
-    expect(origemDoRegistroLegado({})).toBe("LEGADO_LOCAL");
-    expect(origemDoRegistroLegado({ dataCriacao: "" })).toBe("LEGADO_LOCAL");
-    expect(origemDoRegistroLegado({ dataCriacao: "data-invalida" })).toBe("LEGADO_LOCAL");
-  });
+  it("avaliação REALMENTE criada no PostgreSQL entra como banco; o resto é legado", () => {
+    const armazenamento = criarArmazenamentoMemoria();
+    // Escrita server-side confirmada: a RPC devolveu o UUID.
+    const marcador = registrarAvaliacaoCortada(AVALIACAO, armazenamento);
+    expect(marcador).toEqual({ origem: "POSTGRES", evaluationId: AVALIACAO });
 
-  it("separa o acervo SEM misturar autoridades (legado somente leitura)", () => {
     const registros = [
-      { id: "a", dataCriacao: "2025-06-01T00:00:00.000Z" },
-      { id: "b", dataCriacao: "2026-03-01T00:00:00.000Z" },
-      { id: "c" },
+      ...registrosLocais,
+      { id: AVALIACAO, dataCriacao: "2025-01-01T00:00:00.000Z" },
     ];
-    const { legado, aposCorte } = separarAcervoLegado(registros);
-    expect(legado.map((r) => r.id)).toEqual(["a", "c"]);
-    expect(aposCorte.map((r) => r.id)).toEqual(["b"]);
+    const { legado, postgres } = separarAcervoLegado(registros, (registro) => {
+      const id = (registro as { id: string }).id;
+      return avaliacaoVinculadaAoBanco(id, armazenamento)
+        ? { origem: "POSTGRES" as const, evaluationId: id }
+        : { origem: "LEGADO_LOCAL" as const, evaluationId: id };
+    });
+
+    // Mesmo com data antiga, a evidência estrutural manda: é do banco.
+    expect(postgres.map((r) => r.id)).toEqual([AVALIACAO]);
+    expect(legado).toHaveLength(registrosLocais.length);
+  });
+
+  it("registrar sem id técnico NÃO cria evidência de banco", () => {
+    const armazenamento = criarArmazenamentoMemoria();
+    const marcador = registrarAvaliacaoCortada("avaliacao-local-1", armazenamento);
+
+    expect(marcador).toEqual({ origem: "LEGADO_LOCAL", evaluationId: null });
+    expect(avaliacaoVinculadaAoBanco("avaliacao-local-1", armazenamento)).toBe(false);
+    expect(lerAvaliacoesCortadas(armazenamento).size).toBe(0);
   });
 
   it("registra a avaliação cortada e nunca volta a tratá-la como legado", () => {
@@ -249,26 +301,38 @@ describe("cutover do domínio de avaliações (D12/§11)", () => {
     expect(armazenamento.getItem(CHAVE_AVALIACOES_CORTADAS)).toContain(AVALIACAO);
   });
 
-  it("registrar duas vezes não duplica e id vazio é ignorado (fail-closed)", () => {
+  it("registrar duas vezes não duplica e id inválido é ignorado (fail-closed)", () => {
     const armazenamento = criarArmazenamentoMemoria();
     registrarAvaliacaoCortada(AVALIACAO, armazenamento);
     registrarAvaliacaoCortada(AVALIACAO, armazenamento);
     registrarAvaliacaoCortada("   ", armazenamento);
+    registrarAvaliacaoCortada("nao-e-uuid", armazenamento);
 
     expect([...lerAvaliacoesCortadas(armazenamento)]).toEqual([AVALIACAO]);
   });
 
-  it("conteúdo corrompido do registro não quebra a leitura", () => {
+  it("conteúdo corrompido do registro não quebra a leitura nem cria evidência", () => {
     const armazenamento = criarArmazenamentoMemoria();
     armazenamento.setItem(CHAVE_AVALIACOES_CORTADAS, "{nao-e-json");
     expect(lerAvaliacoesCortadas(armazenamento).size).toBe(0);
 
     armazenamento.setItem(CHAVE_AVALIACOES_CORTADAS, JSON.stringify({ a: 1 }));
     expect(lerAvaliacoesCortadas(armazenamento).size).toBe(0);
+
+    // Id não-técnico gravado por fora não vira evidência de banco.
+    armazenamento.setItem(
+      CHAVE_AVALIACOES_CORTADAS,
+      JSON.stringify(["avaliacao-local-1", AVALIACAO])
+    );
+    expect([...lerAvaliacoesCortadas(armazenamento)]).toEqual([AVALIACAO]);
   });
 
   it("sem armazenamento disponível, a marca é inerte (não lança)", () => {
     expect(() => registrarAvaliacaoCortada(AVALIACAO, null)).not.toThrow();
+    expect(registrarAvaliacaoCortada(AVALIACAO, null)).toEqual({
+      origem: "POSTGRES",
+      evaluationId: AVALIACAO,
+    });
     expect(lerAvaliacoesCortadas(null).size).toBe(0);
     expect(avaliacaoVinculadaAoBanco(AVALIACAO, null)).toBe(false);
   });

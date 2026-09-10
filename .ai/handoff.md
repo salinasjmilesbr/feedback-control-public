@@ -34,21 +34,31 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
-- **Atividade:** DEV-01 — Contexto persistente para agentes (Issue #167).
-- **Branch:** `chore/agent-instructions-persistent-context`.
-- **Último commit:** SHA local desta entrega — ver `git log --oneline -1` na
-  branch (mantido por leitura, não por cópia).
-- **Push:** a preencher no handoff seguinte (resultado; em caso de falha
-  conhecida, aguarda o usuário executar `git push -u origin
-  chore/agent-instructions-persistent-context`).
-- **PR:** a abrir pelo usuário após o push (referenciar `Closes #167` se a
-  entrega resolver integralmente a Issue).
-- **Estado:** documentação/infraestrutura de processo concluída localmente;
-  aguardando push e revisão.
-- **Contexto do repositório na criação deste registro:** `main` contém os
-  contratos F4 (encerrada) e F5-01..F5-03; F5-04 (access roles/capabilities
-  reais) está em branch de documentação própria (`docs/f5-04-…`) aguardando push/
-  revisão — fora do escopo do DEV-01.
-- **Próximos passos:** push pelo usuário → abrir PR → revisão → squash merge.
-- **Atenção (fora de escopo do DEV-01):** resolver autenticação/push do sandbox;
-  mudar arquitetura funcional; alterar contratos F4/F5; criar automações externas.
+- **Atividade:** F5-06 — Avaliações no PostgreSQL (Issue #103).
+- **Branch:** `feat/f5-06-avaliacoes-postgresql` (sem PR aberto; sem merge).
+- **Último commit:** consultar `git log --oneline -1` na branch (o SHA não é
+  copiado aqui para não ficar obsoleto).
+- **Push:** realizado no remoto da branch a cada rodada; a última tentativa
+  concluiu sem a limitação de `GIT_ASKPASS`.
+- **PR:** não aberto por decisão explícita do responsável (aguarda auditoria).
+- **Estado:** F5-06 implementada de ponta a ponta no SQL e no caminho TypeScript
+  (repository/infraestrutura Supabase, Edge Function `avaliacoes` com
+  ActorContext/ResourceContext reais, Policy Engine com capability × scope,
+  ASSIGNED por operação via F3-08/F3-09, service/controlador/hook/apresentação).
+  Validadores SQL executados no Supabase local com exit 0 (F5-06, F4-08 e
+  mutações F4-08). O CUTOVER é ESTRUTURAL: a origem de cada registro vem de
+  evidência do caminho novo (UUID da escrita confirmada no banco), nunca de data;
+  registro legado permanece somente leitura e sem dual-write.
+- **Pendência real:** as TELAS antigas de avaliação
+  (`src/services/feedbackStorage.ts` e as páginas que o consomem: Novo/Editar
+  feedback, Minha avaliação e detalhes, painel de ciclo, detalhe de colaborador,
+  além dos serviços de cancelamento/reabertura/ciclo) ainda leem e escrevem
+  `localStorage`. A migração dessas telas para o caminho soberano exige a ponte
+  matrícula → UUID no cliente (hoje só existe server-side) e a decisão de produto
+  sobre o que a tela de edição pode ler por participante (D20 proíbe expor voto
+  individual do colegiado). O caminho novo está pronto e testado para ser
+  consumido; a troca da autoridade das telas é o que falta.
+- **Contexto do repositório:** `main` contém os contratos F4 (encerrada) e
+  F5-01..F5-05; a F5-06 é a atividade em curso nesta branch.
+- **Próximos passos:** auditoria independente da branch → decisão sobre a
+  migração das telas → PR → revisão → squash merge.

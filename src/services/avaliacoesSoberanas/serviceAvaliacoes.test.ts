@@ -6,6 +6,7 @@ import {
 import {
   criarArmazenamentoMemoria,
   CHAVE_AVALIACOES_CORTADAS,
+  registrarAvaliacaoCortada,
 } from "../../infrastructure/supabase/avaliacoes/cutover.ts";
 import type {
   AvaliacaoSoberana,
@@ -153,15 +154,20 @@ describe("service de avaliações soberanas (caminho novo)", () => {
     expect(armazenamento.getItem(CHAVE_AVALIACOES_CORTADAS)).toBeNull();
   });
 
-  it("acervo separa banco e legado: legado é somente leitura e sinalizado", async () => {
+  it("acervo separa banco e legado por EVIDÊNCIA, nunca por data", async () => {
     const repositorio = repositorioFalso();
+    const armazenamento = criarArmazenamentoMemoria();
+    // Registro local de 2026 (data posterior a qualquer "corte") continua
+    // legado: a data não é evidência de escrita no PostgreSQL.
+    const legado2026 = { evaluationId: "local-2026", dataCriacao: "2026-12-31T00:00:00.000Z" };
+    const legadoSemData = { evaluationId: null };
+    const doBanco = { evaluationId: AVALIACAO, dataCriacao: "2025-01-01T00:00:00.000Z" };
+    registrarAvaliacaoCortada(AVALIACAO, armazenamento);
+
     const service = criarServiceAvaliacoes({
       repositorio,
-      lerRegistrosLegados: () => [
-        { id: "legado-1", dataCriacao: "2025-06-01T00:00:00.000Z" },
-        { id: "legado-2" },
-      ],
-      armazenamento: criarArmazenamentoMemoria(),
+      lerRegistrosLegados: () => [legado2026, legadoSemData, doBanco],
+      armazenamento,
     });
 
     const resultado = await service.listarAcervo({
@@ -175,6 +181,7 @@ describe("service de avaliações soberanas (caminho novo)", () => {
     if (!resultado.ok) return;
     expect(resultado.data.avaliacoes).toHaveLength(1);
     expect(resultado.data.avaliacoes[0]!.origem).toBe("POSTGRES");
+    // Somente o registro com evidência estrutural saiu do legado.
     expect(resultado.data.legado).toHaveLength(2);
     expect(resultado.data.legado.every((item) => item.editavel === false)).toBe(true);
     expect(resultado.data.avisoLegado).not.toBeNull();

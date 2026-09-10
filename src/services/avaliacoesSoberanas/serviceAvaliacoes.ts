@@ -27,6 +27,7 @@ import type {
   TransparenciaAvaliado,
 } from "../../infrastructure/supabase/avaliacoes/repositorioAvaliacoes.ts";
 import {
+  avaliacaoVinculadaAoBanco,
   separarAcervoLegado,
   registrarAvaliacaoCortada,
   type ArmazenamentoCutover,
@@ -152,13 +153,15 @@ export function criarServiceAvaliacoes<Registro = unknown>(
         });
       }
 
-      // O acervo legado é separado pela data de criação e exposto SEM edição.
-      const { legado } = separarAcervoLegado(
-        deps.lerRegistrosLegados().map((registro) => ({
-          registro,
-          dataCriacao: (registro as { dataCriacao?: string | null }).dataCriacao ?? null,
-        }))
-      );
+      // O acervo legado é separado por EVIDÊNCIA ESTRUTURAL (marcador do caminho
+      // novo), nunca por data: registro sem marca explícita é legado local e
+      // permanece somente leitura.
+      const { legado } = separarAcervoLegado(deps.lerRegistrosLegados(), (registro) => {
+        const id = (registro as { evaluationId?: string | null }).evaluationId;
+        return avaliacaoVinculadaAoBanco(id ?? "", armazenamento)
+          ? { origem: "POSTGRES" as const, evaluationId: String(id) }
+          : { origem: "LEGADO_LOCAL" as const, evaluationId: id ?? null };
+      });
 
       return {
         ok: true,
@@ -166,11 +169,11 @@ export function criarServiceAvaliacoes<Registro = unknown>(
           organizationId: entrada.organizationId,
           cycleId: entrada.cycleId,
           avaliacoes,
-          legado: legado.map((item) => ({
+          legado: legado.map((registro) => ({
             origem: "LEGADO_LOCAL" as const,
             editavel: false as const,
             motivo: AVISO_LEGADO,
-            registro: item.registro as Registro,
+            registro: registro as Registro,
           })),
           avisoLegado: legado.length > 0 ? AVISO_LEGADO : null,
         },
