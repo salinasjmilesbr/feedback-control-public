@@ -161,10 +161,12 @@ export async function criarAvaliacoesDoCicloAtivado(
     );
 
     if (resultado.ok && resultado.data) {
-      // Livro-caixa de NAVEGAÇÃO (não é autoridade): registra o id soberano do
-      // ciclo E o vínculo com o colaborador, para que a tela localize a
-      // avaliação nova depois do reload (ela nunca existe no legado).
+      // CACHE DE NAVEGAÇÃO (não é autoridade, não é tenant): registra o id
+      // soberano do ciclo E o vínculo com o colaborador, no namespace da
+      // organização ativa, para que a tela localize a avaliação nova depois do
+      // reload (ela nunca existe no legado).
       registrarAvaliacoesDoCiclo(
+        deps.organizationId,
         ciclo.ano,
         ciclo.ciclo,
         [resultado.data.evaluationId],
@@ -592,6 +594,7 @@ export async function concluirAvaliacoesNoEncerramentoDoCiclo(
   deps: DependenciasCicloEquipe
 ): Promise<{ concluidas: number; bloqueadas: number }> {
   const idsSoberanos = lerAvaliacoesDoCiclo(
+    deps.organizationId,
     ciclo.ano,
     ciclo.ciclo,
     deps.armazenamento ?? null

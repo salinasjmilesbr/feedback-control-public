@@ -221,7 +221,7 @@ describe("cicloEquipeService com avaliação cancelada", () => {
 
   it("encerramento conclui no servidor as avaliações NOVAS do ciclo", async () => {
     const armazenamento = criarArmazenamentoMemoria();
-    registrarAvaliacoesDoCiclo(2026, 1, [CICLO_POSTGRES], armazenamento);
+    registrarAvaliacoesDoCiclo(ORG, 2026, 1, [CICLO_POSTGRES], armazenamento);
     const dependencias = deps({}, armazenamento);
     const legadoAntes = localStorage.getItem(CHAVE_LEGADO);
 
@@ -238,7 +238,7 @@ describe("cicloEquipeService com avaliação cancelada", () => {
 
   it("encerramento NÃO reabre nem reconclui avaliação já concluída", async () => {
     const armazenamento = criarArmazenamentoMemoria();
-    registrarAvaliacoesDoCiclo(2026, 1, [CICLO_POSTGRES], armazenamento);
+    registrarAvaliacoesDoCiclo(ORG, 2026, 1, [CICLO_POSTGRES], armazenamento);
     const dependencias = deps(
       {
         ler: async () => ({
@@ -260,7 +260,7 @@ describe("cicloEquipeService com avaliação cancelada", () => {
 
   it("recusa do servidor na conclusão é contabilizada como bloqueada", async () => {
     const armazenamento = criarArmazenamentoMemoria();
-    registrarAvaliacoesDoCiclo(2026, 1, [CICLO_POSTGRES], armazenamento);
+    registrarAvaliacoesDoCiclo(ORG, 2026, 1, [CICLO_POSTGRES], armazenamento);
     const dependencias = deps(
       {
         concluir: async () => ({
@@ -305,7 +305,7 @@ describe("cicloEquipeService com avaliação cancelada", () => {
 
     const resultado = await criarAvaliacoesDoCicloAtivado(ciclo, dependencias);
 
-    const ids = lerAvaliacoesDoCiclo(2026, 1, armazenamento);
+    const ids = lerAvaliacoesDoCiclo(ORG, 2026, 1, armazenamento);
     expect(resultado.criadas).toBeGreaterThan(0);
     expect(ids).toHaveLength(resultado.criadas);
     // Somente ids TÉCNICOS (UUID) entram no livro-caixa.

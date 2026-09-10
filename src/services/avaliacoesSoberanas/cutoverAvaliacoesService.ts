@@ -24,6 +24,7 @@ import type {
   RepositorioAvaliacoes,
   ResultadoRepositorio,
 } from "../../infrastructure/supabase/avaliacoes/repositorioAvaliacoes.ts";
+import type { CodigoPublico } from "../../infrastructure/supabase/avaliacoes/contrato.ts";
 import { mensagemErroAvaliacoes } from "./serviceAvaliacoes.ts";
 import { registrarAvaliacaoCortada, type ArmazenamentoCutover } from "../../infrastructure/supabase/avaliacoes/cutover.ts";
 import { ehIdTecnicoPostgres } from "../../infrastructure/supabase/avaliacoes/cutover.ts";
@@ -32,6 +33,12 @@ export interface ResultadoCutover<T> {
   readonly ok: boolean;
   readonly data?: T;
   readonly erro?: string;
+  /**
+   * Código PÚBLICO do erro (F0-05), quando houver. Permite ao chamador
+   * distinguir RESPOSTA do servidor ("não existe") de INDETERMINAÇÃO (falha de
+   * autorização/rede) sem inspecionar texto — a mensagem é para o usuário.
+   */
+  readonly codigo?: CodigoPublico;
 }
 
 export interface AvaliacaoNovaCriada {
@@ -158,7 +165,7 @@ export interface CutoverAvaliacoes {
 }
 
 function falha<T>(erro: ErroRepositorioAvaliacoes): ResultadoCutover<T> {
-  return { ok: false, erro: mensagemErroAvaliacoes(erro) };
+  return { ok: false, erro: mensagemErroAvaliacoes(erro), codigo: erro.code };
 }
 
 function propagar<T, U>(

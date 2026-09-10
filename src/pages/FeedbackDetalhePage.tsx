@@ -13,7 +13,7 @@ import { useAuth } from "../auth/AuthContext";
 import { cancelarAvaliacao } from "../services/cancelamentoAvaliacaoService";
 import { reabrirAvaliacao } from "../services/reaberturaAvaliacaoService";
 import { carregarPainelSoberano } from "../services/acessoAvaliacoesSoberanas";
-import { ehAvaliacaoNova } from "../services/origemAvaliacaoTela";
+import { ehCandidataAvaliacaoNova } from "../services/origemAvaliacaoTela";
 import type { PainelParticipante } from "../infrastructure/supabase/avaliacoes/repositorioAvaliacoes";
 import type { Colaborador } from "../types/Colaborador";
 import { getCiclosAvaliacao } from "../services/cicloAvaliacaoStorage";
@@ -60,14 +60,16 @@ function FeedbackDetalhePage() {
     ? getColaboradorByMatricula(matricula)
     : undefined;
 
-  // A origem é decidida pela EVIDÊNCIA de cutover (nunca pelo formato do id).
-  const avaliacaoNova = ehAvaliacaoNova(feedbackId);
+  // Um id com formato técnico é CANDIDATO a avaliação nova. A existência NÃO é
+  // decidida pelo formato nem pelo livro-caixa: quem prova é o servidor
+  // (soberano-first). Sem cache local, a URL direta continua funcionando.
+  const candidataAvaliacaoNova = ehCandidataAvaliacaoNova(feedbackId);
   // O carregamento já começa no estado correto (derivado), sem `setState` em
   // efeito: a leitura soberana termina em callback assíncrono.
-  const [carregandoNova, setCarregandoNova] = useState(avaliacaoNova);
+  const [carregandoNova, setCarregandoNova] = useState(candidataAvaliacaoNova);
 
   useEffect(() => {
-    if (!avaliacaoNova) return;
+    if (!candidataAvaliacaoNova) return;
     let ativo = true;
 
     void (async () => {
@@ -90,7 +92,7 @@ function FeedbackDetalhePage() {
     return () => {
       ativo = false;
     };
-  }, [avaliacaoNova, feedbackId, organizacaoAtivaId]);
+  }, [candidataAvaliacaoNova, feedbackId, organizacaoAtivaId]);
 
   if (!colaborador) {
     return (
@@ -130,8 +132,11 @@ function FeedbackDetalhePage() {
     );
   }
 
-  // Avaliação NOVA: a fonte é o PostgreSQL (nenhum registro legado é exigido).
-  if (avaliacaoNova) {
+  // Avaliação NOVA: a fonte é o PostgreSQL (nenhum registro legado é exigido, e
+  // a URL funciona mesmo sem estado local algum). A leitura soberana acima só
+  // falha quando o servidor não devolve a avaliação (inexistente/inacessível,
+  // indistinguíveis por contrato) ou quando o backend está indeterminado.
+  if (candidataAvaliacaoNova) {
     if (!painelSoberano) {
       return (
         <main className="virtus-page">

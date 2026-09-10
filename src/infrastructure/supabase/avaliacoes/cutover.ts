@@ -192,24 +192,34 @@ export function avaliacaoVinculadaAoBanco(
 export const CHAVE_CICLO_AVALIACOES = "feedback-control-ciclo-avaliacoes-postgres";
 
 interface IndiceNavegacao {
-  /** ano+número → ids técnicos conhecidos. */
+  /** namespace de cache → ids técnicos conhecidos. */
   readonly ids?: Record<string, readonly string[]>;
-  /** ano+número+matrícula → id técnico conhecido. */
+  /** namespace de cache → id técnico conhecido por colaborador. */
   readonly porColaborador?: Record<string, string>;
 }
 
-/** Chave canônica do índice por ciclo. Ano+número são INTENÇÃO; sem tenant. */
-export function chaveAnoCiclo(ano: number, ciclo: number): string {
-  return `${ano}-${ciclo}`;
+/**
+ * Chave canônica do índice por ciclo. A organização entra apenas como
+ * NAMESPACE DE CACHE/NAVEGAÇÃO: NÃO é prova de tenant nem autorização — toda
+ * operação real revalida o tenant server-side. Ela existe para que a mesma
+ * matrícula/ano/ciclo em organizações diferentes não colida no navegador.
+ */
+export function chaveAnoCiclo(
+  organizationId: string,
+  ano: number,
+  ciclo: number
+): string {
+  return `${organizationId}|${ano}-${ciclo}`;
 }
 
-/** Chave canônica do índice por colaborador dentro de um ciclo. */
+/** Chave canônica do índice por colaborador dentro de um ciclo (por tenant). */
 export function chaveCicloColaborador(
+  organizationId: string,
   ano: number,
   ciclo: number,
   matricula: number
 ): string {
-  return `${ano}-${ciclo}-${matricula}`;
+  return `${organizationId}|${ano}-${ciclo}-${matricula}`;
 }
 
 function lerIndice(
@@ -250,14 +260,16 @@ function gravarIndice(
 }
 
 /**
- * Associa ids soberanos ao ciclo (ano+número) e, quando `matriculaAvaliado` é
- * informada, registra também o índice por colaborador (usado para a tela saber
- * que já existe avaliação nova daquele colaborador no ciclo).
+ * Associa ids soberanos ao ciclo (organização + ano + número) e, quando
+ * `matriculaAvaliado` é informada, registra também o índice por colaborador.
  *
- * Só registra id técnico válido; idempotente. Nada é gravado sem evidência do
- * caminho novo.
+ * CACHE DE NAVEGAÇÃO opcional: só registra id técnico válido, é idempotente e
+ * NADA aqui estabelece existência, tenant ou autorização. A ausência deste
+ * registro não impede descobrir a avaliação (a resolução soberana consulta o
+ * banco de qualquer forma).
  */
 export function registrarAvaliacoesDoCiclo(
+  organizationId: string,
   ano: number,
   ciclo: number,
   evaluationIds: readonly unknown[],
@@ -269,7 +281,7 @@ export function registrarAvaliacoesDoCiclo(
     .map((id) => id.trim());
   if (!registroCutover || novos.length === 0) return novos;
 
-  const chave = chaveAnoCiclo(ano, ciclo);
+  const chave = chaveAnoCiclo(organizationId, ano, ciclo);
   const indice = lerIndice(registroCutover);
   const atuais = new Set(indice.ids[chave] ?? []);
   for (const id of novos) atuais.add(id);
@@ -277,30 +289,36 @@ export function registrarAvaliacoesDoCiclo(
 
   if (matriculaAvaliado !== undefined && Number.isFinite(matriculaAvaliado)) {
     // Uma avaliação nova por (ciclo, colaborador): o mais recente prevalece.
-    indice.porColaborador[chaveCicloColaborador(ano, ciclo, matriculaAvaliado)] =
-      novos[novos.length - 1]!;
+    indice.porColaborador[
+      chaveCicloColaborador(organizationId, ano, ciclo, matriculaAvaliado)
+    ] = novos[novos.length - 1]!;
   }
 
   gravarIndice(registroCutover, indice);
   return indice.ids[chave]!;
 }
 
-/** Ids soberanos já conhecidos de um ciclo (ano+número). Nunca inclui legado. */
+/** Ids soberanos JÁ CONHECIDOS de um ciclo (cache). Nunca inclui legado. */
 export function lerAvaliacoesDoCiclo(
+  organizationId: string,
   ano: number,
   ciclo: number,
   registroCutover: ArmazenamentoCutover | null = armazenamentoPadrao()
 ): readonly string[] {
   if (!registroCutover) return [];
-  return lerIndice(registroCutover).ids[chaveAnoCiclo(ano, ciclo)] ?? [];
+  return lerIndice(registroCutover).ids[chaveAnoCiclo(organizationId, ano, ciclo)] ?? [];
 }
 
 /**
- * Id soberano JÁ CONHECIDO da avaliação nova de um colaborador no ciclo, ou
- * `null`. É roteamento de navegação: a existência/autorização reais continuam
- * sendo confirmadas pelo banco a cada operação.
+ * Id soberano JÁ CONHECIDO (cache) da avaliação nova de um colaborador no ciclo,
+ * ou `null`.
+ *
+ * É apenas atalho de navegação, no namespace da organização. Um resultado
+ * `null` NÃO significa que a avaliação não existe: a descoberta real é feita
+ * contra o banco (`resolverLeituraAvaliacao`).
  */
 export function lerAvaliacaoNovaDoColaboradorNoCiclo(
+  organizationId: string,
   ano: number,
   ciclo: number,
   matricula: number,
@@ -309,7 +327,27 @@ export function lerAvaliacaoNovaDoColaboradorNoCiclo(
   if (!registroCutover) return null;
   return (
     lerIndice(registroCutover).porColaborador[
-      chaveCicloColaborador(ano, ciclo, matricula)
+      chaveCicloColaborador(organizationId, ano, ciclo, matricula)
     ] ?? null
   );
+}
+
+/**
+ * Remove uma entrada OBSOLETA do cache de navegação (ex.: a avaliação apontada
+ * não existe mais / foi recusada pelo servidor). Não afeta a evidência de
+ * cutover (`CHAVE_AVALIACOES_CORTADAS`), que é append-only.
+ */
+export function esquecerAvaliacaoNovaDoColaboradorNoCiclo(
+  organizationId: string,
+  ano: number,
+  ciclo: number,
+  matricula: number,
+  registroCutover: ArmazenamentoCutover | null = armazenamentoPadrao()
+): void {
+  if (!registroCutover) return;
+  const indice = lerIndice(registroCutover);
+  const chave = chaveCicloColaborador(organizationId, ano, ciclo, matricula);
+  if (!(chave in indice.porColaborador)) return;
+  delete indice.porColaborador[chave];
+  gravarIndice(registroCutover, indice);
 }

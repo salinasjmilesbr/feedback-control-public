@@ -20,7 +20,11 @@ import type {
   ObservacaoDoPainel,
   NotaDoPainelPorNome,
 } from "../services/avaliacoesSoberanas/cutoverAvaliacoesService";
-import { lerAvaliacaoNovaDoColaboradorNoCiclo } from "../infrastructure/supabase/avaliacoes/cutover";
+import {
+  esquecerAvaliacaoNovaDoColaboradorNoCiclo,
+  lerAvaliacaoNovaDoColaboradorNoCiclo,
+} from "../infrastructure/supabase/avaliacoes/cutover";
+import { lerAvaliacaoParaTela } from "../services/origemAvaliacaoTela";
 import CollaboratorIdentity from "../components/CollaboratorIdentity";
 import RoleExpectationsCard from "../components/RoleExpectationsCard";
 import { calcularProgressoAvaliacao } from "../services/progressoAvaliacao";
@@ -291,10 +295,11 @@ function NovoFeedbackPage() {
   const anoAvaliacao = cicloAtivo.ano;
   const cicloAvaliacao = cicloAtivo.ciclo;
 
-  // Id da avaliação NOVA já conhecida deste colaborador no ciclo (índice de
-  // NAVEGAÇÃO; a autoridade de unicidade é o banco). Permite avisar antes de
-  // tentar criar e navegar para a avaliação existente.
+  // Id da avaliação NOVA já conhecida deste colaborador no ciclo: CACHE de
+  // navegação no namespace da organização (não é prova de existência nem de
+  // tenant). O preflight abaixo só bloqueia depois de confirmar no servidor.
   const avaliacaoNovaExistente = lerAvaliacaoNovaDoColaboradorNoCiclo(
+    organizacaoAtivaId ?? "",
     anoAvaliacao,
     cicloAvaliacao,
     colaborador.matricula
@@ -734,16 +739,38 @@ function NovoFeedbackPage() {
       return;
     }
 
-    // UNICIDADE: se o índice de NAVEGAÇÃO já conhece uma avaliação nova deste
-    // colaborador no ciclo (evidência de escrita soberana confirmada), a tela
-    // não tenta criar outra. A autoridade continua sendo o índice único parcial
-    // do banco, que recusaria a duplicata de qualquer forma — e nada é criado
-    // localmente em nenhum cenário.
+    // PREFLIGHT de duplicidade (somente atalho de UX). O cache de navegação
+    // NUNCA bloqueia por si só: ele é CONFIRMADO no servidor antes de recusar a
+    // criação. Se o cache estiver obsoleto (a avaliação não existe mais / não é
+    // acessível), a entrada é descartada e a criação segue — a autoridade da
+    // unicidade é o índice único parcial do banco, e nada é criado localmente.
     if (avaliacaoNovaExistente) {
-      setConflito(
-        `Já existe uma avaliação para ${anoAvaliacao} - Ciclo ${cicloAvaliacao}.`
+      setSalvando(true);
+      let leitura: Awaited<ReturnType<typeof lerAvaliacaoParaTela>>;
+      try {
+        leitura = await lerAvaliacaoParaTela({
+          organizationId: organizacaoAtivaId ?? "",
+          evaluationId: avaliacaoNovaExistente,
+        });
+      } finally {
+        setSalvando(false);
+      }
+
+      if (leitura.ok && leitura.leitura?.origem === "POSTGRES") {
+        setConflito(
+          `Já existe uma avaliação para ${anoAvaliacao} - Ciclo ${cicloAvaliacao}.`
+        );
+        return;
+      }
+
+      // Cache obsoleto: esquece a entrada e prossegue com a criação legítima.
+      esquecerAvaliacaoNovaDoColaboradorNoCiclo(
+        organizacaoAtivaId ?? "",
+        anoAvaliacao,
+        cicloAvaliacao,
+        colaborador!.matricula
       );
-      return;
+      setConflito("");
     }
 
     setErroAcao("");

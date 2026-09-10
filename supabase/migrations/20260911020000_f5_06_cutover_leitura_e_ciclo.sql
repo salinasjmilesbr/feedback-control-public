@@ -134,6 +134,12 @@ begin
 
   -- Ocorrência VIGENTE do próprio ator nesta avaliação. Ambiguidade (mais de
   -- uma ocorrência vigente) é recusada: nunca escolhe arbitrariamente.
+  --
+  -- AUSÊNCIA de ocorrência NÃO é erro de backend: é o resultado "não há painel
+  -- para este ator" (a avaliação pode existir para outro ator). Devolver `null`
+  -- permite à fronteira distinguir "não existe/não é acessível" (NOT_FOUND, que
+  -- não vaza existência cross-tenant) de "indeterminação" (falha real, que é
+  -- fail-closed). Nenhum dado de terceiro é revelado em qualquer caso.
   select count(*) into v_ocorrencias
     from public.evaluation_participants p
    where p.evaluation_id = v_eval.id
@@ -143,7 +149,7 @@ begin
      and (p.valid_to is null or p.valid_to > v_instante);
 
   if v_ocorrencias = 0 then
-    raise exception 'F5-06: participante sem ocorrencia vigente nesta avaliacao';
+    return null;
   end if;
   if v_ocorrencias > 1 then
     raise exception 'F5-06: mais de uma ocorrencia vigente do ator nesta avaliacao (ambiguidade)';
@@ -256,7 +262,10 @@ comment on function public.evaluation_painel_participante(uuid, uuid) is
   'terceiros nem participant_id alheio; a ocorrencia propria e resolvida '
   'server-side pelo vinculo F5-02 + vigencia (o participant_id do cliente nunca '
   'e prova de identidade). D20 (transparencia do AVALIADO) permanece inalterada '
-  'em evaluation_leitura_avaliado. EXECUTE somente service_role.';
+  'em evaluation_leitura_avaliado. Ausencia de ocorrencia vigente do ator '
+  'devolve NULL (resultado "sem painel"), distinguindo-se de falha real de '
+  'backend; a avaliacao inexistente continua recusada (NOT_FOUND, sem revelar '
+  'existencia cross-tenant). EXECUTE somente service_role.';
 
 -- ----------------------------------------------------------------------------
 -- Grants: EXECUTE somente service_role (sem superfície para authenticated)

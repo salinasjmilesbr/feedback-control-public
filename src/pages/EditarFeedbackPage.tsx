@@ -19,7 +19,6 @@ import { getFeedbacksByColaborador } from "../services/feedbackStorage";
 import type { Feedback } from "../types/Feedback";
 import { useAuth } from "../auth/AuthContext";
 import {
-  carregarPainelSoberano,
   concluirAvaliacaoSoberana,
   gravarComentarioFinalSoberano,
   gravarNotasSoberanas,
@@ -30,7 +29,10 @@ import type {
   NotaDoPainelPorNome,
 } from "../services/avaliacoesSoberanas/cutoverAvaliacoesService";
 import type { PainelParticipante } from "../infrastructure/supabase/avaliacoes/repositorioAvaliacoes";
-import { ehAvaliacaoNova } from "../services/origemAvaliacaoTela";
+import {
+  ehCandidataAvaliacaoNova,
+  lerAvaliacaoParaTela,
+} from "../services/origemAvaliacaoTela";
 import {
   getMetasDoColaboradorNoCiclo,
   metaEstaAprovada,
@@ -318,11 +320,12 @@ function EditarFeedbackPage() {
     : [];
 
   const feedbackLegado = feedbacks.find((item) => item.id === feedbackId);
-  // Id técnico (UUID) ⇒ a avaliação é NOVA e vive exclusivamente no PostgreSQL.
-  const avaliacaoNova = ehAvaliacaoNova(feedbackId);
+  // Id com formato técnico é CANDIDATO a avaliação nova: a existência é provada
+  // pelo SERVIDOR (soberano-first), não pelo formato nem pelo livro-caixa local.
+  const candidataAvaliacaoNova = ehCandidataAvaliacaoNova(feedbackId);
 
   const [painel, setPainel] = useState<PainelParticipante | null>(null);
-  const [carregandoNova, setCarregandoNova] = useState(avaliacaoNova);
+  const [carregandoNova, setCarregandoNova] = useState(candidataAvaliacaoNova);
   const [erroLeitura, setErroLeitura] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [erroAcao, setErroAcao] = useState("");
@@ -345,35 +348,43 @@ function EditarFeedbackPage() {
   const [feedbackFinalAberto, setFeedbackFinalAberto] = useState(false);
 
   // Leitura da avaliação NOVA: o painel do próprio participante (server-side)
-  // devolve o catálogo congelado e SOMENTE a própria ocorrência. Nenhum
-  // fallback para o acervo local quando a leitura é recusada (fail-closed).
+  // devolve o catálogo congelado e SOMENTE a própria ocorrência. A prova de
+  // existência vem do servidor — funciona com `localStorage` vazio e em URL
+  // aberta diretamente. Falha de leitura é fail-closed; um registro legado
+  // homônimo só é usado quando o servidor responde SEM a avaliação.
   useEffect(() => {
-    if (!avaliacaoNova) return;
+    if (!candidataAvaliacaoNova) return;
     let ativo = true;
 
     void (async () => {
-      const resultado = await carregarPainelSoberano({
+      const resultado = await lerAvaliacaoParaTela({
         organizationId: organizacaoAtivaId ?? "",
-        evaluationId: feedbackId ?? "",
+        evaluationId: feedbackId,
       });
       if (!ativo) return;
 
-      if (!resultado.ok || !resultado.data) {
-        setErroLeitura(
-          resultado.erro ?? "Avaliação não encontrada para o seu acesso."
-        );
+      if (!resultado.ok) {
+        // Backend indeterminado: não há leitura segura (sem fallback local).
+        setErroLeitura(resultado.erro);
         setCarregandoNova(false);
         return;
       }
 
-      setPainel(resultado.data);
+      if (resultado.leitura?.origem === "POSTGRES") {
+        setPainel(resultado.leitura.painel);
+        setCarregandoNova(false);
+        return;
+      }
+
+      // Sem avaliação soberana: segue o fluxo do acervo legado (somente leitura)
+      // — inclusive quando não há registro algum (tela "não encontrada").
       setCarregandoNova(false);
     })();
 
     return () => {
       ativo = false;
     };
-  }, [avaliacaoNova, feedbackId, organizacaoAtivaId]);
+  }, [candidataAvaliacaoNova, feedbackId, organizacaoAtivaId]);
 
   useEffect(() => {
     if (!criterioParaAlinhar) return;
@@ -1024,7 +1035,7 @@ function EditarFeedbackPage() {
     setErroAcao("");
 
     // Avaliação NOVA: caminho soberano (o painel é obrigatório).
-    if (avaliacaoNova) {
+    if (candidataAvaliacaoNova) {
       if (!painel) {
         setErroAcao("Painel da avaliação indisponível para gravação.");
         return;
