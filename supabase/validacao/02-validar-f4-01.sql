@@ -66,17 +66,28 @@ end $$;
 
 do $$
 begin
+  -- F4-08 (D12/Q7) tornou `capabilities` um catálogo global read-only (1 policy
+  -- SELECT a authenticated). As outras três tabelas F4-01 permanecem fechadas
+  -- (zero policies). Aqui valida-se exatamente essa fronteira.
   if exists (
     select 1 from pg_policies p
     where p.schemaname = 'public'
       and p.tablename in (
-        'capabilities', 'access_roles', 'access_role_capabilities',
+        'access_roles', 'access_role_capabilities',
         'membership_access_role_assignments'
       )
   ) then
-    raise exception '[FAIL] existe policy nas tabelas F4-01 (deny-by-default violado)';
+    raise exception '[FAIL] existe policy em tabela fechada F4-01 (deny-by-default violado)';
   end if;
-  raise notice '[PASS] zero policies nas quatro tabelas F4-01 (deny-by-default estrutural)';
+  if not exists (
+    select 1 from pg_policies p
+    where p.schemaname = 'public'
+      and p.tablename = 'capabilities'
+      and p.policyname = 'capabilities_select_authenticated'
+  ) then
+    raise exception '[FAIL] capabilities deveria ter a policy read-only da F4-08 (capabilities_select_authenticated)';
+  end if;
+  raise notice '[PASS] 3 tabelas F4-01 fechadas (zero policies); capabilities read-only F4-08 (1 policy SELECT)';
 end $$;
 
 -- ============================================================================
@@ -91,9 +102,9 @@ begin
   from information_schema.columns
   where table_schema = 'public' and table_name = 'capabilities';
   if v_cols is distinct from
-     array['code','created_at','description','id','name','status','updated_at','version']::text[]
+     array['code','created_at','deprecated','description','grantable_via_role','id','name','status','updated_at','version']::text[]
   then
-    raise exception '[FAIL] capabilities: colunas fora do contrato (id/code/name/description/status/timestamps/version)';
+    raise exception '[FAIL] capabilities: colunas fora do contrato (F5-04 acrescentou grantable_via_role/deprecated)';
   end if;
 
   select array_agg(column_name order by column_name) into v_cols
@@ -290,14 +301,14 @@ declare
   v_n int;
 begin
   select count(*) into v_n from public.capabilities;
-  if v_n <> 21 then
-    raise exception '[FAIL] catalogo de capabilities deveria ter 21 linhas, encontrado %', v_n;
+  if v_n <> 31 then
+    raise exception '[FAIL] catalogo de capabilities deveria ter 31 linhas (29 canonicas + 2 deprecadas; F5-04 D14), encontrado %', v_n;
   end if;
   select count(distinct code) into v_n from public.capabilities;
-  if v_n <> 21 then
+  if v_n <> 31 then
     raise exception '[FAIL] codigos de capability nao sao unicos';
   end if;
-  raise notice '[PASS] catalogo global com 21 capabilities e codigos unicos (deterministico)';
+  raise notice '[PASS] catalogo global com 31 capabilities e codigos unicos (deterministico; F5-04 D14)';
 end $$;
 
 do $$
@@ -320,9 +331,8 @@ do $$
 declare
   v_codes text[];
   v_esperado text[] := array[
-    'access_role.manage','collaborator.manage','collaborator.read','cycle.read',
-    'membership.manage','membership.read','org.catalog.manage',
-    'org.structure.manage','settings.manage'
+    'collaborator.create','collaborator.edit','collaborator.read','cycle.read',
+    'membership.read','org.catalog.manage','org.structure.manage','settings.manage'
   ]::text[];
 begin
   select array_agg(c.code order by c.code) into v_codes
@@ -331,9 +341,9 @@ begin
   where rc.access_role_id = 'c0000000-0000-4000-8000-0000000000f1';
 
   if v_codes is distinct from v_esperado then
-    raise exception '[FAIL] bundle admin divergente do contrato D14';
+    raise exception '[FAIL] bundle admin divergente do contrato (F5-04 D15: sem controle, sem deprecado)';
   end if;
-  raise notice '[PASS] bundle admin = 9 capabilities de administracao (sem conteudo confidencial)';
+  raise notice '[PASS] bundle admin = 8 capabilities FUNCIONAIS de administracao (sem controle, sem conteudo confidencial)';
 end $$;
 
 -- ============================================================================
@@ -344,9 +354,8 @@ do $$
 declare
   v_codes text[];
   v_esperado text[] := array[
-    'access_role.manage','collaborator.manage','collaborator.read','cycle.read',
-    'membership.manage','membership.read','org.catalog.manage',
-    'org.structure.manage','settings.manage'
+    'collaborator.create','collaborator.edit','collaborator.read','cycle.read',
+    'membership.read','org.catalog.manage','org.structure.manage','settings.manage'
   ]::text[];
 begin
   select array_agg(capability_code order by capability_code) into v_codes
@@ -357,7 +366,7 @@ begin
   if v_codes is distinct from v_esperado then
     raise exception '[FAIL] resolver de ADMIN_A/Alfa divergente';
   end if;
-  raise notice '[PASS] ADMIN_A (sem collaborator) resolve as 9 capabilities de administracao em Alfa';
+  raise notice '[PASS] ADMIN_A (sem collaborator) resolve as 8 capabilities funcionais de administracao em Alfa';
 end $$;
 
 do $$
@@ -370,9 +379,8 @@ begin
     'd0a00000-0000-0000-0000-0000000000b1'
   );
   if v_codes is distinct from array[
-    'access_role.manage','collaborator.manage','collaborator.read','cycle.read',
-    'membership.manage','membership.read','org.catalog.manage',
-    'org.structure.manage','settings.manage'
+    'collaborator.create','collaborator.edit','collaborator.read','cycle.read',
+    'membership.read','org.catalog.manage','org.structure.manage','settings.manage'
   ]::text[] then
     raise exception '[FAIL] resolver de ADMIN_B/Beta divergente (role de sistema deveria valer em qualquer org)';
   end if;
@@ -561,7 +569,8 @@ begin
       and c.code in ('evaluation.read', 'evaluation.create', 'evaluation.write',
                      'evaluation.cancel', 'evaluation.reopen',
                      'goal.read', 'goal.write', 'goal.approve',
-                     'observation.read', 'observation.write', 'report.read')
+                     'observation.read', 'observation.create', 'observation.edit',
+                     'observation.delete', 'report.read')
   ) then
     raise exception '[FAIL] bundle admin contem capability de conteudo confidencial';
   end if;
@@ -668,20 +677,39 @@ set role authenticated;
 
 do $$
 declare
-  v_n int;
+  v_ok boolean;
   v_tabela text;
   v_tabelas text[] := array[
-    'capabilities', 'access_roles', 'access_role_capabilities',
+    'access_roles', 'access_role_capabilities',
     'membership_access_role_assignments'
   ];
 begin
+  -- As 3 tabelas F4-01 permanecem fechadas a authenticated (F4-08): sem SELECT
+  -- (permission denied). `capabilities` é read-only global (checado abaixo).
   foreach v_tabela in array v_tabelas loop
-    execute format('select count(*) from public.%I', v_tabela) into v_n;
-    if v_n <> 0 then
-      raise exception '[FAIL] authenticated enxergou linhas de %', v_tabela;
+    v_ok := false;
+    begin
+      execute format('select count(*) from public.%I', v_tabela);
+    exception when insufficient_privilege then
+      v_ok := true;
+    end;
+    if not v_ok then
+      raise exception '[FAIL] authenticated leu a tabela fechada %', v_tabela;
     end if;
   end loop;
-  raise notice '[PASS] RLS: authenticated nao le linhas das quatro tabelas F4-01';
+  raise notice '[PASS] RLS: authenticated sem leitura das 3 tabelas fechadas F4-01';
+end $$;
+
+do $$
+declare
+  v_n int;
+begin
+  -- capabilities é catálogo GLOBAL read-only (F4-08): legível, mas não DML.
+  select count(*) into v_n from public.capabilities;
+  if v_n < 1 then
+    raise exception '[FAIL] authenticated nao le o catalogo global capabilities (read-only F4-08)';
+  end if;
+  raise notice '[PASS] capabilities legivel a authenticated (catalogo global read-only, % linhas)', v_n;
 end $$;
 
 do $$
@@ -698,26 +726,32 @@ end $$;
 
 do $$
 declare
-  v_n int;
+  v_ok boolean := false;
 begin
-  update public.access_roles set version = version + 1;
-  get diagnostics v_n = row_count;
-  if v_n <> 0 then
-    raise exception '[FAIL] RLS permitiu UPDATE de authenticated em access_roles (%)', v_n;
+  begin
+    update public.access_roles set version = version + 1;
+  exception when insufficient_privilege then
+    v_ok := true;
+  end;
+  if not v_ok then
+    raise exception '[FAIL] RLS permitiu UPDATE de authenticated em access_roles';
   end if;
-  raise notice '[PASS] RLS: UPDATE de authenticated em access_roles afeta zero linhas';
+  raise notice '[PASS] RLS: UPDATE de authenticated em access_roles negado (permission denied)';
 end $$;
 
 do $$
 declare
-  v_n int;
+  v_ok boolean := false;
 begin
-  delete from public.membership_access_role_assignments;
-  get diagnostics v_n = row_count;
-  if v_n <> 0 then
-    raise exception '[FAIL] RLS permitiu DELETE de authenticated em membership_access_role_assignments (%)', v_n;
+  begin
+    delete from public.membership_access_role_assignments;
+  exception when insufficient_privilege then
+    v_ok := true;
+  end;
+  if not v_ok then
+    raise exception '[FAIL] RLS permitiu DELETE de authenticated em membership_access_role_assignments';
   end if;
-  raise notice '[PASS] RLS: DELETE de authenticated em membership_access_role_assignments afeta zero linhas';
+  raise notice '[PASS] RLS: DELETE de authenticated em membership_access_role_assignments negado (permission denied)';
 end $$;
 
 do $$
@@ -744,11 +778,19 @@ do $$
 declare
   v_n int;
 begin
-  select count(*) into v_n from pg_policies p where p.schemaname = 'public';
+  -- As 3 policies de identidade/sessão da F2 devem permanecer intactas; o total
+  -- evolui com a F4-08 (21 = 3 identidade + 18 F4-08). Checagem por nome.
+  select count(*) into v_n from pg_policies p
+  where p.schemaname = 'public'
+    and p.policyname in (
+      'user_profiles_select_own',
+      'user_organization_memberships_select_own',
+      'organizations_select_via_membership'
+    );
   if v_n <> 3 then
-    raise exception '[FAIL] quantidade de policies alterada (esperado 3, encontrado %)', v_n;
+    raise exception '[FAIL] policies de identidade/sessao da F2 ausentes (esperado 3, encontrado %)', v_n;
   end if;
-  raise notice '[PASS] 3 policies de identidade/sessao da F2 inalteradas';
+  raise notice '[PASS] 3 policies de identidade/sessao da F2 inalteradas (checagem por nome)';
 end $$;
 
 do $$
@@ -821,13 +863,13 @@ declare
   v_n int;
 begin
   select count(*) into v_n from public.capabilities;
-  if v_n <> 21 then
+  if v_n <> 31 then
     raise exception '[FAIL] catalogo de sistema (migration) foi alterado pela limpeza (% capabilities)', v_n;
   end if;
   select count(*) into v_n
   from public.access_role_capabilities
   where access_role_id = 'c0000000-0000-4000-8000-0000000000f1';
-  if v_n <> 9 then
+  if v_n <> 8 then
     raise exception '[FAIL] bundle admin (migration) foi alterado pela limpeza';
   end if;
   select count(*) into v_n

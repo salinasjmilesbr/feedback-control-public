@@ -36,6 +36,14 @@ const ALLOWED_TARGETS: Record<Capability, readonly TargetType[]> = {
   "observation.delete": ["observation", "collaborator", "cycle"],
   "report.read": ["collaborator", "cycle", "evaluation"],
   "settings.manage": ["cycle"],
+  // Administrativas/controle (F5-04 D14/D15): não possuem alvo de domínio
+  // funcional no vocabulário atual do engine; fail-closed (nenhum target é
+  // compatível). São resolvidas server-side, nunca via TargetRef funcional.
+  "membership.read": [],
+  "membership.manage": [],
+  "access_role.manage": [],
+  "org.structure.manage": [],
+  "org.catalog.manage": [],
   "exceptional_access.grant": ["evaluation"],
   "pilot_full_access.grant": ["collaborator", "cycle", "goal", "observation"],
   // Aliases legados (mesma semântica de alvo do canônico)
