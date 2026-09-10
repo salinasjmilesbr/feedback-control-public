@@ -42,8 +42,8 @@ export function origemDoRegistroLegado(entrada: {
 
 /**
  * Separa o acervo legado do caminho novo SEM misturar autoridades: devolve o
- * legado (somente leitura) e sinaliza quantos registros foram cortados. Nunca
- * converte, nunca espelha e nunca escreve no destino.
+ * legado (somente leitura) e os registros posteriores ao corte. Nunca converte,
+ * nunca espelha e nunca escreve no destino.
  */
 export function separarAcervoLegado<T extends { readonly dataCriacao?: string | null }>(
   registros: readonly T[]
@@ -55,4 +55,81 @@ export function separarAcervoLegado<T extends { readonly dataCriacao?: string | 
     else aposCorte.push(registro);
   }
   return { legado, aposCorte };
+}
+
+// ---------------------------------------------------------------------------
+// Registro de avaliações que JÁ possuem escrita exclusiva no PostgreSQL
+// ---------------------------------------------------------------------------
+
+/** Chave local do REGISTRO de cutover (não é autoridade de nada). */
+export const CHAVE_AVALIACOES_CORTADAS = "feedback-control-avaliacoes-no-postgres";
+
+/** Porta mínima de armazenamento (permite teste sem DOM). */
+export interface ArmazenamentoCutover {
+  getItem(chave: string): string | null;
+  setItem(chave: string, valor: string): void;
+}
+
+/** Implementação em memória — usada quando não há `localStorage` (SSR/teste). */
+export function criarArmazenamentoMemoria(): ArmazenamentoCutover {
+  const dados = new Map<string, string>();
+  return {
+    getItem: (chave) => dados.get(chave) ?? null,
+    setItem: (chave, valor) => {
+      dados.set(chave, valor);
+    },
+  };
+}
+
+function armazenamentoPadrao(): ArmazenamentoCutover | null {
+  if (typeof localStorage === "undefined") return null;
+  return {
+    getItem: (chave) => localStorage.getItem(chave),
+    setItem: (chave, valor) => localStorage.setItem(chave, valor),
+  };
+}
+
+/** Lê o conjunto de avaliações já migradas (ids técnicos do banco). */
+export function lerAvaliacoesCortadas(
+  armazenamento: ArmazenamentoCutover | null = armazenamentoPadrao()
+): ReadonlySet<string> {
+  if (!armazenamento) return new Set();
+  const bruto = armazenamento.getItem(CHAVE_AVALIACOES_CORTADAS);
+  if (!bruto) return new Set();
+  try {
+    const lista = JSON.parse(bruto);
+    if (!Array.isArray(lista)) return new Set();
+    return new Set(lista.filter((item): item is string => typeof item === "string"));
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * Registra que uma avaliação passou a existir EXCLUSIVAMENTE no PostgreSQL.
+ * A partir daqui o `localStorage` não é mais autoridade para ela (D12/§11.3):
+ * rollback para o legado é proibido e correções são fix-forward.
+ */
+export function registrarAvaliacaoCortada(
+  evaluationId: string,
+  armazenamento: ArmazenamentoCutover | null = armazenamentoPadrao()
+): void {
+  if (!armazenamento || typeof evaluationId !== "string" || evaluationId.trim() === "") return;
+  const atuais = lerAvaliacoesCortadas(armazenamento);
+  if (atuais.has(evaluationId)) return;
+  armazenamento.setItem(
+    CHAVE_AVALIACOES_CORTADAS,
+    JSON.stringify([...atuais, evaluationId])
+  );
+}
+
+/**
+ * A avaliação já possui escrita exclusiva no banco? Quando `true`, NENHUM
+ * caminho local pode voltar a ser autoridade para ela (sem dual-write).
+ */
+export function avaliacaoVinculadaAoBanco(
+  evaluationId: string,
+  armazenamento: ArmazenamentoCutover | null = armazenamentoPadrao()
+): boolean {
+  return lerAvaliacoesCortadas(armazenamento).has(evaluationId);
 }

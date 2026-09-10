@@ -4,8 +4,13 @@ import {
   FUNCAO_AVALIACOES,
 } from "./repositorioAvaliacoes.ts";
 import {
+  avaliacaoVinculadaAoBanco,
+  CHAVE_AVALIACOES_CORTADAS,
+  criarArmazenamentoMemoria,
   INSTANTE_CUTOVER_AVALIACOES,
+  lerAvaliacoesCortadas,
   origemDoRegistroLegado,
+  registrarAvaliacaoCortada,
   separarAcervoLegado,
 } from "./cutover.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -230,5 +235,41 @@ describe("cutover do domínio de avaliações (D12/§11)", () => {
     const { legado, aposCorte } = separarAcervoLegado(registros);
     expect(legado.map((r) => r.id)).toEqual(["a", "c"]);
     expect(aposCorte.map((r) => r.id)).toEqual(["b"]);
+  });
+
+  it("registra a avaliação cortada e nunca volta a tratá-la como legado", () => {
+    const armazenamento = criarArmazenamentoMemoria();
+    expect(avaliacaoVinculadaAoBanco(AVALIACAO, armazenamento)).toBe(false);
+    expect(lerAvaliacoesCortadas(armazenamento).size).toBe(0);
+
+    registrarAvaliacaoCortada(AVALIACAO, armazenamento);
+
+    expect(avaliacaoVinculadaAoBanco(AVALIACAO, armazenamento)).toBe(true);
+    expect([...lerAvaliacoesCortadas(armazenamento)]).toEqual([AVALIACAO]);
+    expect(armazenamento.getItem(CHAVE_AVALIACOES_CORTADAS)).toContain(AVALIACAO);
+  });
+
+  it("registrar duas vezes não duplica e id vazio é ignorado (fail-closed)", () => {
+    const armazenamento = criarArmazenamentoMemoria();
+    registrarAvaliacaoCortada(AVALIACAO, armazenamento);
+    registrarAvaliacaoCortada(AVALIACAO, armazenamento);
+    registrarAvaliacaoCortada("   ", armazenamento);
+
+    expect([...lerAvaliacoesCortadas(armazenamento)]).toEqual([AVALIACAO]);
+  });
+
+  it("conteúdo corrompido do registro não quebra a leitura", () => {
+    const armazenamento = criarArmazenamentoMemoria();
+    armazenamento.setItem(CHAVE_AVALIACOES_CORTADAS, "{nao-e-json");
+    expect(lerAvaliacoesCortadas(armazenamento).size).toBe(0);
+
+    armazenamento.setItem(CHAVE_AVALIACOES_CORTADAS, JSON.stringify({ a: 1 }));
+    expect(lerAvaliacoesCortadas(armazenamento).size).toBe(0);
+  });
+
+  it("sem armazenamento disponível, a marca é inerte (não lança)", () => {
+    expect(() => registrarAvaliacaoCortada(AVALIACAO, null)).not.toThrow();
+    expect(lerAvaliacoesCortadas(null).size).toBe(0);
+    expect(avaliacaoVinculadaAoBanco(AVALIACAO, null)).toBe(false);
   });
 });

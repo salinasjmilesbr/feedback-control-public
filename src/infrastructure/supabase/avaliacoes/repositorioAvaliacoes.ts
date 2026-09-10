@@ -92,7 +92,8 @@ export interface EntradaGravarComentario {
 export interface EntradaOperacaoAuditada {
   readonly organizationId: string;
   readonly evaluationId: string;
-  readonly motivo: string;
+  /** Obrigatório em reabertura/cancelamento; a conclusão não exige motivo. */
+  readonly motivo?: string;
 }
 
 export interface RepositorioAvaliacoes {
