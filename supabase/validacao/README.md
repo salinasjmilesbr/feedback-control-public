@@ -1062,16 +1062,37 @@ Observações:
    ator de outro tenant é rejeitado na revalidação de membership; ciclo/tenant
    divergente (IDOR) é rejeitado fail-closed.
 
-### Execução registrada
+### Execução registrada (Supabase local, testada de ponta a ponta)
 
-**Não executada nesta entrega.** O Docker Desktop não estava disponível no
-ambiente de trabalho (`npipe:////./pipe/dockerDesktopLinuxEngine` inexistente),
-portanto nem `npx --yes supabase@2.116.0 start` nem os passos 2–4 acima puderam
-rodar. A conferência possível no ambiente foi estática: consistência de nomes de
-constraints/índices/tabelas/funções entre validador, cenário e migrations,
-`GRANT EXECUTE` restrito a `service_role`, ausência de `SECURITY DEFINER` novo e
-balanceamento dos blocos `do $$`. A execução completa no Supabase local fica
-**pendente** e deve ser anexada à revisão antes do merge.
+Executada com a stack local do Supabase nesta rodada:
+
+```powershell
+npx --yes supabase@2.116.0 db reset
+docker cp supabase/validacao/01-cenario-f5-06.sql supabase_db_feedback-control:/tmp/cenario.sql
+docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/cenario.sql
+docker cp supabase/validacao/02-validar-f5-06.sql supabase_db_feedback-control:/tmp/valida.sql
+docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/valida.sql
+```
+
+| Etapa | Resultado |
+| --- | --- |
+| `npx --yes supabase@2.116.0 db reset` (migrations em ordem + seed) | exit 0 |
+| `01-cenario-f5-06.sql` | exit 0 |
+| `02-validar-f5-06.sql` | **todas as verificações [PASS] — exit 0** |
+| `02-validar-f4-08.sql` | **todas as verificações [PASS] — exit 0** (42 tabelas / 21 fechadas) |
+| `03-validar-f4-08-mutacoes.sql` | **8 mutation tests [PASS] — exit 0** |
+
+O cálculo oficial foi verificado com **três responsabilidades** — GESTAO_CADEIA=4,
+GESTAO_DIRETA=4 e COLEGIADO=média(2,4)=3 — produzindo
+`nota_media = (4+4+3)/3 = 3.66666667`, com 8 agregados de critério, 25 de
+subcritério e recomputação igual ao materializado. O validador também **recusa** o
+resultado alternativo `(4+4+2+4)/4 = 3.5`, que apareceria se o colegiado pesasse
+**por membro** — anti-regressão de D25.
+
+> Nota de ambiente: o runner padrão do sandbox desta sessão não inicia por
+> ausência do diretório temporário (`--temp is not an existing directory`); os
+> comandos foram executados com acesso ampliado. É limitação do **sandbox de
+> execução**, não da aplicação nem do repositório.
 
 ## Limitações e notas registradas
 
