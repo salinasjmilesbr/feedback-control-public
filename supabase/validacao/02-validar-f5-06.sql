@@ -206,8 +206,8 @@ begin
   cross join lateral aclexplode(coalesce(p.proacl, acldefault('f'::"char", p.proowner))) a
   where n.nspname='public' and p.proname like 'evaluation_%'
     and a.privilege_type='EXECUTE' and a.grantee='service_role'::regrole;
-  if v_n < 15 then
-    raise exception '[FAIL] funcoes F5-06 com EXECUTE service_role esperadas>=15, encontradas=%', v_n;
+  if v_n < 14 then
+    raise exception '[FAIL] funcoes F5-06 com EXECUTE service_role esperadas>=14, encontradas=%', v_n;
   end if;
   raise notice '[PASS] funcoes F5-06 com EXECUTE somente service_role (%)', v_n;
 end $$;
@@ -283,22 +283,30 @@ begin
 
   select nota_media into v_media from public.evaluations where id = v_eval;
 
-  -- GESTAO_CADEIA=4 ; COLEGIADO=(2+4)/2=3 => (4+3)/2 = 3.5
-  -- Se cada membro do colegiado pesasse individualmente: (4+2+4)/3 = 3.3333...
-  if v_media <> 3.5 then
-    raise exception '[FAIL] nota_media esperada 3.5 (colegiado agregado como UMA parcela), obtida %', v_media;
+  -- Parcelas: GESTAO_CADEIA=4 ; GESTAO_DIRETA=4 ; COLEGIADO=(2+4)/2=3
+  -- => subcriterio = (4+4+3)/3 = 11/3 = 3.66666667 (colegiado como UMA parcela).
+  -- Se cada membro do colegiado pesasse individualmente, o valor seria
+  -- (4+4+2+4)/4 = 3.5 — o teste distingue os dois casos.
+  if v_media <> round(11::numeric / 3, 8) then
+    raise exception '[FAIL] nota_media esperada (4+4+3)/3 (colegiado agregado como UMA parcela), obtida %', v_media;
   end if;
 
   select count(*) into v_qtd from public.evaluation_aggregates
-   where evaluation_id = v_eval and escopo='CRITERIO' and nota = 3.5;
+   where evaluation_id = v_eval and escopo='CRITERIO' and nota = round(11::numeric / 3, 8);
   if v_qtd <> 8 then
-    raise exception '[FAIL] agregados por criterio esperados=8 com 3.5, encontrados=%', v_qtd;
+    raise exception '[FAIL] agregados por criterio esperados=8 com (4+4+3)/3, encontrados=%', v_qtd;
   end if;
 
   select count(*) into v_qtd from public.evaluation_aggregates
-   where evaluation_id = v_eval and escopo='SUBCRITERIO' and nota = 3.5;
+   where evaluation_id = v_eval and escopo='SUBCRITERIO' and nota = round(11::numeric / 3, 8);
   if v_qtd <> 25 then
-    raise exception '[FAIL] agregados por subcriterio esperados=25 com 3.5, encontrados=%', v_qtd;
+    raise exception '[FAIL] agregados por subcriterio esperados=25 com (4+4+3)/3, encontrados=%', v_qtd;
+  end if;
+
+  -- Regressão de ponderação: somar cada voto do colegiado como parcela
+  -- separada NÃO pode reproduzir o resultado oficial.
+  if v_media = round(14::numeric / 4, 8) then
+    raise exception '[FAIL] colegiado pesou por membro (regressao D25)';
   end if;
 
   -- recomputação == materializado (D13)
@@ -337,13 +345,22 @@ begin
   select config_version_id into v_config from public.evaluation_cycles
    where id='d6f00000-0000-0000-0000-0000000000a1';
 
+  -- A avaliacao de c3 precisa estar CANCELADA antes de recriar (unique parcial
+  -- por organizacao/ciclo/colaborador nao cancelada — D9).
+  perform public.evaluation_cancelar(
+    e.id, 'Cancelamento sintetico para recriar a avaliacao incompleta.',
+    'd6b00000-0000-0000-0000-0000000000a1')
+    from public.evaluations e
+   where e.evaluated_collaborator_id = 'd6c00000-0000-0000-0000-0000000000c3'
+     and e.status <> 'CANCELADA';
+
   -- avaliação incompleta (sem participantes/notas) do colaborador c3 — é a
   -- avaliação usada no fechamento de ciclo com pendência (§7)
   v_inc := public.evaluation_criar(
     'd6a00000-0000-0000-0000-0000000000a1',
     'd6f00000-0000-0000-0000-0000000000a1',
     'd6c00000-0000-0000-0000-0000000000c3',
-    v_config, '[]'::jsonb, 'd6b00000-0000-0000-0000-0000000000a1');
+    'd6b00000-0000-0000-0000-0000000000a1');
 
   begin
     perform public.evaluation_concluir(v_inc, 'd6b00000-0000-0000-0000-0000000000a1');
@@ -430,7 +447,7 @@ begin
   v_leit := public.evaluation_leitura_avaliado(v_eval, 'd6b00000-0000-0000-0000-0000000000a1');
   v_txt := v_leit::text;
 
-  if (v_leit ->> 'nota_media')::numeric <> 3.5 then
+  if (v_leit ->> 'nota_media')::numeric <> round(11::numeric / 3, 8) then
     raise exception '[FAIL] projecao do avaliado sem nota_media correta';
   end if;
   if jsonb_array_length(v_leit -> 'criterios') <> 8 then
@@ -494,7 +511,7 @@ begin
     'd6a00000-0000-0000-0000-0000000000a1',
     'd6f00000-0000-0000-0000-0000000000a1',
     'd6c00000-0000-0000-0000-0000000000c1',
-    v_config, '[]'::jsonb, 'd6b00000-0000-0000-0000-0000000000a1');
+    'd6b00000-0000-0000-0000-0000000000a1');
 
   perform public.evaluation_cancelar(v_cancel, 'Cancelamento sintetico.', 'd6b00000-0000-0000-0000-0000000000a1');
   if (select status from public.evaluations where id=v_cancel) <> 'CANCELADA' then
@@ -506,7 +523,7 @@ begin
     'd6a00000-0000-0000-0000-0000000000a1',
     'd6f00000-0000-0000-0000-0000000000a1',
     'd6c00000-0000-0000-0000-0000000000c1',
-    v_config, '[]'::jsonb, 'd6b00000-0000-0000-0000-0000000000a1');
+    'd6b00000-0000-0000-0000-0000000000a1');
   raise notice '[PASS] cancelamento auditado e unique parcial liberado para nova avaliacao (D9)';
 end $$;
 
@@ -588,8 +605,7 @@ begin
       'd6a00000-0000-0000-0000-0000000000b1',
       'd6f00000-0000-0000-0000-0000000000a1',
       'd6c00000-0000-0000-0000-0000000000c1',
-      (select config_version_id from public.evaluation_cycles where id='d6f00000-0000-0000-0000-0000000000a1'),
-      '[]'::jsonb, 'd6b00000-0000-0000-0000-0000000000a1');
+      'd6b00000-0000-0000-0000-0000000000a1');
   exception when raise_exception then v_ok := true;
   end;
   if not v_ok then

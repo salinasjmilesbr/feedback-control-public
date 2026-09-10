@@ -45,6 +45,10 @@ delete from public.position_reporting_lines where organization_id::text like 'd6
 delete from public.organizational_positions where organization_id::text like 'd6a00000%';
 delete from public.organizational_unit_parent_periods where organization_id::text like 'd6a00000%';
 delete from public.organizational_units where organization_id::text like 'd6a00000%';
+delete from public.collaborator_status_periods
+ where collaborator_id in (
+   select id from public.collaborators where organization_id::text like 'd6a00000%'
+ );
 delete from public.job_roles where organization_id::text like 'd6a00000%';
 delete from public.collaborators where organization_id::text like 'd6a00000%';
 delete from public.user_profiles where id::text like 'd6b00000%';
@@ -73,11 +77,19 @@ insert into public.user_organization_memberships (id, user_profile_id, organizat
   ('d6d00000-0000-0000-0000-0000000000b1','d6b00000-0000-0000-0000-0000000000a2','d6a00000-0000-0000-0000-0000000000b1','active');
 
 -- Colaboradores (identidade interna = UUID; nunca matrícula)
-insert into public.collaborators (id, organization_id, status) values
-  ('d6c00000-0000-0000-0000-0000000000c1','d6a00000-0000-0000-0000-0000000000a1','active'),
-  ('d6c00000-0000-0000-0000-0000000000c2','d6a00000-0000-0000-0000-0000000000a1','active'),
-  ('d6c00000-0000-0000-0000-0000000000c3','d6a00000-0000-0000-0000-0000000000a1','active'),
-  ('d6c00000-0000-0000-0000-0000000000c4','d6a00000-0000-0000-0000-0000000000a1','active');
+insert into public.collaborators (id, organization_id) values
+  ('d6c00000-0000-0000-0000-0000000000c1','d6a00000-0000-0000-0000-0000000000a1'),
+  ('d6c00000-0000-0000-0000-0000000000c2','d6a00000-0000-0000-0000-0000000000a1'),
+  ('d6c00000-0000-0000-0000-0000000000c3','d6a00000-0000-0000-0000-0000000000a1'),
+  ('d6c00000-0000-0000-0000-0000000000c4','d6a00000-0000-0000-0000-0000000000a1');
+
+-- Lifecycle vigente (F3-01): periodo ACTIVE aberto por colaborador.
+insert into public.collaborator_status_periods
+  (collaborator_id, status, valid_from) values
+  ('d6c00000-0000-0000-0000-0000000000c1','active','2025-01-01T00:00:00Z'),
+  ('d6c00000-0000-0000-0000-0000000000c2','active','2025-01-01T00:00:00Z'),
+  ('d6c00000-0000-0000-0000-0000000000c3','active','2025-01-01T00:00:00Z'),
+  ('d6c00000-0000-0000-0000-0000000000c4','active','2025-01-01T00:00:00Z');
 
 -- Vínculo do avaliado com a membership do ATOR (para a leitura de transparência)
 insert into public.membership_collaborator_links
@@ -92,37 +104,37 @@ values
 --   c3 = gestor formal DIRETO do avaliado
 --   c4 = membro do colegiado (via snapshot F3-08)
 -- ----------------------------------------------------------------------------
-insert into public.job_roles (id, organization_id, name) values
-  ('d6c00000-0000-0000-0000-0000000000e1','d6a00000-0000-0000-0000-0000000000a1','Funcao Sintetica F5-06');
+insert into public.job_roles (id, organization_id, name, status) values
+  ('d6c00000-0000-0000-0000-0000000000e1','d6a00000-0000-0000-0000-0000000000a1','Funcao Sintetica F5-06','active');
 
 insert into public.organizational_units (id, organization_id, name, valid_from) values
   ('d6e00000-0000-0000-0000-0000000000f1','d6a00000-0000-0000-0000-0000000000a1',
-   'Unidade Sintetica F5-06', '2026-01-01T00:00:00Z');
+   'Unidade Sintetica F5-06', '2025-01-01T00:00:00Z');
 
 insert into public.organizational_positions
   (id, organization_id, unit_id, job_role_id, valid_from) values
   ('d6e00000-0000-0000-0000-0000000000f1','d6a00000-0000-0000-0000-0000000000a1',
-   'd6e00000-0000-0000-0000-0000000000f1','d6c00000-0000-0000-0000-0000000000e1','2026-01-01T00:00:00Z'),
+   'd6e00000-0000-0000-0000-0000000000f1','d6c00000-0000-0000-0000-0000000000e1','2025-01-01T00:00:00Z'),
   ('d6e00000-0000-0000-0000-0000000000f2','d6a00000-0000-0000-0000-0000000000a1',
-   'd6e00000-0000-0000-0000-0000000000f1','d6c00000-0000-0000-0000-0000000000e1','2026-01-01T00:00:00Z'),
+   'd6e00000-0000-0000-0000-0000000000f1','d6c00000-0000-0000-0000-0000000000e1','2025-01-01T00:00:00Z'),
   ('d6e00000-0000-0000-0000-0000000000f3','d6a00000-0000-0000-0000-0000000000a1',
-   'd6e00000-0000-0000-0000-0000000000f1','d6c00000-0000-0000-0000-0000000000e1','2026-01-01T00:00:00Z');
+   'd6e00000-0000-0000-0000-0000000000f1','d6c00000-0000-0000-0000-0000000000e1','2025-01-01T00:00:00Z');
 
 insert into public.position_reporting_lines
   (organization_id, subordinate_position_id, manager_position_id, reason, valid_from) values
   ('d6a00000-0000-0000-0000-0000000000a1','d6e00000-0000-0000-0000-0000000000f3',
-   'd6e00000-0000-0000-0000-0000000000f2','estrutura sintetica','2026-01-01T00:00:00Z'),
+   'd6e00000-0000-0000-0000-0000000000f2','estrutura sintetica','2025-01-01T00:00:00Z'),
   ('d6a00000-0000-0000-0000-0000000000a1','d6e00000-0000-0000-0000-0000000000f2',
-   'd6e00000-0000-0000-0000-0000000000f1','estrutura sintetica','2026-01-01T00:00:00Z');
+   'd6e00000-0000-0000-0000-0000000000f1','estrutura sintetica','2025-01-01T00:00:00Z');
 
 insert into public.occupations
   (organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to) values
   ('d6a00000-0000-0000-0000-0000000000a1','d6c00000-0000-0000-0000-0000000000c2',
-   'd6e00000-0000-0000-0000-0000000000f3','ocupacao sintetica','2026-01-01T00:00:00Z', null),
+   'd6e00000-0000-0000-0000-0000000000f3','ocupacao sintetica','2025-01-01T00:00:00Z', null),
   ('d6a00000-0000-0000-0000-0000000000a1','d6c00000-0000-0000-0000-0000000000c3',
-   'd6e00000-0000-0000-0000-0000000000f2','ocupacao sintetica','2026-01-01T00:00:00Z', null),
+   'd6e00000-0000-0000-0000-0000000000f2','ocupacao sintetica','2025-01-01T00:00:00Z', null),
   ('d6a00000-0000-0000-0000-0000000000a1','d6c00000-0000-0000-0000-0000000000c1',
-   'd6e00000-0000-0000-0000-0000000000f1','ocupacao sintetica','2026-01-01T00:00:00Z', null);
+   'd6e00000-0000-0000-0000-0000000000f1','ocupacao sintetica','2025-01-01T00:00:00Z', null);
 
 -- ----------------------------------------------------------------------------
 -- Snapshots F3-08 do ciclo (congelam colegiado e data de referência)
@@ -130,9 +142,15 @@ insert into public.occupations
 insert into public.collegiate_cycle_snapshots
   (id, organization_id, ano, ciclo, collaborator_id, reference_date) values
   ('d6f00000-0000-0000-0000-0000000000b1','d6a00000-0000-0000-0000-0000000000a1',
-   2026, 1, 'd6c00000-0000-0000-0000-0000000000c2','2026-01-01T00:00:00Z'),
+   2026, 1, 'd6c00000-0000-0000-0000-0000000000c2','2025-01-01T00:00:00Z'),
   ('d6f00000-0000-0000-0000-0000000000b2','d6a00000-0000-0000-0000-0000000000a1',
-   2026, 1, 'd6c00000-0000-0000-0000-0000000000c3','2026-01-01T00:00:00Z');
+   2026, 1, 'd6c00000-0000-0000-0000-0000000000c3','2025-01-01T00:00:00Z');
+
+-- Snapshots dos demais avaliados exercitados pelo validador (c1 e c3).
+insert into public.collegiate_cycle_snapshots
+  (id, organization_id, ano, ciclo, collaborator_id, reference_date) values
+  ('d6f00000-0000-0000-0000-0000000000b3','d6a00000-0000-0000-0000-0000000000a1',
+   2026, 1, 'd6c00000-0000-0000-0000-0000000000c1','2025-01-01T00:00:00Z');
 
 insert into public.collegiate_cycle_snapshot_positions
   (id, snapshot_id, organization_id, position_id, superior_position_id, superior_collaborator_id) values
@@ -141,7 +159,10 @@ insert into public.collegiate_cycle_snapshot_positions
    'd6e00000-0000-0000-0000-0000000000f2','d6c00000-0000-0000-0000-0000000000c3'),
   ('d6f00000-0000-0000-0000-0000000000c2','d6f00000-0000-0000-0000-0000000000b2',
    'd6a00000-0000-0000-0000-0000000000a1','d6e00000-0000-0000-0000-0000000000f2',
-   'd6e00000-0000-0000-0000-0000000000f1','d6c00000-0000-0000-0000-0000000000c1');
+   'd6e00000-0000-0000-0000-0000000000f1','d6c00000-0000-0000-0000-0000000000c1'),
+  ('d6f00000-0000-0000-0000-0000000000c3','d6f00000-0000-0000-0000-0000000000b3',
+   'd6a00000-0000-0000-0000-0000000000a1','d6e00000-0000-0000-0000-0000000000f1',
+   null, null);
 
 insert into public.collegiate_cycle_snapshot_members
   (id, snapshot_id, organization_id, member_collaborator_id) values
@@ -155,10 +176,10 @@ insert into public.cycle_evaluation_responsibilities
   (id, organization_id, snapshot_id, position_id, responsible_collaborator_id, valid_from) values
   ('d6f00000-0000-0000-0000-0000000000e1','d6a00000-0000-0000-0000-0000000000a1',
    'd6f00000-0000-0000-0000-0000000000b1','d6e00000-0000-0000-0000-0000000000f3',
-   'd6c00000-0000-0000-0000-0000000000c3','2026-01-01T00:00:00Z'),
+   'd6c00000-0000-0000-0000-0000000000c3','2025-01-01T00:00:00Z'),
   ('d6f00000-0000-0000-0000-0000000000e2','d6a00000-0000-0000-0000-0000000000a1',
    'd6f00000-0000-0000-0000-0000000000b2','d6e00000-0000-0000-0000-0000000000f2',
-   'd6c00000-0000-0000-0000-0000000000c1','2026-01-01T00:00:00Z');
+   'd6c00000-0000-0000-0000-0000000000c1','2025-01-01T00:00:00Z');
 
 -- ----------------------------------------------------------------------------
 -- Ciclo ATIVO + configuração baseline versionada
@@ -193,6 +214,7 @@ do $$
 declare
   v_eval uuid;
   v_part_cadeia uuid;
+  v_part_direta uuid;
   v_part_col_2 uuid;
   v_part_col_4 uuid;
   v_notas_4 jsonb;
@@ -228,6 +250,25 @@ begin
 
   select id into v_part_cadeia from public.evaluation_participants
    where evaluation_id = v_eval and role_type = 'GESTAO_CADEIA';
+
+  -- Responsabilidade DIRETA (derivada do gestor formal direto): tambem
+  -- contribui para o score, portanto precisa das notas do subcriterio.
+  select id into v_part_direta from public.evaluation_participants
+   where evaluation_id = v_eval and role_type = 'GESTAO_DIRETA';
+
+  -- Feedback final obrigatorio do papel de cadeia (requires_final_comment),
+  -- de ocorrencia VIGENTE: sem ele a conclusao normal nao passa na completude.
+  perform public.evaluation_gravar_comentario(
+    v_eval, v_part_cadeia, 'FINAL', null,
+    'Feedback final sintetico do responsavel de cadeia.',
+    'd6b00000-0000-0000-0000-0000000000a1');
+  if v_part_direta is not null then
+    perform public.evaluation_gravar_comentario(
+      v_eval, v_part_direta, 'FINAL', null,
+      'Feedback final sintetico do gestor direto.',
+      'd6b00000-0000-0000-0000-0000000000a1');
+  end if;
+
   select id into v_part_col_2 from public.evaluation_participants
    where evaluation_id = v_eval and role_type = 'COLEGIADO'
      and collaborator_id = 'd6c00000-0000-0000-0000-0000000000c3';
@@ -244,15 +285,20 @@ begin
     from public.evaluation_config_subcriteria sc
    where sc.organization_id = 'd6a00000-0000-0000-0000-0000000000a1';
 
-  -- parcelas: GESTAO_CADEIA (c1) = 4 ; COLEGIADO = media(2, 4) = 3
-  -- => subcriterio = (4 + 3) / 2 = 3.5 (colegiado como UMA parcela — D25).
-  -- Se cada membro do colegiado pesasse individualmente: (4+2+4)/3 = 3.3333.
+  -- Parcelas: GESTAO_CADEIA (c1) = 4 ; GESTAO_DIRETA (c3) = 4 ;
+  -- COLEGIADO = media(2, 4) = 3  => subcriterio = (4 + 4 + 3) / 3 = 11/3.
+  -- O colegiado e UMA parcela (D25): se cada membro pesasse individualmente
+  -- seriam 4 parcelas e o resultado mudaria.
   perform public.evaluation_gravar_notas(v_eval, v_part_cadeia, v_notas_4,
     'd6b00000-0000-0000-0000-0000000000a1');
   perform public.evaluation_gravar_notas(v_eval, v_part_col_2, v_notas_2,
     'd6b00000-0000-0000-0000-0000000000a1');
   perform public.evaluation_gravar_notas(v_eval, v_part_col_4, v_notas_4,
     'd6b00000-0000-0000-0000-0000000000a1');
+  if v_part_direta is not null then
+    perform public.evaluation_gravar_notas(v_eval, v_part_direta, v_notas_4,
+      'd6b00000-0000-0000-0000-0000000000a1');
+  end if;
 
   -- feedback final obrigatório do papel de cadeia (requires_final_comment = true)
   perform public.evaluation_gravar_comentario(

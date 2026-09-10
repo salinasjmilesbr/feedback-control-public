@@ -292,7 +292,11 @@ create table public.evaluation_participants (
     references public.collaborators (id, organization_id) on delete restrict,
   constraint fk_evaluation_participants_user_profile
     foreign key (user_profile_id) references public.user_profiles (id) on delete restrict,
+  -- Chaves candidatas de referência: a primeira sustenta as FKs compostas de
+  -- tenant; a segunda sustenta a FK PARTICIPANTE x AVALIACAO das tabelas filhas.
   constraint uq_evaluation_participants_id_organization unique (id, organization_id),
+  constraint uq_evaluation_participants_id_evaluation_organization
+    unique (id, evaluation_id, organization_id),
   constraint ck_evaluation_participants_role
     check (role_type in ('GESTAO_CADEIA', 'GESTAO_DIRETA', 'COLEGIADO')),
   constraint ck_evaluation_participants_origem
@@ -341,9 +345,11 @@ create table public.evaluation_scores (
   constraint fk_evaluation_scores_evaluation
     foreign key (evaluation_id, organization_id)
     references public.evaluations (id, organization_id) on delete restrict,
+  -- ACHADO DA AUDITORIA: a FK amarra PARTICIPANTE + AVALIACAO + TENANT. Sem
+  -- 'evaluation_id' o banco aceitaria nota da avaliacao A na ocorrencia da B.
   constraint fk_evaluation_scores_participant
-    foreign key (participant_id, organization_id)
-    references public.evaluation_participants (id, organization_id) on delete restrict,
+    foreign key (participant_id, evaluation_id, organization_id)
+    references public.evaluation_participants (id, evaluation_id, organization_id) on delete restrict,
   constraint fk_evaluation_scores_subcriterion
     foreign key (subcriterion_id, organization_id)
     references public.evaluation_config_subcriteria (id, organization_id) on delete restrict,
@@ -381,15 +387,13 @@ create table public.evaluation_comments (
     foreign key (evaluation_id, organization_id)
     references public.evaluations (id, organization_id) on delete restrict,
   constraint fk_evaluation_comments_participant
-    foreign key (participant_id, organization_id)
-    references public.evaluation_participants (id, organization_id) on delete restrict,
+    foreign key (participant_id, evaluation_id, organization_id)
+    references public.evaluation_participants (id, evaluation_id, organization_id) on delete restrict,
   constraint fk_evaluation_comments_criterion
     foreign key (criterion_id, organization_id)
     references public.evaluation_config_criteria (id, organization_id) on delete restrict,
   constraint fk_evaluation_comments_autor
     foreign key (autor_user_profile_id) references public.user_profiles (id) on delete restrict,
-  constraint uq_evaluation_comments_participant_escopo_criterion
-    unique (participant_id, escopo, criterion_id),
   constraint ck_evaluation_comments_escopo check (escopo in ('CRITERIO', 'FINAL')),
   constraint ck_evaluation_comments_texto check (btrim(texto) <> ''),
   constraint ck_evaluation_comments_escopo_criterion
@@ -471,8 +475,8 @@ create table public.evaluation_pendencies (
     foreign key (evaluation_id, organization_id)
     references public.evaluations (id, organization_id) on delete restrict,
   constraint fk_evaluation_pendencies_participant
-    foreign key (participant_id, organization_id)
-    references public.evaluation_participants (id, organization_id) on delete restrict,
+    foreign key (participant_id, evaluation_id, organization_id)
+    references public.evaluation_participants (id, evaluation_id, organization_id) on delete restrict,
   constraint fk_evaluation_pendencies_registrada_por
     foreign key (registrada_por_user_profile_id) references public.user_profiles (id) on delete restrict,
   constraint ck_evaluation_pendencies_codigo
@@ -634,19 +638,21 @@ $$;
 
 comment on function public.enforce_evaluation_config_children_imutaveis() is
   'F5-06 D5/D22: criterios, subcriterios, faixas e papeis de participante de '
-  'uma versao ja materializada/publicada nao podem ser alterados in-place.';
+  'uma versao ja materializada/publicada nao podem ser ALTERADOS in-place. '
+  'DELETE permanece disponivel apenas para higienizacao administrativa '
+  '(fixture/superuser), como na F4-08 D18.';
 
 create trigger trg_evaluation_config_criteria_imutavel
-  before update or delete on public.evaluation_config_criteria
+  before update on public.evaluation_config_criteria
   for each row execute function public.enforce_evaluation_config_children_imutaveis();
 create trigger trg_evaluation_config_subcriteria_imutavel
-  before update or delete on public.evaluation_config_subcriteria
+  before update on public.evaluation_config_subcriteria
   for each row execute function public.enforce_evaluation_config_children_imutaveis();
 create trigger trg_evaluation_config_scale_bands_imutavel
-  before update or delete on public.evaluation_config_scale_bands
+  before update on public.evaluation_config_scale_bands
   for each row execute function public.enforce_evaluation_config_children_imutaveis();
 create trigger trg_evaluation_config_participant_roles_imutavel
-  before update or delete on public.evaluation_config_participant_roles
+  before update on public.evaluation_config_participant_roles
   for each row execute function public.enforce_evaluation_config_children_imutaveis();
 
 -- ----------------------------------------------------------------------------

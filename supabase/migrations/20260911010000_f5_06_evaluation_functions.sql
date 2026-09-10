@@ -62,7 +62,8 @@ comment on table public.evaluation_aggregates is
 
 -- ----------------------------------------------------------------------------
 -- 2) Guard de ator/tenant (D27): perfil ativo + membership ativa na organização
--- ----------------------------------------------------------------------------create or replace function public.evaluation_ator_valido(
+-- ----------------------------------------------------------------------------
+create or replace function public.evaluation_ator_valido(
   p_actor_user_profile_id uuid,
   p_organization_id uuid
 )
@@ -119,17 +120,23 @@ declare
   'Desempenho técnico','Produtividade','Comunicação','Trabalho em equipe',
   'Proatividade e iniciativa','Adaptação e flexibilidade',
   'Comprometimento e responsabilidade','Desenvolvimento profissional'];
-  v_subs text[][] := array[
-    array['Qualidade do trabalho entregue','Cumprimento de prazos','Conhecimento técnico e aplicação prática','Capacidade de resolver problemas'],
-    array['Volume de trabalho realizado','Eficiência no uso do tempo','Organização e priorização de tarefas'],
-    array['Clareza na comunicação verbal e escrita','Capacidade de ouvir e compreender','Participação em reuniões e interações com a equipe'],
-    array['Colaboração com colegas','Respeito e empatia no ambiente de trabalho','Contribuição para um clima positivo'],
-    array['Capacidade de tomar decisões sem depender sempre de orientação','Sugestão de melhorias e novas ideias','Disposição para assumir responsabilidades'],
-    array['Reação a mudanças e imprevistos','Facilidade de aprender novas ferramentas ou processos','Resiliência diante de desafios'],
-    array['Pontualidade e assiduidade','Cumprimento de metas e compromissos','Alinhamento com os valores da empresa'],
-    array['Busca por aprendizado contínuo','Participação em treinamentos ou cursos','Aplicação de novos conhecimentos no dia a dia']];
+  -- Array PLANO de subcriterios (a ordem segue os criterios acima) + quantos
+  -- subcriterios pertencem a cada criterio. Evita array multidimensional
+  -- irregular (nao suportado pelo PostgreSQL: 4 subcriterios no 1o criterio,
+  -- 3 nos demais => 25 subcriterios no total).
+  v_subs text[] := array[
+    'Qualidade do trabalho entregue','Cumprimento de prazos','Conhecimento técnico e aplicação prática','Capacidade de resolver problemas',
+    'Volume de trabalho realizado','Eficiência no uso do tempo','Organização e priorização de tarefas',
+    'Clareza na comunicação verbal e escrita','Capacidade de ouvir e compreender','Participação em reuniões e interações com a equipe',
+    'Colaboração com colegas','Respeito e empatia no ambiente de trabalho','Contribuição para um clima positivo',
+    'Capacidade de tomar decisões sem depender sempre de orientação','Sugestão de melhorias e novas ideias','Disposição para assumir responsabilidades',
+    'Reação a mudanças e imprevistos','Facilidade de aprender novas ferramentas ou processos','Resiliência diante de desafios',
+    'Pontualidade e assiduidade','Cumprimento de metas e compromissos','Alinhamento com os valores da empresa',
+    'Busca por aprendizado contínuo','Participação em treinamentos ou cursos','Aplicação de novos conhecimentos no dia a dia'];
+  v_qtd_subs int[] := array[4, 3, 3, 3, 3, 3, 3, 3];
   i int;
   j int;
+  v_idx int := 1;
 begin
   if not public.evaluation_ator_valido(p_actor_user_profile_id, p_organization_id) then
     raise exception 'F5-06: ator sem membership ativa na organizacao (autorizacao negada)';
@@ -153,11 +160,12 @@ begin
     values (p_organization_id, v_version_id, v_codes[i], v_names[i], i - 1)
     returning id into v_criterion_id;
 
-    for j in 1 .. array_length(v_subs[i], 1) loop
+    for j in 1 .. v_qtd_subs[i] loop
       insert into public.evaluation_config_subcriteria
         (organization_id, config_criterion_id, code, name, position)
       values (p_organization_id, v_criterion_id,
-              v_codes[i] || '-s' || (j - 1), v_subs[i][j], j - 1);
+              v_codes[i] || '-s' || (j - 1), v_subs[v_idx], j - 1);
+      v_idx := v_idx + 1;
     end loop;
   end loop;
 
@@ -771,7 +779,7 @@ begin
        autor_user_profile_id, data_avaliacao)
     values (v_org, p_evaluation_id, p_participant_id, v_sub, v_nota,
             p_actor_user_profile_id, v_instante)
-    on conflict (evaluation_id, participant_id, subcriterion_id) do update
+    on conflict (participant_id, subcriterion_id) do update
       set nota = excluded.nota,
           autor_user_profile_id = excluded.autor_user_profile_id,
           data_avaliacao = excluded.data_avaliacao,
@@ -1364,11 +1372,8 @@ begin
     -- D20: SOMENTE o nome dos membros do colegiado vigente; nunca o voto ou a
     -- nota individual, nunca participant_id correlacionado.
     'colegiado', coalesce((
-      select jsonb_agg(distinct jsonb_build_object('colaborador', col.nome))
+      select jsonb_agg(distinct jsonb_build_object('colaborador_id', p.collaborator_id))
         from public.evaluation_participants p
-        join public.collaborators col
-          on col.id = p.collaborator_id
-         and col.organization_id = v_eval.organization_id
        where p.evaluation_id = v_eval.id
          and p.organization_id = v_eval.organization_id
          and p.role_type = 'COLEGIADO'

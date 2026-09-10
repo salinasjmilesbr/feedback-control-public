@@ -280,7 +280,11 @@ begin
       'capabilities','access_roles','access_role_capabilities',
       'membership_access_role_assignments','membership_collaborator_links',
       'access_role_assignment_scopes','access_role_assignment_unit_targets',
-      'privilege_mutation_audit');
+      'privilege_mutation_audit',
+      'evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria',
+      'evaluation_config_scale_bands','evaluation_config_participant_roles','evaluation_cycles',
+      'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
+      'evaluation_events','evaluation_pendencies','evaluation_aggregates');
   if v_t is not null then
     raise exception '[FAIL] tabela public nao classificada (D16 — catalogacao explicita obrigatoria): %', v_t;
   end if;
