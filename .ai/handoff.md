@@ -34,10 +34,45 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
-- **Atividade:** F5-06 — Avaliações no PostgreSQL (Issue #103).
-- **Branch:** `feat/f5-06-avaliacoes-postgresql` (sem PR; sem merge).
+- **Atividade (rodada atual):** DEV-02 — reduzir interrupções por elevação de
+  acesso dos agentes (Issue #177). Somente camada de contexto; **sem alteração
+  funcional**.
+- **Branch:** `chore/dev-02-batch-elevation-workflow` (sem PR; sem merge).
 - **Último commit:** consultar `git log --oneline -1` na branch.
-- **PR:** não aberto por decisão explícita do responsável.
+- **Regra operacional registrada:** `.ai/workflow.md` **§6** (elevação de acesso e
+  economia de interrupções), com síntese permanente em `AGENTS.md` **§4**.
+  - **aprovação técnica/arquitetural** e **autorização de elevação de acesso** são
+    decisões **distintas**: uma não implica a outra;
+  - com desenho **FECHADO**, não se pede nova aprovação técnica para decisões
+    cobertas pelo contrato — interrupção apenas por contradição arquitetural real,
+    decisão não coberta (nova `Q#`), risco de segurança ou ação irreversível;
+  - implementação em **lote** com autoauditoria estática e correções consolidadas
+    **antes** das validações privilegiadas;
+  - comandos que exigem elevação (`npm test`, `npm run build`, `npm run lint`,
+    `git diff --check`, Supabase/Docker/SQL, `add`/`commit`/`push`) são agrupados
+    em **um ou poucos gates**; o antipadrão `editar → elevar → testar` repetido é
+    proibido;
+  - **proibido** alterar PAT/credenciais/configurações de segurança ou reduzir
+    controles para evitar prompts; merge continua exigindo solicitação explícita,
+    com CI verde e SHA auditado.
+- **Limitação do ambiente (registrada):** neste host o sandbox exige elevação
+  (`danger-full-access`) até para comandos triviais (`git status`, `npm test`,
+  `lint`) e para Docker/Supabase. A regra é reconhecer a limitação, agrupar
+  operações por gate e registrá-la na entrega — nunca contornar a proteção
+  (`.ai/git-rules.md` §3; `.ai/workflow.md` §6.4).
+- **Validação desta rodada (todo exit 0):** `npm test` (84 arquivos, 1069 testes),
+  `npm run build`, `npm run lint`, `git diff --check origin/main...HEAD`;
+  `git status --short` com apenas os arquivos de contexto previstos. Sem mudança
+  em migrations/SQL, portanto sem necessidade de gate Supabase nesta atividade.
+
+### 3.1 Entrega anterior — F5-06 (concluída e integrada)
+
+- **Atividade:** F5-06 — Avaliações no PostgreSQL (Issue #103).
+- **Branch:** `feat/f5-06-avaliacoes-postgresql` — **squash merge em `main`** como
+  `f540f0f5d16a4b3f33a99f7e4f0e8fb7c5c30584` (PR #176, `Closes #103`); a cabeça do
+  PR auditada foi `a11687e…`, com a correção final de whitespace em `c38de2b…`.
+- **PR:** #176 — fechado e integrado. Este agente **não** declara a atividade
+  aprovada: a aprovação é da auditoria independente.
 - **Estado — SQL, fronteira e caminho TS (completo e validado):** migrations
   F5-06 (schema, funções e `20260911020000_f5_06_cutover_leitura_e_ciclo.sql`),
   Edge Function `avaliacoes`, policy/capabilities, ponte matrícula → UUID,
@@ -153,14 +188,15 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
      ambiguidade (fail-closed, coberto pelo validador). O cenário sintético
      encerra a ocorrência redundante para exercitar o fluxo positivo. Resolver a
      escrita nesse caso exigiria papel explícito na intenção ⇒ nova `Q#`.
-- **Validação executada nesta rodada (todo exit 0):** `npm test` (84 arquivos,
+- **Validação da F5-06 (todo exit 0):** `npm test` (84 arquivos,
   1069 testes), `npm run build`, `npm run lint`, `git diff --check`;
   validadores SQL no Supabase local — `01-cenario-f5-06.sql`,
   `02-validar-f5-06.sql` (25 PASS), `03-validar-f5-06-cutover.sql` (13 PASS,
   incluindo os testes negativos de IDOR), `01-cenario-f4-08.sql`,
   `02-validar-f4-08.sql` (56 PASS), `03-validar-f4-08-mutacoes.sql` (8 PASS).
-- **Contexto do repositório:** `main` contém F4 e F5-01..F5-05; a F5-06 é a
-  atividade em curso nesta branch.
-- **Próximos passos:** nova auditoria independente sobre o novo SHA; abrir PR
-  quando solicitado. **A F5-06 NÃO deve ser declarada aprovada por este agente** —
-  a correção foi submetida a nova auditoria.
+- **Contexto do repositório:** `main` contém F4 e F5-01..F5-06 já integradas
+  (F5-06 no SHA `f540f0f…`); a DEV-02 é a atividade em curso nesta branch, sem
+  alteração funcional.
+- **Próximos passos:** auditoria independente sobre o novo SHA da DEV-02; abrir PR
+  quando solicitado. Nenhum agente declara a própria entrega aprovada
+  (`.ai/workflow.md` §6.3, item 8).
