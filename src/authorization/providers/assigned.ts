@@ -1,4 +1,4 @@
-import type { TargetRef } from "../policyEngine/types";
+import type { TargetRef } from "../policyEngine/types.ts";
 
 /**
  * ASSIGNED derivado das fontes soberanas F3-08/F3-09 (F4-04, D5/D6).

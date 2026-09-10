@@ -1,5 +1,5 @@
-import type { Capability } from "../Capability";
-import type { ApplicationErrorCode } from "../../errors/applicationErrors";
+import type { Capability } from "../Capability.ts";
+import type { ApplicationErrorCode } from "../../errors/applicationErrors.ts";
 
 /**
  * Tipos e contratos do policy engine da F4-03 (Issue #90).

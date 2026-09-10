@@ -290,6 +290,12 @@ function requisicaoEngine(
     }
 
     case "global": {
+      // LEGADO/TRANSITÓRIO (F5-05 D19/D22): este caso usa ALVOS SINTÉTICOS
+      // (`{ type: "cycle", id: "global" }` e o próprio ator) e NÃO é autorização
+      // real. O enforcement real da F5-05 (`contextoAutorizacao`) recusa alvos
+      // globais/sintéticos e exige recurso tenant-rooted com fonte soberana.
+      // Mantido apenas como UX/transição até a migração dos domínios — nunca
+      // como prova de autorização.
       const alvoSelf: TargetRef = { type: "collaborator", id: String(atorId) };
       const alvoCiclo: TargetRef = { type: "cycle", id: "global" };
 

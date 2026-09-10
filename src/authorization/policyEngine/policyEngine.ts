@@ -1,5 +1,8 @@
-import { codigoPublicoDeNegacao, erroDeNegacao } from "./errors";
-import { isCapabilityTargetCompatible } from "./capabilityTarget";
+// F5-05 (D20): imports com extensão explícita para que o MESMO engine seja
+// resolvível também na fronteira confiável server-side (Edge Function/Deno),
+// sem duplicar a lógica de decisão. Sem mudança semântica.
+import { codigoPublicoDeNegacao, erroDeNegacao } from "./errors.ts";
+import { isCapabilityTargetCompatible } from "./capabilityTarget.ts";
 import type {
   AuthorizationDecision,
   AuthorizationRequest,
@@ -7,7 +10,7 @@ import type {
   PolicyEngineProviders,
   ScopeType,
   TargetRef,
-} from "./types";
+} from "./types.ts";
 
 /**
  * Policy engine da F4-03 (Issue #90) — fonte única de decisão na application
