@@ -38,7 +38,11 @@ export function criarProvidersMundoLocal(
       hasCapability: (_id, _org, capability) => capability === "goal.write",
     },
     scopes: {
-      getActiveScopes: () => ["SELF"],
+      // ACHADO 1 (F5-05): scopes da CAPABILITY avaliada. Este mundo concede
+      // apenas `goal.write` (fluxo próprio) — SELF; qualquer outra capability
+      // não recebe alcance algum (sem herança entre capabilities).
+      getActiveScopes: (_id, _org, capability) =>
+        capability === "goal.write" ? ["SELF"] : [],
     },
     targets: {
       resolveTargetTenant: (target: TargetRef) => {

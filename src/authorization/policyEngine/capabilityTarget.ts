@@ -1,5 +1,5 @@
-import type { Capability } from "../Capability";
-import type { TargetRef } from "../policyEngine/types";
+import type { Capability } from "../Capability.ts";
+import type { TargetRef } from "./types.ts";
 
 /**
  * Contrato FECHADO de compatibilidade capability × tipo de alvo (F4-04,

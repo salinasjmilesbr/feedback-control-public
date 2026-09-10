@@ -1,5 +1,8 @@
-import { codigoPublicoDeNegacao, erroDeNegacao } from "./errors";
-import { isCapabilityTargetCompatible } from "./capabilityTarget";
+// F5-05 (D20): imports com extensão explícita para que o MESMO engine seja
+// resolvível também na fronteira confiável server-side (Edge Function/Deno),
+// sem duplicar a lógica de decisão. Sem mudança semântica.
+import { codigoPublicoDeNegacao, erroDeNegacao } from "./errors.ts";
+import { isCapabilityTargetCompatible } from "./capabilityTarget.ts";
 import type {
   AuthorizationDecision,
   AuthorizationRequest,
@@ -7,7 +10,7 @@ import type {
   PolicyEngineProviders,
   ScopeType,
   TargetRef,
-} from "./types";
+} from "./types.ts";
 
 /**
  * Policy engine da F4-03 (Issue #90) — fonte única de decisão na application
@@ -95,9 +98,15 @@ export function decidir(
     return negar("TARGET_INCOMPATIBLE");
   }
 
-  // 6) scope membership (pelo menos um ativo com alvo no alcance)
+  // 6) scope DA CAPABILITY avaliada (achado 1 F5-05): o alcance pertence à
+  // capability — o provider recebe a capability e nunca devolve a união de
+  // scopes de outras ações.
   let matchedScope: ScopeType | undefined;
-  const scopes = providers.scopes.getActiveScopes(actor.actorId, actor.organizationId);
+  const scopes = providers.scopes.getActiveScopes(
+    actor.actorId,
+    actor.organizationId,
+    capability
+  );
   if (scopes.length > 0) {
     for (const scope of scopes) {
       if (providers.relations.isTargetInScope(actor.actorId, actor.organizationId, scope, target, context.date, context.cycleId)) {

@@ -1,5 +1,5 @@
-import type { Capability } from "../Capability";
-import type { ApplicationErrorCode } from "../../errors/applicationErrors";
+import type { Capability } from "../Capability.ts";
+import type { ApplicationErrorCode } from "../../errors/applicationErrors.ts";
 
 /**
  * Tipos e contratos do policy engine da F4-03 (Issue #90).
@@ -105,7 +105,18 @@ export interface CapabilityProvider {
 }
 
 export interface ScopeProvider {
-  getActiveScopes(actorId: string, organizationId: string): ScopeType[];
+  /**
+   * Scopes efetivos **PARA A CAPABILITY AVALIADA** (F5-05, achado 1):
+   * capability = ação; scope = alcance DAQUELA capability. O provider NUNCA
+   * devolve a união de scopes de outras capabilities — o alcance de uma
+   * capability não pode vazar para outra. Recebe `capability` explicitamente
+   * para que o engine não possa avaliar scopes de outra ação.
+   */
+  getActiveScopes(
+    actorId: string,
+    organizationId: string,
+    capability: Capability
+  ): ScopeType[];
 }
 
 export interface TargetProvider {

@@ -2,8 +2,8 @@ import {
   ConflictError,
   ForbiddenError,
   NotFoundError,
-} from "../../errors/applicationErrors";
-import type { DenialReason } from "./types";
+} from "../../errors/applicationErrors.ts";
+import type { DenialReason } from "./types.ts";
 
 /**
  * Mapeia razões internas de negação para códigos públicos F0-05 (D6).
