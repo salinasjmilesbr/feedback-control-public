@@ -1,6 +1,6 @@
 import { type CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AuthorizationContext } from "../authorization/AuthorizationContext";
 import type { EvaluationResource } from "../authorization/ResourceContext";
 import { can } from "../authorization/authorizationPolicy";
@@ -12,6 +12,10 @@ import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import { useAuth } from "../auth/AuthContext";
 import { cancelarAvaliacao } from "../services/cancelamentoAvaliacaoService";
 import { reabrirAvaliacao } from "../services/reaberturaAvaliacaoService";
+import { carregarPainelSoberano } from "../services/acessoAvaliacoesSoberanas";
+import { ehAvaliacaoNova } from "../services/origemAvaliacaoTela";
+import type { PainelParticipante } from "../infrastructure/supabase/avaliacoes/repositorioAvaliacoes";
+import type { Colaborador } from "../types/Colaborador";
 import { getCiclosAvaliacao } from "../services/cicloAvaliacaoStorage";
 import {
   getColaboradorByMatricula,
@@ -43,11 +47,50 @@ function FeedbackDetalhePage() {
   const [versao, setVersao] = useState(0);
   const [processando, setProcessando] = useState(false);
   const [erroAcao, setErroAcao] = useState("");
+  // Origem POSTGRES: a avaliação nova NÃO existe no acervo legado. Este estado
+  // carrega a leitura soberana (painel do próprio participante) — sem fallback
+  // local e sem depender de registro legado.
+  const [painelSoberano, setPainelSoberano] = useState<PainelParticipante | null>(
+    null
+  );
+  const [erroLeitura, setErroLeitura] = useState("");
   void versao;
   const matricula = Number(id);
   const colaborador = Number.isFinite(matricula)
     ? getColaboradorByMatricula(matricula)
     : undefined;
+
+  // A origem é decidida pela EVIDÊNCIA de cutover (nunca pelo formato do id).
+  const avaliacaoNova = ehAvaliacaoNova(feedbackId);
+  // O carregamento já começa no estado correto (derivado), sem `setState` em
+  // efeito: a leitura soberana termina em callback assíncrono.
+  const [carregandoNova, setCarregandoNova] = useState(avaliacaoNova);
+
+  useEffect(() => {
+    if (!avaliacaoNova) return;
+    let ativo = true;
+
+    void (async () => {
+      const resultado = await carregarPainelSoberano({
+        organizationId: organizacaoAtivaId ?? "",
+        evaluationId: feedbackId ?? "",
+      });
+      if (!ativo) return;
+
+      setCarregandoNova(false);
+      if (!resultado.ok || !resultado.data) {
+        setErroLeitura(
+          resultado.erro ?? "Avaliação não encontrada para o seu acesso."
+        );
+        return;
+      }
+      setPainelSoberano(resultado.data);
+    })();
+
+    return () => {
+      ativo = false;
+    };
+  }, [avaliacaoNova, feedbackId, organizacaoAtivaId]);
 
   if (!colaborador) {
     return (
@@ -57,6 +100,73 @@ function FeedbackDetalhePage() {
           <button className="evaluation-btn evaluation-btn--secondary" onClick={() => navigate(-1)}>← Voltar</button>
         </section>
       </main>
+    );
+  }
+
+  if (carregandoNova) {
+    return (
+      <main className="virtus-page">
+        <section className="evaluation-empty" role="status" aria-live="polite">
+          <h1>Carregando a avaliação…</h1>
+        </section>
+      </main>
+    );
+  }
+
+  if (erroLeitura) {
+    return (
+      <main className="virtus-page">
+        <section className="evaluation-empty">
+          <h1>Avaliação indisponível</h1>
+          <p>{erroLeitura}</p>
+          <button
+            className="evaluation-btn evaluation-btn--secondary"
+            onClick={() => navigate(`/colaborador/${colaborador.matricula}`)}
+          >
+            ← Voltar
+          </button>
+        </section>
+      </main>
+    );
+  }
+
+  // Avaliação NOVA: a fonte é o PostgreSQL (nenhum registro legado é exigido).
+  if (avaliacaoNova) {
+    if (!painelSoberano) {
+      return (
+        <main className="virtus-page">
+          <section className="evaluation-empty">
+            <h1>Avaliação não encontrada</h1>
+            <button
+              className="evaluation-btn evaluation-btn--secondary"
+              onClick={() => navigate(`/colaborador/${colaborador.matricula}`)}
+            >
+              ← Voltar
+            </button>
+          </section>
+        </main>
+      );
+    }
+
+    return (
+      <VistaAvaliacaoSoberana
+        painel={painelSoberano}
+        colaborador={colaborador}
+        processando={processando}
+        erroAcao={erroAcao}
+        onVoltar={() => navigate(`/colaborador/${colaborador.matricula}`)}
+        onEditar={() =>
+          navigate(
+            `/colaborador/${colaborador.matricula}/feedback/${painelSoberano.evaluationId}/editar`
+          )
+        }
+        onCancelar={() => {
+          void executarCancelamentoSoberano();
+        }}
+        onReabrir={() => {
+          void executarReaberturaSoberana();
+        }}
+      />
     );
   }
 
@@ -240,6 +350,78 @@ function FeedbackDetalhePage() {
     } finally {
       setProcessando(false);
     }
+  }
+
+  /**
+   * Cancelamento/reabertura da avaliação NOVA. A origem já é soberana: o
+   * serviço envia a intenção e o Policy Engine decide server-side. Nada é
+   * gravado localmente e não há fallback para o acervo legado.
+   */
+  async function executarCancelamentoSoberano() {
+    const motivo = window.prompt("Informe o motivo do cancelamento:");
+    if (motivo === null) return;
+
+    setErroAcao("");
+    setProcessando(true);
+    try {
+      const resultado = await cancelarAvaliacao(
+        painelSoberano!.evaluationId,
+        motivo,
+        organizacaoAtivaId ?? ""
+      );
+      if (!resultado.ok) {
+        setErroAcao(resultado.erro ?? "Não foi possível cancelar a avaliação.");
+        return;
+      }
+      // Recarrega o estado REAL do banco (nunca uma projeção local).
+      await recarregarPainelSoberano();
+      alert("Avaliação cancelada com sucesso.");
+    } catch (error) {
+      setErroAcao(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível cancelar a avaliação."
+      );
+    } finally {
+      setProcessando(false);
+    }
+  }
+
+  async function executarReaberturaSoberana() {
+    const motivo = window.prompt("Informe o motivo da reabertura:");
+    if (motivo === null) return;
+
+    setErroAcao("");
+    setProcessando(true);
+    try {
+      const resultado = await reabrirAvaliacao(
+        painelSoberano!.evaluationId,
+        motivo,
+        organizacaoAtivaId ?? ""
+      );
+      if (!resultado.ok) {
+        setErroAcao(resultado.erro ?? "Não foi possível reabrir a avaliação.");
+        return;
+      }
+      await recarregarPainelSoberano();
+      alert("Avaliação reaberta com sucesso.");
+    } catch (error) {
+      setErroAcao(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível reabrir a avaliação."
+      );
+    } finally {
+      setProcessando(false);
+    }
+  }
+
+  async function recarregarPainelSoberano() {
+    const resultado = await carregarPainelSoberano({
+      organizationId: organizacaoAtivaId ?? "",
+      evaluationId: feedbackId ?? "",
+    });
+    if (resultado.ok && resultado.data) setPainelSoberano(resultado.data);
   }
 
   const feedbackFinalGerente = feedback.feedbackFinalGerente ?? "";
@@ -474,6 +656,185 @@ function FeedbackDetalhePage() {
               <p>{feedbackFinalCoordenador || "Sem feedback final registrado."}</p>
             </div>
           )}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+/**
+ * F5-06 (Issue #103) — VISTA SOBERANA da avaliação NOVA.
+ *
+ * Esta avaliação existe EXCLUSIVAMENTE no PostgreSQL: não há registro legado e
+ * a tela NÃO depende de nenhum. A leitura vem do painel do próprio participante
+ * (server-side) e mostra apenas o que o ator tem direito a ver: estado real,
+ * papéis, catálogo congelado e as notas/comentários da PRÓPRIA ocorrência.
+ * Voto ou nota individual de terceiro nunca é solicitado nem exibido (D20).
+ */
+function VistaAvaliacaoSoberana({
+  painel,
+  colaborador,
+  processando,
+  erroAcao,
+  onVoltar,
+  onEditar,
+  onCancelar,
+  onReabrir,
+}: {
+  readonly painel: PainelParticipante;
+  readonly colaborador: Colaborador;
+  readonly processando: boolean;
+  readonly erroAcao: string;
+  readonly onVoltar: () => void;
+  readonly onEditar: () => void;
+  readonly onCancelar: () => void;
+  readonly onReabrir: () => void;
+}) {
+  const editavel =
+    painel.status === "RASCUNHO" || painel.status === "PRONTA_PARA_FEEDBACK";
+  const notaDaOcorrencia =
+    painel.minhasNotas.length > 0
+      ? painel.minhasNotas.reduce((soma, item) => soma + item.nota, 0) /
+        painel.minhasNotas.length
+      : 0;
+
+  return (
+    <main className="virtus-page evaluation-detail-page admin-evaluation-detail">
+      <section className="evaluation-detail-header">
+        <div>
+          <button type="button" className="evaluation-back-link" onClick={onVoltar}>
+            ← Voltar para o colaborador
+          </button>
+          <h1>Detalhes da Avaliação</h1>
+          <p>
+            Avaliação registrada no servidor (PostgreSQL).{" "}
+            {painel.cycleAno} • Ciclo {painel.cycleNumero}
+          </p>
+        </div>
+
+        <div className="evaluation-detail-actions admin-evaluation-actions">
+          {painel.status === "CONCLUIDA" && (
+            <button
+              type="button"
+              className="evaluation-btn evaluation-btn--secondary"
+              onClick={onReabrir}
+              disabled={processando}
+            >
+              Reabrir avaliação
+            </button>
+          )}
+          {painel.status !== "CANCELADA" && (
+            <button
+              type="button"
+              className="evaluation-btn evaluation-btn--secondary"
+              onClick={onCancelar}
+              disabled={processando}
+            >
+              Cancelar avaliação
+            </button>
+          )}
+          {editavel && (
+            <button
+              type="button"
+              className="evaluation-btn evaluation-btn--primary"
+              onClick={onEditar}
+              disabled={processando}
+            >
+              Editar avaliação
+            </button>
+          )}
+        </div>
+      </section>
+
+      {processando && (
+        <section className="evaluation-alert" role="status" aria-live="polite">
+          Processando a operação no servidor…
+        </section>
+      )}
+
+      {erroAcao && (
+        <section className="evaluation-alert evaluation-alert--warning" role="alert">
+          <strong>Operação não concluída.</strong>
+          <p>{erroAcao}</p>
+        </section>
+      )}
+
+      <section className="evaluation-detail-summary">
+        <CollaboratorIdentity colaborador={colaborador} variant="standard" />
+        <div className="evaluation-detail-summary__meta">
+          <div>
+            <span>Status (servidor)</span>
+            <strong>{painel.status}</strong>
+          </div>
+          <div>
+            <span>Seus papéis nesta avaliação</span>
+            <strong>{painel.meusPapeis.join(", ") || "—"}</strong>
+          </div>
+          <div>
+            <span>Nota média das notas registradas</span>
+            <strong>
+              {possuiNotaAvaliacao(notaDaOcorrencia)
+                ? formatarNotaAvaliacao(notaDaOcorrencia)
+                : "Sem avaliação"}
+            </strong>
+          </div>
+        </div>
+      </section>
+
+      <section className="evaluation-detail-section">
+        <div className="evaluation-section-heading">
+          <div>
+            <span className="evaluation-eyebrow">Sua participação</span>
+            <h2>Critérios e subcritérios</h2>
+          </div>
+          <span className="evaluation-muted">
+            {painel.minhasNotas.length} nota(s) registrada(s) por você
+          </span>
+        </div>
+
+        <div className="admin-evaluation-final__grid">
+          {painel.criterios.map((criterio) => {
+            const subcriterios = painel.subcriterios.filter(
+              (item) => item.criterionCode === criterio.code
+            );
+            return (
+              <div key={criterio.criterionId}>
+                <strong>{criterio.name}</strong>
+                <ul>
+                  {subcriterios.length === 0 && <li>Sem subcritérios.</li>}
+                  {subcriterios.map((subcriterio) => {
+                    const nota = painel.minhasNotas.find(
+                      (item) => item.subcriterionId === subcriterio.subcriterionId
+                    );
+                    return (
+                      <li key={subcriterio.subcriterionId}>
+                        {subcriterio.name}:{" "}
+                        {nota ? formatarNotaAvaliacao(nota.nota) : "sem nota"}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="evaluation-detail-section">
+        <div className="evaluation-section-heading">
+          <div>
+            <span className="evaluation-eyebrow">Conclusão</span>
+            <h2>Seu feedback final</h2>
+          </div>
+        </div>
+        <div className="admin-evaluation-final__grid">
+          <div>
+            <strong>Comentário final registrado</strong>
+            <p>
+              {painel.meusComentarios.find((item) => item.escopo === "FINAL")
+                ?.texto || "Sem comentário final registrado."}
+            </p>
+          </div>
         </div>
       </section>
     </main>

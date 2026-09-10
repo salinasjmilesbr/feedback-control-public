@@ -20,6 +20,7 @@ import type {
   ObservacaoDoPainel,
   NotaDoPainelPorNome,
 } from "../services/avaliacoesSoberanas/cutoverAvaliacoesService";
+import { lerAvaliacaoNovaDoColaboradorNoCiclo } from "../infrastructure/supabase/avaliacoes/cutover";
 import CollaboratorIdentity from "../components/CollaboratorIdentity";
 import RoleExpectationsCard from "../components/RoleExpectationsCard";
 import { calcularProgressoAvaliacao } from "../services/progressoAvaliacao";
@@ -162,6 +163,9 @@ function NovoFeedbackPage() {
   const { organizacaoAtivaId } = useAuth();
   const [salvando, setSalvando] = useState(false);
   const [erroAcao, setErroAcao] = useState("");
+  // Confirmação de UNICIDADE pedida ao servidor (a autoridade é o índice único
+  // parcial do banco; o serviço traduz o conflito em erro público).
+  const [conflito, setConflito] = useState("");
 
   const matricula = Number(id);
   const colaborador = Number.isFinite(matricula)
@@ -286,6 +290,15 @@ function NovoFeedbackPage() {
 
   const anoAvaliacao = cicloAtivo.ano;
   const cicloAvaliacao = cicloAtivo.ciclo;
+
+  // Id da avaliação NOVA já conhecida deste colaborador no ciclo (índice de
+  // NAVEGAÇÃO; a autoridade de unicidade é o banco). Permite avisar antes de
+  // tentar criar e navegar para a avaliação existente.
+  const avaliacaoNovaExistente = lerAvaliacaoNovaDoColaboradorNoCiclo(
+    anoAvaliacao,
+    cicloAvaliacao,
+    colaborador.matricula
+  );
   const metasDoCiclo = getMetasDoColaboradorNoCiclo(
     colaborador.matricula,
     cicloAtivo.id
@@ -721,7 +734,20 @@ function NovoFeedbackPage() {
       return;
     }
 
+    // UNICIDADE: se o índice de NAVEGAÇÃO já conhece uma avaliação nova deste
+    // colaborador no ciclo (evidência de escrita soberana confirmada), a tela
+    // não tenta criar outra. A autoridade continua sendo o índice único parcial
+    // do banco, que recusaria a duplicata de qualquer forma — e nada é criado
+    // localmente em nenhum cenário.
+    if (avaliacaoNovaExistente) {
+      setConflito(
+        `Já existe uma avaliação para ${anoAvaliacao} - Ciclo ${cicloAvaliacao}.`
+      );
+      return;
+    }
+
     setErroAcao("");
+    setConflito("");
     setSalvando(true);
     try {
       authorize(contextoAutorizado, "evaluation.create", evaluationResource);
@@ -734,6 +760,8 @@ function NovoFeedbackPage() {
       });
 
       if (!criada.ok || !criada.data) {
+        // Sem evidência local de duplicidade, a recusa é reportada como erro de
+        // domínio. Nada é criado localmente em nenhum caso (fail-closed).
         setErroAcao(
           criada.erro ?? "Não foi possível criar a avaliação no servidor."
         );
@@ -1545,6 +1573,44 @@ function NovoFeedbackPage() {
           </div>
         )}
       </div>
+
+      {conflito && (
+        <section
+          className="new-evaluation-goals-warning"
+          role="alert"
+          style={{ marginTop: "16px" }}
+        >
+          <div className="new-evaluation-goals-warning__icon" aria-hidden="true">
+            !
+          </div>
+          <div>
+            <strong>Avaliação já existente</strong>
+            <p>{conflito}</p>
+            {avaliacaoNovaExistente && (
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(
+                    `/colaborador/${colaborador.matricula}/feedback/${avaliacaoNovaExistente}`
+                  )
+                }
+                style={{
+                  marginTop: "8px",
+                  padding: "8px 14px",
+                  borderRadius: "8px",
+                  border: "1px solid #660099",
+                  backgroundColor: "#fff",
+                  color: "#660099",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                }}
+              >
+                Abrir a avaliação existente
+              </button>
+            )}
+          </div>
+        </section>
+      )}
 
       {erroAcao && (
         <section

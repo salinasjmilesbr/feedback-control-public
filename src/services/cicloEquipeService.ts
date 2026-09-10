@@ -134,7 +134,6 @@ export async function criarAvaliacoesDoCicloAtivado(
   let criadas = 0;
   let existentes = 0;
   let bloqueadas = 0;
-  const idsCriados: string[] = [];
 
   for (const colaborador of elegiveis) {
     // Acervo LEGADO (somente leitura): uma avaliação não cancelada já existente
@@ -162,7 +161,16 @@ export async function criarAvaliacoesDoCicloAtivado(
     );
 
     if (resultado.ok && resultado.data) {
-      idsCriados.push(resultado.data.evaluationId);
+      // Livro-caixa de NAVEGAÇÃO (não é autoridade): registra o id soberano do
+      // ciclo E o vínculo com o colaborador, para que a tela localize a
+      // avaliação nova depois do reload (ela nunca existe no legado).
+      registrarAvaliacoesDoCiclo(
+        ciclo.ano,
+        ciclo.ciclo,
+        [resultado.data.evaluationId],
+        deps.armazenamento ?? null,
+        colaborador.matricula
+      );
       criadas += 1;
     } else {
       // Recusa do servidor (ou ausência do caminho novo): fail-closed. Não há
@@ -170,15 +178,6 @@ export async function criarAvaliacoesDoCicloAtivado(
       bloqueadas += 1;
     }
   }
-
-  // Livro-caixa de NAVEGAÇÃO (não é autoridade): permite que o encerramento do
-  // ciclo alcance as avaliações novas, que nunca existem no `localStorage`.
-  registrarAvaliacoesDoCiclo(
-    ciclo.ano,
-    ciclo.ciclo,
-    idsCriados,
-    deps.armazenamento ?? null
-  );
 
   return { criadas, existentes, bloqueadas };
 }

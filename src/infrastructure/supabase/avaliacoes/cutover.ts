@@ -1,35 +1,52 @@
 /**
- * F5-06 (Issue #103) — CUTOVER do domínio de avaliações (D12/§11).
+ * F5-06 (Issue #103) — LIVRO-CAIXA DE CUTOVER (cliente).
  *
- * A partir do cutover de escrita, Supabase é a fonte de verdade das avaliações
- * NOVAS. O `localStorage` permanece apenas como legado de LEITURA e:
- * - NÃO recebe espelho (sem dual-write);
- * - NÃO é fallback autoritativo;
- * - NÃO volta a ser autoridade depois da primeira escrita exclusiva no banco.
+ * Este módulo responde a UMA pergunta: **o cliente sabe, por evidência de uma
+ * escrita server-side CONFIRMADA, que esta avaliação existe exclusivamente no
+ * PostgreSQL?**
  *
- * ## Como a origem é decidida (correção pós-auditoria)
+ * ## O que este arquivo É e o que NÃO é
  *
- * A origem NÃO é inferida por DATA. Uma data (mesmo um "instante de cutover"
- * fixo no código) não é evidência de nada: registros locais podem ser criados
- * depois de qualquer data escolhida e seriam classificados como banco
- * indevidamente. A classificação é ESTRUTURAL, a partir de evidência do caminho
- * novo:
+ * - É um registro local de ROTEAMENTO/NAVEGAÇÃO: diz à tela "use o caminho
+ *   soberano para este id" e permite alcançar avaliações novas que nunca
+ *   existirão no `localStorage` legado.
+ * - **NÃO é autorização** — quem decide ALLOW/DENY é o Policy Engine na
+ *   fronteira confiável, a cada operação.
+ * - **NÃO é tenancy** — o tenant vem sempre do recurso/da membership validados
+ *   server-side.
+ * - **NÃO é prova de existência** — a existência real é confirmada pelo
+ *   PostgreSQL; a leitura soberana pode recusar (fail-closed) um id que conste
+ *   aqui.
+ *
+ * ## Como a origem é decidida (nunca por data)
+ *
+ * Uma DATA não é evidência de nada: um registro local criado depois de qualquer
+ * "instante de cutover" continuaria sendo local. A classificação é ESTRUTURAL:
  *
  *   1. a marca `POSTGRES` só existe quando o id veio de uma escrita server-side
- *      CONFIRMADA (UUID retornado pela RPC e validado);
- *   2. qualquer registro sem essa evidência é `LEGADO_LOCAL` e permanece
- *      SOMENTE LEITURA — inclusive registros recentes, sem data ou com data
- *      inválida (fail-closed).
+ *      CONFIRMADA (UUID devolvido pela RPC e validado);
+ *   2. **formato de UUID NÃO é evidência suficiente**: um id legado que por
+ *      acaso tenha forma de UUID continua `LEGADO_LOCAL` enquanto não houver
+ *      registro explícito de cutover (fail-closed);
+ *   3. registro ausente, corrompido ou ilegível ⇒ `LEGADO_LOCAL` (nunca promove
+ *      por omissão).
  *
- * A marca local é apenas livro-caixa de migração: nunca concede autorização,
- * nunca é tenancy e nunca é prova de existência no banco (a fonte soberana
- * continua sendo o PostgreSQL, consultado pela fronteira confiável).
+ * ## Índices de NAVEGAÇÃO
+ *
+ * `CHAVE_CICLO_AVALIACOES` guarda dois índices, ambos apenas de navegação:
+ * - `ids`: ano+número do ciclo → ids técnicos;
+ * - `porColaborador`: ano+número+matrícula → id técnico (permite à tela saber
+ *   que já existe avaliação nova de um colaborador no ciclo sem varrer o
+ *   `localStorage` legado, que nunca a contém).
+ *
+ * A autoridade de unicidade continua sendo o índice único parcial do banco
+ * (`uq_evaluations_org_cycle_collaborator_nao_cancelada`).
  */
 
 /** Formato canônico de UUID (id técnico devolvido pelo PostgreSQL). */
 const FORMATO_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** `true` somente para id técnico (UUID) — evidência do caminho novo. */
+/** `true` somente para id técnico (UUID) — formato, NÃO evidência por si só. */
 export function ehIdTecnicoPostgres(valor: unknown): valor is string {
   return typeof valor === "string" && FORMATO_UUID.test(valor.trim());
 }
@@ -101,12 +118,16 @@ export function separarAcervoLegado<T>(
   return { legado, postgres };
 }
 
-/** Lê o conjunto de avaliações já confirmadas no PostgreSQL (ids técnicos). */
+/**
+ * Lê o conjunto de avaliações já confirmadas no PostgreSQL (ids técnicos).
+ * Registro ausente, corrompido ou com forma inesperada ⇒ conjunto VAZIO
+ * (fail-closed: nada é promovido por omissão).
+ */
 export function lerAvaliacoesCortadas(
-  armazenamento: ArmazenamentoCutover | null = armazenamentoPadrao()
+  registroCutover: ArmazenamentoCutover | null = armazenamentoPadrao()
 ): ReadonlySet<string> {
-  if (!armazenamento) return new Set();
-  const bruto = armazenamento.getItem(CHAVE_AVALIACOES_CORTADAS);
+  if (!registroCutover) return new Set();
+  const bruto = registroCutover.getItem(CHAVE_AVALIACOES_CORTADAS);
   if (!bruto) return new Set();
   try {
     const lista = JSON.parse(bruto);
@@ -128,7 +149,7 @@ export function lerAvaliacoesCortadas(
  */
 export function registrarAvaliacaoCortada(
   evaluationId: unknown,
-  armazenamento: ArmazenamentoCutover | null = armazenamentoPadrao()
+  registroCutover: ArmazenamentoCutover | null = armazenamentoPadrao()
 ): MarcadorOrigem {
   if (!ehIdTecnicoPostgres(evaluationId)) {
     // Sem evidência do caminho novo: permanece legado (somente leitura).
@@ -136,104 +157,159 @@ export function registrarAvaliacaoCortada(
   }
 
   const id = evaluationId.trim();
-  if (armazenamento) {
-    const atuais = lerAvaliacoesCortadas(armazenamento);
+  if (registroCutover) {
+    const atuais = lerAvaliacoesCortadas(registroCutover);
     if (!atuais.has(id)) {
-      armazenamento.setItem(CHAVE_AVALIACOES_CORTADAS, JSON.stringify([...atuais, id]));
+      registroCutover.setItem(CHAVE_AVALIACOES_CORTADAS, JSON.stringify([...atuais, id]));
     }
   }
   return { origem: "POSTGRES", evaluationId: id };
 }
 
 /**
- * A avaliação possui evidência de escrita exclusiva no banco? Quando `true`,
- * NENHUM caminho local pode voltar a ser autoridade para ela (sem dual-write).
+ * A avaliação possui EVIDÊNCIA REGISTRADA de escrita exclusiva no banco?
+ *
+ * Exige as DUAS coisas: id técnico (formato) **e** registro explícito do
+ * cutover. Formato de UUID sozinho NÃO promove um registro a `POSTGRES` — um id
+ * legado que por acaso tenha forma de UUID continua legado (fail-closed).
+ *
+ * Quando `true`, NENHUM caminho local pode voltar a ser autoridade para ela
+ * (sem dual-write).
  */
 export function avaliacaoVinculadaAoBanco(
   evaluationId: string,
-  armazenamento: ArmazenamentoCutover | null = armazenamentoPadrao()
+  registroCutover: ArmazenamentoCutover | null = armazenamentoPadrao()
 ): boolean {
   if (!ehIdTecnicoPostgres(evaluationId)) return false;
-  return lerAvaliacoesCortadas(armazenamento).has(evaluationId.trim());
+  return lerAvaliacoesCortadas(registroCutover).has(evaluationId.trim());
 }
 
 // ---------------------------------------------------------------------------
-// Índice de LEITURA por ciclo (ano+número) → ids soberanos
+// Índices de NAVEGAÇÃO (nunca autoridade)
 // ---------------------------------------------------------------------------
 
-/**
- * Chave local do índice ano+ciclo → ids técnicos. É apenas LIVRO-CAIXA de
- * navegação do cliente: NÃO é tenant, NÃO é autorização, NÃO é prova de
- * existência (a fonte soberana continua sendo o PostgreSQL, consultado pela
- * fronteira confiável a cada operação).
-
- * Ele existe porque o produto precisa alcançar as avaliações de um ciclo sem
- * varrer o `localStorage` legado, que nunca contém avaliação nova.
- */
+/** Chave local dos índices de navegação do ciclo. */
 export const CHAVE_CICLO_AVALIACOES = "feedback-control-ciclo-avaliacoes-postgres";
 
-interface IndiceCiclo {
-  readonly [chaveAnoCiclo: string]: readonly string[];
+interface IndiceNavegacao {
+  /** ano+número → ids técnicos conhecidos. */
+  readonly ids?: Record<string, readonly string[]>;
+  /** ano+número+matrícula → id técnico conhecido. */
+  readonly porColaborador?: Record<string, string>;
 }
 
-/** Chave canônica do índice. Ano+número são INTENÇÃO; nada de tenant aqui. */
+/** Chave canônica do índice por ciclo. Ano+número são INTENÇÃO; sem tenant. */
 export function chaveAnoCiclo(ano: number, ciclo: number): string {
   return `${ano}-${ciclo}`;
 }
 
-function lerIndiceCiclo(
-  armazenamento: ArmazenamentoCutover
-): Record<string, string[]> {
-  const bruto = armazenamento.getItem(CHAVE_CICLO_AVALIACOES);
-  if (!bruto) return {};
+/** Chave canônica do índice por colaborador dentro de um ciclo. */
+export function chaveCicloColaborador(
+  ano: number,
+  ciclo: number,
+  matricula: number
+): string {
+  return `${ano}-${ciclo}-${matricula}`;
+}
+
+function lerIndice(
+  registroCutover: ArmazenamentoCutover
+): Required<IndiceNavegacao> {
+  const bruto = registroCutover.getItem(CHAVE_CICLO_AVALIACOES);
+  if (!bruto) return { ids: {}, porColaborador: {} };
   try {
     const dados = JSON.parse(bruto);
-    if (typeof dados !== "object" || dados === null || Array.isArray(dados)) return {};
-
-    const indice: Record<string, string[]> = {};
-    for (const [chave, valor] of Object.entries(dados as IndiceCiclo)) {
-      if (!Array.isArray(valor)) continue;
-      // Somente ids técnicos contam como evidência do caminho novo.
-      const ids = valor.filter((item): item is string => ehIdTecnicoPostgres(item));
-      if (ids.length > 0) indice[chave] = ids;
+    if (typeof dados !== "object" || dados === null || Array.isArray(dados)) {
+      return { ids: {}, porColaborador: {} };
     }
-    return indice;
+    const cru = dados as IndiceNavegacao;
+    const ids: Record<string, string[]> = {};
+    for (const [chave, valor] of Object.entries(cru.ids ?? {})) {
+      if (!Array.isArray(valor)) continue;
+      const validos = valor.filter((item): item is string => ehIdTecnicoPostgres(item));
+      if (validos.length > 0) ids[chave] = validos;
+    }
+    const porColaborador: Record<string, string> = {};
+    for (const [chave, valor] of Object.entries(cru.porColaborador ?? {})) {
+      if (ehIdTecnicoPostgres(valor)) porColaborador[chave] = valor.trim();
+    }
+    return { ids, porColaborador };
   } catch {
-    return {};
+    return { ids: {}, porColaborador: {} };
   }
 }
 
+function gravarIndice(
+  registroCutover: ArmazenamentoCutover,
+  indice: Required<IndiceNavegacao>
+): void {
+  registroCutover.setItem(
+    CHAVE_CICLO_AVALIACOES,
+    JSON.stringify({ ids: indice.ids, porColaborador: indice.porColaborador })
+  );
+}
+
 /**
- * Associa ids soberanos ao ciclo (ano+número). Só registra id técnico válido;
- * idempotente e sem duplicar entradas. Nada é gravado quando não há evidência
- * do caminho novo.
+ * Associa ids soberanos ao ciclo (ano+número) e, quando `matriculaAvaliado` é
+ * informada, registra também o índice por colaborador (usado para a tela saber
+ * que já existe avaliação nova daquele colaborador no ciclo).
+ *
+ * Só registra id técnico válido; idempotente. Nada é gravado sem evidência do
+ * caminho novo.
  */
 export function registrarAvaliacoesDoCiclo(
   ano: number,
   ciclo: number,
   evaluationIds: readonly unknown[],
-  armazenamento: ArmazenamentoCutover | null = armazenamentoPadrao()
+  registroCutover: ArmazenamentoCutover | null = armazenamentoPadrao(),
+  matriculaAvaliado?: number
 ): readonly string[] {
   const novos = evaluationIds
     .filter((id): id is string => ehIdTecnicoPostgres(id))
     .map((id) => id.trim());
-  if (!armazenamento || novos.length === 0) return novos;
+  if (!registroCutover || novos.length === 0) return novos;
 
   const chave = chaveAnoCiclo(ano, ciclo);
-  const indice = lerIndiceCiclo(armazenamento);
-  const atuais = new Set(indice[chave] ?? []);
+  const indice = lerIndice(registroCutover);
+  const atuais = new Set(indice.ids[chave] ?? []);
   for (const id of novos) atuais.add(id);
-  indice[chave] = Array.from(atuais);
-  armazenamento.setItem(CHAVE_CICLO_AVALIACOES, JSON.stringify(indice));
-  return indice[chave];
+  indice.ids[chave] = Array.from(atuais);
+
+  if (matriculaAvaliado !== undefined && Number.isFinite(matriculaAvaliado)) {
+    // Uma avaliação nova por (ciclo, colaborador): o mais recente prevalece.
+    indice.porColaborador[chaveCicloColaborador(ano, ciclo, matriculaAvaliado)] =
+      novos[novos.length - 1]!;
+  }
+
+  gravarIndice(registroCutover, indice);
+  return indice.ids[chave]!;
 }
 
 /** Ids soberanos já conhecidos de um ciclo (ano+número). Nunca inclui legado. */
 export function lerAvaliacoesDoCiclo(
   ano: number,
   ciclo: number,
-  armazenamento: ArmazenamentoCutover | null = armazenamentoPadrao()
+  registroCutover: ArmazenamentoCutover | null = armazenamentoPadrao()
 ): readonly string[] {
-  if (!armazenamento) return [];
-  return lerIndiceCiclo(armazenamento)[chaveAnoCiclo(ano, ciclo)] ?? [];
+  if (!registroCutover) return [];
+  return lerIndice(registroCutover).ids[chaveAnoCiclo(ano, ciclo)] ?? [];
+}
+
+/**
+ * Id soberano JÁ CONHECIDO da avaliação nova de um colaborador no ciclo, ou
+ * `null`. É roteamento de navegação: a existência/autorização reais continuam
+ * sendo confirmadas pelo banco a cada operação.
+ */
+export function lerAvaliacaoNovaDoColaboradorNoCiclo(
+  ano: number,
+  ciclo: number,
+  matricula: number,
+  registroCutover: ArmazenamentoCutover | null = armazenamentoPadrao()
+): string | null {
+  if (!registroCutover) return null;
+  return (
+    lerIndice(registroCutover).porColaborador[
+      chaveCicloColaborador(ano, ciclo, matricula)
+    ] ?? null
+  );
 }
