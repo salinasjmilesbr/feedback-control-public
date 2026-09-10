@@ -1,10 +1,10 @@
 # Documento histórico de auditoria
 
-> **Status:** HISTÓRICO / NÃO NORMATIVO  
-> **Data do checkpoint:** 10/09/2026  
-> **Contexto:** diagnóstico transversal do repositório após a conclusão da F5-06.  
-> **Uso:** evidência histórica para rastreabilidade do planejamento da Etapa 5.  
-> **Fonte vigente para estado atual e próximos passos:** Plano Mestre e contratos `docs/F5-XX-desenho-tecnico.md` fechados.  
+> **Status:** HISTÓRICO / NÃO NORMATIVO
+> **Data do checkpoint:** 10/09/2026
+> **Contexto:** diagnóstico transversal do repositório após a conclusão da F5-06.
+> **Uso:** evidência histórica para rastreabilidade do planejamento da Etapa 5.
+> **Fonte vigente para estado atual e próximos passos:** Plano Mestre e contratos `docs/F5-XX-desenho-tecnico.md` fechados.
 > **Importante:** o roadmap proposto neste diagnóstico foi posteriormente refinado durante a revisão arquitetural da F5-07. O roadmap vigente passou a ser F5-07 a F5-12, incluindo F5-08 — Estrutura organizacional e catálogos soberanos.
 
 ---
