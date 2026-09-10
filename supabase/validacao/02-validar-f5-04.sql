@@ -429,6 +429,23 @@ begin
   raise notice '[PASS] trilha append-only bloqueia UPDATE (D18)';
 end $$;
 
+do $$
+declare v_ok boolean := true;
+begin
+  -- D18: a credencial do caminho de aplicação (service_role) só grava (INSERT)
+  -- e lê (SELECT) a trilha; UPDATE/DELETE são revogados (imutabilidade). A
+  -- higienização pertence ao proprietário/superuser (fora do runtime).
+  if has_table_privilege('service_role', 'public.privilege_mutation_audit', 'UPDATE') then v_ok := false; end if;
+  if has_table_privilege('service_role', 'public.privilege_mutation_audit', 'DELETE') then v_ok := false; end if;
+  if has_table_privilege('service_role', 'public.privilege_mutation_audit', 'TRUNCATE') then v_ok := false; end if;
+  if not has_table_privilege('service_role', 'public.privilege_mutation_audit', 'INSERT') then v_ok := false; end if;
+  if not has_table_privilege('service_role', 'public.privilege_mutation_audit', 'SELECT') then v_ok := false; end if;
+  if not v_ok then
+    raise exception '[FAIL] service_role com privilegio indevido na trilha (deveria ser somente SELECT+INSERT)';
+  end if;
+  raise notice '[PASS] service_role com somente SELECT+INSERT na trilha (UPDATE/DELETE/TRUNCATE revogados — D18)';
+end $$;
+
 set role authenticated;
 do $$
 declare v_ok boolean := false;

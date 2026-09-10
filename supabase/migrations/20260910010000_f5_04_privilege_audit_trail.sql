@@ -9,9 +9,14 @@
 -- existente (created_by/version em membership_access_role_assignments) e evolui
 -- para uma tabela de eventos dedicada.
 --
--- Segurança (D10/AC7): RLS deny-by-default (zero policies, zero grants a
--- authenticated); apenas service_role (BYPASSRLS) e o caminho DEFINER de
--- mutação escrevem/leem; nenhuma superfície nova para authenticated.
+-- Segurança (D10/AC7/D18):
+--   - RLS deny-by-default (zero policies, zero grants a authenticated);
+--   - service_role (credencial do caminho aplicativo de D16) tem SOMENTE
+--     SELECT + INSERT: grava (append) e lê a trilha, mas NÃO pode UPDATE nem
+--     DELETE (imutabilidade append-only da trilha);
+--   - higienização/limpeza fica FORA da credencial/runtime normal da aplicação:
+--     exclusiva do proprietário/superuser (postgres/supabase_admin, credencial
+--     de migração/operação local), nunca de service_role.
 -- ============================================================================
 
 create table public.privilege_mutation_audit (
@@ -46,9 +51,10 @@ create index ix_privilege_mutation_audit_organization_id
 create index ix_privilege_mutation_audit_membership_id
   on public.privilege_mutation_audit (membership_id);
 
--- Append-only: nenhuma linha pode ser ATUALIZADA após a gravação. DELETE fica
--- restrito pela RLS (authenticated não tem grant; superuser/service_role podem
--- purgar em operações administrativas de higienização de ambiente sintético).
+-- Append-only: nenhuma linha pode ser ATUALIZADA após a gravação (trigger).
+-- DELETE é bloqueado no caminho de aplicação pela REVOGAÇÃO de privilégio de
+-- service_role (abaixo): service_role só grava (INSERT) e lê (SELECT). A
+-- higienização fica fora do runtime — exclusiva do proprietário/superuser.
 create or replace function public.enforce_privilege_audit_append_only()
 returns trigger
 language plpgsql
@@ -60,8 +66,9 @@ $$;
 
 comment on function public.enforce_privilege_audit_append_only() is
   'F5-04 (D18): impede UPDATE de registros da trilha de mutacoes de privilegio '
-  '(append-only). DELETE nao e bloqueado por trigger (purgas administrativas de '
-  'ambiente sintetico via superuser/service_role); authenticated nao tem grant.';
+  '(append-only). DELETE e bloqueado no caminho de aplicacao por revogacao de '
+  'privilegio de service_role (somente SELECT+INSERT); a higienizacao pertence '
+  'ao proprietario/superuser (postgres/supabase_admin), fora do runtime.';
 
 create trigger trg_privilege_mutation_audit_append_only
   before update on public.privilege_mutation_audit
@@ -71,4 +78,9 @@ create trigger trg_privilege_mutation_audit_append_only
 -- RLS deny-by-default: zero policies; zero grants a authenticated/anon.
 alter table public.privilege_mutation_audit enable row level security;
 
-revoke all on public.privilege_mutation_audit from anon, authenticated;
+-- Imutabilidade no caminho de aplicação (D18): service_role perde UPDATE/DELETE
+-- (e demais DML) e mantém SOMENTE SELECT + INSERT. O proprietário (postgres/
+-- supabase_admin) preserva DELETE por ownership para a higienização explícita
+-- de ambiente sintético (fora da credencial/runtime de produção).
+revoke all on public.privilege_mutation_audit from anon, authenticated, service_role;
+grant select, insert on public.privilege_mutation_audit to service_role;
