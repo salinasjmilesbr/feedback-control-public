@@ -104,7 +104,39 @@ begin
   if v_n <> 12 then
     raise exception '[FAIL] FKs compostas de tenant esperadas=12, encontradas=%', v_n;
   end if;
-  raise notice '[PASS] 12 FKs compostas de tenant presentes (cross-tenant por construcao)';
+
+  -- ACHADO DA AUDITORIA: alem do tenant, a FK precisa amarrar PARTICIPANTE e
+  -- AVALIACAO. Sem isso o banco aceitaria nota/comentario/pendencia da
+  -- avaliacao A apontando para a ocorrencia da avaliacao B do mesmo tenant.
+  select count(*) into v_n from pg_constraint c
+   where c.conname in ('fk_evaluation_scores_participant',
+                       'fk_evaluation_comments_participant',
+                       'fk_evaluation_pendencies_participant')
+     and array_length(c.conkey, 1) = 3
+     and (select count(*) from unnest(c.conkey) k
+           join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k
+          where a.attname = 'evaluation_id') = 1;
+  if v_n <> 3 then
+    raise exception '[FAIL] FK participante+avaliacao+tenant incompleta (% de 3)', v_n;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'uq_evaluation_participants_id_evaluation_organization'
+  ) then
+    raise exception '[FAIL] chave candidata (id, evaluation_id, organization_id) ausente';
+  end if;
+
+  -- Comentario FINAL unico por ocorrencia exige indice PARCIAL (NULL nao
+  -- bloqueia duplicidade em unique simples).
+  if not exists (
+    select 1 from pg_indexes
+     where schemaname='public' and tablename='evaluation_comments'
+       and indexname='uq_evaluation_comments_participant_final'
+  ) then
+    raise exception '[FAIL] unique parcial de comentario FINAL ausente';
+  end if;
+  raise notice '[PASS] FKs de tenant + participante x avaliacao + unique parcial de comentario';
 end $$;
 
 do $$
@@ -174,8 +206,8 @@ begin
   cross join lateral aclexplode(coalesce(p.proacl, acldefault('f'::"char", p.proowner))) a
   where n.nspname='public' and p.proname like 'evaluation_%'
     and a.privilege_type='EXECUTE' and a.grantee='service_role'::regrole;
-  if v_n < 12 then
-    raise exception '[FAIL] funcoes F5-06 com EXECUTE service_role esperadas>=12, encontradas=%', v_n;
+  if v_n < 15 then
+    raise exception '[FAIL] funcoes F5-06 com EXECUTE service_role esperadas>=15, encontradas=%', v_n;
   end if;
   raise notice '[PASS] funcoes F5-06 com EXECUTE somente service_role (%)', v_n;
 end $$;
@@ -185,7 +217,27 @@ begin
   if not exists (select 1 from pg_trigger where tgname='trg_evaluation_events_append_only') then
     raise exception '[FAIL] trigger append-only de evaluation_events ausente (D26)';
   end if;
-  raise notice '[PASS] trigger append-only presente em evaluation_events (D26)';
+
+  -- Configuracao versionada IMUTAVEL (D5/D22): enforcement no BANCO.
+  if not exists (select 1 from pg_trigger where tgname='trg_evaluation_config_versions_imutavel')
+     or not exists (select 1 from pg_trigger where tgname='trg_evaluation_config_criteria_imutavel')
+     or not exists (select 1 from pg_trigger where tgname='trg_evaluation_config_subcriteria_imutavel')
+     or not exists (select 1 from pg_trigger where tgname='trg_evaluation_config_scale_bands_imutavel')
+     or not exists (select 1 from pg_trigger where tgname='trg_evaluation_config_participant_roles_imutavel') then
+    raise exception '[FAIL] guard de imutabilidade da configuracao versionada ausente (D5/D22)';
+  end if;
+  raise notice '[PASS] append-only (D26) + configuracao versionada imutavel (D5/D22)';
+end $$;
+
+do $$
+begin
+  -- Least privilege: nenhuma remocao fisica de avaliacao/ocorrencia pelo
+  -- caminho server-side (historico preservado — D11/D23).
+  if has_table_privilege('service_role', 'public.evaluations', 'DELETE')
+     or has_table_privilege('service_role', 'public.evaluation_participants', 'DELETE') then
+    raise exception '[FAIL] service_role com DELETE em avaliacao/participantes (least privilege)';
+  end if;
+  raise notice '[PASS] service_role sem DELETE em evaluations/evaluation_participants';
 end $$;
 
 -- ============================================================================
