@@ -207,7 +207,7 @@ describe("cutover: criação, edição e encerramento soberanos", () => {
     expect(JSON.stringify(resultado.data)).not.toContain("voto");
   });
 
-  it("grava notas usando SEMPRE a ocorrência resolvida no painel", async () => {
+  it("grava notas SEM participant_id: a ocorrência é resolvida no servidor", async () => {
     const registros: unknown[] = [];
     const repositorio = repositorioFalso({
       gravarNotas: async (entrada) => {
@@ -219,7 +219,8 @@ describe("cutover: criação, edição e encerramento soberanos", () => {
     const painelCarregado = painel();
 
     // A tela informa o NOME do subcritério; o id do catálogo CONGELADO vem do
-    // painel (server-side) e nunca é inventado no cliente.
+    // painel (server-side) e nunca é inventado no cliente. A OCORRÊNCIA, porém,
+    // NÃO é enviada: quem a resolve é a fronteira confiável, pelo ator.
     const resultado = await cutover.gravarNotasDoPainel({
       organizationId: ORG,
       evaluationId: AVALIACAO,
@@ -230,11 +231,15 @@ describe("cutover: criação, edição e encerramento soberanos", () => {
     expect(resultado.ok).toBe(true);
     expect(registros).toEqual([
       expect.objectContaining({
-        participantId: OCORRENCIA,
+        evaluationId: AVALIACAO,
         notas: [{ subcriterion_id: SUB, nota: 5 }],
       }),
     ]);
-    // A ocorrência do painel é a única fonte possível de participant_id.
+    // CORREÇÃO DE AUDITORIA (IDOR): nenhuma ocorrência no envio.
+    expect(registros[0]).not.toHaveProperty("participantId");
+    expect(registros[0]).not.toHaveProperty("participant_id");
+    // O painel continua sendo a referência do CATÁLOGO e da identidade da
+    // própria ocorrência exibida na tela.
     expect(painelCarregado.participanteOcorrenciaId).toBe(OCORRENCIA);
   });
 
@@ -277,12 +282,15 @@ describe("cutover: criação, edição e encerramento soberanos", () => {
     // Observação em branco não vira comentário vazio no banco.
     expect(registros).toEqual([
       expect.objectContaining({
-        participantId: OCORRENCIA,
+        evaluationId: AVALIACAO,
         escopo: "CRITERIO",
         criterionId: CRITERIO,
         texto: "Observação do papel",
       }),
     ]);
+    // CORREÇÃO DE AUDITORIA (IDOR): nenhuma ocorrência no envio.
+    expect(registros[0]).not.toHaveProperty("participantId");
+    expect(registros[0]).not.toHaveProperty("participant_id");
   });
 
   it("comentário final vazio não gera chamada ao servidor", async () => {
@@ -300,16 +308,19 @@ describe("cutover: criação, edição e encerramento soberanos", () => {
     expect(repositorio.chamadas).not.toContain("gravarComentario");
   });
 
-  it("painel sem ocorrência resolvida ⇒ recusa fail-closed (nada gravado)", async () => {
+  it("painel sem catálogo congelado (subcritério desconhecido) ⇒ recusa fail-closed", async () => {
     const repositorio = repositorioFalso();
     const cutover = criarCutoverAvaliacoes({ repositorio });
     const gravouAntes = vi.fn();
     expect(gravouAntes).not.toHaveBeenCalled();
 
+    // A ocorrência NÃO vem mais do cliente (é resolvida no servidor); o que o
+    // painel ainda fornece é o CATÁLOGO congelado. Sem correspondência de nome,
+    // o lote é recusado inteiro e nada é gravado.
     const resultado = await cutover.gravarNotasDoPainel({
       organizationId: ORG,
       evaluationId: AVALIACAO,
-      painel: painel({ participanteOcorrenciaId: "" }),
+      painel: painel({ subcriterios: [] }),
       notas: [{ subcriterio: "Sub", nota: 5 }],
     });
 

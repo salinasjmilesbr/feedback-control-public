@@ -140,17 +140,22 @@ export interface PainelParticipante {
   readonly papeisComFeedbackFinal: readonly string[];
 }
 
+/**
+ * Gravação de notas. CORREÇÃO DE AUDITORIA (IDOR): NÃO existe `participantId`.
+ * A ocorrência editável é resolvida na fronteira confiável a partir do ator
+ * autenticado (auth.uid → membership → vínculo F5-02 → ocorrência vigente), de
+ * modo que o cliente não pode escolher a ocorrência de terceiro.
+ */
 export interface EntradaGravarNotas {
   readonly organizationId: string;
   readonly evaluationId: string;
-  readonly participantId: string;
   readonly notas: readonly { readonly subcriterion_id: string; readonly nota: number }[];
 }
 
+/** Gravação de comentário — mesma regra: sem ocorrência vinda do cliente. */
 export interface EntradaGravarComentario {
   readonly organizationId: string;
   readonly evaluationId: string;
-  readonly participantId: string;
   readonly escopo: "CRITERIO" | "FINAL";
   readonly criterionId?: string | null;
   readonly texto: string;
@@ -333,7 +338,9 @@ export function criarRepositorioAvaliacoesSupabase(
           "evaluation.gravar_notas",
           entrada.organizationId,
           { type: "evaluation", id: entrada.evaluationId },
-          { participant_id: entrada.participantId, notas: entrada.notas }
+          // Sem `participant_id`: a ocorrência é resolvida server-side a partir
+          // do ator autenticado (correção de IDOR).
+          { notas: entrada.notas }
         ),
         (resultado) => (typeof resultado === "number" ? resultado : Number(resultado))
       ),
@@ -345,7 +352,6 @@ export function criarRepositorioAvaliacoesSupabase(
           entrada.organizationId,
           { type: "evaluation", id: entrada.evaluationId },
           {
-            participant_id: entrada.participantId,
             escopo: entrada.escopo,
             criterion_id: entrada.criterionId ?? null,
             texto: entrada.texto,

@@ -187,12 +187,10 @@ describe("controlador de avaliações soberanas", () => {
 
     await controlador.gravarNotas({
       evaluationId: AVALIACAO,
-      participantId: PARTICIPANTE,
       notas: [{ subcriterion_id: PARTICIPANTE, nota: 4 }],
     });
     await controlador.gravarComentario({
       evaluationId: AVALIACAO,
-      participantId: PARTICIPANTE,
       escopo: "FINAL",
       texto: "fechamento",
     });

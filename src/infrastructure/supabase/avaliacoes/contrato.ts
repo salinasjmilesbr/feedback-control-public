@@ -7,9 +7,10 @@
  * - `organization_id` é intenção a ser REVALIDADA contra membership ativa;
  * - identificadores são UUID (`collaborators.id` / `evaluations.id`), nunca
  *   matrícula, nome ou e-mail;
- * - nenhum `actor_id`, `participant_id` forjado ou `config_version_id` do
- *   cliente é aceito como autoridade: o snapshot de participantes e a versão de
- *   configuração são derivados server-side;
+ * - nenhum `actor_id`, `participant_id` ou `config_version_id` do cliente é
+ *   aceito como autoridade: o snapshot de participantes e a versão de
+ *   configuração são derivados server-side, e a OCORRÊNCIA editável é resolvida
+ *   a partir do ator autenticado (auth.uid → vínculo F5-02 → vigência);
  * - a resposta de erro expõe somente código público (F0-05), nunca a razão
  *   interna da negação.
  */
@@ -40,7 +41,12 @@ export interface EntradaAvaliacao {
   readonly alvo: AlvoAvaliacao;
   /** Notas do lote: `{ subcriterion_id, nota }[]` (1..5). */
   readonly notas?: readonly { readonly subcriterion_id: string; readonly nota: number }[];
-  readonly participant_id?: string;
+  /**
+   * CORREÇÃO DE AUDITORIA (IDOR): `participant_id` NÃO faz parte deste contrato.
+   * A ocorrência editável é resolvida server-side a partir do ator autenticado
+   * (auth.uid → membership → vínculo F5-02 → ocorrência vigente). Enviar esse
+   * campo é `INVALID_INPUT` — o browser não escolhe a ocorrência de ninguém.
+   */
   readonly escopo?: "CRITERIO" | "FINAL";
   readonly criterion_id?: string | null;
   readonly texto?: string;
@@ -138,6 +144,16 @@ export function validarEntradaAvaliacao(corpo: unknown): ResultadoValidacao {
     }
   }
 
+  // CORREÇÃO DE AUDITORIA (IDOR): a ocorrência editável é resolvida server-side.
+  // Qualquer tentativa de escolhê-la pelo payload é recusada de forma explícita.
+  if (cru.participant_id !== undefined && cru.participant_id !== null) {
+    return {
+      ok: false,
+      code: "INVALID_INPUT",
+      message: "A ocorrência do participante é resolvida no servidor e não é aceita no corpo.",
+    };
+  }
+
   if (!ehOperacaoAvaliacao(cru.operacao)) {
     return { ok: false, code: "INVALID_INPUT", message: "Operação de avaliação desconhecida." };
   }
@@ -181,9 +197,6 @@ export function validarEntradaAvaliacao(corpo: unknown): ResultadoValidacao {
     if (typeof texto !== "string" || !/^\d+$/.test(texto.trim()) || Number(texto.trim()) <= 0) {
       return { ok: false, code: "INVALID_INPUT", message: "matricula_avaliado inválida." };
     }
-  }
-  if (cru.participant_id !== undefined && cru.participant_id !== null && !ehUuid(cru.participant_id)) {
-    return { ok: false, code: "INVALID_INPUT", message: "participant_id inválido." };
   }
   if (cru.criterion_id !== undefined && cru.criterion_id !== null && !ehUuid(cru.criterion_id)) {
     return { ok: false, code: "INVALID_INPUT", message: "criterion_id inválido." };

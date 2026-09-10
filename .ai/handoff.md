@@ -101,6 +101,33 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
      se a entrada estiver obsoleta, esquece o cache e segue com a criação
      legítima. A autoridade da unicidade continua sendo o índice único parcial do
      banco, e nada é criado localmente.
+- **Estado — CORREÇÕES DA AUDITORIA GPT-5.6 TERRA (rodada 3, FINAL):**
+  1. **BLOCKER 1 — assinatura de `evaluation_resolver_ciclo`.** A Edge enviava
+     `p_matricula_avaliado`, argumento que NUNCA existiu na RPC; com PostgREST a
+     divergência quebra a chamada e impedia toda criação nova. A Edge passou a
+     enviar EXATAMENTE a assinatura real:
+     `evaluation_resolver_ciclo(p_organization_id uuid, p_ano integer,
+     p_numero integer, p_actor_user_profile_id uuid) returns uuid`.
+     A matrícula continua sendo INTENÇÃO resolvida pela ponte F3-01 **antes** do
+     Policy Engine (para o alvo autorizável) e não trafega de novo. Nenhum
+     overload foi criado. Teste novo `avaliacoesContratoRpc.test.ts` lê o código
+     real da Edge e falha se algum argumento voltar a divergir do contrato.
+  2. **BLOCKER 2 — IDOR em `participant_id`.** As RPCs `evaluation_gravar_notas`
+     e `evaluation_gravar_comentario` aceitavam `p_participant_id` do chamador e
+     só validavam que a ocorrência pertencia à avaliação e estava vigente: um ator
+     autorizado podia forjar o id da ocorrência de TERCEIRO. Agora a ocorrência
+     editável é derivada SOBERANAMENTE do ator, por
+     `evaluation_ocorrencia_do_ator(organization_id, evaluation_id, actor)`:
+     `auth.uid()` → perfil → membership ativa no tenant do RECURSO → vínculo
+     F5-02 → ocorrência VIGENTE pertencente a ele. **`participant_id` foi
+     REMOVIDO do contrato externo** (Edge, `core.ts`, `contrato.ts`, repositório,
+     controlador e serviço) e a validação de forma RECUSA o campo
+     (`INVALID_INPUT`); as assinaturas antigas foram dropadas. Defesas em
+     profundidade nas RPCs: ator revalidado, tenant do recurso revalidado,
+     ocorrência vinculada ao ator, vigência respeitada e fail-closed em ausência
+     **ou ambiguidade** (duas ocorrências vigentes ⇒ recusa).
+     O `painel_participante` continua devolvendo SOMENTE a ocorrência própria
+     (usada como catálogo/identidade da tela) e D20 permanece intacta.
 - **Telas que ainda leem SOMENTE o legado (justificativa):**
   - `CiclosAvaliacaoPage`/`PainelCicloPage`/`relatorioService`: o painel é
     montado pelo domínio de **ciclos**, que ainda vive em `localStorage`
@@ -121,13 +148,19 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   4. **Descoberta de id fora da URL**: sem estado local, o produto alcança a
      avaliação pela URL/painel; uma listagem soberana "por ciclo/colaborador"
      (Edge + Policy Engine) é evolução aditiva e depende da migração de ciclos.
-- **Validação executada nesta rodada (todo exit 0):** `npm test` (83 arquivos,
-  1062 testes), `npm run build`, `npm run lint`, `git diff --check`;
+  5. **Ator com duas ocorrências vigentes** na mesma avaliação (ex.: o mesmo
+     colaborador como responsável direto E membro do colegiado) é recusado por
+     ambiguidade (fail-closed, coberto pelo validador). O cenário sintético
+     encerra a ocorrência redundante para exercitar o fluxo positivo. Resolver a
+     escrita nesse caso exigiria papel explícito na intenção ⇒ nova `Q#`.
+- **Validação executada nesta rodada (todo exit 0):** `npm test` (84 arquivos,
+  1069 testes), `npm run build`, `npm run lint`, `git diff --check`;
   validadores SQL no Supabase local — `01-cenario-f5-06.sql`,
-  `02-validar-f5-06.sql` (25 PASS), `03-validar-f5-06-cutover.sql` (6 PASS),
-  `01-cenario-f4-08.sql`, `02-validar-f4-08.sql` (56 PASS),
-  `03-validar-f4-08-mutacoes.sql` (8 PASS).
+  `02-validar-f5-06.sql` (25 PASS), `03-validar-f5-06-cutover.sql` (13 PASS,
+  incluindo os testes negativos de IDOR), `01-cenario-f4-08.sql`,
+  `02-validar-f4-08.sql` (56 PASS), `03-validar-f4-08-mutacoes.sql` (8 PASS).
 - **Contexto do repositório:** `main` contém F4 e F5-01..F5-05; a F5-06 é a
   atividade em curso nesta branch.
-- **Próximos passos:** abrir PR quando solicitado; eventuais follow-ups são os
-  três itens de "pendências/limitações conhecidas".
+- **Próximos passos:** nova auditoria independente sobre o novo SHA; abrir PR
+  quando solicitado. **A F5-06 NÃO deve ser declarada aprovada por este agente** —
+  a correção foi submetida a nova auditoria.

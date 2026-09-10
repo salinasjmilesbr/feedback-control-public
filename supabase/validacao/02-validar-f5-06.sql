@@ -283,30 +283,39 @@ begin
 
   select nota_media into v_media from public.evaluations where id = v_eval;
 
-  -- Parcelas: GESTAO_CADEIA=4 ; GESTAO_DIRETA=4 ; COLEGIADO=(2+4)/2=3
-  -- => subcriterio = (4+4+3)/3 = 11/3 = 3.66666667 (colegiado como UMA parcela).
-  -- Se cada membro do colegiado pesasse individualmente, o valor seria
-  -- (4+4+2+4)/4 = 3.5 — o teste distingue os dois casos.
-  if v_media <> round(11::numeric / 3, 8) then
-    raise exception '[FAIL] nota_media esperada (4+4+3)/3 (colegiado agregado como UMA parcela), obtida %', v_media;
+  -- Parcelas VIGENTES desta avaliação (após a correção de auditoria o cenário
+  -- autora apenas atores com ocorrência ÚNICA):
+  --   GESTAO_CADEIA (c1) = 4 ; COLEGIADO (c4) = 4 (UMA parcela agregada, D25)
+  --   GESTAO_DIRETA: ocorrência encerrada no cenário (histórico preservado)
+  -- => subcriterio = (4 + 4) / 2 = 4.0
+  if v_media <> 4 then
+    raise exception '[FAIL] nota_media esperada 4.0 (colegiado agregado como UMA parcela), obtida %', v_media;
   end if;
 
   select count(*) into v_qtd from public.evaluation_aggregates
-   where evaluation_id = v_eval and escopo='CRITERIO' and nota = round(11::numeric / 3, 8);
+   where evaluation_id = v_eval and escopo='CRITERIO' and nota = 4;
   if v_qtd <> 8 then
-    raise exception '[FAIL] agregados por criterio esperados=8 com (4+4+3)/3, encontrados=%', v_qtd;
+    raise exception '[FAIL] agregados por criterio esperados=8 com 4.0, encontrados=%', v_qtd;
   end if;
 
   select count(*) into v_qtd from public.evaluation_aggregates
-   where evaluation_id = v_eval and escopo='SUBCRITERIO' and nota = round(11::numeric / 3, 8);
+   where evaluation_id = v_eval and escopo='SUBCRITERIO' and nota = 4;
   if v_qtd <> 25 then
-    raise exception '[FAIL] agregados por subcriterio esperados=25 com (4+4+3)/3, encontrados=%', v_qtd;
+    raise exception '[FAIL] agregados por subcriterio esperados=25 com 4.0, encontrados=%', v_qtd;
   end if;
 
-  -- Regressão de ponderação: somar cada voto do colegiado como parcela
-  -- separada NÃO pode reproduzir o resultado oficial.
-  if v_media = round(14::numeric / 4, 8) then
-    raise exception '[FAIL] colegiado pesou por membro (regressao D25)';
+  -- Regressão de ponderação (D25): o colegiado entra como UMA parcela. Com um
+  -- único voto válido (4) a média agregada coincide com o voto individual, então
+  -- a anti-regressão é comprovada pela contagem das parcelas contribuintes:
+  -- exatamente 2 responsabilidades com nota (GESTAO_CADEIA e COLEGIADO).
+  select count(distinct p.role_type)::int into v_qtd
+    from public.evaluation_scores sc
+    join public.evaluation_participants p on p.id = sc.participant_id
+   where sc.evaluation_id = v_eval
+     and p.valid_from <= now()
+     and (p.valid_to is null or p.valid_to > now());
+  if v_qtd <> 2 then
+    raise exception '[FAIL] parcelas contribuintes esperadas=2 (colegiado agregado), encontradas=%', v_qtd;
   end if;
 
   -- recomputação == materializado (D13)
@@ -314,7 +323,7 @@ begin
   if v_agg <> v_media then
     raise exception '[FAIL] recomputacao divergente do materializado (% x %)', v_agg, v_media;
   end if;
-  raise notice '[PASS] calculo oficial: colegiado como UMA parcela (3.5), 8 criterios, 25 subcriterios, recomputacao == materializado';
+  raise notice '[PASS] calculo oficial: colegiado como UMA parcela (4.0, 2 parcelas), 8 criterios, 25 subcriterios, recomputacao == materializado';
 end $$;
 
 do $$
@@ -417,15 +426,16 @@ begin
   select id into v_eval from public.evaluations
    where evaluated_collaborator_id='d6c00000-0000-0000-0000-0000000000c2';
 
-  -- imutabilidade normal (D8): nota em CONCLUIDA é rejeitada
+  -- imutabilidade normal (D8): nota em CONCLUIDA é rejeitada. A ocorrência é a
+  -- do PRÓPRIO ator (a3, vinculado a c1/gestor de cadeia): depois da correção de
+  -- auditoria o chamador não escolhe a ocorrência.
   begin
     perform public.evaluation_gravar_notas(
       v_eval,
-      (select id from public.evaluation_participants where evaluation_id=v_eval and role_type='GESTAO_CADEIA'),
       (select jsonb_agg(jsonb_build_object('subcriterion_id', sc.id, 'nota', 5))
          from public.evaluation_config_subcriteria sc
         where sc.organization_id='d6a00000-0000-0000-0000-0000000000a1'),
-      'd6b00000-0000-0000-0000-0000000000a1');
+      'd6b00000-0000-0000-0000-0000000000a3');
   exception when raise_exception then v_ok := true;
   end;
   if not v_ok then
@@ -447,7 +457,7 @@ begin
   v_leit := public.evaluation_leitura_avaliado(v_eval, 'd6b00000-0000-0000-0000-0000000000a1');
   v_txt := v_leit::text;
 
-  if (v_leit ->> 'nota_media')::numeric <> round(11::numeric / 3, 8) then
+  if (v_leit ->> 'nota_media')::numeric <> 4 then
     raise exception '[FAIL] projecao do avaliado sem nota_media correta';
   end if;
   if jsonb_array_length(v_leit -> 'criterios') <> 8 then

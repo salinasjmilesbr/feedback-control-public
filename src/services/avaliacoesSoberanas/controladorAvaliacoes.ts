@@ -50,14 +50,18 @@ export interface ControladorAvaliacoes<Registro = unknown> {
     readonly cycleId: string;
     readonly evaluatedCollaboratorId: string;
   }): Promise<string | null>;
+  /**
+   * Grava notas da PRÓPRIA ocorrência. CORREÇÃO DE AUDITORIA (IDOR): NÃO existe
+   * `participantId` — a ocorrência é resolvida na fronteira confiável a partir
+   * do ator autenticado.
+   */
   gravarNotas(entrada: {
     readonly evaluationId: string;
-    readonly participantId: string;
     readonly notas: readonly { readonly subcriterion_id: string; readonly nota: number }[];
   }): Promise<boolean>;
+  /** Grava comentário da PRÓPRIA ocorrência (sem `participantId`). */
   gravarComentario(entrada: {
     readonly evaluationId: string;
-    readonly participantId: string;
     readonly escopo: "CRITERIO" | "FINAL";
     readonly criterionId?: string | null;
     readonly texto: string;

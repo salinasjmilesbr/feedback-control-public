@@ -320,23 +320,23 @@ Deno.serve(async (req) => {
           .maybeSingle();
       }
       case "evaluation.gravar_notas": {
-        if (!execucao.participantId) {
-          return { error: { code: "INVALID_INPUT", message: "participant_id obrigatório." } };
-        }
+        // CORREÇÃO DE AUDITORIA (IDOR): a ocorrência editável NÃO vem do
+        // cliente. A RPC a deriva de `p_actor_user_profile_id` (auth.uid →
+        // membership → vínculo F5-02 → ocorrência vigente). Nenhum
+        // `participant_id` atravessa esta fronteira.
         return admin.rpc("evaluation_gravar_notas", {
           p_evaluation_id: avaliacao,
-          p_participant_id: execucao.participantId,
           p_notas: execucao.notas,
           p_actor_user_profile_id: ator,
         });
       }
       case "evaluation.gravar_comentario": {
-        if (!execucao.participantId || !execucao.escopo || !execucao.texto) {
+        if (!execucao.escopo || !execucao.texto) {
           return { error: { code: "INVALID_INPUT", message: "Parâmetros do comentário incompletos." } };
         }
+        // Idem: a ocorrência é resolvida server-side a partir do ator.
         return admin.rpc("evaluation_gravar_comentario", {
           p_evaluation_id: avaliacao,
-          p_participant_id: execucao.participantId,
           p_escopo: execucao.escopo,
           p_criterion_id: execucao.criterionId,
           p_texto: execucao.texto,
@@ -380,8 +380,11 @@ Deno.serve(async (req) => {
         });
       }
       case "evaluation.resolver_ciclo": {
-        // ano+ciclo (INTENÇÃO) → UUID soberano do ciclo, dentro do tenant. O
-        // alvo já foi resolvido (colaborador avaliado) antes do Policy Engine.
+        // ano+ciclo (INTENÇÃO) → UUID soberano do ciclo, dentro do tenant
+        // revalidado. A assinatura da RPC é EXATAMENTE
+        // `(p_organization_id, p_ano, p_numero, p_actor_user_profile_id)`:
+        // a matrícula NÃO é enviada aqui porque a ponte matrícula → UUID (F3-01)
+        // já foi resolvida ANTES do Policy Engine, para o alvo autorizável.
         if (execucao.ano === null || execucao.numero === null) {
           return { error: { code: "INVALID_INPUT", message: "ano e numero obrigatórios." } };
         }
@@ -389,7 +392,6 @@ Deno.serve(async (req) => {
           p_organization_id: org,
           p_ano: execucao.ano,
           p_numero: execucao.numero,
-          p_matricula_avaliado: execucao.matriculaAvaliado,
           p_actor_user_profile_id: ator,
         });
       }

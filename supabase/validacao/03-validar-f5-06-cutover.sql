@@ -106,18 +106,16 @@ begin
    order by created_at limit 1;
 
   -- O ator do cenário está vinculado ao AVALIADO (c2), que NÃO é participante
-  -- desta avaliação ⇒ recusa (esta leitura é de PARTICIPANTE, não do avaliado).
-  begin
-    perform public.evaluation_painel_participante(v_eval, 'd6b00000-0000-0000-0000-0000000000a1');
+  -- desta avaliação. Esta leitura é de PARTICIPANTE (edição), não do avaliado:
+  -- o resultado é "sem painel" (NULL), nunca erro de backend — assim a
+  -- fronteira distingue "não existe/não é acessível" de falha real.
+  v_painel := public.evaluation_painel_participante(
+    v_eval, 'd6b00000-0000-0000-0000-0000000000a1');
+
+  if v_painel is not null then
     raise exception '[FAIL] avaliado obteve a leitura de EDICAO do participante';
-  exception when raise_exception then
-    if sqlerrm like '%ocorrencia vigente%' or sqlerrm like '%avaliado%' then
-      null;
-    else
-      raise;
-    end if;
-  end;
-  raise notice '[PASS] leitura de edicao recusada para quem nao tem ocorrencia vigente';
+  end if;
+  raise notice '[PASS] leitura de edicao devolve NULL para quem nao tem ocorrencia vigente';
 end $$;
 
 do $$
@@ -219,7 +217,340 @@ begin
 end $$;
 
 -- ============================================================================
--- 3) Superfície fechada: EXECUTE somente service_role
+-- 3) CORREÇÃO DE AUDITORIA (IDOR): a ocorrência editável é do ATOR
+-- ----------------------------------------------------------------------------
+-- evaluation_gravar_notas / evaluation_gravar_comentario NÃO aceitam mais
+-- participant_id: a ocorrência vem de auth.uid -> membership -> vínculo F5-02 ->
+-- ocorrência vigente. Um ator autorizado a escrever NÃO consegue atingir a
+-- ocorrência de terceiro, porque o payload nem possui esse campo.
+-- ============================================================================
+do $$
+declare
+  v_eval uuid;
+  v_part_c1 uuid;
+  v_part_c4 uuid;
+  v_notas_5 jsonb;
+  v_c4_antes int;
+  v_c4_depois int;
+begin
+  select id into v_eval from public.evaluations
+   where evaluated_collaborator_id = 'd6c00000-0000-0000-0000-0000000000c2'
+     and status <> 'CANCELADA'
+   order by created_at limit 1;
+
+  select id into v_part_c1 from public.evaluation_participants
+   where evaluation_id = v_eval and collaborator_id = 'd6c00000-0000-0000-0000-0000000000c1';
+  select id into v_part_c4 from public.evaluation_participants
+   where evaluation_id = v_eval and collaborator_id = 'd6c00000-0000-0000-0000-0000000000c4';
+
+  if v_part_c1 is null or v_part_c4 is null then
+    raise exception '[FAIL] cenario sem ocorrencias esperadas (c1/c4)';
+  end if;
+
+  select jsonb_agg(jsonb_build_object('subcriterion_id', sc.id, 'nota', 5))
+    into v_notas_5
+    from public.evaluation_config_subcriteria sc
+   where sc.organization_id = 'd6a00000-0000-0000-0000-0000000000a1';
+
+  select coalesce(sum(nota), 0)::int into v_c4_antes
+    from public.evaluation_scores where participant_id = v_part_c4;
+  if v_c4_antes = 0 then
+    raise exception '[FAIL] cenario invalido: ocorrencia de terceiro (c4) sem notas';
+  end if;
+
+  -- (1) O ator a3 (vinculado a c1) grava as PRÓPRIAS notas.
+  perform public.evaluation_gravar_notas(
+    v_eval, v_notas_5, 'd6b00000-0000-0000-0000-0000000000a3');
+
+  -- (2) A ocorrência de TERCEIRO permanece intacta (prova de isolamento).
+  select coalesce(sum(nota), 0)::int into v_c4_depois
+    from public.evaluation_scores where participant_id = v_part_c4;
+  if v_c4_depois <> v_c4_antes then
+    raise exception '[FAIL] IDOR: gravacao do ator alterou a ocorrencia de terceiro (c4)';
+  end if;
+
+  -- (3) As notas estão na ocorrência DO ATOR e com a autoria soberana dele.
+  if not exists (
+    select 1 from public.evaluation_scores sc
+     where sc.evaluation_id = v_eval
+       and sc.participant_id = v_part_c1
+       and sc.nota = 5
+       and sc.autor_user_profile_id = 'd6b00000-0000-0000-0000-0000000000a3'
+  ) then
+    raise exception '[FAIL] o ator nao gravou as PROPRIA notas com sua autoria';
+  end if;
+
+  -- (4) Comentário: com escopo válido, vai para a ocorrência do ATOR (c1) e
+  --     nunca para a de terceiro (c4).
+  perform public.evaluation_gravar_comentario(
+    v_eval, 'FINAL', null,
+    'Comentario final do proprio ator (IDOR).',
+    'd6b00000-0000-0000-0000-0000000000a3');
+
+  if exists (
+    select 1 from public.evaluation_comments cm
+     where cm.evaluation_id = v_eval
+       and cm.participant_id = v_part_c4
+       and cm.escopo = 'FINAL'
+       and cm.texto like '%proprio ator%'
+  ) then
+    raise exception '[FAIL] IDOR: comentario do ator gravado na ocorrencia de terceiro (c4)';
+  end if;
+  if not exists (
+    select 1 from public.evaluation_comments cm
+     where cm.evaluation_id = v_eval
+       and cm.participant_id = v_part_c1
+       and cm.escopo = 'FINAL'
+       and cm.texto like '%proprio ator%'
+  ) then
+    raise exception '[FAIL] comentario do proprio ator nao foi gravado na sua ocorrencia';
+  end if;
+
+  raise notice '[PASS] IDOR: notas e comentario caem SEMPRE na ocorrencia do ator (terceiro intacto)';
+end $$;
+
+do $$
+declare
+  v_eval uuid;
+  v_part_c4 uuid;
+  v_notas_4 jsonb;
+begin
+  -- Ator do COLEGIADO (a5, vinculado a c4 no cenário): grava nas PRÓPRIAS notas.
+  -- O papel efetivo (e a proibição de escrever "como outro papel") é decidido
+  -- pelo Policy Engine na fronteira; no banco, o limite é a ocorrência do ator.
+  select id into v_eval from public.evaluations
+   where evaluated_collaborator_id = 'd6c00000-0000-0000-0000-0000000000c2'
+     and status <> 'CANCELADA'
+   order by created_at limit 1;
+
+  select id into v_part_c4 from public.evaluation_participants
+   where evaluation_id = v_eval and collaborator_id = 'd6c00000-0000-0000-0000-0000000000c4';
+
+  select jsonb_agg(jsonb_build_object('subcriterion_id', sc.id, 'nota', 3))
+    into v_notas_4
+    from public.evaluation_config_subcriteria sc
+   where sc.organization_id = 'd6a00000-0000-0000-0000-0000000000a1';
+
+  perform public.evaluation_gravar_notas(
+    v_eval, v_notas_4, 'd6b00000-0000-0000-0000-0000000000a5');
+
+  -- Nenhuma nota do ator do colegiado escapou para outra ocorrência.
+  if exists (
+    select 1 from public.evaluation_scores sc
+     where sc.evaluation_id = v_eval
+       and sc.nota = 3
+       and sc.participant_id <> v_part_c4
+  ) then
+    raise exception '[FAIL] IDOR: notas do colegiado alcancaram ocorrencia de terceiro';
+  end if;
+  -- E nenhuma nota de terceiro recebeu a autoria dele.
+  if exists (
+    select 1 from public.evaluation_scores sc
+     where sc.evaluation_id = v_eval
+       and sc.participant_id <> v_part_c4
+       and sc.autor_user_profile_id = 'd6b00000-0000-0000-0000-0000000000a5'
+  ) then
+    raise exception '[FAIL] IDOR: autoria do colegiado em ocorrencia de terceiro';
+  end if;
+
+  raise notice '[PASS] IDOR: ator do colegiado grava somente na propria ocorrencia';
+end $$;
+
+do $$
+declare
+  v_eval uuid;
+  v_ok boolean := false;
+begin
+  select id into v_eval from public.evaluations
+   where evaluated_collaborator_id = 'd6c00000-0000-0000-0000-0000000000c2'
+     and status <> 'CANCELADA'
+   order by created_at limit 1;
+
+  -- Ator SEM ocorrência vigente (a1, vinculado ao AVALIADO) não grava nada.
+  begin
+    perform public.evaluation_gravar_notas(
+      v_eval, '[]'::jsonb, 'd6b00000-0000-0000-0000-0000000000a1');
+  exception when raise_exception then v_ok := true;
+  end;
+  if not v_ok then
+    raise exception '[FAIL] ator sem ocorrencia vigente gravou notas';
+  end if;
+
+  v_ok := false;
+  begin
+    perform public.evaluation_gravar_comentario(
+      v_eval, 'FINAL', null, 'tentativa', 'd6b00000-0000-0000-0000-0000000000a1');
+  exception when raise_exception then v_ok := true;
+  end;
+  if not v_ok then
+    raise exception '[FAIL] ator sem ocorrencia vigente gravou comentario';
+  end if;
+
+  -- Cross-tenant continua impossível.
+  v_ok := false;
+  begin
+    perform public.evaluation_gravar_notas(
+      v_eval,
+      (select jsonb_agg(jsonb_build_object('subcriterion_id', sc.id, 'nota', 5))
+         from public.evaluation_config_subcriteria sc
+        where sc.organization_id = 'd6a00000-0000-0000-0000-0000000000a1'),
+      'd6b00000-0000-0000-0000-0000000000a2');
+  exception when raise_exception then v_ok := true;
+  end;
+  if not v_ok then
+    raise exception '[FAIL] ator de outro tenant gravou notas (D27 violado)';
+  end if;
+
+  raise notice '[PASS] IDOR: gravacao recusada para ator sem ocorrencia e para ator de outro tenant';
+end $$;
+
+do $$
+declare
+  v_n int;
+  v_old int;
+begin
+  -- A assinatura ANTIGA (com participant_id) deve ter sido REMOVIDA: sem ela,
+  -- nenhum caminho do browser consegue escolher a ocorrência.
+  select count(*) into v_old from pg_proc p
+   join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and p.proname = 'evaluation_gravar_notas'
+     and pg_get_function_identity_arguments(p.oid) like '%participant_id%';
+  if v_old <> 0 then
+    raise exception '[FAIL] assinatura antiga com participant_id ainda existe (%)', v_old;
+  end if;
+
+  select count(*) into v_n from pg_proc p
+   join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'evaluation_gravar_notas';
+  if v_n <> 1 then
+    raise exception '[FAIL] evaluation_gravar_notas deveria ter exatamente 1 assinatura (%)', v_n;
+  end if;
+
+  select count(*) into v_old from pg_proc p
+   join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and p.proname = 'evaluation_gravar_comentario'
+     and pg_get_function_identity_arguments(p.oid) like '%participant_id%';
+  if v_old <> 0 then
+    raise exception '[FAIL] assinatura antiga com participant_id ainda existe (%)', v_old;
+  end if;
+
+  select count(*) into v_n from pg_proc p
+   join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'evaluation_gravar_comentario';
+  if v_n <> 1 then
+    raise exception '[FAIL] evaluation_gravar_comentario deveria ter exatamente 1 assinatura (%)', v_n;
+  end if;
+
+  raise notice '[PASS] IDOR: assinaturas antigas com participant_id removidas (1 assinatura cada)';
+end $$;
+
+do $$
+declare
+  v_ok boolean := false;
+  v_eval uuid;
+  v_notas_5 jsonb;
+begin
+  -- Ocorrência ENCERRADA (valid_to no passado) não pode ser usada: mesmo com o
+  -- ator correto, a resolução server-side não encontra ocorrência vigente.
+  select id into v_eval from public.evaluations
+   where evaluated_collaborator_id = 'd6c00000-0000-0000-0000-0000000000c2'
+     and status <> 'CANCELADA'
+   order by created_at limit 1;
+
+  select jsonb_agg(jsonb_build_object('subcriterion_id', sc.id, 'nota', 5))
+    into v_notas_5
+    from public.evaluation_config_subcriteria sc
+   where sc.organization_id = 'd6a00000-0000-0000-0000-0000000000a1';
+
+  update public.evaluation_participants
+     set valid_from = now() - interval '10 days',
+         valid_to = now() - interval '1 day',
+         status = 'ended'
+   where evaluation_id = v_eval
+     and collaborator_id = 'd6c00000-0000-0000-0000-0000000000c1';
+
+  begin
+    perform public.evaluation_gravar_notas(
+      v_eval, v_notas_5, 'd6b00000-0000-0000-0000-0000000000a3');
+  exception when raise_exception then v_ok := true;
+  end;
+
+  -- Restaura a vigência para não interferir nas verificações seguintes.
+  update public.evaluation_participants
+     set valid_to = null,
+         status = 'active'
+   where evaluation_id = v_eval
+     and collaborator_id = 'd6c00000-0000-0000-0000-0000000000c1';
+
+  if not v_ok then
+    raise exception '[FAIL] ocorrencia ENCERRADA aceitou gravacao';
+  end if;
+  raise notice '[PASS] IDOR: ocorrencia encerrada (fora da vigencia) nao aceita gravacao';
+end $$;
+
+do $$
+declare
+  v_ok boolean := false;
+  v_eval uuid;
+  v_notas_5 jsonb;
+  v_media_antes numeric(12,8);
+  v_media_depois numeric(12,8);
+begin
+  -- (6) OCORRÊNCIA AMBÍGUA: o colaborador c3 acumula DUAS ocorrências vigentes
+  --     (COLEGIADO e GESTAO_DIRETA). A resolução soberana recusa em vez de
+  --     escolher arbitrariamente — nenhuma gravação acontece.
+  select id into v_eval from public.evaluations
+   where evaluated_collaborator_id = 'd6c00000-0000-0000-0000-0000000000c2'
+     and status <> 'CANCELADA'
+   order by created_at limit 1;
+
+  select jsonb_agg(jsonb_build_object('subcriterion_id', sc.id, 'nota', 5))
+    into v_notas_5
+    from public.evaluation_config_subcriteria sc
+   where sc.organization_id = 'd6a00000-0000-0000-0000-0000000000a1';
+
+  select nota_media into v_media_antes from public.evaluations where id = v_eval;
+
+  -- Reabre a ocorrência de GESTAO_DIRETA (encerrada pelo cenário) para criar a
+  -- ambiguidade de forma controlada.
+  update public.evaluation_participants
+     set valid_from = now() - interval '10 days',
+         valid_to = null,
+         status = 'active'
+   where evaluation_id = v_eval
+     and role_type = 'GESTAO_DIRETA';
+
+  begin
+    perform public.evaluation_gravar_notas(
+      v_eval, v_notas_5, 'd6b00000-0000-0000-0000-0000000000a4');
+  exception when raise_exception then v_ok := true;
+  end;
+
+  -- Restaura o estado do cenário (GESTAO_DIRETA encerrada).
+  update public.evaluation_participants
+     set valid_to = now() - interval '1 day',
+         status = 'ended'
+   where evaluation_id = v_eval
+     and role_type = 'GESTAO_DIRETA';
+
+  if not v_ok then
+    raise exception '[FAIL] ocorrencia AMBIGUA (2 vigentes) aceitou gravacao';
+  end if;
+
+  -- (10) O CÁLCULO OFICIAL não é alterado por tentativa recusada.
+  select nota_media into v_media_depois from public.evaluations where id = v_eval;
+  if v_media_depois <> v_media_antes then
+    raise exception '[FAIL] tentativa IDOR alterou o calculo oficial (% -> %)',
+      v_media_antes, v_media_depois;
+  end if;
+
+  raise notice '[PASS] IDOR: ocorrencia ambigua recusada e calculo oficial inalterado';
+end $$;
+
+-- ============================================================================
+-- 4) Superfície fechada: EXECUTE somente service_role
 -- ============================================================================
 do $$
 declare
@@ -257,17 +588,32 @@ begin
 end $$;
 
 -- ============================================================================
--- 4) Limpeza do ator sintético desta validação
+-- 5) Limpeza dos atores sintéticos criados por esta validação
+-- ----------------------------------------------------------------------------
+-- Os atores a3/a4/a5 do CENÁRIO permanecem (o cenário é reaplicado a cada
+-- execução). Esta validação não cria novos atores; apenas garante que nenhum
+-- resíduo de execuções anteriores permaneça quando o cenário é reaplicado.
 -- ============================================================================
-delete from public.membership_collaborator_links
- where id = 'd6e00000-0000-0000-0000-0000000000a3';
-delete from public.user_organization_memberships
- where id = 'd6d00000-0000-0000-0000-0000000000a3';
-delete from public.user_profiles where id = 'd6b00000-0000-0000-0000-0000000000a3';
-delete from auth.users where id = 'd6b00000-0000-0000-0000-0000000000a3';
+do $$
+declare
+  v_residuo int;
+begin
+  select count(*) into v_residuo
+    from public.user_profiles
+   where id::text like 'd6b00000%'
+     and id not in ('d6b00000-0000-0000-0000-0000000000a1',
+                    'd6b00000-0000-0000-0000-0000000000a2',
+                    'd6b00000-0000-0000-0000-0000000000a3',
+                    'd6b00000-0000-0000-0000-0000000000a4',
+                    'd6b00000-0000-0000-0000-0000000000a5');
+  if v_residuo <> 0 then
+    raise exception '[FAIL] residuo de atores sinteticos desta validacao (%)', v_residuo;
+  end if;
+  raise notice '[PASS] nenhum ator residual criado por esta validacao';
+end $$;
 
 do $$
 begin
   raise notice '============================================================';
-  raise notice 'F5-06 (cutover): todas as verificacoes passaram (resolucao de ciclo + leitura da propria ocorrencia + superficie fechada).';
+  raise notice 'F5-06 (cutover): todas as verificacoes passaram (resolucao de ciclo + leitura da propria ocorrencia + anti-IDOR + superficie fechada).';
 end $$;

@@ -63,7 +63,12 @@ export interface ExecucaoAvaliacao {
   readonly evaluationId: string;
   readonly evaluatedCollaboratorId: string;
   readonly cycleId: string | null;
-  readonly participantId: string | null;
+  /**
+   * CORREÇÃO DE AUDITORIA (IDOR): NÃO existe ocorrência escolhida pelo cliente.
+   * A ocorrência editável é resolvida dentro da RPC a partir do ator
+   * autenticado (`actorUserProfileId`), com revalidação de tenant, vínculo
+   * (F5-02) e vigência. O payload do browser nunca a seleciona.
+   */
   readonly escopo: "CRITERIO" | "FINAL" | null;
   readonly criterionId: string | null;
   readonly texto: string | null;
@@ -203,7 +208,6 @@ export async function avaliacoes(
     evaluationId: alvoDaOperacao.id,
     evaluatedCollaboratorId: alvoDaOperacao.id,
     cycleId: entrada.cycle_id ?? null,
-    participantId: entrada.participant_id ?? null,
     escopo: entrada.escopo ?? null,
     criterionId: entrada.criterion_id ?? null,
     texto: entrada.texto ?? null,

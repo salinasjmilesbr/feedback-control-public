@@ -235,13 +235,11 @@ describe("service de avaliações soberanas (caminho novo)", () => {
     await service.gravarNotas({
       organizationId: ORG,
       evaluationId: AVALIACAO,
-      participantId: COLABORADOR,
       notas: [{ subcriterion_id: COLABORADOR, nota: 4 }],
     });
     await service.gravarComentario({
       organizationId: ORG,
       evaluationId: AVALIACAO,
-      participantId: COLABORADOR,
       escopo: "FINAL",
       texto: "comentário",
     });

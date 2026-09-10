@@ -61,20 +61,34 @@ insert into public.organizations (id, name) values
   ('d6a00000-0000-0000-0000-0000000000b1', 'Org Sintetica F5-06 Beta');
 
 -- auth.users + perfis
+-- a1 = ATOR/avaliado (vínculo com c2, o AVALIADO — usado na transparência D20)
+-- a2 = ator de OUTRO tenant (Beta)
+-- a3/a4/a5 = atores PARTICIPANTES (vínculo com c1/c3/c4): depois da correção de
+--            auditoria (IDOR) a ocorrência editável é resolvida a partir do
+--            ator, então cada participante grava sob a PRÓPRIA identidade.
 insert into auth.users
   (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
    raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
 values
   ('d6b00000-0000-0000-0000-0000000000a1','00000000-0000-0000-0000-000000000000','authenticated','authenticated','f5-06.ator@example.invalid','x',now(),'{}'::jsonb,'{}'::jsonb,now(),now()),
-  ('d6b00000-0000-0000-0000-0000000000a2','00000000-0000-0000-0000-000000000000','authenticated','authenticated','f5-06.beta@example.invalid','x',now(),'{}'::jsonb,'{}'::jsonb,now(),now());
+  ('d6b00000-0000-0000-0000-0000000000a2','00000000-0000-0000-0000-000000000000','authenticated','authenticated','f5-06.beta@example.invalid','x',now(),'{}'::jsonb,'{}'::jsonb,now(),now()),
+  ('d6b00000-0000-0000-0000-0000000000a3','00000000-0000-0000-0000-000000000000','authenticated','authenticated','f5-06.cadeia@example.invalid','x',now(),'{}'::jsonb,'{}'::jsonb,now(),now()),
+  ('d6b00000-0000-0000-0000-0000000000a4','00000000-0000-0000-0000-000000000000','authenticated','authenticated','f5-06.direta@example.invalid','x',now(),'{}'::jsonb,'{}'::jsonb,now(),now()),
+  ('d6b00000-0000-0000-0000-0000000000a5','00000000-0000-0000-0000-000000000000','authenticated','authenticated','f5-06.colegiado@example.invalid','x',now(),'{}'::jsonb,'{}'::jsonb,now(),now());
 
 insert into public.user_profiles (id, status) values
   ('d6b00000-0000-0000-0000-0000000000a1','active'),
-  ('d6b00000-0000-0000-0000-0000000000a2','active');
+  ('d6b00000-0000-0000-0000-0000000000a2','active'),
+  ('d6b00000-0000-0000-0000-0000000000a3','active'),
+  ('d6b00000-0000-0000-0000-0000000000a4','active'),
+  ('d6b00000-0000-0000-0000-0000000000a5','active');
 
 insert into public.user_organization_memberships (id, user_profile_id, organization_id, status) values
   ('d6d00000-0000-0000-0000-0000000000a1','d6b00000-0000-0000-0000-0000000000a1','d6a00000-0000-0000-0000-0000000000a1','active'),
-  ('d6d00000-0000-0000-0000-0000000000b1','d6b00000-0000-0000-0000-0000000000a2','d6a00000-0000-0000-0000-0000000000b1','active');
+  ('d6d00000-0000-0000-0000-0000000000b1','d6b00000-0000-0000-0000-0000000000a2','d6a00000-0000-0000-0000-0000000000b1','active'),
+  ('d6d00000-0000-0000-0000-0000000000a3','d6b00000-0000-0000-0000-0000000000a3','d6a00000-0000-0000-0000-0000000000a1','active'),
+  ('d6d00000-0000-0000-0000-0000000000a4','d6b00000-0000-0000-0000-0000000000a4','d6a00000-0000-0000-0000-0000000000a1','active'),
+  ('d6d00000-0000-0000-0000-0000000000a5','d6b00000-0000-0000-0000-0000000000a5','d6a00000-0000-0000-0000-0000000000a1','active');
 
 -- Colaboradores (identidade interna = UUID; nunca matrícula)
 insert into public.collaborators (id, organization_id) values
@@ -92,11 +106,19 @@ insert into public.collaborator_status_periods
   ('d6c00000-0000-0000-0000-0000000000c4','active','2025-01-01T00:00:00Z');
 
 -- Vínculo do avaliado com a membership do ATOR (para a leitura de transparência)
+-- e vínculos dos ATORES PARTICIPANTES com seus colaboradores (c1/c3/c4): a
+-- ocorrência editável é resolvida a partir do ator (correção de IDOR).
 insert into public.membership_collaborator_links
   (id, membership_id, organization_id, collaborator_id, status)
 values
   ('d6e00000-0000-0000-0000-0000000000a1','d6d00000-0000-0000-0000-0000000000a1',
-   'd6a00000-0000-0000-0000-0000000000a1','d6c00000-0000-0000-0000-0000000000c2','active');
+   'd6a00000-0000-0000-0000-0000000000a1','d6c00000-0000-0000-0000-0000000000c2','active'),
+  ('d6e00000-0000-0000-0000-0000000000a3','d6d00000-0000-0000-0000-0000000000a3',
+   'd6a00000-0000-0000-0000-0000000000a1','d6c00000-0000-0000-0000-0000000000c1','active'),
+  ('d6e00000-0000-0000-0000-0000000000a4','d6d00000-0000-0000-0000-0000000000a4',
+   'd6a00000-0000-0000-0000-0000000000a1','d6c00000-0000-0000-0000-0000000000c3','active'),
+  ('d6e00000-0000-0000-0000-0000000000a5','d6d00000-0000-0000-0000-0000000000a5',
+   'd6a00000-0000-0000-0000-0000000000a1','d6c00000-0000-0000-0000-0000000000c4','active');
 
 -- ----------------------------------------------------------------------------
 -- Estrutura F3 (fonte soberana do snapshot de participantes — D16/D17)
@@ -206,19 +228,23 @@ end $$;
 -- ----------------------------------------------------------------------------
 -- Avaliação do avaliado c2 com SNAPSHOT SOBERANO de participantes.
 -- Nenhum participante vem do payload: a RPC deriva das fontes F3.
--- Parcelas: GESTAO_CADEIA (c1) = 4 ; COLEGIADO (c4) = 2  => sub = 3.0
--- (o cenário usa notas 4/2 para deixar o coeficiente explícito; o validador
--- de colegiado agregado ajusta as notas do colegiado para 2 e 4.)
+--
+-- CORREÇÃO DE AUDITORIA (IDOR): a ocorrência editável é resolvida a partir do
+-- ATOR (auth.uid → vínculo F5-02 → ocorrência vigente). Portanto cada gravação é
+-- feita pelo ator do PRÓPRIO colaborador, e só participam deste bloco atores com
+-- ocorrência ÚNICA nesta avaliação:
+--   c1 → GESTAO_CADEIA  (ator a3)
+--   c4 → COLEGIADO      (ator a5)
+--   c3 → COLEGIADO *e* GESTAO_DIRETA (ocorrência AMBÍGUA, exercitada à parte
+--        pelo validador 03, que exige recusa fail-closed)
+-- Parcelas: GESTAO_CADEIA (c1) = 4 ; COLEGIADO (c4) = 4  => sub = 4.0
 -- ----------------------------------------------------------------------------
 do $$
 declare
   v_eval uuid;
   v_part_cadeia uuid;
   v_part_direta uuid;
-  v_part_col_2 uuid;
-  v_part_col_4 uuid;
   v_notas_4 jsonb;
-  v_notas_2 jsonb;
   v_qtd int;
 begin
   v_eval := public.evaluation_criar(
@@ -251,57 +277,38 @@ begin
   select id into v_part_cadeia from public.evaluation_participants
    where evaluation_id = v_eval and role_type = 'GESTAO_CADEIA';
 
-  -- Responsabilidade DIRETA (derivada do gestor formal direto): tambem
-  -- contribui para o score, portanto precisa das notas do subcriterio.
+  -- Responsabilidade DIRETA (derivada do gestor formal direto) existe, mas fica
+  -- ENCERRADA neste cenário: o mesmo colaborador (c3) também é membro do
+  -- COLEGIADO, e duas ocorrências VIGENTES do mesmo ator são ambiguidade — que o
+  -- contrato recusa (fail-closed, exercitado pelo validador 03). Encerrar a
+  -- ocorrência preserva o histórico (nada é apagado) e deixa c3 com UMA
+  -- ocorrência vigente, permitindo que ele autor as próprias notas.
   select id into v_part_direta from public.evaluation_participants
    where evaluation_id = v_eval and role_type = 'GESTAO_DIRETA';
-
-  -- Feedback final obrigatorio do papel de cadeia (requires_final_comment),
-  -- de ocorrencia VIGENTE: sem ele a conclusao normal nao passa na completude.
-  perform public.evaluation_gravar_comentario(
-    v_eval, v_part_cadeia, 'FINAL', null,
-    'Feedback final sintetico do responsavel de cadeia.',
-    'd6b00000-0000-0000-0000-0000000000a1');
-  if v_part_direta is not null then
-    perform public.evaluation_gravar_comentario(
-      v_eval, v_part_direta, 'FINAL', null,
-      'Feedback final sintetico do gestor direto.',
-      'd6b00000-0000-0000-0000-0000000000a1');
+  if v_part_direta is null then
+    raise exception 'Cenario F5-06: GESTAO_DIRETA nao derivada do gestor direto';
   end if;
-
-  select id into v_part_col_2 from public.evaluation_participants
-   where evaluation_id = v_eval and role_type = 'COLEGIADO'
-     and collaborator_id = 'd6c00000-0000-0000-0000-0000000000c3';
-  select id into v_part_col_4 from public.evaluation_participants
-   where evaluation_id = v_eval and role_type = 'COLEGIADO'
-     and collaborator_id = 'd6c00000-0000-0000-0000-0000000000c4';
+  update public.evaluation_participants
+     set valid_from = now() - interval '30 days',
+         valid_to = now() - interval '1 day',
+         status = 'ended'
+   where id = v_part_direta;
 
   select jsonb_agg(jsonb_build_object('subcriterion_id', sc.id, 'nota', 4))
     into v_notas_4
     from public.evaluation_config_subcriteria sc
    where sc.organization_id = 'd6a00000-0000-0000-0000-0000000000a1';
-  select jsonb_agg(jsonb_build_object('subcriterion_id', sc.id, 'nota', 2))
-    into v_notas_2
-    from public.evaluation_config_subcriteria sc
-   where sc.organization_id = 'd6a00000-0000-0000-0000-0000000000a1';
 
-  -- Parcelas: GESTAO_CADEIA (c1) = 4 ; GESTAO_DIRETA (c3) = 4 ;
-  -- COLEGIADO = media(2, 4) = 3  => subcriterio = (4 + 4 + 3) / 3 = 11/3.
-  -- O colegiado e UMA parcela (D25): se cada membro pesasse individualmente
-  -- seriam 4 parcelas e o resultado mudaria.
-  perform public.evaluation_gravar_notas(v_eval, v_part_cadeia, v_notas_4,
-    'd6b00000-0000-0000-0000-0000000000a1');
-  perform public.evaluation_gravar_notas(v_eval, v_part_col_2, v_notas_2,
-    'd6b00000-0000-0000-0000-0000000000a1');
-  perform public.evaluation_gravar_notas(v_eval, v_part_col_4, v_notas_4,
-    'd6b00000-0000-0000-0000-0000000000a1');
-  if v_part_direta is not null then
-    perform public.evaluation_gravar_notas(v_eval, v_part_direta, v_notas_4,
-      'd6b00000-0000-0000-0000-0000000000a1');
-  end if;
+  -- GESTAO_CADEIA (c1) = 4, pelo ator a3 (ocorrência única).
+  perform public.evaluation_gravar_notas(v_eval, v_notas_4,
+    'd6b00000-0000-0000-0000-0000000000a3');
+  -- COLEGIADO (c4) = 4, pelo ator a5 (ocorrência única). O colegiado é UMA
+  -- parcela agregada (D25); com apenas um voto válido a parcela é 4.0.
+  perform public.evaluation_gravar_notas(v_eval, v_notas_4,
+    'd6b00000-0000-0000-0000-0000000000a5');
 
-  -- feedback final obrigatório do papel de cadeia (requires_final_comment = true)
+  -- Feedback final obrigatório do papel de cadeia (requires_final_comment).
   perform public.evaluation_gravar_comentario(
-    v_eval, v_part_cadeia, 'FINAL', null, 'Feedback final sintetico do gestor.',
-    'd6b00000-0000-0000-0000-0000000000a1');
+    v_eval, 'FINAL', null, 'Feedback final sintetico do gestor.',
+    'd6b00000-0000-0000-0000-0000000000a3');
 end $$;

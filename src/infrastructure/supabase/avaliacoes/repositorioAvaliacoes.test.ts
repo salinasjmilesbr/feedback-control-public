@@ -79,24 +79,44 @@ describe("repositório de avaliações (caminho novo)", () => {
     }
   });
 
-  it("grava notas com participant_id e notas (o cálculo oficial fica no servidor)", async () => {
+  it("grava notas SEM participant_id (a ocorrência é resolvida no servidor)", async () => {
     const { cliente, invocacoes } = clienteFalso({ data: { ok: true, resultado: 3.5 } });
     const repo = criarRepositorioAvaliacoesSupabase(cliente);
 
     const resultado = await repo.gravarNotas({
       organizationId: ORG,
       evaluationId: AVALIACAO,
-      participantId: PARTICIPANTE,
       notas: [{ subcriterion_id: SUB, nota: 4 }],
     });
 
     expect(resultado).toEqual({ ok: true, data: 3.5 });
     expect(invocacoes[0]!.body).toMatchObject({
       operacao: "evaluation.gravar_notas",
-      participant_id: PARTICIPANTE,
       notas: [{ subcriterion_id: SUB, nota: 4 }],
     });
+    // CORREÇÃO DE AUDITORIA (IDOR): o cliente não escolhe a ocorrência.
+    expect(Object.keys(invocacoes[0]!.body)).not.toContain("participant_id");
+    expect(Object.keys(invocacoes[0]!.body)).not.toContain("participantId");
     expect(Object.keys(invocacoes[0]!.body)).not.toContain("nota_media");
+  });
+
+  it("grava comentário SEM participant_id (a ocorrência é resolvida no servidor)", async () => {
+    const { cliente, invocacoes } = clienteFalso({ data: { ok: true } });
+    const repo = criarRepositorioAvaliacoesSupabase(cliente);
+
+    await repo.gravarComentario({
+      organizationId: ORG,
+      evaluationId: AVALIACAO,
+      escopo: "FINAL",
+      texto: "fechamento",
+    });
+
+    expect(invocacoes[0]!.body).toMatchObject({
+      operacao: "evaluation.gravar_comentario",
+      escopo: "FINAL",
+      texto: "fechamento",
+    });
+    expect(Object.keys(invocacoes[0]!.body)).not.toContain("participant_id");
   });
 
   it("conclusão/reabertura/cancelamento enviam motivo quando exigido", async () => {

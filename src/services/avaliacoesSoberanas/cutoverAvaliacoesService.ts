@@ -109,9 +109,9 @@ export interface CutoverAvaliacoes {
     readonly evaluationId: string;
   }): Promise<ResultadoCutover<PainelParticipante>>;
   /**
-   * Notas da própria ocorrência (participant_id vem do painel, server-side).
-   * A tela informa o NOME do subcritério; a conversão para o UUID da
-   * configuração congelada é estrutural e recusa nome desconhecido.
+   * Notas da PRÓPRIA ocorrência. A ocorrência é resolvida SERVER-SIDE a partir
+   * do ator autenticado (correção de IDOR); a tela informa apenas o NOME do
+   * subcritério do catálogo congelado (o painel) e nunca um `participant_id`.
    */
   gravarNotasDoPainel(entrada: {
     readonly organizationId: string;
@@ -182,10 +182,10 @@ export function criarCutoverAvaliacoes(
   const armazenamento = deps.armazenamento ?? null;
 
   /**
-   * Fonte única da gravação de comentário da PRÓPRIA ocorrência, usada tanto
-   * pelo comentário de critério quanto pelo comentário final. A ocorrência vem
-   * SEMPRE do painel (resolvida server-side): o cliente nunca escolhe
-   * `participant_id`.
+   * Fonte única da gravação de comentário, usada tanto pelo comentário de
+   * critério quanto pelo comentário final. A ocorrência editável é resolvida
+   * SERVER-SIDE a partir do ator autenticado (correção de IDOR): o cliente não
+   * escolhe `participant_id` — o painel serve apenas como catálogo congelado.
    */
   async function gravarComentario(entrada: {
     readonly organizationId: string;
@@ -195,13 +195,9 @@ export function criarCutoverAvaliacoes(
     readonly criterionId?: string | null;
     readonly texto: string;
   }): Promise<ResultadoCutover<null>> {
-    if (!ehIdTecnicoPostgres(entrada.painel.participanteOcorrenciaId)) {
-      return { ok: false, erro: "Ocorrência do participante não resolvida." };
-    }
     const paraGravar: EntradaGravarComentario = {
       organizationId: entrada.organizationId,
       evaluationId: entrada.evaluationId,
-      participantId: entrada.painel.participanteOcorrenciaId,
       escopo: entrada.escopo,
       criterionId: entrada.criterionId ?? null,
       texto: entrada.texto,
@@ -254,11 +250,9 @@ export function criarCutoverAvaliacoes(
     },
 
     async gravarNotasDoPainel(entrada) {
-      // A ocorrência é SEMPRE a do painel (resolvida server-side); o cliente
-      // nunca escolhe participant_id.
-      if (!ehIdTecnicoPostgres(entrada.painel.participanteOcorrenciaId)) {
-        return { ok: false, erro: "Ocorrência do participante não resolvida." };
-      }
+      // A ocorrência editável NÃO é escolhida pelo cliente: o servidor a resolve
+      // a partir do ator autenticado (correção de IDOR). O painel continua
+      // servindo ao CATÁLOGO congelado (nome → UUID do subcritério).
       const mapa = montarMapaCatalogo(entrada.painel);
 
       // Resolução estrutural nome → UUID da configuração congelada. Uma nota
@@ -280,16 +274,12 @@ export function criarCutoverAvaliacoes(
       const paraGravar: EntradaGravarNotas = {
         organizationId: entrada.organizationId,
         evaluationId: entrada.evaluationId,
-        participantId: entrada.painel.participanteOcorrenciaId,
         notas: resolvidas,
       };
       return propagar(await deps.repositorio.gravarNotas(paraGravar), (data) => data);
     },
 
     async gravarObservacoesDoPainel(entrada) {
-      if (!ehIdTecnicoPostgres(entrada.painel.participanteOcorrenciaId)) {
-        return { ok: false, erro: "Ocorrência do participante não resolvida." };
-      }
       const mapa = montarMapaCatalogo(entrada.painel);
       let gravadas = 0;
 
@@ -305,7 +295,6 @@ export function criarCutoverAvaliacoes(
         const resultado = await deps.repositorio.gravarComentario({
           organizationId: entrada.organizationId,
           evaluationId: entrada.evaluationId,
-          participantId: entrada.painel.participanteOcorrenciaId,
           escopo: "CRITERIO",
           criterionId,
           texto: observacao.texto,

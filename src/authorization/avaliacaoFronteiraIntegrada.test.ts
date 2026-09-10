@@ -26,7 +26,6 @@ const CICLO = "55555555-5555-4555-8555-555555555555";
 const GESTOR = "66666666-6666-4666-8666-666666666666";
 const AVALIADO = "77777777-7777-4777-8777-777777777777";
 const COLEGA = "88888888-8888-4888-8888-888888888888";
-const PARTICIPANTE = "99999999-9999-4999-8999-999999999999";
 const SUB = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
 function identidade(): AuthIdentity {
@@ -142,7 +141,6 @@ describe("fronteira de avaliações: Edge + Policy Engine real + domínio", () =
     const resposta = await avaliacoes(
       requisicao(
         corpoAvaliacao("evaluation.gravar_notas", {
-          participant_id: PARTICIPANTE,
           notas: [{ subcriterion_id: SUB, nota: 4 }],
         })
       ),
@@ -152,6 +150,8 @@ describe("fronteira de avaliações: Edge + Policy Engine real + domínio", () =
     expect(resposta.status).toBe(200);
     expect(executadas).toHaveLength(1);
     expect(executadas[0]!.actorUserProfileId).toBe(USER);
+    // O payload não carrega ocorrência: quem a resolve é a RPC, pelo ator.
+    expect("participantId" in executadas[0]!).toBe(false);
   });
 
   it("ator SEM o scope necessário ⇒ 403 e a RPC NÃO é executada (achado 7)", async () => {
@@ -160,7 +160,6 @@ describe("fronteira de avaliações: Edge + Policy Engine real + domínio", () =
     const resposta = await avaliacoes(
       requisicao(
         corpoAvaliacao("evaluation.gravar_notas", {
-          participant_id: PARTICIPANTE,
           notas: [{ subcriterion_id: SUB, nota: 4 }],
         })
       ),
@@ -189,7 +188,6 @@ describe("fronteira de avaliações: Edge + Policy Engine real + domínio", () =
     const resposta = await avaliacoes(
       requisicao(
         corpoAvaliacao("evaluation.gravar_comentario", {
-          participant_id: PARTICIPANTE,
           escopo: "FINAL",
           texto: "fechamento",
         })

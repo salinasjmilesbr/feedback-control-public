@@ -61,7 +61,6 @@ const corpoValido = {
   organization_id: ORG,
   operacao: "evaluation.gravar_notas",
   alvo: { type: "evaluation", id: AVALIACAO },
-  participant_id: PARTICIPANTE,
   notas: [{ subcriterion_id: SUB, nota: 4 }],
 };
 
@@ -224,8 +223,26 @@ describe("fronteira confiÃ¡vel do caminho novo", () => {
     expect(execucao.actorUserProfileId).toBe(CALLER);
     expect(execucao.organizationId).toBe(ORG);
     expect(execucao.evaluationId).toBe(AVALIACAO);
-    expect(execucao.participantId).toBe(PARTICIPANTE);
     expect(execucao.notas).toHaveLength(1);
+    // CORREÇÃO DE AUDITORIA (IDOR): nenhuma ocorrência atravessa a execução —
+    // ela é resolvida dentro da RPC a partir do ator verificado.
+    expect("participantId" in execucao).toBe(false);
+  });
+
+  it("participant_id no payload é RECUSADO (a ocorrência é resolvida no servidor)", async () => {
+    const { d, executarRpc } = deps();
+    const resposta = await avaliacoes(
+      requisicao(
+        { ...corpoValido, participant_id: PARTICIPANTE },
+        { Authorization: "Bearer ok" }
+      ),
+      d
+    );
+
+    expect(resposta.status).toBe(400);
+    const corpo = (await resposta.json()) as { error: { code: string } };
+    expect(corpo.error.code).toBe("INVALID_INPUT");
+    expect(executarRpc).not.toHaveBeenCalled();
   });
 
   it("matrícula do avaliado é encaminhada como INTENÇÃO (ponte resolvida no Edge)", async () => {
