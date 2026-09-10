@@ -4,13 +4,30 @@ import type { Colaborador } from "../types/Colaborador";
 import type { Feedback } from "../types/Feedback";
 import * as feedbackStorage from "./feedbackStorage";
 import {
+  avaliacaoEstaVaziaParaCleanupInterno,
+  escreverNoLegadoEstaProibido,
+  existeAvaliacaoNaoCanceladaNoCiclo,
   getFeedbacks,
   getFeedbacksAdministrativosByColaborador,
   getFeedbacksConcluidosByColaborador,
+  persistirCancelamentoAuditadoInterno,
+  persistirReaberturaAuditadaInterno,
   removerAvaliacaoVaziaNoCleanupInterno,
-  saveFeedback,
   updateFeedback,
 } from "./feedbackStorage";
+
+/**
+ * F5-06 (Issue #103) — LEGADO SOMENTE LEITURA.
+ *
+ * Depois do cutover, este módulo NÃO é mais autoridade de escrita: a criação,
+ * edição, cancelamento e reabertura de avaliações acontecem exclusivamente no
+ * PostgreSQL pelo caminho soberano. Os testes abaixo provam:
+ *
+ * - a LEITURA do acervo legado continua funcionando (compatibilidade histórica);
+ * - NENHUMA função de escrita local existe ou grava no `localStorage`;
+ * - tentativas de escrita falham de forma explícita (fail-closed), em vez de
+ *   gravar localmente por engano.
+ */
 
 const STORAGE_KEY = "feedback-control-feedbacks";
 
@@ -73,19 +90,32 @@ const avaliacaoVazia: Feedback = {
   feedbackFinalCoordenador: "",
 };
 
-describe("feedbackStorage", () => {
+/** Escreve o acervo legado DIRETAMENTE no armazenamento (simula dado antigo). */
+function semearLegado(feedbacks: Feedback[]): void {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(feedbacks));
+}
+
+describe("feedbackStorage é somente leitura para o legado", () => {
   beforeEach(() => {
     instalarLocalStorageEmMemoria();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([avaliacaoConcluida]));
+    semearLegado([avaliacaoConcluida]);
   });
 
   it("não expõe caminho genérico de exclusão física", () => {
     expect("deleteFeedback" in feedbackStorage).toBe(false);
   });
 
+  it("não expõe nenhuma função de criação de avaliação", () => {
+    expect("saveFeedback" in feedbackStorage).toBe(false);
+  });
+
+  it("lê o acervo legado preservado", () => {
+    expect(getFeedbacks()).toEqual([avaliacaoConcluida]);
+  });
+
   it("oculta canceladas por padrão e inclui somente sob opção administrativa", () => {
     const cancelada = { ...avaliacaoConcluida, status: "CANCELADA" as const };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([avaliacaoConcluida, cancelada]));
+    semearLegado([avaliacaoConcluida, cancelada]);
 
     expect(
       getFeedbacksAdministrativosByColaborador(avaliacaoConcluida.colaboradorId)
@@ -100,68 +130,99 @@ describe("feedbackStorage", () => {
 
   it("mantém canceladas fora das avaliações concluídas do avaliado", () => {
     const cancelada = { ...avaliacaoConcluida, status: "CANCELADA" as const };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([cancelada]));
+    semearLegado([cancelada]);
 
     expect(
       getFeedbacksConcluidosByColaborador(cancelada.colaboradorId)
     ).toEqual([]);
   });
 
-  it("permite criar registro novo e vazio quando só existe avaliação cancelada", () => {
-    const cancelada: Feedback = {
-      ...avaliacaoVazia,
-      id: "avaliacao-cancelada-com-conteudo",
-      status: "CANCELADA",
-      notaMedia: 4,
-      competencias: avaliacaoVazia.competencias.map((competencia) => ({
-        ...competencia,
-        nota: 4,
-        comentario: "Conteúdo histórico preservado",
-      })),
-      feedbackFinalGerente: "Feedback histórico",
-      motivoCancelamento: "Criada indevidamente",
-      canceladoPorMatricula: gerente.matricula,
-      canceladoPorNome: gerente.nome,
-      dataCancelamento: "2026-02-01T10:00:00.000Z",
-    };
-    const nova: Feedback = {
-      ...avaliacaoVazia,
-      id: "avaliacao-nova",
-      competencias: avaliacaoVazia.competencias.map((competencia) => ({
-        ...competencia,
-        nota: 0,
-        comentario: "",
-      })),
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([cancelada]));
+  it("considera cancelada como inexistente para a unicidade de ciclo", () => {
+    const cancelada = { ...avaliacaoVazia, status: "CANCELADA" as const };
 
-    saveFeedback(nova);
+    expect(
+      existeAvaliacaoNaoCanceladaNoCiclo(
+        [cancelada],
+        cancelada.colaboradorId,
+        cancelada.ano,
+        cancelada.ciclo
+      )
+    ).toBe(false);
+    expect(
+      existeAvaliacaoNaoCanceladaNoCiclo(
+        [avaliacaoVazia],
+        avaliacaoVazia.colaboradorId,
+        avaliacaoVazia.ano,
+        avaliacaoVazia.ciclo
+      )
+    ).toBe(true);
+  });
+});
 
-    const persistidas = getFeedbacks();
-    expect(persistidas).toHaveLength(2);
-    expect(persistidas[0]).toEqual(cancelada);
-    expect(persistidas[1].id).not.toBe(cancelada.id);
-    expect(persistidas[1]).toEqual(nova);
-    expect(persistidas[1]).not.toHaveProperty("motivoCancelamento");
-    expect(persistidas[1]).not.toHaveProperty("canceladoPorMatricula");
-    expect(persistidas[1]).not.toHaveProperty("dataCancelamento");
+describe("feedbackStorage recusa qualquer escrita local (fail-closed)", () => {
+  beforeEach(() => {
+    instalarLocalStorageEmMemoria();
+    semearLegado([avaliacaoVazia]);
   });
 
-  it("bloqueia uma segunda avaliação não cancelada no mesmo ciclo", () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([avaliacaoVazia]));
-
+  it("updateFeedback recusa a edição e preserva o registro", () => {
     expect(() =>
-      saveFeedback({ ...avaliacaoVazia, id: "outra-avaliacao" })
-    ).toThrow("Já existe uma avaliação para 2026 - Ciclo 1.");
+      updateFeedback({ ...avaliacaoVazia, notaMedia: 5 }, gerente)
+    ).toThrow(/escrita de avaliações no armazenamento local foi desativada/i);
     expect(getFeedbacks()).toEqual([avaliacaoVazia]);
   });
 
-  it("remove avaliação realmente vazia somente pelo cleanup interno", () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([avaliacaoVazia]));
+  it("cancelamento local recusa e preserva o registro", () => {
+    expect(() =>
+      persistirCancelamentoAuditadoInterno(
+        avaliacaoVazia.id,
+        "Motivo",
+        gerente,
+        "2026-03-01T00:00:00.000Z"
+      )
+    ).toThrow(/desativada/i);
+    expect(getFeedbacks()[0].status).toBe("RASCUNHO");
+  });
 
-    removerAvaliacaoVaziaNoCleanupInterno(avaliacaoVazia.id);
+  it("reabertura local recusa e preserva o registro", () => {
+    semearLegado([avaliacaoConcluida]);
+    expect(() =>
+      persistirReaberturaAuditadaInterno(
+        avaliacaoConcluida.id,
+        "Motivo",
+        gerente,
+        "2026-03-01T00:00:00.000Z"
+      )
+    ).toThrow(/desativada/i);
+    expect(getFeedbacks()[0].status).toBe("CONCLUIDA");
+  });
 
-    expect(getFeedbacks()).toEqual([]);
+  it("cleanup de avaliação vazia recusa a exclusão física do legado", () => {
+    expect(() => removerAvaliacaoVaziaNoCleanupInterno(avaliacaoVazia.id)).toThrow(
+      /desativada/i
+    );
+    expect(getFeedbacks()).toHaveLength(1);
+  });
+
+  it("cleanup continua exigindo avaliação vazia antes de recusar", () => {
+    semearLegado([avaliacaoConcluida]);
+    expect(() =>
+      removerAvaliacaoVaziaNoCleanupInterno(avaliacaoConcluida.id)
+    ).toThrow("O cleanup interno só pode remover avaliações vazias.");
+  });
+
+  it("a guarda de escrita é explícita e nomeia a operação", () => {
+    expect(() => escreverNoLegadoEstaProibido("teste")).toThrow(
+      /teste/
+    );
+  });
+});
+
+describe("avaliacaoEstaVaziaParaCleanupInterno (leitura)", () => {
+  beforeEach(() => instalarLocalStorageEmMemoria());
+
+  it("reconhece avaliação vazia", () => {
+    expect(avaliacaoEstaVaziaParaCleanupInterno(avaliacaoVazia)).toBe(true);
   });
 
   it.each([
@@ -227,64 +288,7 @@ describe("feedbackStorage", () => {
       "feedback final",
       { ...avaliacaoVazia, feedbackFinalGerente: "Feedback operacional" },
     ],
-  ] as const)("rejeita cleanup interno quando existe %s", (_tipo, feedback) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([feedback]));
-
-    expect(() =>
-      removerAvaliacaoVaziaNoCleanupInterno(feedback.id)
-    ).toThrow("O cleanup interno só pode remover avaliações vazias.");
-    expect(getFeedbacks()).toHaveLength(1);
-  });
-
-  it("rejeita mutação normal de usuário sobre avaliação concluída", () => {
-    expect(() =>
-      updateFeedback(
-        { ...avaliacaoConcluida, notaMedia: 5 },
-        gerente
-      )
-    ).toThrow("Avaliações concluídas ou canceladas não podem ser alteradas.");
-
-    expect(getFeedbacks()[0].notaMedia).toBe(4);
-  });
-
-  it("rejeita mutação normal de usuário sobre avaliação cancelada", () => {
-    const cancelada = { ...avaliacaoConcluida, status: "CANCELADA" as const };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([cancelada]));
-
-    expect(() =>
-      updateFeedback({ ...cancelada, notaMedia: 5 }, gerente)
-    ).toThrow("Avaliações concluídas ou canceladas não podem ser alteradas.");
-    expect(getFeedbacks()[0].notaMedia).toBe(4);
-  });
-
-  it("rejeita mutação normal de avaliação vinculada a ciclo cancelado", () => {
-    localStorage.setItem(
-      "feedback-control-ciclos",
-      JSON.stringify([
-        {
-          id: "ciclo-cancelado",
-          ano: avaliacaoVazia.ano,
-          ciclo: avaliacaoVazia.ciclo,
-          status: "CANCELADO",
-          dataCriacao: "2026-01-01T00:00:00.000Z",
-          dataUltimaAtualizacao: "2026-01-01T00:00:00.000Z",
-        },
-      ])
-    );
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([avaliacaoVazia]));
-
-    expect(() =>
-      updateFeedback({ ...avaliacaoVazia, notaMedia: 5 }, gerente)
-    ).toThrow("Avaliações de ciclo cancelado não podem ser alteradas.");
-    expect(getFeedbacks()).toEqual([avaliacaoVazia]);
-  });
-
-  it("preserva a mutação interna sem ator usada no encerramento de ciclo", () => {
-    updateFeedback({
-      ...avaliacaoConcluida,
-      encerradaComPendencias: true,
-    });
-
-    expect(getFeedbacks()[0].encerradaComPendencias).toBe(true);
+  ] as const)("não considera vazia quando existe %s", (_tipo, feedback) => {
+    expect(avaliacaoEstaVaziaParaCleanupInterno(feedback)).toBe(false);
   });
 });

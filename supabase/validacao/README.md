@@ -965,6 +965,159 @@ Observações:
    histórico.
 6. **Limpeza**: cenário sintético removido ao final.
 
+## F5-06 — Avaliações no PostgreSQL (Issue #103)
+
+Validação estrutural contra o **Supabase local** das migrations F5-06
+(`20260911000000_f5_06_evaluation_schema.sql` e
+`20260911010000_f5_06_evaluation_functions.sql`): modelo orientado a
+**participantes** (sem colunas fixas de gerente/coordenador/colegiado),
+participantes como **ocorrências históricas** (vigência + exclusion, sem unique
+eterno), cálculo oficial no servidor com o **colegiado como UMA parcela
+agregada** (D25), `numeric(12,8)` sem arredondamento intermediário (D24),
+completude exigida para conclusão normal (D18), marcador permanente de
+pendência no fechamento incompleto de ciclo (D11), transparência do avaliado sem
+expor voto individual (D20), reabertura/cancelamento auditados (D7/D26) e
+isolamento de tenant server-side (D27).
+
+### Como reproduzir
+
+Requisitos: Docker Desktop em execução e o CLI Supabase da raiz
+(`npx --yes supabase@2.116.0`).
+
+```powershell
+# 1) subir a stack local (rebuild limpo: migrations em ordem + seed)
+npx --yes supabase@2.116.0 start
+
+# 2) aplicar o cenário sintético no banco local (idempotente)
+Get-Content supabase/validacao/01-cenario-f5-06.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+
+# 3) executar a validação (exit code 0 = todas as verificações passaram)
+Get-Content supabase/validacao/02-validar-f5-06.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+
+# 4) regressão das barreiras de RLS (F4-08) com as 13 tabelas novas catalogadas
+Get-Content supabase/validacao/02-validar-f4-08.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+Get-Content supabase/validacao/03-validar-f4-08-mutacoes.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+```
+
+Observações:
+
+- os scripts **não tocam projeto remoto**, **não alteram nenhuma policy RLS** e
+  usam apenas UUIDs fixos com prefixo `d6`, sem colidir com os cenários
+  anteriores;
+- `01-cenario-f5-06.sql` cria duas organizações, ator autenticado com membership,
+  quatro colaboradores (gestor da cadeia, avaliado e dois membros de colegiado) e
+  um ciclo `ATIVO`; a configuração baseline (8 critérios, 25 subcritérios, 5
+  faixas de escala, 3 papéis de participante) é criada pela própria RPC
+  `evaluation_config_bootstrap`;
+- o cenário fixa `GESTAO_CADEIA=4` e votos de colegiado `2` e `4`. Como o
+  colegiado é **uma** parcela, o subcritério fecha em `(4+3)/2 = 3.5`; se cada
+  membro pesasse individualmente o resultado seria `3.3333` — o validador
+  distingue os dois casos e rejeita o segundo;
+- a regressão F4-08 é preservada: as 13 tabelas novas foram catalogadas em
+  `02-validar-f4-08.sql` (42 tabelas, 21 fechadas) e em
+  `03-validar-f4-08-mutacoes.sql`; nenhum `SECURITY DEFINER` novo foi
+  introduzido (a F4-08 continua esperando exatamente 4).
+
+### O que é verificado (02-validar-f5-06.sql)
+
+1. **Estrutura**: 13 tabelas novas (`evaluation_config_versions`,
+   `evaluation_config_criteria`, `evaluation_config_subcriteria`,
+   `evaluation_config_scale_bands`, `evaluation_config_participant_roles`,
+   `evaluation_cycles`, `evaluations`, `evaluation_participants`,
+   `evaluation_scores`, `evaluation_comments`, `evaluation_events`,
+   `evaluation_pendencies`, `evaluation_aggregates`) com RLS habilitado e
+   **zero policies** (deny-by-default estrutural); 12 FKs compostas de tenant;
+   `numeric(12,8)` nos agregados e nenhuma coluna `float`.
+2. **Constraints (D4/D9/D23)**: unique **parcial** de avaliação não cancelada
+   por `(organização, ciclo, colaborador)`; exclusion de vigência de
+   participante por `tstzrange(valid_from, coalesce(valid_to,'infinity'))`;
+   check de nota `1..5`; ausência de unique eterno
+   `(evaluation, role, collaborator)`.
+3. **Funções (F4-08/D18)**: todas as funções F5-06 `SECURITY INVOKER`, zero
+   `EXECUTE` para `public`/`anon`/`authenticated` e `EXECUTE` para
+   `service_role`; trigger append-only de `evaluation_events` presente.
+4. **RLS em execução**: como `authenticated`, nenhuma leitura direta nas tabelas
+   do domínio (a projeção do avaliado é exclusivamente via RPC).
+5. **Cálculo oficial (D24/D25)**: `nota_media = 3.5` com o colegiado agregado
+   como **uma** parcela; 8 agregados de critério e 25 de subcritério em `3.5`;
+   recomputação igual ao materializado (D13); ausência representada por linha
+   inexistente (nunca zero) e notas persistidas sempre `1..5`.
+6. **Workflow (D8/D18)**: conclusão de avaliação **incompleta é rejeitada** e a
+   avaliação permanece `RASCUNHO` (sem conversão automática); conclusão completa
+   registra o evento `CONCLUIDA` com autoria soberana na mesma transação;
+   avaliação `CONCLUIDA` é imutável; reabertura exige motivo não vazio, volta a
+   `RASCUNHO`, limpa `data_conclusao` e grava evento `REABERTA`.
+7. **Transparência (D20)**: a projeção do avaliado traz agregados e a lista de
+   membros do colegiado, **nunca** voto/nota individual nem `participant_id`.
+8. **Cancelamento e fechamento (D7/D11/D26)**: cancelamento auditado grava
+   `CANCELADA` + motivo + autoria e libera a unique parcial para nova avaliação;
+   o fechamento de ciclo marca **pendência permanente** e persiste
+   `evaluation_pendencies` **sem** converter a avaliação incompleta em
+   `CONCLUIDA`.
+9. **Append-only e tenant (D26/D27)**: `UPDATE` da trilha de eventos é negado;
+   ator de outro tenant é rejeitado na revalidação de membership; ciclo/tenant
+   divergente (IDOR) é rejeitado fail-closed.
+
+### Execução registrada (Supabase local, testada de ponta a ponta)
+
+Executada com a stack local do Supabase nesta rodada:
+
+```powershell
+npx --yes supabase@2.116.0 db reset
+docker cp supabase/validacao/01-cenario-f5-06.sql supabase_db_feedback-control:/tmp/cenario.sql
+docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/cenario.sql
+docker cp supabase/validacao/02-validar-f5-06.sql supabase_db_feedback-control:/tmp/valida.sql
+docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/valida.sql
+```
+
+| Etapa | Resultado |
+| --- | --- |
+| `npx --yes supabase@2.116.0 db reset` (migrations em ordem + seed) | exit 0 |
+| `01-cenario-f5-06.sql` | exit 0 |
+| `02-validar-f5-06.sql` | **todas as verificações [PASS] — exit 0** |
+| `02-validar-f4-08.sql` | **todas as verificações [PASS] — exit 0** (42 tabelas / 21 fechadas) |
+| `03-validar-f4-08-mutacoes.sql` | **8 mutation tests [PASS] — exit 0** |
+
+O cálculo oficial foi verificado com **três responsabilidades** — GESTAO_CADEIA=4,
+GESTAO_DIRETA=4 e COLEGIADO=média(2,4)=3 — produzindo
+`nota_media = (4+4+3)/3 = 3.66666667`, com 8 agregados de critério, 25 de
+subcritério e recomputação igual ao materializado. O validador também **recusa** o
+resultado alternativo `(4+4+2+4)/4 = 3.5`, que apareceria se o colegiado pesasse
+**por membro** — anti-regressão de D25.
+
+> Nota de ambiente: o runner padrão do sandbox desta sessão não inicia por
+> ausência do diretório temporário (`--temp is not an existing directory`); os
+> comandos foram executados com acesso ampliado. É limitação do **sandbox de
+> execução**, não da aplicação nem do repositório.
+
+## F5-06 — caminho TypeScript (aplicação → PostgreSQL)
+
+Além dos validadores SQL, a F5-06 tem um caminho de aplicação exercitado por
+testes automatizados (Vitest):
+
+```
+UI/componente → hook → controlador → service → repository → Edge Function
+              → ActorContext + ResourceContext reais → Policy Engine → RPC
+```
+
+| Camada | Arquivo | O que é verificado por teste |
+| --- | --- | --- |
+| Edge Function | `supabase/functions/avaliacoes/{core,index}.ts` | 401 sem JWT, 400 em corpo forjado (`actor_id`), 403 quando o Policy Engine nega **sem executar a RPC**, 404 cross-tenant, 409 sem vazar mensagem interna, ALLOW executa com o ator VERIFICADO |
+| ASSIGNED (F3-08/09) | `supabase/functions/avaliacoes/assignedSupabase.ts` + `src/services/avaliacoesSoberanas/assignedSoberano.ts` | vigência da responsabilidade, tradução (ano,ciclo) → UUID do ciclo, alvo com o mesmo ciclo do ResourceContext, fail-closed em ausência/divergência |
+| Repositório | `src/infrastructure/supabase/avaliacoes/repositorioAvaliacoes.ts` | payload só de INTENÇÃO (sem actor, sem `config_version_id`, sem participantes), projeção de leitura, transparência sem voto individual |
+| Serviço | `src/services/avaliacoesSoberanas/serviceAvaliacoes.ts` | criação só no banco + registro de cutover, acervo banco × legado, isolamento por ciclo/tenant, mensagens públicas |
+| Controlador | `src/services/avaliacoesSoberanas/controladorAvaliacoes.ts` | recarga do SERVIDOR após mutação, erro público sem lançar, sem fallback para o legado |
+| Apresentação | `src/components/ExibicaoAvaliacoesSoberanas.tsx` | carregando/erro/vazio, estado real do banco e legado sempre `editavel: false` |
+| Cutover | `src/infrastructure/supabase/avaliacoes/cutover.ts` + `src/services/cutoverAvaliacoes.test.ts` | sem dual-write, legado somente leitura, avaliação cortada não volta ao legado |
+
+A Edge Function está registrada em `supabase/config.toml`
+(`[functions.avaliacoes]`, `verify_jwt = true`) — a identidade continua sendo
+resolvida com `auth.getUser` dentro da função e passada pelo Policy Engine.
+
 ## Limitações e notas registradas
 
 - **JWT é stateless**: após logout, o refresh token é revogado, mas um access

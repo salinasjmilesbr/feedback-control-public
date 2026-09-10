@@ -8,17 +8,21 @@ import type { DomainStateProbe, TargetRef } from "./policyEngine/types.ts";
  * decisão de scope. Produz o `TargetRef` + `domainState` do Policy Engine.
  *
  * Limite do mundo híbrido (D19): só existem tipos de recurso SOBERANOS — os que
- * possuem persistência server-side com `organization_id` (estrutura F3). Alvos
- * de domínios ainda mantidos apenas em `localStorage` (ciclo/avaliação/meta/
- * observação) NÃO produzem ResourceContext soberano e são recusados aqui
- * (fail-closed), assim como alvos sintéticos globais (D22).
+ * possuem persistência server-side com `organization_id`. Depois da F5-06 a
+ * AVALIAÇÃO passa a ser recurso soberano (`evaluations` no PostgreSQL — D10/
+ * §8.1): o tenant é derivado da LINHA REAL carregada na fronteira confiável e o
+ * `domainState` reflete o status real da avaliação. Domínios ainda mantidos
+ * apenas em `localStorage` (ciclo/meta/observação) NÃO produzem ResourceContext
+ * soberano e são recusados aqui (fail-closed), assim como alvos sintéticos
+ * globais (D22).
  */
 
-/** Tipos de recurso com fonte soberana server-side (estrutura F3). */
+/** Tipos de recurso com fonte soberana server-side (estrutura F3 + F5-06). */
 export const TIPOS_RECURSO_SOBERANOS = [
   "collaborator",
   "position",
   "organizational_unit",
+  "evaluation",
 ] as const;
 
 export type TipoRecursoSoberano = (typeof TIPOS_RECURSO_SOBERANOS)[number];
@@ -26,7 +30,6 @@ export type TipoRecursoSoberano = (typeof TIPOS_RECURSO_SOBERANOS)[number];
 /** Alvos NÃO autorizáveis pelo Policy Engine (legado/transitório ou global). */
 export const TIPOS_RECURSO_NAO_SOBERANOS = [
   "cycle",
-  "evaluation",
   "goal",
   "observation",
 ] as const;
@@ -58,6 +61,10 @@ export interface RecursoSoberanoCarregado {
   readonly positionId?: string | null;
   readonly unitId?: string | null;
   readonly cycleId?: string;
+  /** F5-06: estado real do recurso (usado pelo probe de domínio). */
+  readonly status?: string;
+  /** F5-06: colaborador AVALIADO (dono do recurso de avaliação). */
+  readonly evaluatedCollaboratorId?: string | null;
 }
 
 export type MotivoRecursoInvalido =
@@ -136,15 +143,25 @@ export function montarResourceContextSoberano(entrada: {
 
   const target: TargetRef = { type: recurso.kind, id };
 
+  // F5-06 (§8.1): para o recurso de AVALIAÇÃO o dono é o colaborador AVALIADO
+  // (`evaluations.evaluated_collaborator_id`), nunca o caller. É esse vínculo
+  // que permite ao engine resolver SELF/DIRECT_REPORTS/DESCENDANTS/ASSIGNED
+  // sobre o alvo `{ type: "evaluation" }`.
+  const ownerCollaboratorId =
+    normalizarOpcional(recurso.ownerCollaboratorId) ??
+    (recurso.kind === "evaluation"
+      ? normalizarOpcional(recurso.evaluatedCollaboratorId)
+      : null);
+
   return {
     ok: true,
     resourceContext: {
       kind: recurso.kind,
       target,
       organizationId,
-      ownerCollaboratorId: normalizarOpcional(recurso.ownerCollaboratorId),
+      ownerCollaboratorId,
       structure: {
-        collaboratorId: normalizarOpcional(recurso.ownerCollaboratorId),
+        collaboratorId: ownerCollaboratorId,
         positionId: normalizarOpcional(recurso.positionId),
         unitId: normalizarOpcional(recurso.unitId),
       },

@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { authorize, can } from "../authorization/authorizationPolicy";
 import type { AuthorizationContext } from "../authorization/AuthorizationContext";
@@ -6,13 +6,25 @@ import type { EvaluationResource } from "../authorization/ResourceContext";
 import AccessRestrictedState from "../components/AccessRestrictedState";
 import CriterionIcon from "../components/CriterionIcon";
 import { getColaboradorByMatricula, getColaboradores } from "../services/colaboradorStorage";
-import {
-  existeAvaliacaoNaoCanceladaNoCiclo,
-  getFeedbacksByColaborador,
-  saveFeedback,
-} from "../services/feedbackStorage";
 import type { Feedback } from "../types/Feedback";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
+import { useAuth } from "../auth/AuthContext";
+import {
+  carregarPainelSoberano,
+  criarAvaliacaoSoberana,
+  gravarComentarioFinalSoberano,
+  gravarNotasSoberanas,
+  gravarObservacoesSoberanas,
+} from "../services/acessoAvaliacoesSoberanas";
+import type {
+  ObservacaoDoPainel,
+  NotaDoPainelPorNome,
+} from "../services/avaliacoesSoberanas/cutoverAvaliacoesService";
+import {
+  esquecerAvaliacaoNovaDoColaboradorNoCiclo,
+  lerAvaliacaoNovaDoColaboradorNoCiclo,
+} from "../infrastructure/supabase/avaliacoes/cutover";
+import { lerAvaliacaoParaTela } from "../services/origemAvaliacaoTela";
 import CollaboratorIdentity from "../components/CollaboratorIdentity";
 import RoleExpectationsCard from "../components/RoleExpectationsCard";
 import { calcularProgressoAvaliacao } from "../services/progressoAvaliacao";
@@ -152,6 +164,12 @@ function NovoFeedbackPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { usuarioAtual } = useUsuarioAtual();
+  const { organizacaoAtivaId } = useAuth();
+  const [salvando, setSalvando] = useState(false);
+  const [erroAcao, setErroAcao] = useState("");
+  // Confirmação de UNICIDADE pedida ao servidor (a autoridade é o índice único
+  // parcial do banco; o serviço traduz o conflito em erro público).
+  const [conflito, setConflito] = useState("");
 
   const matricula = Number(id);
   const colaborador = Number.isFinite(matricula)
@@ -276,6 +294,16 @@ function NovoFeedbackPage() {
 
   const anoAvaliacao = cicloAtivo.ano;
   const cicloAvaliacao = cicloAtivo.ciclo;
+
+  // Id da avaliação NOVA já conhecida deste colaborador no ciclo: CACHE de
+  // navegação no namespace da organização (não é prova de existência nem de
+  // tenant). O preflight abaixo só bloqueia depois de confirmar no servidor.
+  const avaliacaoNovaExistente = lerAvaliacaoNovaDoColaboradorNoCiclo(
+    organizacaoAtivaId ?? "",
+    anoAvaliacao,
+    cicloAvaliacao,
+    colaborador.matricula
+  );
   const metasDoCiclo = getMetasDoColaboradorNoCiclo(
     colaborador.matricula,
     cicloAtivo.id
@@ -682,7 +710,21 @@ function NovoFeedbackPage() {
     );
   }
 
-  function handleSalvarFeedback() {
+  /**
+   * F5-06 (Issue #103) — CUTOVER da tela: a avaliação NOVA passa a existir
+   * EXCLUSIVAMENTE no PostgreSQL. A tela NÃO monta mais um registro local, NÃO
+   * calcula nem persiste nota oficial e NÃO faz dual-write.
+   *
+   * Sequência soberana (cada passo autorizado na fronteira confiável):
+   *   1. `authorize` local é apenas UX/preflight; a decisão real é server-side;
+   *   2. `criarNova` resolve ano+ciclo e matrícula → UUID e cria no banco;
+   *   3. `carregarPainel` devolve o catálogo congelado e a PRÓPRIA ocorrência;
+   *   4. notas/observações/comentário final são gravados na própria ocorrência.
+   *
+   * Falha em qualquer passo é FAIL-CLOSED: a tela reporta o erro público e nada
+   * é gravado localmente como compensação (D12/§11.3).
+   */
+  async function handleSalvarFeedback() {
     if (status !== "RASCUNHO" && !progressoAvaliacao.completo) {
       alert(
         `Não é possível salvar com este status.\n\n${progressoAvaliacao.pendencias.join(
@@ -692,114 +734,167 @@ function NovoFeedbackPage() {
       return;
     }
 
-    const agora = new Date().toISOString();
+    if (!podeAvaliar) {
+      setErroAcao("Seu papel nesta avaliação não permite gravar notas.");
+      return;
+    }
 
-    const novoFeedback = {
-      id: crypto.randomUUID(),
-      colaboradorId: colaborador!.matricula,
-      colaboradorNome: colaborador!.nome,
-      data: agora,
+    // PREFLIGHT de duplicidade (somente atalho de UX). O cache de navegação
+    // NUNCA bloqueia por si só: ele é CONFIRMADO no servidor antes de recusar a
+    // criação. Se o cache estiver obsoleto (a avaliação não existe mais / não é
+    // acessível), a entrada é descartada e a criação segue — a autoridade da
+    // unicidade é o índice único parcial do banco, e nada é criado localmente.
+    if (avaliacaoNovaExistente) {
+      setSalvando(true);
+      let leitura: Awaited<ReturnType<typeof lerAvaliacaoParaTela>>;
+      try {
+        leitura = await lerAvaliacaoParaTela({
+          organizationId: organizacaoAtivaId ?? "",
+          evaluationId: avaliacaoNovaExistente,
+        });
+      } finally {
+        setSalvando(false);
+      }
 
-      dataCriacao: agora,
-      dataUltimaAtualizacao: agora,
-      dataConclusao: status === "CONCLUIDA" ? agora : undefined,
+      if (leitura.ok && leitura.leitura?.origem === "POSTGRES") {
+        setConflito(
+          `Já existe uma avaliação para ${anoAvaliacao} - Ciclo ${cicloAvaliacao}.`
+        );
+        return;
+      }
 
-      ano: anoAvaliacao,
-      ciclo: cicloAvaliacao,
-      status,
-      notaMedia,
-      expectativaCargoSnapshot: expectativaCargoAtual
-        ? {
-            cargo: expectativaCargoAtual.cargo,
-            nome: expectativaCargoAtual.nome,
-            autonomia: expectativaCargoAtual.autonomia,
-            tarefas: expectativaCargoAtual.tarefas,
-            responsabilidades: expectativaCargoAtual.responsabilidades,
-            foco: expectativaCargoAtual.foco,
-            capturadoEm: agora,
-          }
-        : undefined,
-      competencias: criterios.map((criterio) => {
-        const avaliacao = avaliacoes[criterio.id];
+      // Cache obsoleto: esquece a entrada e prossegue com a criação legítima.
+      esquecerAvaliacaoNovaDoColaboradorNoCiclo(
+        organizacaoAtivaId ?? "",
+        anoAvaliacao,
+        cicloAvaliacao,
+        colaborador!.matricula
+      );
+      setConflito("");
+    }
 
-        return {
-          competenciaId: criterio.id,
-          competenciaNome: criterio.nome,
-          nota: calcularNotaCriterio(criterio.id),
-          comentario: [
-            avaliacao.observacaoGerente
-              ? `Observação do Gerente: ${avaliacao.observacaoGerente}`
-              : "",
-            avaliacao.observacaoCoordenador
-              ? `Observação do Coordenador: ${avaliacao.observacaoCoordenador}`
-              : "",
-          ]
-            .filter(Boolean)
-            .join("\n\n"),
-        };
-      }),
-      criteriosDetalhados: criterios.map((criterio) => ({
-        criterioId: criterio.id,
-        criterioNome: criterio.nome,
-        nota: calcularNotaCriterio(criterio.id),
-        subcriterios: criterio.subcriterios.map((subcriterio) => {
-          const notas = avaliacoes[criterio.id].notas[subcriterio];
+    setErroAcao("");
+    setConflito("");
+    setSalvando(true);
+    try {
+      authorize(contextoAutorizado, "evaluation.create", evaluationResource);
 
-          return {
-            nome: subcriterio,
-            notaGerente: notas.gerente,
-            notaCoordenador: notas.coordenador,
-            notaColegiado: notas.colegiado,
-            votosColegiado: avaliadoresColegiado
-              .map((avaliador) => {
-                const nota =
-                  votosColegiado[criterio.id]?.[subcriterio]?.[
-                    avaliador.matricula
-                  ] ?? 0;
+      const criada = await criarAvaliacaoSoberana({
+        organizationId: organizacaoAtivaId ?? "",
+        ano: anoAvaliacao,
+        ciclo: cicloAvaliacao,
+        matriculaAvaliado: colaborador!.matricula,
+      });
 
-                return nota > 0
-                  ? {
-                      avaliadorMatricula: avaliador.matricula,
-                      avaliadorNome: avaliador.nome,
-                      nota,
-                      dataAtualizacao: new Date().toISOString(),
-                    }
-                  : undefined;
-              })
-              .filter((voto) => voto !== undefined),
-            notaFinal: calcularMediaSubcriterio(criterio.id, subcriterio),
-          };
-        }),
-        observacaoGerente: avaliacoes[criterio.id].observacaoGerente,
-        observacaoCoordenador: avaliacoes[criterio.id].observacaoCoordenador,
-      })),
-      feedbackFinalGerente,
-      feedbackFinalCoordenador,
-    } as unknown as Feedback;
+      if (!criada.ok || !criada.data) {
+        // Sem evidência local de duplicidade, a recusa é reportada como erro de
+        // domínio. Nada é criado localmente em nenhum caso (fail-closed).
+        setErroAcao(
+          criada.erro ?? "Não foi possível criar a avaliação no servidor."
+        );
+        return;
+      }
 
-    const feedbackExistente = existeAvaliacaoNaoCanceladaNoCiclo(
-      getFeedbacksByColaborador(colaborador!.matricula),
-      colaborador!.matricula,
-      anoAvaliacao,
-      cicloAvaliacao
-    );
+      const evaluationId = criada.data.evaluationId;
+      const painel = await carregarPainelSoberano({
+        organizationId: organizacaoAtivaId ?? "",
+        evaluationId,
+      });
 
-if (feedbackExistente) {
-  alert(
-    `Já existe uma avaliação para ${anoAvaliacao} - Ciclo ${cicloAvaliacao}.`
-  );
+      if (!painel.ok || !painel.data) {
+        setErroAcao(
+          painel.erro ??
+            "Avaliação criada, mas seu painel de edição não pôde ser carregado."
+        );
+        return;
+      }
 
-  return;
-}
+      // Somente as notas do PAPEL do ator são enviadas: a própria ocorrência
+      // vem do painel (server-side) e o banco valida o que lhe cabe.
+      const notas: NotaDoPainelPorNome[] = [];
+      for (const criterio of criterios) {
+        for (const subcriterio of criterio.subcriterios) {
+          const linhas = avaliacoes[criterio.id].notas[subcriterio];
+          const nota = podeAvaliarComoGerente
+            ? linhas.gerente
+            : podeAvaliarComoCoordenador
+              ? linhas.coordenador
+              : podeAvaliarComoColegiado
+                ? linhas.colegiado
+                : 0;
+          if (nota > 0) notas.push({ subcriterio, nota });
+        }
+      }
 
-    authorize(
-      contextoAutorizado,
-      "evaluation.create",
-      evaluationResource
-    );
-    saveFeedback(novoFeedback, usuarioAtual);
-    alert("Avaliação salva com sucesso.");
-    navigate(`/colaborador/${colaborador!.matricula}`);
+      const gravouNotas = await gravarNotasSoberanas({
+        organizationId: organizacaoAtivaId ?? "",
+        evaluationId,
+        painel: painel.data,
+        notas,
+      });
+      if (!gravouNotas.ok) {
+        setErroAcao(gravouNotas.erro ?? "Não foi possível gravar as notas.");
+        return;
+      }
+
+      const observacoes: ObservacaoDoPainel[] = [];
+      criterios.forEach((criterio, indice) => {
+        const code = painel.data!.criterios[indice]?.code;
+        if (!code) return;
+        const texto = podeAvaliarComoGerente
+          ? avaliacoes[criterio.id].observacaoGerente
+          : podeAvaliarComoCoordenador
+            ? avaliacoes[criterio.id].observacaoCoordenador
+            : "";
+        if (texto.trim()) observacoes.push({ criterioCode: code, texto });
+      });
+
+      const gravouObservacoes = await gravarObservacoesSoberanas({
+        organizationId: organizacaoAtivaId ?? "",
+        evaluationId,
+        painel: painel.data,
+        observacoes,
+      });
+      if (!gravouObservacoes.ok) {
+        setErroAcao(
+          gravouObservacoes.erro ?? "Não foi possível gravar as observações."
+        );
+        return;
+      }
+
+      // Comentário final: vai para a PRÓPRIA ocorrência quando o papel do ator
+      // exige esse comentário na configuração congelada.
+      const papeisComFinal = painel.data.papeisComFeedbackFinal;
+      const textoFinal = papeisComFinal.includes(painel.data.participanteRoleType)
+        ? podeAvaliarComoGerente
+          ? feedbackFinalGerente
+          : podeAvaliarComoCoordenador
+            ? feedbackFinalCoordenador
+            : ""
+        : "";
+
+      const gravouFinal = await gravarComentarioFinalSoberano({
+        organizationId: organizacaoAtivaId ?? "",
+        evaluationId,
+        painel: painel.data,
+        texto: textoFinal,
+      });
+      if (!gravouFinal.ok) {
+        setErroAcao(gravouFinal.erro ?? "Não foi possível gravar o feedback final.");
+        return;
+      }
+
+      alert("Avaliação salva com sucesso.");
+      navigate(`/colaborador/${colaborador!.matricula}`);
+    } catch (error) {
+      setErroAcao(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível salvar a avaliação."
+      );
+    } finally {
+      setSalvando(false);
+    }
   }
 
   return (
@@ -1506,26 +1601,84 @@ if (feedbackExistente) {
         )}
       </div>
 
+      {conflito && (
+        <section
+          className="new-evaluation-goals-warning"
+          role="alert"
+          style={{ marginTop: "16px" }}
+        >
+          <div className="new-evaluation-goals-warning__icon" aria-hidden="true">
+            !
+          </div>
+          <div>
+            <strong>Avaliação já existente</strong>
+            <p>{conflito}</p>
+            {avaliacaoNovaExistente && (
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(
+                    `/colaborador/${colaborador.matricula}/feedback/${avaliacaoNovaExistente}`
+                  )
+                }
+                style={{
+                  marginTop: "8px",
+                  padding: "8px 14px",
+                  borderRadius: "8px",
+                  border: "1px solid #660099",
+                  backgroundColor: "#fff",
+                  color: "#660099",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                }}
+              >
+                Abrir a avaliação existente
+              </button>
+            )}
+          </div>
+        </section>
+      )}
+
+      {erroAcao && (
+        <section
+          className="new-evaluation-goals-warning"
+          role="alert"
+          style={{ marginTop: "16px" }}
+        >
+          <div className="new-evaluation-goals-warning__icon" aria-hidden="true">
+            !
+          </div>
+          <div>
+            <strong>Avaliação não salva</strong>
+            <p>{erroAcao}</p>
+          </div>
+        </section>
+      )}
+
       <div className="new-evaluation-save-actions" style={{
           marginTop: "20px",
           display: "flex",
           justifyContent: "center",
+          gap: "12px",
+          alignItems: "center",
         }}>
 <button
-          onClick={handleSalvarFeedback}
-          disabled={!podeAvaliar}
+          onClick={() => {
+            void handleSalvarFeedback();
+          }}
+          disabled={!podeAvaliar || salvando}
           style={{
             padding: "12px 24px",
             borderRadius: "10px",
             border: "none",
-            cursor: "pointer",
-            backgroundColor: "#660099",
+            cursor: salvando ? "progress" : "pointer",
+            backgroundColor: salvando ? "#B98FD0" : "#660099",
             color: "#fff",
             fontWeight: "bold",
             fontSize: "15px",
           }}
         >
-          Salvar Avaliação
+          {salvando ? "Salvando no servidor…" : "Salvar Avaliação"}
         </button>
       </div>
     </main>

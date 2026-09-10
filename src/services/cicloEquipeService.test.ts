@@ -1,15 +1,45 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { instalarLocalStorageEmMemoria } from "../test/localStorageMock";
+import {
+  criarArmazenamentoMemoria,
+  lerAvaliacoesDoCiclo,
+  registrarAvaliacoesDoCiclo,
+  type ArmazenamentoCutover,
+} from "../infrastructure/supabase/avaliacoes/cutover";
+import { criarCutoverAvaliacoes } from "./avaliacoesSoberanas/cutoverAvaliacoesService";
+import type {
+  AvaliacaoSoberana,
+  RepositorioAvaliacoes,
+} from "../infrastructure/supabase/avaliacoes/repositorioAvaliacoes";
 import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
 import type { Feedback } from "../types/Feedback";
+import { getColaboradores } from "./colaboradorStorage";
 import {
   analisarPendenciasDoCiclo,
   concluirAvaliacoesNoEncerramentoDoCiclo,
   criarAvaliacoesDoCicloAtivado,
   excluirAvaliacoesVaziasDoCiclo,
   getPainelCiclo,
+  type DependenciasCicloEquipe,
 } from "./cicloEquipeService";
+
+/**
+ * F5-06 (Issue #103) — CICLO SOBERANO.
+ *
+ * A criação automática na ativação e a conclusão no encerramento deixaram de
+ * escrever no `localStorage`: ambas falam com o PostgreSQL pelo caminho
+ * soberano. Os testes verificam:
+ *
+ * - a criação automática DELEGA ao servidor e não cria registro local;
+ * - o legado existente continua contando como "já existe" (não é duplicado);
+ * - o encerramento conclui no servidor e NÃO recalcula nota no frontend;
+ * - o cleanup da exclusão de ciclo é fail-closed sobre o acervo somente leitura.
+ */
+
+const ORG = "11111111-1111-4111-8111-111111111111";
+const CICLO_POSTGRES = "22222222-2222-4222-8222-222222222222";
+const CHAVE_LEGADO = "feedback-control-feedbacks";
 
 const gerente: Colaborador = {
   matricula: 1,
@@ -70,6 +100,77 @@ const cancelada: Feedback = {
   ],
 };
 
+const avaliacaoSoberana = (
+  status: string,
+  id: string
+): AvaliacaoSoberana => ({
+  id,
+  organizationId: ORG,
+  cycleId: CICLO_POSTGRES,
+  evaluatedCollaboratorId: "44444444-4444-4444-8444-444444444444",
+  status,
+  notaMedia: null,
+  dataConclusao: null,
+  encerradaComPendencias: false,
+});
+
+function repositorioFalso(
+  comportamentos: Partial<RepositorioAvaliacoes> = {}
+): RepositorioAvaliacoes & { readonly chamadas: string[] } {
+  const chamadas: string[] = [];
+  let sequencia = 0;
+  const base: RepositorioAvaliacoes = {
+    // Cada criação devolve um id técnico DISTINTO (como o PostgreSQL faria):
+    // ids repetidos esconderiam erros de livro-caixa e de contagem.
+    criar: async () => {
+      sequencia += 1;
+      return {
+        ok: true,
+        data: `99999999-9999-4999-8999-${String(sequencia).padStart(12, "0")}`,
+      };
+    },
+    ler: async () => ({ ok: true, data: avaliacaoSoberana("RASCUNHO", CICLO_POSTGRES) }),
+    gravarNotas: async () => ({ ok: true, data: null }),
+    gravarComentario: async () => ({ ok: true, data: null }),
+    concluir: async () => ({ ok: true, data: null }),
+    reabrir: async () => ({ ok: true, data: null }),
+    cancelar: async () => ({ ok: true, data: null }),
+    realinharParticipantes: async () => ({ ok: true, data: 0 }),
+    transparenciaDoAvaliado: async () => {
+      throw new Error("não usado neste teste");
+    },
+    painelParticipante: async () => {
+      throw new Error("não usado neste teste");
+    },
+    resolverCiclo: async () => ({ ok: true, data: CICLO_POSTGRES }),
+  };
+
+  const instrumentado = Object.fromEntries(
+    Object.entries({ ...base, ...comportamentos }).map(([nome, fn]) => [
+      nome,
+      async (...args: unknown[]) => {
+        chamadas.push(nome);
+        return (fn as (...a: unknown[]) => unknown)(...args);
+      },
+    ])
+  ) as unknown as RepositorioAvaliacoes;
+
+  return Object.assign(instrumentado, { chamadas });
+}
+
+function deps(
+  comportamentos: Partial<RepositorioAvaliacoes> = {},
+  armazenamento: ArmazenamentoCutover = criarArmazenamentoMemoria()
+): DependenciasCicloEquipe & { readonly repositorio: RepositorioAvaliacoes & { readonly chamadas: string[] } } {
+  const repositorio = repositorioFalso(comportamentos);
+  return {
+    organizationId: ORG,
+    armazenamento,
+    repositorio,
+    criarCutover: () => criarCutoverAvaliacoes({ repositorio, armazenamento }),
+  };
+}
+
 describe("cicloEquipeService com avaliação cancelada", () => {
   beforeEach(() => {
     instalarLocalStorageEmMemoria();
@@ -78,7 +179,7 @@ describe("cicloEquipeService com avaliação cancelada", () => {
       JSON.stringify([gerente, avaliado])
     );
     localStorage.setItem("feedback-control-ciclos", JSON.stringify([ciclo]));
-    localStorage.setItem("feedback-control-feedbacks", JSON.stringify([cancelada]));
+    localStorage.setItem(CHAVE_LEGADO, JSON.stringify([cancelada]));
   });
 
   it("oculta no painel por padrão e inclui com status explícito", () => {
@@ -92,13 +193,6 @@ describe("cicloEquipeService com avaliação cancelada", () => {
 
   it("não gera pendência de encerramento", () => {
     expect(analisarPendenciasDoCiclo(ciclo)).toEqual([]);
-
-    concluirAvaliacoesNoEncerramentoDoCiclo(ciclo, []);
-
-    expect(
-      JSON.parse(localStorage.getItem("feedback-control-feedbacks") ?? "[]")[0]
-        .status
-    ).toBe("CANCELADA");
   });
 
   it("não gera pendências para ciclo cancelado", () => {
@@ -111,41 +205,160 @@ describe("cicloEquipeService com avaliação cancelada", () => {
     expect(analisarPendenciasDoCiclo(cicloCancelado)).toEqual([]);
   });
 
-  it("gera avaliação automática nova e vazia quando só existe cancelada", () => {
-    const resultado = criarAvaliacoesDoCicloAtivado(ciclo);
+  it("encerramento de ciclo sem avaliação nova não chama o servidor nem escreve local", async () => {
+    const legadoAntes = localStorage.getItem(CHAVE_LEGADO);
+    const dependencias = deps();
 
-    expect(resultado.criadas).toBeGreaterThan(0);
-    expect(resultado.existentes).toBe(0);
-    const persistidas = JSON.parse(
-      localStorage.getItem("feedback-control-feedbacks") ?? "[]"
-    ) as Feedback[];
-    const doAvaliado = persistidas.filter(
-      (feedback) => feedback.colaboradorId === avaliado.matricula
+    const resultado = await concluirAvaliacoesNoEncerramentoDoCiclo(
+      ciclo,
+      dependencias
     );
-    expect(doAvaliado).toHaveLength(2);
-    expect(doAvaliado[0]).toEqual(cancelada);
-    expect(doAvaliado[1].id).not.toBe(cancelada.id);
-    expect(doAvaliado[1].status).toBe("RASCUNHO");
-    expect(doAvaliado[1].notaMedia).toBe(0);
-    expect(doAvaliado[1].feedbackFinalGerente).toBe("");
-    expect(doAvaliado[1].feedbackFinalCoordenador).toBe("");
-    expect(doAvaliado[1]).not.toHaveProperty("motivoCancelamento");
+
+    expect(resultado).toEqual({ concluidas: 0, bloqueadas: 0 });
+    expect(dependencias.repositorio.chamadas).toEqual([]);
+    expect(localStorage.getItem(CHAVE_LEGADO)).toBe(legadoAntes);
   });
 
-  it("mantém a avaliação não cancelada como existente na geração automática", () => {
-    localStorage.setItem(
-      "feedback-control-feedbacks",
-      JSON.stringify([{ ...cancelada, id: "avaliacao-ativa", status: "RASCUNHO" }])
+  it("encerramento conclui no servidor as avaliações NOVAS do ciclo", async () => {
+    const armazenamento = criarArmazenamentoMemoria();
+    registrarAvaliacoesDoCiclo(ORG, 2026, 1, [CICLO_POSTGRES], armazenamento);
+    const dependencias = deps({}, armazenamento);
+    const legadoAntes = localStorage.getItem(CHAVE_LEGADO);
+
+    const resultado = await concluirAvaliacoesNoEncerramentoDoCiclo(
+      ciclo,
+      dependencias
     );
 
-    const resultado = criarAvaliacoesDoCicloAtivado(ciclo);
-    expect(resultado.existentes).toBe(1);
-    const persistidas = JSON.parse(
-      localStorage.getItem("feedback-control-feedbacks") ?? "[]"
-    ) as Feedback[];
+    expect(resultado).toEqual({ concluidas: 1, bloqueadas: 0 });
+    expect(dependencias.repositorio.chamadas).toEqual(["ler", "concluir"]);
+    // Sem re-cálculo oficial no frontend e sem dual-write.
+    expect(localStorage.getItem(CHAVE_LEGADO)).toBe(legadoAntes);
+  });
+
+  it("encerramento NÃO reabre nem reconclui avaliação já concluída", async () => {
+    const armazenamento = criarArmazenamentoMemoria();
+    registrarAvaliacoesDoCiclo(ORG, 2026, 1, [CICLO_POSTGRES], armazenamento);
+    const dependencias = deps(
+      {
+        ler: async () => ({
+          ok: true,
+          data: avaliacaoSoberana("CONCLUIDA", CICLO_POSTGRES),
+        }),
+      },
+      armazenamento
+    );
+
+    const resultado = await concluirAvaliacoesNoEncerramentoDoCiclo(
+      ciclo,
+      dependencias
+    );
+
+    expect(resultado).toEqual({ concluidas: 0, bloqueadas: 0 });
+    expect(dependencias.repositorio.chamadas).toEqual(["ler"]);
+  });
+
+  it("recusa do servidor na conclusão é contabilizada como bloqueada", async () => {
+    const armazenamento = criarArmazenamentoMemoria();
+    registrarAvaliacoesDoCiclo(ORG, 2026, 1, [CICLO_POSTGRES], armazenamento);
+    const dependencias = deps(
+      {
+        concluir: async () => ({
+          ok: false,
+          error: { code: "CONFLICT", message: "incompleta" },
+        }),
+      },
+      armazenamento
+    );
+
+    const resultado = await concluirAvaliacoesNoEncerramentoDoCiclo(
+      ciclo,
+      dependencias
+    );
+
+    expect(resultado).toEqual({ concluidas: 0, bloqueadas: 1 });
+  });
+
+  it("gera avaliação automática no SERVIDOR quando só existe cancelada no legado", async () => {
+    const dependencias = deps();
+    const legadoAntes = localStorage.getItem(CHAVE_LEGADO);
+
+    const resultado = await criarAvaliacoesDoCicloAtivado(ciclo, dependencias);
+
+    // Uma criação soberana por colaborador elegível; nenhuma avaliação é
+    // criada no acervo legado (sem dual-write).
+    expect(resultado.criadas).toBeGreaterThan(0);
+    expect(resultado.existentes).toBe(0);
+    expect(resultado.bloqueadas).toBe(0);
     expect(
-      persistidas.filter((feedback) => feedback.colaboradorId === avaliado.matricula)
-    ).toHaveLength(1);
+      dependencias.repositorio.chamadas.filter((nome) => nome === "criar")
+    ).toHaveLength(resultado.criadas);
+    expect(localStorage.getItem(CHAVE_LEGADO)).toBe(legadoAntes);
+  });
+
+  it("registra o id soberano no livro-caixa do ciclo (navegação, não autoridade)", async () => {
+    // Este cenário precisa dos colaboradores REAIS (o cadastro de teste acima
+    // tem apenas duas pessoas, das quais uma é gestora e não é elegível).
+    localStorage.removeItem("feedback-control-colaboradores");
+    const armazenamento = criarArmazenamentoMemoria();
+    const dependencias = deps({}, armazenamento);
+
+    const resultado = await criarAvaliacoesDoCicloAtivado(ciclo, dependencias);
+
+    const ids = lerAvaliacoesDoCiclo(ORG, 2026, 1, armazenamento);
+    expect(resultado.criadas).toBeGreaterThan(0);
+    expect(ids).toHaveLength(resultado.criadas);
+    // Somente ids TÉCNICOS (UUID) entram no livro-caixa.
+    expect(ids.every((id) => /^[0-9a-f-]{36}$/i.test(id))).toBe(true);
+  });
+
+  it("mantém toda avaliação não cancelada do legado como existente (não duplica)", async () => {
+    // Um registro legado por colaborador cadastrado: como a checagem legada
+    // ocorre ANTES de qualquer chamada, nada deve ser criado nem resolvido.
+    const legados = getColaboradores().map((colaborador, indice) => ({
+      ...cancelada,
+      id: `legado-${indice}`,
+      colaboradorId: colaborador.matricula,
+      status: "RASCUNHO" as const,
+    }));
+    localStorage.setItem(CHAVE_LEGADO, JSON.stringify(legados));
+    const dependencias = deps();
+
+    const resultado = await criarAvaliacoesDoCicloAtivado(ciclo, dependencias);
+
+    expect(resultado.criadas).toBe(0);
+    expect(resultado.existentes).toBeGreaterThan(0);
+    expect(dependencias.repositorio.chamadas).toEqual([]);
+    expect(JSON.parse(localStorage.getItem(CHAVE_LEGADO) ?? "[]")).toHaveLength(
+      legados.length
+    );
+  });
+
+  it("recusa do servidor na criação conta como bloqueada (fail-closed)", async () => {
+    const dependencias = deps({
+      resolverCiclo: async () => ({
+        ok: false,
+        error: { code: "NOT_FOUND", message: "ciclo ausente" },
+      }),
+    });
+
+    const resultado = await criarAvaliacoesDoCicloAtivado(ciclo, dependencias);
+
+    expect(resultado.criadas).toBe(0);
+    expect(resultado.bloqueadas).toBeGreaterThan(0);
+  });
+
+  it("sem caminho soberano configurado nada é criado localmente", async () => {
+    const legadoAntes = localStorage.getItem(CHAVE_LEGADO);
+
+    const resultado = await criarAvaliacoesDoCicloAtivado(ciclo, {
+      organizationId: ORG,
+      criarCutover: () => null,
+    });
+
+    expect(resultado.criadas).toBe(0);
+    expect(resultado.bloqueadas).toBeGreaterThan(0);
+    expect(localStorage.getItem(CHAVE_LEGADO)).toBe(legadoAntes);
   });
 });
 
@@ -168,7 +381,7 @@ describe("cleanup seguro na exclusão de ciclo", () => {
         JSON.stringify([cicloProtegido])
       );
       localStorage.setItem(
-        "feedback-control-feedbacks",
+        CHAVE_LEGADO,
         JSON.stringify([feedbackRelacionado])
       );
 
@@ -179,7 +392,7 @@ describe("cleanup seguro na exclusão de ciclo", () => {
         JSON.parse(localStorage.getItem("feedback-control-ciclos") ?? "[]")
       ).toEqual([cicloProtegido]);
       expect(
-        JSON.parse(localStorage.getItem("feedback-control-feedbacks") ?? "[]")
+        JSON.parse(localStorage.getItem(CHAVE_LEGADO) ?? "[]")
       ).toEqual([feedbackRelacionado]);
     }
   );
@@ -192,7 +405,7 @@ describe("cleanup seguro na exclusão de ciclo", () => {
       feedbackFinalGerente: "Conteúdo operacional",
     };
     localStorage.setItem("feedback-control-ciclos", JSON.stringify([cicloPlanejado]));
-    localStorage.setItem("feedback-control-feedbacks", JSON.stringify([preenchida]));
+    localStorage.setItem(CHAVE_LEGADO, JSON.stringify([preenchida]));
 
     expect(() => excluirAvaliacoesVaziasDoCiclo(cicloPlanejado)).toThrow(
       "dados preenchidos"
@@ -201,22 +414,20 @@ describe("cleanup seguro na exclusão de ciclo", () => {
       JSON.parse(localStorage.getItem("feedback-control-ciclos") ?? "[]")
     ).toEqual([cicloPlanejado]);
     expect(
-      JSON.parse(localStorage.getItem("feedback-control-feedbacks") ?? "[]")
+      JSON.parse(localStorage.getItem(CHAVE_LEGADO) ?? "[]")
     ).toEqual([preenchida]);
   });
 
-  it("remove somente avaliação realmente vazia de ciclo planejado", () => {
+  it("recusa apagar avaliação vazia do legado: acervo é somente leitura", () => {
     const cicloPlanejado = { ...ciclo, status: "PLANEJADO" as const };
     const vazia = { ...cancelada, status: "RASCUNHO" as const };
     localStorage.setItem("feedback-control-ciclos", JSON.stringify([cicloPlanejado]));
-    localStorage.setItem("feedback-control-feedbacks", JSON.stringify([vazia]));
+    localStorage.setItem(CHAVE_LEGADO, JSON.stringify([vazia]));
 
-    expect(excluirAvaliacoesVaziasDoCiclo(cicloPlanejado)).toEqual({
-      excluidas: 1,
-      bloqueadas: 0,
-    });
-    expect(
-      JSON.parse(localStorage.getItem("feedback-control-feedbacks") ?? "[]")
-    ).toEqual([]);
+    expect(() => excluirAvaliacoesVaziasDoCiclo(cicloPlanejado)).toThrow(
+      /desativada/i
+    );
+    // O acervo permanece intacto: nenhuma exclusão física pelo produto.
+    expect(JSON.parse(localStorage.getItem(CHAVE_LEGADO) ?? "[]")).toEqual([vazia]);
   });
 });

@@ -10,15 +10,22 @@ import {
   existeAvaliacaoNaoCanceladaNoCiclo,
   getFeedbacks,
   removerAvaliacaoVaziaNoCleanupInterno,
-  saveFeedback,
-  updateFeedback,
 } from "./feedbackStorage";
+import {
+  criarAvaliacaoSoberana,
+  lerStatusSoberano,
+  concluirAvaliacaoSoberana,
+  type DependenciasAcessoAvaliacoes,
+} from "./acessoAvaliacoesSoberanas";
+import {
+  lerAvaliacoesDoCiclo,
+  registrarAvaliacoesDoCiclo,
+} from "../infrastructure/supabase/avaliacoes/cutover";
 import { getColaboradoresVisiveis } from "./visibilidadeColaboradores";
 import { getMetasDoCiclo } from "./metaStorage";
 import {
   getAplicabilidadeNoCiclo,
   getColaboradoresEfetivosNoCiclo,
-  getColaboradorEfetivoNoCiclo,
 } from "./historicoOrganizacionalStorage";
 
 export type SituacaoAvaliacaoCiclo =
@@ -54,92 +61,14 @@ export interface LinhaPainelCiclo {
   motivoNaoAplicavel?: string;
 }
 
-function criarFeedbackVazio(
-  colaborador: Colaborador,
-  ciclo: CicloAvaliacao
-): Feedback {
-  const agora = new Date().toISOString();
-
-  return {
-    id: crypto.randomUUID(),
-    colaboradorId: colaborador.matricula,
-    colaboradorNome: colaborador.nome,
-    status: "RASCUNHO",
-    data: agora,
-    dataCriacao: agora,
-    dataUltimaAtualizacao: agora,
-    ano: ciclo.ano,
-    ciclo: ciclo.ciclo,
-    notaMedia: 0,
-    competencias: criteriosAvaliacao.map((criterio) => ({
-      competenciaId: criterio.id,
-      competenciaNome: criterio.nome,
-      nota: 0,
-      comentario: "",
-    })),
-    criteriosDetalhados: criteriosAvaliacao.map((criterio) => ({
-      criterioId: criterio.id,
-      criterioNome: criterio.nome,
-      nota: 0,
-      subcriterios: criterio.subcriterios.map((subcriterio) => ({
-        nome: subcriterio,
-        notaGerente: 0,
-        notaCoordenador: 0,
-        notaColegiado: 0,
-        votosColegiado: [],
-        notaFinal: 0,
-      })),
-      observacaoGerente: "",
-      observacaoCoordenador: "",
-    })),
-    feedbackFinalGerente: "",
-    feedbackFinalCoordenador: "",
-  };
-}
-
-export function criarAvaliacoesDoCicloAtivado(
-  ciclo: CicloAvaliacao
-): {
-  criadas: number;
-  existentes: number;
-  elegiveis: number;
-} {
-  const colaboradores = getColaboradores();
-  const efetivos = getColaboradoresEfetivosNoCiclo(ciclo, colaboradores);
-  const feedbacks = getFeedbacks();
-
-  const elegiveis = efetivos.filter(
-    (colaborador) =>
-      getAplicabilidadeNoCiclo(
-        colaboradores.find((item) => item.matricula === colaborador.matricula) ?? colaborador,
-        ciclo
-      ).aplicavel &&
-      colaborador.status === "ATIVO" &&
-      colaborador.funcao !== "GERENTE" &&
-      colaborador.gestorDiretoMatricula !== undefined
-  );
-
-  let criadas = 0;
-  let existentes = 0;
-
-  elegiveis.forEach((colaborador) => {
-    const jaExiste = existeAvaliacaoNaoCanceladaNoCiclo(
-      feedbacks,
-      colaborador.matricula,
-      ciclo.ano,
-      ciclo.ciclo
-    );
-
-    if (jaExiste) {
-      existentes += 1;
-      return;
-    }
-
-    saveFeedback(criarFeedbackVazio(colaborador, ciclo));
-    criadas += 1;
-  });
-
-  return { criadas, existentes, elegiveis: elegiveis.length };
+/**
+ * Dependências das operações soberanas de ciclo. O `organizationId` é apenas
+ * INTENÇÃO: a fronteira confiável o revalida contra a membership ativa do ator
+ * (`auth.uid()`) e é ela quem decide. Sem caminho novo configurado a operação é
+ * recusada — nunca cai para o `localStorage` (D12/§11.3).
+ */
+export interface DependenciasCicloEquipe extends DependenciasAcessoAvaliacoes {
+  readonly organizationId: string;
 }
 
 function temPreenchimento(feedback: Feedback): boolean {
@@ -166,6 +95,93 @@ function temPreenchimento(feedback: Feedback): boolean {
     (feedback.feedbackFinalCoordenador?.trim().length ?? 0) > 0;
 
   return temNotas || temObservacoes || temFeedbackFinal;
+}
+
+/**
+ * Criação AUTOMÁTICA das avaliações do ciclo ativado — SOBERANA.
+ *
+ * A partir do cutover, a avaliação nova existe EXCLUSIVAMENTE no PostgreSQL
+ * (D12): este fluxo deixa de escrever qualquer registro em `localStorage`. O
+ * ciclo é resolvido por ano+número e o colaborador pela matrícula, ambos na
+ * fronteira confiável (ponte F3-01); os participantes são snapshotados
+ * server-side por `evaluation_criar`.
+ *
+ * A resposta distingue três resultados, porque "já existe" não é erro:
+ * - `criadas`: avaliação nova criada no banco;
+ * - `existentes`: já havia avaliação não cancelada (legado ou banco);
+ * - `bloqueadas`: o servidor recusou (ex.: ciclo ainda não existe no
+ *   PostgreSQL, snapshot de ciclo ausente). Nada é criado no lugar dela.
+ */
+export async function criarAvaliacoesDoCicloAtivado(
+  ciclo: CicloAvaliacao,
+  deps: DependenciasCicloEquipe
+): Promise<{ criadas: number; existentes: number; bloqueadas: number }> {
+  const colaboradores = getColaboradores();
+  const efetivos = getColaboradoresEfetivosNoCiclo(ciclo, colaboradores);
+  const feedbacksLegados = getFeedbacks();
+
+  const elegiveis = efetivos.filter(
+    (colaborador) =>
+      getAplicabilidadeNoCiclo(
+        colaboradores.find((item) => item.matricula === colaborador.matricula) ?? colaborador,
+        ciclo
+      ).aplicavel &&
+      colaborador.status === "ATIVO" &&
+      colaborador.funcao !== "GERENTE" &&
+      colaborador.gestorDiretoMatricula !== undefined
+  );
+
+  let criadas = 0;
+  let existentes = 0;
+  let bloqueadas = 0;
+
+  for (const colaborador of elegiveis) {
+    // Acervo LEGADO (somente leitura): uma avaliação não cancelada já existente
+    // no legado continua contando como existente — o cutover não a duplica.
+    const jaExisteNoLegado = existeAvaliacaoNaoCanceladaNoCiclo(
+      feedbacksLegados,
+      colaborador.matricula,
+      ciclo.ano,
+      ciclo.ciclo
+    );
+
+    if (jaExisteNoLegado) {
+      existentes += 1;
+      continue;
+    }
+
+    const resultado = await criarAvaliacaoSoberana(
+      {
+        organizationId: deps.organizationId,
+        ano: ciclo.ano,
+        ciclo: ciclo.ciclo,
+        matriculaAvaliado: colaborador.matricula,
+      },
+      deps
+    );
+
+    if (resultado.ok && resultado.data) {
+      // CACHE DE NAVEGAÇÃO (não é autoridade, não é tenant): registra o id
+      // soberano do ciclo E o vínculo com o colaborador, no namespace da
+      // organização ativa, para que a tela localize a avaliação nova depois do
+      // reload (ela nunca existe no legado).
+      registrarAvaliacoesDoCiclo(
+        deps.organizationId,
+        ciclo.ano,
+        ciclo.ciclo,
+        [resultado.data.evaluationId],
+        deps.armazenamento ?? null,
+        colaborador.matricula
+      );
+      criadas += 1;
+    } else {
+      // Recusa do servidor (ou ausência do caminho novo): fail-closed. Não há
+      // escrita local de compensação e a contagem é reportada à tela.
+      bloqueadas += 1;
+    }
+  }
+
+  return { criadas, existentes, bloqueadas };
 }
 
 export function getSituacaoAvaliacaoCiclo(
@@ -468,6 +484,11 @@ function notasEsperadasDoSubcriterio(
   return resultado;
 }
 
+/**
+ * Pendências do fechamento. Lê o ACERVO (legado somente leitura + avaliações
+ * novas do banco) para relatar o que falta; não decide completude oficial — a
+ * completude que autoriza a conclusão normal é calculada no servidor (D18).
+ */
 export function analisarPendenciasDoCiclo(
   ciclo: CicloAvaliacao
 ): PendenciaAvaliacao[] {
@@ -555,85 +576,58 @@ export function analisarPendenciasDoCiclo(
   );
 }
 
-function mediaNotasValidas(notas: number[]): number {
-  const validas = notas.filter((nota) => nota > 0);
-  if (validas.length === 0) return 0;
-  return validas.reduce((soma, nota) => soma + nota, 0) / validas.length;
-}
-
-function recalcularAvaliacaoParcial(
-  feedback: Feedback,
-  colaborador: Colaborador,
-  pendencias: PendenciaAvaliacao[]
-): Feedback {
-  const criteriosDetalhados = (feedback.criteriosDetalhados ?? []).map(
-    (criterio) => {
-      const subcriterios = criterio.subcriterios.map((subcriterio) => {
-        const notas = [subcriterio.notaGerente];
-        if (funcaoUsaEstruturaAvaliacaoAnalista(colaborador.funcao)) {
-          notas.push(subcriterio.notaCoordenador, subcriterio.notaColegiado);
-        }
-        return { ...subcriterio, notaFinal: mediaNotasValidas(notas) };
-      });
-      return {
-        ...criterio,
-        subcriterios,
-        nota: mediaNotasValidas(subcriterios.map((sub) => sub.notaFinal)),
-      };
-    }
-  );
-
-  const notaMedia = mediaNotasValidas(
-    criteriosDetalhados.map((criterio) => criterio.nota)
-  );
-  const pendenciasDesteColaborador = pendencias
-    .filter(
-      (item) =>
-        item.colaboradorId === feedback.colaboradorId && item.papel !== "Metas"
-    )
-    .map(
-      (item) =>
-        `${item.papel}: ${item.quantidade} nota${
-          item.quantidade === 1 ? "" : "s"
-        } pendente${item.quantidade === 1 ? "" : "s"}`
-    );
-  const agora = new Date().toISOString();
-
-  return {
-    ...feedback,
-    criteriosDetalhados,
-    notaMedia,
-    status: "CONCLUIDA",
-    dataConclusao: feedback.dataConclusao ?? agora,
-    dataUltimaAtualizacao: agora,
-    encerradaComPendencias: pendenciasDesteColaborador.length > 0,
-    pendenciasEncerramento: pendenciasDesteColaborador,
-  };
-}
-
-export function concluirAvaliacoesNoEncerramentoDoCiclo(
+/**
+ * Encerramento do ciclo: CONCLUSÃO SOBERANA das avaliações NOVAS.
+ *
+ * A partir do cutover o frontend NÃO recalcula nota oficial (D13) e NÃO converte
+ * avaliação incompleta em `CONCLUIDA` (D18). Para cada avaliação que existe
+ * exclusivamente no PostgreSQL — alcançada pelo livro-caixa do ciclo, porque ela
+ * nunca está no `localStorage` — o frontend pede a conclusão ao servidor: ele
+ * decide a completude e materializa o agregado na mesma transação.
+ *
+ * A completude NÃO é presumida pela ausência de pendências locais: quem responde
+ * é o banco (fail-closed). As recusas são contadas e devolvidas para a tela
+ * relatar, sem inventar estado local e sem escrever em `localStorage`.
+ */
+export async function concluirAvaliacoesNoEncerramentoDoCiclo(
   ciclo: CicloAvaliacao,
-  pendencias: PendenciaAvaliacao[]
-): void {
-  const colaboradoresBase = getColaboradores();
+  deps: DependenciasCicloEquipe
+): Promise<{ concluidas: number; bloqueadas: number }> {
+  const idsSoberanos = lerAvaliacoesDoCiclo(
+    deps.organizationId,
+    ciclo.ano,
+    ciclo.ciclo,
+    deps.armazenamento ?? null
+  );
 
-  getFeedbacks()
-    .filter(
-      (feedback) =>
-        feedback.ano === ciclo.ano &&
-        feedback.ciclo === ciclo.ciclo &&
-        feedback.status !== "CANCELADA"
-    )
-    .forEach((feedback) => {
-      const base = colaboradoresBase.find(
-        (item) => item.matricula === feedback.colaboradorId
-      );
-      if (!base) return;
-      const colaborador = getColaboradorEfetivoNoCiclo(
-        base,
-        ciclo,
-        colaboradoresBase
-      );
-      updateFeedback(recalcularAvaliacaoParcial(feedback, colaborador, pendencias));
-    });
+  let concluidas = 0;
+  let bloqueadas = 0;
+
+  for (const evaluationId of idsSoberanos) {
+    const status = await lerStatusSoberano(
+      { organizationId: deps.organizationId, evaluationId },
+      deps
+    );
+
+    // Sem status real não há decisão: falha de leitura é fail-closed.
+    if (!status.ok || !status.data) {
+      bloqueadas += 1;
+      continue;
+    }
+
+    // Já concluída ou cancelada não é recusa nem reabertura: é o estado real.
+    if (status.data.status === "CONCLUIDA" || status.data.status === "CANCELADA") {
+      continue;
+    }
+
+    const conclusao = await concluirAvaliacaoSoberana(
+      { organizationId: deps.organizationId, evaluationId },
+      deps
+    );
+
+    if (conclusao.ok) concluidas += 1;
+    else bloqueadas += 1;
+  }
+
+  return { concluidas, bloqueadas };
 }

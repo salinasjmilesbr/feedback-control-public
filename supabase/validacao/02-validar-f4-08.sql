@@ -134,14 +134,18 @@ declare v_tab text;
     'access_roles','access_role_capabilities','membership_access_role_assignments',
     'membership_collaborator_links','access_role_assignment_scopes',
     'access_role_assignment_unit_targets','evaluation_succession_events',
-    'privilege_mutation_audit'];
+    'privilege_mutation_audit',
+    'evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria',
+    'evaluation_config_scale_bands','evaluation_config_participant_roles','evaluation_cycles',
+    'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
+    'evaluation_events','evaluation_pendencies','evaluation_aggregates'];
 begin
   foreach v_tab in array v_closed loop
     if exists (select 1 from pg_policies p where p.schemaname='public' and p.tablename=v_tab) then
       raise exception '[FAIL] tabela fechada com policy indevida: %', v_tab;
     end if;
   end loop;
-  raise notice '[PASS] 8 tabelas fechadas permanecem sem policy';
+  raise notice '[PASS] 21 tabelas fechadas permanecem sem policy';
 end $$;
 
 do $$
@@ -171,7 +175,11 @@ declare
     'capabilities','access_roles','access_role_capabilities',
     'membership_access_role_assignments','membership_collaborator_links',
     'access_role_assignment_scopes','access_role_assignment_unit_targets',
-    'privilege_mutation_audit'];
+    'privilege_mutation_audit',
+    'evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria',
+    'evaluation_config_scale_bands','evaluation_config_participant_roles','evaluation_cycles',
+    'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
+    'evaluation_events','evaluation_pendencies','evaluation_aggregates'];
   v_privs text[] := array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'];
 begin
   foreach v_tab in array v_todos loop
@@ -181,7 +189,7 @@ begin
       end if;
     end loop;
   end loop;
-  raise notice '[PASS] anon sem qualquer privilegio de tabela (29 tabelas x 7 privs)';
+  raise notice '[PASS] anon sem qualquer privilegio de tabela (42 tabelas x 7 privs)';
 end $$;
 
 do $$
@@ -201,7 +209,11 @@ declare
     'capabilities','access_roles','access_role_capabilities',
     'membership_access_role_assignments','membership_collaborator_links',
     'access_role_assignment_scopes','access_role_assignment_unit_targets',
-    'privilege_mutation_audit'];
+    'privilege_mutation_audit',
+    'evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria',
+    'evaluation_config_scale_bands','evaluation_config_participant_roles','evaluation_cycles',
+    'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
+    'evaluation_events','evaluation_pendencies','evaluation_aggregates'];
 begin
   foreach v_tab in array v_todos loop
     foreach v_priv in array v_dml loop
@@ -210,7 +222,7 @@ begin
       end if;
     end loop;
   end loop;
-  raise notice '[PASS] authenticated sem INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER (29 tabelas)';
+  raise notice '[PASS] authenticated sem INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER (42 tabelas)';
 end $$;
 
 do $$
@@ -228,7 +240,11 @@ declare v_tab text;
     'access_roles','access_role_capabilities','membership_access_role_assignments',
     'membership_collaborator_links','access_role_assignment_scopes',
     'access_role_assignment_unit_targets','evaluation_succession_events',
-    'privilege_mutation_audit'];
+    'privilege_mutation_audit',
+    'evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria',
+    'evaluation_config_scale_bands','evaluation_config_participant_roles','evaluation_cycles',
+    'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
+    'evaluation_events','evaluation_pendencies','evaluation_aggregates'];
 begin
   foreach v_tab in array v_readable loop
     if not has_table_privilege('authenticated', format('public.%I', v_tab), 'SELECT') then
@@ -240,7 +256,7 @@ begin
       raise exception '[FAIL] authenticated com SELECT em tabela fechada public.%', v_tab;
     end if;
   end loop;
-  raise notice '[PASS] authenticated com SELECT somente nas 21 tabelas legiveis (8 fechadas sem SELECT)';
+  raise notice '[PASS] authenticated com SELECT somente nas 21 tabelas legiveis (21 fechadas sem SELECT)';
 end $$;
 
 -- ----------------------------------------------------------------------------
@@ -264,11 +280,15 @@ begin
       'capabilities','access_roles','access_role_capabilities',
       'membership_access_role_assignments','membership_collaborator_links',
       'access_role_assignment_scopes','access_role_assignment_unit_targets',
-      'privilege_mutation_audit');
+      'privilege_mutation_audit',
+      'evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria',
+      'evaluation_config_scale_bands','evaluation_config_participant_roles','evaluation_cycles',
+      'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
+      'evaluation_events','evaluation_pendencies','evaluation_aggregates');
   if v_t is not null then
     raise exception '[FAIL] tabela public nao classificada (D16 — catalogacao explicita obrigatoria): %', v_t;
   end if;
-  raise notice '[PASS] todas as 29 tabelas public estao explicitamente classificadas (D16)';
+  raise notice '[PASS] todas as 42 tabelas public estao explicitamente classificadas (D16)';
 end $$;
 
 do $$
@@ -674,14 +694,14 @@ end $$;
 
 do $$
 declare v_t text; v_ok boolean;
-  v_closed text[] := array['access_roles','access_role_capabilities','membership_access_role_assignments','membership_collaborator_links','access_role_assignment_scopes','access_role_assignment_unit_targets','evaluation_succession_events','privilege_mutation_audit'];
+  v_closed text[] := array['access_roles','access_role_capabilities','membership_access_role_assignments','membership_collaborator_links','access_role_assignment_scopes','access_role_assignment_unit_targets','evaluation_succession_events','privilege_mutation_audit','evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria','evaluation_config_scale_bands','evaluation_config_participant_roles','evaluation_cycles','evaluations','evaluation_participants','evaluation_scores','evaluation_comments','evaluation_events','evaluation_pendencies','evaluation_aggregates'];
 begin
   foreach v_t in array v_closed loop
     v_ok := false;
     begin execute format('select count(*) from public.%I', v_t); exception when insufficient_privilege then v_ok := true; end;
     if not v_ok then raise exception '[FAIL] authenticated leu tabela fechada %', v_t; end if;
   end loop;
-  raise notice '[PASS] 8 tabelas fechadas invisiveis (permission denied) apesar de dados de fixture';
+  raise notice '[PASS] 21 tabelas fechadas invisiveis (permission denied) apesar de dados de fixture';
 end $$;
 
 do $$

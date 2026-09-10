@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it } from "vitest";
 import { UsuarioAtualContext } from "../contexts/UsuarioAtualContext";
 import { instalarLocalStorageEmMemoria } from "../test/localStorageMock";
+import { ProvedorAuthTeste } from "../test/authTeste";
 import type {
   CicloAvaliacao,
   StatusCicloAvaliacao,
@@ -42,19 +43,21 @@ function renderizarCiclos(
   );
 
   return renderToStaticMarkup(
-    <UsuarioAtualContext.Provider
-      value={{
-        usuarioAtual: usuario,
-        usuariosDisponiveis: [gerente, coordenador],
-        selecionarUsuario: () => undefined,
-      }}
-    >
-      <MemoryRouter>
-        <CiclosAvaliacaoPage
-          mostrarCanceladosInicial={mostrarCanceladosInicial}
-        />
-      </MemoryRouter>
-    </UsuarioAtualContext.Provider>
+    <ProvedorAuthTeste>
+      <UsuarioAtualContext.Provider
+        value={{
+          usuarioAtual: usuario,
+          usuariosDisponiveis: [gerente, coordenador],
+          selecionarUsuario: () => undefined,
+        }}
+      >
+        <MemoryRouter>
+          <CiclosAvaliacaoPage
+            mostrarCanceladosInicial={mostrarCanceladosInicial}
+          />
+        </MemoryRouter>
+      </UsuarioAtualContext.Provider>
+    </ProvedorAuthTeste>
   );
 }
 
@@ -159,7 +162,7 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
 
     expect(confirmado).toBe(false);
     expect(mensagem).toContain("Excluir 2026 • Ciclo 2?");
-    expect(mensagem).toContain("Avaliações vazias");
+    expect(mensagem).toContain("não remove avaliações já registradas");
   });
 });
 

@@ -1,57 +1,41 @@
-import { authorize } from "../authorization/authorizationPolicy";
-import type { AuthorizationContext } from "../authorization/AuthorizationContext";
-import type { EvaluationResource } from "../authorization/ResourceContext";
-import type { Colaborador } from "../types/Colaborador";
-import type { Feedback } from "../types/Feedback";
-import { getCiclosAvaliacao } from "./cicloAvaliacaoStorage";
-import { getColaboradores } from "./colaboradorStorage";
-import {
-  getFeedbacks,
-  persistirCancelamentoAuditadoInterno,
-} from "./feedbackStorage";
+/**
+ * F5-06 (Issue #103) — CANCELAMENTO SOBERANO da avaliação.
+ *
+ * A decisão de autorização NÃO é tomada aqui: o ator, o tenant e a relação com o
+ * avaliado são revalidados server-side (ActorContext/ResourceContext reais) e o
+ * Policy Engine decide ALLOW/DENY. O cliente apenas envia a INTENÇÃO (id + motivo
+ * + organização ativa) e traduz o erro público.
+ *
+ * Nenhuma escrita local acontece — nem antes, nem em caso de falha (sem
+ * dual-write, sem fallback; D12/§11.3). O motivo é obrigatório e auditado com
+ * autoria soberana e evento na mesma transação (D7/D26).
+ */
 
-export function cancelarAvaliacao(
+import {
+  cancelarAvaliacaoSoberana,
+  type DependenciasAcessoAvaliacoes,
+} from "./acessoAvaliacoesSoberanas";
+
+export interface ResultadoCancelamentoAvaliacao {
+  readonly ok: boolean;
+  readonly erro?: string;
+}
+
+export async function cancelarAvaliacao(
   feedbackId: string,
   motivoInformado: string,
-  autor: Colaborador
-): Feedback {
+  organizationId: string,
+  deps: DependenciasAcessoAvaliacoes = {}
+): Promise<ResultadoCancelamentoAvaliacao> {
   const motivo = motivoInformado.trim();
   if (!motivo) {
     throw new Error("Informe o motivo do cancelamento.");
   }
 
-  const feedback = getFeedbacks().find((item) => item.id === feedbackId);
-  if (!feedback) throw new Error("Avaliação não encontrada.");
-
-  const colaboradores = getColaboradores();
-  const colaborador = colaboradores.find(
-    (item) => item.matricula === feedback.colaboradorId
+  const resultado = await cancelarAvaliacaoSoberana(
+    { organizationId, evaluationId: feedbackId, motivo },
+    deps
   );
-  if (!colaborador) throw new Error("Colaborador não encontrado.");
 
-  const ciclo = getCiclosAvaliacao().find(
-    (item) => item.ano === feedback.ano && item.ciclo === feedback.ciclo
-  );
-  const context: AuthorizationContext = {
-    actor: {
-      matricula: autor.matricula,
-      funcao: autor.funcao,
-      status: autor.status,
-    },
-  };
-  const resource: EvaluationResource = {
-    kind: "evaluation",
-    evaluatedCollaborator: colaborador,
-    collaborators: colaboradores,
-    cycle: ciclo,
-    evaluationStatus: feedback.status,
-  };
-  authorize(context, "evaluation.cancel.manager", resource);
-
-  return persistirCancelamentoAuditadoInterno(
-    feedback.id,
-    motivo,
-    autor,
-    new Date().toISOString()
-  );
+  return resultado.ok ? { ok: true } : { ok: false, erro: resultado.erro };
 }

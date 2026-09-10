@@ -77,3 +77,11 @@ entrypoint = "./functions/convidar-usuario/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/gerenciar-usuario/index.ts"
+
+# F5-06 (Issue #103): caminho server-side das avaliacoes. verify_jwt = true
+# porque toda operacao exige identidade autenticada; a funcao AINDA resolve a
+# identidade soberana com auth.getUser e passa pelo Policy Engine (D27).
+[functions.avaliacoes]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/avaliacoes/index.ts"

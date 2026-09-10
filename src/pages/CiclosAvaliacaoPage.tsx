@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { can } from "../authorization/authorizationPolicy";
+import { useAuth } from "../auth/AuthContext";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import {
   criarCiclo,
@@ -18,6 +19,7 @@ import {
   concluirAvaliacoesNoEncerramentoDoCiclo,
   criarAvaliacoesDoCicloAtivado,
   excluirAvaliacoesVaziasDoCiclo,
+  type DependenciasCicloEquipe,
 } from "../services/cicloEquipeService";
 import { confirmarExclusaoCiclo } from "./confirmarExclusaoCiclo";
 import { cancelarCiclo } from "../services/cancelamentoCicloService";
@@ -116,6 +118,7 @@ function CiclosAvaliacaoPage({
 }: CiclosAvaliacaoPageProps = {}) {
   const navigate = useNavigate();
   const { usuarioAtual } = useUsuarioAtual();
+  const { organizacaoAtivaId } = useAuth();
   const [versao, setVersao] = useState(0);
   const [ano, setAno] = useState(new Date().getFullYear());
   const [ciclo, setCiclo] = useState<1 | 2 | 3>(1);
@@ -178,7 +181,17 @@ function CiclosAvaliacaoPage({
   const totalPlanejados = ciclos.filter((item) => item.status === "PLANEJADO").length;
   const totalEncerrados = ciclos.filter((item) => item.status === "ENCERRADO").length;
 
-  function criar() {
+  /**
+   * Dependências das operações soberanas de avaliação do ciclo. A organização
+   * ativa é apenas INTENÇÃO enviada à fronteira confiável, que a revalida contra
+   * a membership do ator autenticado. Sem caminho novo configurado a operação é
+   * recusada (fail-closed) e reportada na tela — nunca há escrita local.
+   */
+  const dependenciasCiclo: DependenciasCicloEquipe = {
+    organizationId: organizacaoAtivaId ?? "",
+  };
+
+  async function criar() {
     setErro("");
     try {
       const novoCiclo = criarCiclo(
@@ -192,7 +205,15 @@ function CiclosAvaliacaoPage({
       );
 
       if (ativarAgora) {
-        criarAvaliacoesDoCicloAtivado(novoCiclo);
+        const resultado = await criarAvaliacoesDoCicloAtivado(
+          novoCiclo,
+          dependenciasCiclo
+        );
+        if (resultado.bloqueadas > 0) {
+          setErro(
+            `Ciclo criado, mas ${resultado.bloqueadas} avaliação(ões) não puderam ser abertas no servidor e não foram criadas localmente.`
+          );
+        }
       }
 
       setDataInicio("");
@@ -209,7 +230,14 @@ function CiclosAvaliacaoPage({
     }
   }
 
-  function encerrarComValidacao(
+  /**
+   * Encerramento do ciclo. As avaliações NOVAS são concluídas no SERVIDOR (ele
+   * decide completude e materializa a nota — D13/D18); o frontend não recalcula
+   * nada oficialmente nem converte avaliação incompleta em concluída. As recusas
+   * do servidor são reportadas e o ciclo é encerrado com o marcador de pendências
+   * do próprio domínio de ciclos.
+   */
+  async function encerrarComValidacao(
     item: ReturnType<typeof getCiclosAvaliacao>[number]
   ) {
     setErro("");
@@ -245,7 +273,7 @@ function CiclosAvaliacaoPage({
 
       if (!confirmar) return;
 
-      concluirAvaliacoesNoEncerramentoDoCiclo(item, pendencias);
+      await concluirAvaliacoesNoEncerramentoDoCiclo(item, dependenciasCiclo);
       encerrarCiclo(item.id, totalPendencias);
       setVersao((valor) => valor + 1);
       return;
@@ -257,12 +285,20 @@ function CiclosAvaliacaoPage({
 
     if (!confirmar) return;
 
-    concluirAvaliacoesNoEncerramentoDoCiclo(item, []);
+    const resultado = await concluirAvaliacoesNoEncerramentoDoCiclo(
+      item,
+      dependenciasCiclo
+    );
     encerrarCiclo(item.id, 0);
+    if (resultado.bloqueadas > 0) {
+      setErro(
+        `Ciclo encerrado, mas ${resultado.bloqueadas} avaliação(ões) não puderam ser concluídas pelo servidor.`
+      );
+    }
     setVersao((valor) => valor + 1);
   }
 
-  function ativarComValidacao(
+  async function ativarComValidacao(
     item: ReturnType<typeof getCiclosAvaliacao>[number]
   ) {
     try {
@@ -270,9 +306,23 @@ function CiclosAvaliacaoPage({
       const cicloAtivado = getCiclosAvaliacao().find(
         (cicloAtual) => cicloAtual.id === item.id
       );
-      if (cicloAtivado) criarAvaliacoesDoCicloAtivado(cicloAtivado);
 
-      setErro("");
+      if (!cicloAtivado) {
+        setErro("");
+        setVersao((valor) => valor + 1);
+        return;
+      }
+
+      const resultado = await criarAvaliacoesDoCicloAtivado(
+        cicloAtivado,
+        dependenciasCiclo
+      );
+
+      setErro(
+        resultado.bloqueadas > 0
+          ? `Ciclo ativado, mas ${resultado.bloqueadas} avaliação(ões) não puderam ser abertas no servidor e não foram criadas localmente.`
+          : ""
+      );
       setVersao((valor) => valor + 1);
     } catch (error) {
       setErro(
@@ -498,7 +548,12 @@ function CiclosAvaliacaoPage({
             </span>
           </label>
 
-          <button className="cycle-btn cycle-btn--primary" onClick={criar}>
+          <button
+            className="cycle-btn cycle-btn--primary"
+            onClick={() => {
+              void criar();
+            }}
+          >
             + Criar ciclo
           </button>
         </div>
@@ -827,7 +882,9 @@ function CiclosAvaliacaoPage({
                     {item.status === "PLANEJADO" && (
                       <button
                         className="cycle-link-button"
-                        onClick={() => ativarComValidacao(item)}
+                        onClick={() => {
+                          void ativarComValidacao(item);
+                        }}
                       >
                         Ativar ciclo
                       </button>
@@ -835,7 +892,9 @@ function CiclosAvaliacaoPage({
                     {item.status === "ATIVO" && (
                       <button
                         className="cycle-link-button"
-                        onClick={() => encerrarComValidacao(item)}
+                        onClick={() => {
+                          void encerrarComValidacao(item);
+                        }}
                       >
                         Encerrar ciclo
                       </button>

@@ -1,104 +1,148 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { AuthorizationError } from "../authorization/authorizationError";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { instalarLocalStorageEmMemoria } from "../test/localStorageMock";
-import type { CicloAvaliacao } from "../types/CicloAvaliacao";
-import type { Colaborador } from "../types/Colaborador";
-import type { Feedback } from "../types/Feedback";
+import { criarArmazenamentoMemoria } from "../infrastructure/supabase/avaliacoes/cutover";
+import { criarCutoverAvaliacoes } from "./avaliacoesSoberanas/cutoverAvaliacoesService";
+import type { RepositorioAvaliacoes } from "../infrastructure/supabase/avaliacoes/repositorioAvaliacoes";
 import { cancelarAvaliacao } from "./cancelamentoAvaliacaoService";
-import { getFeedbacks } from "./feedbackStorage";
 
-function pessoa(
-  matricula: number,
-  funcao: Colaborador["funcao"],
-  gestorDiretoMatricula?: number,
-  colegiado?: number[]
-): Colaborador {
+/**
+ * F5-06 (Issue #103) — CANCELAMENTO SOBERANO.
+ *
+ * O cancelamento deixou de ser decidido no navegador: o serviço apenas envia a
+ * INTENÇÃO (id + motivo + organização ativa) para a fronteira confiável e
+ * traduz o erro público. Os testes abaixo verificam exatamente isso:
+ *
+ * - o motivo é obrigatório ANTES de qualquer chamada (validação de entrada);
+ * - a decisão ALLOW/DENY pertence ao Policy Engine server-side — a recusa chega
+ *   como erro público e NADA é gravado localmente (fail-closed, sem dual-write);
+ * - nenhum registro é tocado no `localStorage` em nenhum cenário.
+ */
+
+const ORG = "11111111-1111-4111-8111-111111111111";
+const AVALIACAO = "33333333-3333-4333-8333-333333333333";
+const CHAVE_LEGADO = "feedback-control-feedbacks";
+
+function repositorioFalso(
+  comportamentos: Partial<RepositorioAvaliacoes> = {}
+): RepositorioAvaliacoes & { readonly chamadas: string[] } {
+  const chamadas: string[] = [];
+  const base: RepositorioAvaliacoes = {
+    criar: async () => ({ ok: true, data: AVALIACAO }),
+    ler: async () => ({ ok: true, data: null }),
+    gravarNotas: async () => ({ ok: true, data: null }),
+    gravarComentario: async () => ({ ok: true, data: null }),
+    concluir: async () => ({ ok: true, data: null }),
+    reabrir: async () => ({ ok: true, data: null }),
+    cancelar: async () => ({ ok: true, data: null }),
+    realinharParticipantes: async () => ({ ok: true, data: 0 }),
+    transparenciaDoAvaliado: async () => {
+      throw new Error("não usado neste teste");
+    },
+    painelParticipante: async () => {
+      throw new Error("não usado neste teste");
+    },
+    resolverCiclo: async () => ({ ok: true, data: "22222222-2222-4222-8222-222222222222" }),
+  };
+
+  const instrumentado = Object.fromEntries(
+    Object.entries({ ...base, ...comportamentos }).map(([nome, fn]) => [
+      nome,
+      async (...args: unknown[]) => {
+        chamadas.push(nome);
+        return (fn as (...a: unknown[]) => unknown)(...args);
+      },
+    ])
+  ) as unknown as RepositorioAvaliacoes;
+
+  return Object.assign(instrumentado, { chamadas });
+}
+
+function deps(comportamentos: Partial<RepositorioAvaliacoes> = {}) {
+  const repositorio = repositorioFalso(comportamentos);
   return {
-    matricula,
-    status: "ATIVO",
-    nome: `Pessoa ${matricula}`,
-    email: `${matricula}@example.com`,
-    cargo: funcao ?? "Sem função",
-    area: "Área fictícia",
-    funcao,
-    gestorDiretoMatricula,
-    avaliadoresColegiadoMatriculas: colegiado,
-    respondePara: "",
+    repositorio,
+    criarCutover: () =>
+      criarCutoverAvaliacoes({
+        repositorio,
+        armazenamento: criarArmazenamentoMemoria(),
+      }),
   };
 }
 
-const gerente = pessoa(1, "GERENTE");
-const coordenador = pessoa(2, "COORDENADOR", gerente.matricula);
-const colegiado = pessoa(3, "COORDENADOR", gerente.matricula);
-const avaliado = pessoa(4, "ANALISTA", coordenador.matricula, [colegiado.matricula]);
-const colaboradores = [gerente, coordenador, colegiado, avaliado];
-const ciclo: CicloAvaliacao = {
-  id: "ciclo-cancelamento",
-  ano: 2026,
-  ciclo: 1,
-  status: "ATIVO",
-  dataCriacao: "2026-01-01T00:00:00.000Z",
-  dataUltimaAtualizacao: "2026-01-01T00:00:00.000Z",
-};
-const feedback: Feedback = {
-  id: "avaliacao-cancelamento",
-  colaboradorId: avaliado.matricula,
-  colaboradorNome: avaliado.nome,
-  status: "RASCUNHO",
-  data: "2026-01-10T00:00:00.000Z",
-  ano: 2026,
-  ciclo: 1,
-  notaMedia: 4,
-  competencias: [
-    {
-      competenciaId: "qualidade",
-      competenciaNome: "Qualidade",
-      nota: 4,
-      comentario: "Conteúdo preservado",
-    },
-  ],
-  feedbackFinalGerente: "Registro anterior",
-};
-
-describe("cancelarAvaliacao", () => {
+describe("cancelarAvaliacao (soberano)", () => {
   beforeEach(() => {
     instalarLocalStorageEmMemoria();
-    localStorage.setItem("feedback-control-colaboradores", JSON.stringify(colaboradores));
-    localStorage.setItem("feedback-control-ciclos", JSON.stringify([ciclo]));
-    localStorage.setItem("feedback-control-feedbacks", JSON.stringify([feedback]));
+    localStorage.setItem(CHAVE_LEGADO, JSON.stringify([{ id: AVALIACAO }]));
   });
 
-  it("permite ao gerente responsável cancelar com auditoria e preserva dados", () => {
-    const cancelada = cancelarAvaliacao(feedback.id, "  Não se aplica mais  ", gerente);
+  it("envia a intenção ao servidor e NÃO escreve no localStorage", async () => {
+    const dependencias = deps();
+    const legadoAntes = localStorage.getItem(CHAVE_LEGADO);
 
-    expect(cancelada).toMatchObject({
-      status: "CANCELADA",
-      motivoCancelamento: "Não se aplica mais",
-      canceladoPorMatricula: gerente.matricula,
-      canceladoPorNome: gerente.nome,
-      notaMedia: feedback.notaMedia,
-      competencias: feedback.competencias,
-      feedbackFinalGerente: feedback.feedbackFinalGerente,
+    const resultado = await cancelarAvaliacao(
+      AVALIACAO,
+      "  Não se aplica mais  ",
+      ORG,
+      dependencias
+    );
+
+    expect(resultado.ok).toBe(true);
+    expect(dependencias.repositorio.chamadas).toEqual(["cancelar"]);
+    // Sem dual-write: o acervo legado permanece byte a byte o mesmo.
+    expect(localStorage.getItem(CHAVE_LEGADO)).toBe(legadoAntes);
+  });
+
+  it("recusa motivo vazio antes de chamar o servidor", async () => {
+    const dependencias = deps();
+
+    await expect(
+      cancelarAvaliacao(AVALIACAO, "   ", ORG, dependencias)
+    ).rejects.toThrow("Informe o motivo do cancelamento.");
+    expect(dependencias.repositorio.chamadas).toEqual([]);
+  });
+
+  it("recusa do Policy Engine vira erro público e nada é gravado localmente", async () => {
+    const dependencias = deps({
+      cancelar: async () => ({
+        ok: false,
+        error: { code: "FORBIDDEN", message: "negado" },
+      }),
     });
-    expect(cancelada.dataCancelamento).toEqual(expect.any(String));
-    expect(Number.isNaN(Date.parse(cancelada.dataCancelamento!))).toBe(false);
-    expect(getFeedbacks()).toHaveLength(1);
+    const legadoAntes = localStorage.getItem(CHAVE_LEGADO);
+
+    const resultado = await cancelarAvaliacao(
+      AVALIACAO,
+      "Motivo válido",
+      ORG,
+      dependencias
+    );
+
+    expect(resultado.ok).toBe(false);
+    expect(resultado.erro).toBeTruthy();
+    expect(localStorage.getItem(CHAVE_LEGADO)).toBe(legadoAntes);
   });
 
-  it("rejeita cancelamento sem motivo", () => {
-    expect(() => cancelarAvaliacao(feedback.id, "   ", gerente)).toThrow(
-      "Informe o motivo do cancelamento."
-    );
+  it("sem caminho soberano configurado a operação é recusada (fail-closed)", async () => {
+    const legadoAntes = localStorage.getItem(CHAVE_LEGADO);
+    const resultado = await cancelarAvaliacao(AVALIACAO, "Motivo válido", ORG, {
+      criarCutover: () => null,
+    });
+
+    expect(resultado.ok).toBe(false);
+    expect(resultado.erro).toContain("PostgreSQL");
+    expect(localStorage.getItem(CHAVE_LEGADO)).toBe(legadoAntes);
   });
 
-  it.each([
-    ["COORDENADOR", coordenador],
-    ["COLEGIADO", colegiado],
-    ["AVALIADO", avaliado],
-  ] as const)("rejeita cancelamento por %s", (_papel, actor) => {
-    expect(() => cancelarAvaliacao(feedback.id, "Motivo válido", actor)).toThrow(
-      AuthorizationError
-    );
-    expect(getFeedbacks()[0].status).toBe("RASCUNHO");
+  it("propaga o erro de rede do repositório sem cair para o caminho legado", async () => {
+    const dependencias = deps({
+      cancelar: vi.fn(async () => {
+        throw new Error("rede indisponível");
+      }) as unknown as RepositorioAvaliacoes["cancelar"],
+    });
+
+    await expect(
+      cancelarAvaliacao(AVALIACAO, "Motivo válido", ORG, dependencias)
+    ).rejects.toThrow("rede indisponível");
+    expect(localStorage.getItem(CHAVE_LEGADO)).not.toBeNull();
   });
 });
