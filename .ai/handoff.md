@@ -34,38 +34,48 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
-- **Atividade (rodada atual):** DEV-02 — reduzir interrupções por elevação de
-  acesso dos agentes (Issue #177). Somente camada de contexto; **sem alteração
-  funcional**.
-- **Branch:** `chore/dev-02-batch-elevation-workflow` (sem PR; sem merge).
+- **Atividade (rodada atual):** BUG #170 — item "Ciclos" duplicado no menu para
+  Gerente e Coordenador (Issue #170, **aberta**). Correção de **navegação/UX**.
+- **Branch:** `fix/170-ciclos-menu-duplicado` (sem PR; sem merge).
 - **Último commit:** consultar `git log --oneline -1` na branch.
-- **Regra operacional registrada:** `.ai/workflow.md` **§6** (elevação de acesso e
-  economia de interrupções), com síntese permanente em `AGENTS.md` **§4**.
-  - **aprovação técnica/arquitetural** e **autorização de elevação de acesso** são
-    decisões **distintas**: uma não implica a outra;
-  - com desenho **FECHADO**, não se pede nova aprovação técnica para decisões
-    cobertas pelo contrato — interrupção apenas por contradição arquitetural real,
-    decisão não coberta (nova `Q#`), risco de segurança ou ação irreversível;
-  - implementação em **lote** com autoauditoria estática e correções consolidadas
-    **antes** das validações privilegiadas;
-  - comandos que exigem elevação (`npm test`, `npm run build`, `npm run lint`,
-    `git diff --check`, Supabase/Docker/SQL, `add`/`commit`/`push`) são agrupados
-    em **um ou poucos gates**; o antipadrão `editar → elevar → testar` repetido é
-    proibido;
-  - **proibido** alterar PAT/credenciais/configurações de segurança ou reduzir
-    controles para evitar prompts; merge continua exigindo solicitação explícita,
-    com CI verde e SHA auditado.
+- **Causa raiz:** `NavegacaoPrincipal` tinha DOIS gates de menu para o MESMO
+  assunto — `cycle.management.view` (`/ciclos`) e `cycle.coordinator.list`
+  (`/painel-ciclos`). Ambos são **aliases da mesma capability canônica**
+  (`cycle.read`, colapso Q1 da F4-09 em `authorization/canonical.ts`), e Gerente e
+  Coordenador possuem `cycle.read`: as duas condições ficavam verdadeiras ao mesmo
+  tempo e o menu renderizava dois itens consecutivos rotulados "Ciclos" (ambos com
+  `IconCalendar`). Antes da centralização F4 os gates eram
+  `funcao === "GERENTE"` / `funcao === "COORDENADOR"` — mutuamente exclusivos —,
+  por isso o rótulo repetido nunca aparecia.
+- **Correção:** UM ÚNICO item "Ciclos" → `/ciclos`, gated pela capability canônica
+  `cycle.read` (visibilidade de menu é UX; o resource `{ kind: "global" }` é
+  transitório e nunca prova de autorização). Rotas, capabilities, roles, RLS e
+  contratos F4/F5 intactos. `/painel-ciclos` permanece rota autorizada e
+  alcançável por "Minha equipe" (Início → `ColaboradoresPage`, botão do
+  COORDENADOR). Teste novo `src/components/NavegacaoPrincipal.test.tsx` (13 casos)
+  fixa o invariante de UM item por contexto e o menu completo de Gerente,
+  Coordenador, Analista, Consultor, Estagiário e colaborador sem função.
+- **Validação desta rodada (todo exit 0):** `npm test` (85 arquivos, 1082 testes),
+  `npm run build`, `npm run lint`, `git diff --check origin/main...HEAD`.
+
+### 3.1 DEV-02 (concluída e integrada)
+
+- **Atividade:** DEV-02 — reduzir interrupções por elevação de acesso dos agentes
+  (Issue #177). Somente camada de contexto; sem alteração funcional.
+- **Integração:** `main` no SHA `e098754…` (PR #178).
+- **Regra registrada:** `.ai/workflow.md` **§6**, com síntese permanente em
+  `AGENTS.md` **§4**: aprovação técnica/arquitetural ≠ autorização de elevação de
+  acesso; com desenho FECHADO não se repete pedido de aprovação; trabalho em lote
+  com autoauditoria estática antes dos comandos privilegiados; comandos que exigem
+  elevação agrupados em um ou poucos gates; proibido alterar PAT/credenciais/
+  configurações ou reduzir controles.
 - **Limitação do ambiente (registrada):** neste host o sandbox exige elevação
   (`danger-full-access`) até para comandos triviais (`git status`, `npm test`,
-  `lint`) e para Docker/Supabase. A regra é reconhecer a limitação, agrupar
-  operações por gate e registrá-la na entrega — nunca contornar a proteção
-  (`.ai/git-rules.md` §3; `.ai/workflow.md` §6.4).
-- **Validação desta rodada (todo exit 0):** `npm test` (84 arquivos, 1069 testes),
-  `npm run build`, `npm run lint`, `git diff --check origin/main...HEAD`;
-  `git status --short` com apenas os arquivos de contexto previstos. Sem mudança
-  em migrations/SQL, portanto sem necessidade de gate Supabase nesta atividade.
+  `lint`) e para Docker/Supabase — agrupar operações por gate e registrar a
+  limitação, nunca contornar a proteção (`.ai/git-rules.md` §3;
+  `.ai/workflow.md` §6.4).
 
-### 3.1 Entrega anterior — F5-06 (concluída e integrada)
+### 3.2 F5-06 (concluída e integrada)
 
 - **Atividade:** F5-06 — Avaliações no PostgreSQL (Issue #103).
 - **Branch:** `feat/f5-06-avaliacoes-postgresql` — **squash merge em `main`** como
@@ -194,9 +204,10 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   `02-validar-f5-06.sql` (25 PASS), `03-validar-f5-06-cutover.sql` (13 PASS,
   incluindo os testes negativos de IDOR), `01-cenario-f4-08.sql`,
   `02-validar-f4-08.sql` (56 PASS), `03-validar-f4-08-mutacoes.sql` (8 PASS).
-- **Contexto do repositório:** `main` contém F4 e F5-01..F5-06 já integradas
-  (F5-06 no SHA `f540f0f…`); a DEV-02 é a atividade em curso nesta branch, sem
-  alteração funcional.
-- **Próximos passos:** auditoria independente sobre o novo SHA da DEV-02; abrir PR
-  quando solicitado. Nenhum agente declara a própria entrega aprovada
-  (`.ai/workflow.md` §6.3, item 8).
+- **Contexto do repositório:** `main` contém F4, F5-01..F5-06 e a DEV-02 já
+  integradas (F5-06 em `f540f0f…`, DEV-02 em `e098754…`); o BUG #170 é a atividade
+  em curso nesta branch, sem alteração funcional fora da navegação.
+- **Próximos passos:** auditoria independente sobre o novo SHA do BUG #170; abrir
+  PR quando solicitado; a Issue #170 **não** deve ser fechada por este agente.
+  Nenhum agente declara a própria entrega aprovada (`.ai/workflow.md` §6.3,
+  item 8).

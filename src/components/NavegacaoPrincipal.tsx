@@ -91,7 +91,21 @@ function NavegacaoPrincipal() {
     "report.view",
     { kind: "global" }
   );
-  const podeGerenciarCiclos = can(
+  /**
+   * Bug #170: `cycle.management.view` e `cycle.coordinator.list` são ALIASES da
+   * MESMA capability canônica (`cycle.read`, colapso Q1 da F4-09 em
+   * `authorization/canonical.ts`). Como Gerente e Coordenador possuem
+   * `cycle.read`, as duas condições ficavam verdadeiras ao mesmo tempo e o menu
+   * renderizava DOIS itens "Ciclos" consecutivos — um para `/ciclos` e outro
+   * para `/painel-ciclos`.
+   *
+   * A visibilidade do menu é UX (o resource `{ kind: "global" }` é
+   * explicitamente transitório no Policy Engine e nunca prova de autorização):
+   * a listagem de ciclos tem UM único item, gated pela capability canônica. O
+   * painel do coordenador (`/painel-ciclos`) permanece rota autorizada e
+   * alcançável a partir de "Minha equipe" (Início).
+   */
+  const podeAcessarCiclos = can(
     {
       actor: {
         matricula: usuarioAtual.matricula,
@@ -99,18 +113,7 @@ function NavegacaoPrincipal() {
         status: usuarioAtual.status,
       },
     },
-    "cycle.management.view",
-    { kind: "global" }
-  );
-  const podeListarCiclosComoCoordenador = can(
-    {
-      actor: {
-        matricula: usuarioAtual.matricula,
-        funcao: usuarioAtual.funcao,
-        status: usuarioAtual.status,
-      },
-    },
-    "cycle.coordinator.list",
+    "cycle.read",
     { kind: "global" }
   );
   const podeGerenciarConfiguracoes = can(
@@ -132,14 +135,8 @@ function NavegacaoPrincipal() {
           Início
         </NavItem>
 
-        {podeGerenciarCiclos && (
+        {podeAcessarCiclos && (
           <NavItem to="/ciclos" icon={<IconCalendar />}>
-            Ciclos
-          </NavItem>
-        )}
-
-        {podeListarCiclosComoCoordenador && (
-          <NavItem to="/painel-ciclos" icon={<IconCalendar />}>
             Ciclos
           </NavItem>
         )}
