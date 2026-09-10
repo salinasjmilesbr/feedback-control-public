@@ -50,6 +50,42 @@ export interface EntradaCriarAvaliacaoNova {
   readonly matriculaAvaliado: number;
 }
 
+/**
+ * Conversão ESTRUTURAL entre o vocabulário da tela (nome do critério/
+ * subcritério) e o UUID da configuração CONGELADA da avaliação (D6). A tela do
+ * produto trabalha com nomes; o banco só aceita UUID. Nenhum id é inventado no
+ * cliente: o painel entrega o catálogo congelado e um nome sem correspondência
+ * recusa o lote inteiro (fail-closed).
+ */
+export interface MapaCatalogoPainel {
+  readonly subcriterioIdPorNome: ReadonlyMap<string, string>;
+  readonly criterioIdPorCode: ReadonlyMap<string, string>;
+}
+
+export function montarMapaCatalogo(painel: PainelParticipante): MapaCatalogoPainel {
+  const subcriterioIdPorNome = new Map<string, string>();
+  for (const subcriterio of painel.subcriterios) {
+    subcriterioIdPorNome.set(subcriterio.name, subcriterio.subcriterionId);
+  }
+  const criterioIdPorCode = new Map<string, string>();
+  for (const criterio of painel.criterios) {
+    criterioIdPorCode.set(criterio.code, criterio.criterionId);
+  }
+  return { subcriterioIdPorNome, criterioIdPorCode };
+}
+
+/** Nota informada pela tela por NOME do subcritério (nunca por id). */
+export interface NotaDoPainelPorNome {
+  readonly subcriterio: string;
+  readonly nota: number;
+}
+
+/** Observação de critério informada pela tela (escopo CRITERIO). */
+export interface ObservacaoDoPainel {
+  readonly criterioCode: string;
+  readonly texto: string;
+}
+
 export interface DepsCutoverAvaliacoes {
   readonly repositorio: RepositorioAvaliacoes;
   readonly armazenamento?: ArmazenamentoCutover | null;
@@ -65,13 +101,31 @@ export interface CutoverAvaliacoes {
     readonly organizationId: string;
     readonly evaluationId: string;
   }): Promise<ResultadoCutover<PainelParticipante>>;
-  /** Notas da própria ocorrência (participant_id vem do painel, server-side). */
+  /**
+   * Notas da própria ocorrência (participant_id vem do painel, server-side).
+   * A tela informa o NOME do subcritério; a conversão para o UUID da
+   * configuração congelada é estrutural e recusa nome desconhecido.
+   */
   gravarNotasDoPainel(entrada: {
     readonly organizationId: string;
     readonly evaluationId: string;
     readonly painel: PainelParticipante;
-    readonly notas: readonly { readonly subcriterionId: string; readonly nota: number }[];
+    readonly notas: readonly NotaDoPainelPorNome[];
   }): Promise<ResultadoCutover<number | null>>;
+  /** Observações de critério da própria ocorrência (escopo CRITERIO). */
+  gravarObservacoesDoPainel(entrada: {
+    readonly organizationId: string;
+    readonly evaluationId: string;
+    readonly painel: PainelParticipante;
+    readonly observacoes: readonly ObservacaoDoPainel[];
+  }): Promise<ResultadoCutover<number>>;
+  /** Comentário final da própria ocorrência (escopo FINAL). */
+  gravarComentarioFinalDoPainel(entrada: {
+    readonly organizationId: string;
+    readonly evaluationId: string;
+    readonly painel: PainelParticipante;
+    readonly texto: string;
+  }): Promise<ResultadoCutover<null>>;
   /** Comentários da própria ocorrência (critério ou final). */
   gravarComentarioDoPainel(entrada: {
     readonly organizationId: string;
@@ -120,6 +174,34 @@ export function criarCutoverAvaliacoes(
 ): CutoverAvaliacoes {
   const armazenamento = deps.armazenamento ?? null;
 
+  /**
+   * Fonte única da gravação de comentário da PRÓPRIA ocorrência, usada tanto
+   * pelo comentário de critério quanto pelo comentário final. A ocorrência vem
+   * SEMPRE do painel (resolvida server-side): o cliente nunca escolhe
+   * `participant_id`.
+   */
+  async function gravarComentario(entrada: {
+    readonly organizationId: string;
+    readonly evaluationId: string;
+    readonly painel: PainelParticipante;
+    readonly escopo: "CRITERIO" | "FINAL";
+    readonly criterionId?: string | null;
+    readonly texto: string;
+  }): Promise<ResultadoCutover<null>> {
+    if (!ehIdTecnicoPostgres(entrada.painel.participanteOcorrenciaId)) {
+      return { ok: false, erro: "Ocorrência do participante não resolvida." };
+    }
+    const paraGravar: EntradaGravarComentario = {
+      organizationId: entrada.organizationId,
+      evaluationId: entrada.evaluationId,
+      participantId: entrada.painel.participanteOcorrenciaId,
+      escopo: entrada.escopo,
+      criterionId: entrada.criterionId ?? null,
+      texto: entrada.texto,
+    };
+    return propagar(await deps.repositorio.gravarComentario(paraGravar), () => null);
+  }
+
   return {
     async criarNova(entrada) {
       // 1) ano+ciclo (INTENÇÃO) → UUID soberano do ciclo, dentro do tenant. O
@@ -135,12 +217,15 @@ export function criarCutoverAvaliacoes(
         return { ok: false, erro: "Ciclo não resolvido para a avaliação." };
       }
 
-      // 2) criação no PostgreSQL: a matrícula é novamente resolvida no Edge e
-      //    prevalece sobre qualquer identidade vinda do cliente.
+      // 2) criação no PostgreSQL. O ALVO autorizável é o colaborador resolvido
+      //    da matrícula (ponte F3-01) na fronteira confiável: o cliente nunca
+      //    fornece o alvo. Usar o UUID do CICLO como se fosse o do colaborador
+      //    apresentaria um alvo de outro TIPO à autorização, então a identidade
+      //    do avaliado é derivada server-side de `matriculaAvaliado` — sem essa
+      //    ponte a criação é recusada (fail-closed), nunca inventada.
       const criada = await deps.repositorio.criar({
         organizationId: entrada.organizationId,
         cycleId: ciclo.data,
-        evaluatedCollaboratorId: ciclo.data,
         matriculaAvaliado: entrada.matriculaAvaliado,
       });
       if (!criada.ok) return falha(criada.error);
@@ -167,31 +252,77 @@ export function criarCutoverAvaliacoes(
       if (!ehIdTecnicoPostgres(entrada.painel.participanteOcorrenciaId)) {
         return { ok: false, erro: "Ocorrência do participante não resolvida." };
       }
+      const mapa = montarMapaCatalogo(entrada.painel);
+
+      // Resolução estrutural nome → UUID da configuração congelada. Uma nota
+      // para nome desconhecido é recusada: nada é gravado pela metade.
+      const resolvidas: { subcriterion_id: string; nota: number }[] = [];
+      for (const nota of entrada.notas) {
+        const subcriterionId = mapa.subcriterioIdPorNome.get(nota.subcriterio);
+        if (!ehIdTecnicoPostgres(subcriterionId)) {
+          return {
+            ok: false,
+            erro: `Subcritério "${nota.subcriterio}" não pertence à configuração desta avaliação.`,
+          };
+        }
+        resolvidas.push({ subcriterion_id: subcriterionId, nota: nota.nota });
+      }
+
+      if (resolvidas.length === 0) return { ok: true, data: null };
+
       const paraGravar: EntradaGravarNotas = {
         organizationId: entrada.organizationId,
         evaluationId: entrada.evaluationId,
         participantId: entrada.painel.participanteOcorrenciaId,
-        notas: entrada.notas.map((nota) => ({
-          subcriterion_id: nota.subcriterionId,
-          nota: nota.nota,
-        })),
+        notas: resolvidas,
       };
       return propagar(await deps.repositorio.gravarNotas(paraGravar), (data) => data);
     },
 
-    async gravarComentarioDoPainel(entrada) {
+    async gravarObservacoesDoPainel(entrada) {
       if (!ehIdTecnicoPostgres(entrada.painel.participanteOcorrenciaId)) {
         return { ok: false, erro: "Ocorrência do participante não resolvida." };
       }
-      const paraGravar: EntradaGravarComentario = {
+      const mapa = montarMapaCatalogo(entrada.painel);
+      let gravadas = 0;
+
+      for (const observacao of entrada.observacoes) {
+        if (!observacao.texto.trim()) continue;
+        const criterionId = mapa.criterioIdPorCode.get(observacao.criterioCode);
+        if (!ehIdTecnicoPostgres(criterionId)) {
+          return {
+            ok: false,
+            erro: `Critério "${observacao.criterioCode}" não pertence à configuração desta avaliação.`,
+          };
+        }
+        const resultado = await deps.repositorio.gravarComentario({
+          organizationId: entrada.organizationId,
+          evaluationId: entrada.evaluationId,
+          participantId: entrada.painel.participanteOcorrenciaId,
+          escopo: "CRITERIO",
+          criterionId,
+          texto: observacao.texto,
+        });
+        if (!resultado.ok) return falha(resultado.error);
+        gravadas += 1;
+      }
+
+      return { ok: true, data: gravadas };
+    },
+
+    async gravarComentarioFinalDoPainel(entrada) {
+      if (!entrada.texto.trim()) return { ok: true, data: null };
+      return gravarComentario({
         organizationId: entrada.organizationId,
         evaluationId: entrada.evaluationId,
-        participantId: entrada.painel.participanteOcorrenciaId,
-        escopo: entrada.escopo,
-        criterionId: entrada.criterionId ?? null,
+        painel: entrada.painel,
+        escopo: "FINAL",
         texto: entrada.texto,
-      };
-      return propagar(await deps.repositorio.gravarComentario(paraGravar), () => null);
+      });
+    },
+
+    gravarComentarioDoPainel(entrada) {
+      return gravarComentario(entrada);
     },
 
     async concluir(entrada) {

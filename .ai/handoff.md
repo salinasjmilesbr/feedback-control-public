@@ -38,29 +38,51 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 - **Branch:** `feat/f5-06-avaliacoes-postgresql` (sem PR; sem merge).
 - **Último commit:** consultar `git log --oneline -1` na branch.
 - **PR:** não aberto por decisão explícita do responsável.
-- **Estado — SQL e fronteira (completo e validado):** migrations F5-06
-  (schema, funções e `20260911020000_f5_06_cutover_leitura_e_ciclo.sql` com
-  `evaluation_resolver_ciclo` e `evaluation_painel_participante`); Edge
-  Function `avaliacoes` com ActorContext/ResourceContext reais, Policy Engine
-  (capability × scope), ASSIGNED por operação (F3-08/F3-09) e ponte
-  matrícula → UUID (F3-01) resolvida ANTES do engine; cutover ESTRUTURAL por
-  evidência (nunca por data). Validadores SQL com exit 0:
-  `02-validar-f5-06.sql`, `03-validar-f5-06-cutover.sql`,
-  `02-validar-f4-08.sql`, `03-validar-f4-08-mutacoes.sql`.
-- **Estado — caminho TS (pronto para consumo):** repository/service/controlador/
-  hook/apresentação, incluindo as operações `painelParticipante` e
-  `resolverCiclo` e o `cutoverAvaliacoesService` (criarNova, carregarPainel,
-  gravarNotas/ComentarioDoPainel, concluir, cancelar, reabrir, lerStatus) sem
-  cálculo oficial no cliente e sem escrita em `localStorage`.
-- **PENDÊNCIA REAL (bloqueia "Supabase como única fonte de verdade"):** as TELAS
-  ainda não consomem esse caminho. Continuam escrevendo avaliação nova em
-  `localStorage`: `NovoFeedbackPage` (`saveFeedback`), `EditarFeedbackPage`
-  (`updateFeedback`), `cicloEquipeService` (criação no ciclo e conclusão no
-  encerramento), `cancelamentoAvaliacaoService` e
-  `reaberturaAvaliacaoService` (persistências internas). Nenhuma delas faz
-  dual-write, mas a autoridade de escrita ainda é local nessas telas.
+- **Estado — SQL, fronteira e caminho TS (completo e validado):** migrations
+  F5-06 (schema, funções e `20260911020000_f5_06_cutover_leitura_e_ciclo.sql`),
+  Edge Function `avaliacoes`, policy/capabilities, ponte matrícula → UUID,
+  resolução ano+ciclo, painel do participante e `cutoverAvaliacoesService`.
+- **Estado — CUTOVER DAS TELAS (concluído nesta rodada):** nenhuma avaliação
+  NOVA é criada/editada/cancelada/reaberta em `localStorage`; a autoridade é o
+  PostgreSQL pelo caminho soberano.
+  - Telas migradas: `NovoFeedbackPage` (criação + notas/observações/comentário
+    final), `EditarFeedbackPage` (leitura do painel + gravação soberana +
+    conclusão), `FeedbackDetalhePage` (cancelar/reabrir soberanos),
+    `CiclosAvaliacaoPage` (ativação e encerramento).
+  - Serviços migrados: `cancelamentoAvaliacaoService`,
+    `reaberturaAvaliacaoService`, `cicloEquipeService`
+    (`criarAvaliacoesDoCicloAtivado` e `concluirAvaliacoesNoEncerramentoDoCiclo`
+    agora **async** e soberanos).
+  - Novos módulos: `src/services/acessoAvaliacoesSoberanas.ts` (porta única das
+    telas; nenhuma página importa Supabase) e `src/services/origemAvaliacaoTela.ts`
+    (origem ESTRUTURAL: UUID ⇒ banco; resto ⇒ legado somente leitura).
+  - Síncrono → assíncrono: `criarAvaliacoesDoCicloAtivado`,
+    `concluirAvaliacoesNoEncerramentoDoCiclo`, `cancelarAvaliacao`,
+    `reabrirAvaliacao` e os handlers das quatro telas (com estados de
+    processamento/erro preservados).
+  - `feedbackStorage` é **somente leitura** para o legado: `saveFeedback` foi
+    removida; `updateFeedback`, `persistirCancelamentoAuditadoInterno`,
+    `persistirReaberturaAuditadaInterno` e `removerAvaliacaoVaziaNoCleanupInterno`
+    existem apenas como barreiras que lançam (fail-closed). Exclusão de ciclo com
+    avaliação vazia no legado agora é recusada — a limpeza do legado pertence à
+    atividade de importação (fora do escopo, §1.3).
+- **Pendências/limitações conhecidas (não bloqueiam o critério de conclusão):**
+  1. **Gravação de ciclo (entidade `evaluation_cycles`) é de outra atividade**
+     (D15). Sem o ciclo correspondente no banco, `evaluation.criar` é recusado e
+     a tela reporta quantas avaliações ficaram **bloqueadas** (nunca cria local).
+  2. **Remoção de nota**: `evaluation_gravar_notas` aceita notas `1..5`; limpar
+     uma nota já gravada não a apaga (não há API de exclusão). O valor anterior
+     permanece — alteração de contrato exigiria nova `Q#`.
+  3. **Leitura do banco nas telas** já cobre `EditarFeedbackPage` (painel);
+     `FeedbackDetalhePage`/listagens ainda exibem o acervo legado. A adoção do
+     caminho novo de leitura nessas telas é aditivo e não afeta a autoridade.
+- **Validação executada nesta rodada (todo exit 0):** `npm test` (82 arquivos,
+  1049 testes), `npm run build`, `npm run lint`, `git diff --check`;
+  validadores SQL no Supabase local — `01-cenario-f5-06.sql`,
+  `02-validar-f5-06.sql` (25 PASS), `03-validar-f5-06-cutover.sql` (6 PASS),
+  `01-cenario-f4-08.sql`, `02-validar-f4-08.sql` (56 PASS),
+  `03-validar-f4-08-mutacoes.sql` (8 PASS).
 - **Contexto do repositório:** `main` contém F4 e F5-01..F5-05; a F5-06 é a
   atividade em curso nesta branch.
-- **Próximos passos:** migrar as telas/serviços listados para o caminho soberano
-  (usando `cutoverAvaliacoesService`), tornar `feedbackStorage` somente leitura
-  para o legado, atualizar os testes acoplados e rodar o gate final.
+- **Próximos passos:** abrir PR quando solicitado; eventuais follow-ups são os
+  três itens de "pendências/limitações conhecidas".

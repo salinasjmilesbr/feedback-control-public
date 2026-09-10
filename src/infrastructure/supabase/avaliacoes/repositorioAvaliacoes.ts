@@ -26,6 +26,14 @@ import {
 
 export const FUNCAO_AVALIACOES = "avaliacoes";
 
+/**
+ * Alvo NEUTRO para operações cujo alvo autorizável é derivado server-side da
+ * matrícula (ponte F3-01). Não é identidade: o Edge substitui este valor pelo
+ * UUID resolvido ANTES do Policy Engine e recusa a operação se a ponte não
+ * resolver (fail-closed).
+ */
+const ID_NEUTRO = "00000000-0000-0000-0000-000000000000";
+
 /** Estado REAL da avaliação (projeção de leitura do caminho novo). */
 export interface AvaliacaoSoberana {
   readonly id: string;
@@ -70,12 +78,18 @@ export type ResultadoRepositorio<T> =
 export interface EntradaCriarAvaliacao {
   readonly organizationId: string;
   readonly cycleId: string;
-  readonly evaluatedCollaboratorId: string;
   /**
    * Matrícula do avaliado (INTENÇÃO da tela): a fronteira confiável resolve a
-   * ponte para o UUID (F3-01) e é ele que prevalece na criação.
+   * ponte para o UUID (F3-01) e é ele que prevalece na criação E no alvo
+   * autorizável.
    */
   readonly matriculaAvaliado?: number | string | null;
+  /**
+   * UUID do avaliado — NÃO é fonte de autoridade e não é enviado pela tela.
+   * Quando ausente, a fronteira confiável deriva a identidade exclusivamente
+   * da matrícula (ponte F3-01) e recusa a criação sem essa evidência.
+   */
+  readonly evaluatedCollaboratorId?: string;
 }
 
 /** Projeção de EDIÇÃO: SOMENTE a ocorrência do próprio ator (decisão 1). */
@@ -83,6 +97,10 @@ export interface PainelParticipante {
   readonly evaluationId: string;
   readonly organizationId: string;
   readonly cycleId: string;
+  /** Ano do ciclo — contexto de apresentação, vindo da linha real do banco. */
+  readonly cycleAno: number;
+  /** Número do ciclo (1..3). */
+  readonly cycleNumero: number;
   readonly configVersionId: string;
   readonly status: string;
   readonly evaluatedCollaboratorId: string;
@@ -95,11 +113,15 @@ export interface PainelParticipante {
     readonly validTo: string | null;
   };
   readonly criterios: readonly {
+    /** Id da configuração CONGELADA da avaliação (D6) — necessário para gravar. */
+    readonly criterionId: string;
     readonly code: string;
     readonly name: string;
     readonly position: number;
   }[];
   readonly subcriterios: readonly {
+    /** Id da configuração CONGELADA da avaliação (D6) — necessário para gravar. */
+    readonly subcriterionId: string;
     readonly code: string;
     readonly name: string;
     readonly position: number;
@@ -270,9 +292,12 @@ export function criarRepositorioAvaliacoesSupabase(
         montarCorpo(
           "evaluation.criar",
           entrada.organizationId,
+          // Alvo NEUTRO: a fronteira confiável substitui o alvo pelo UUID do
+          // colaborador resolvido da matrícula (ponte F3-01) ANTES da
+          // autorização. Nenhum id de colaborador vem da tela.
           {
             type: "collaborator",
-            id: entrada.evaluatedCollaboratorId,
+            id: entrada.evaluatedCollaboratorId ?? ID_NEUTRO,
           },
           {
             cycle_id: entrada.cycleId,
@@ -427,6 +452,8 @@ function projetarPainel(valor: unknown): PainelParticipante {
     evaluationId: String(registro.evaluation_id),
     organizationId: String(registro.organization_id),
     cycleId: String(registro.cycle_id),
+    cycleAno: Number(registro.cycle_ano),
+    cycleNumero: Number(registro.cycle_numero),
     configVersionId: String(registro.config_version_id),
     status: String(registro.status),
     evaluatedCollaboratorId: String(registro.evaluated_collaborator_id),
@@ -440,11 +467,13 @@ function projetarPainel(valor: unknown): PainelParticipante {
       validTo: typeof vigencia.valid_to === "string" ? vigencia.valid_to : null,
     },
     criterios: lista("criterios", (item) => ({
+      criterionId: String(item.id),
       code: String(item.code),
       name: String(item.name),
       position: Number(item.position),
     })),
     subcriterios: lista("subcriterios", (item) => ({
+      subcriterionId: String(item.id),
       code: String(item.code),
       name: String(item.name),
       position: Number(item.position),

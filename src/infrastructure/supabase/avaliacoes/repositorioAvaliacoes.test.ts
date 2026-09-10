@@ -179,6 +179,92 @@ describe("repositório de avaliações (caminho novo)", () => {
     }
   });
 
+  it("criação SEM alvo do cliente envia alvo NEUTRO e mantém a matrícula como intenção", async () => {
+    const { cliente, invocacoes } = clienteFalso({ data: { ok: true, resultado: AVALIACAO } });
+    const repo = criarRepositorioAvaliacoesSupabase(cliente);
+
+    // A tela não conhece (nem deve conhecer) o UUID do colaborador avaliado: a
+    // identidade é derivada server-side da matrícula (ponte F3-01). O alvo
+    // enviado é NEUTRO e o Edge o substitui ANTES do Policy Engine.
+    const resultado = await repo.criar({
+      organizationId: ORG,
+      cycleId: CICLO,
+      matriculaAvaliado: 101,
+    });
+
+    expect(resultado).toEqual({ ok: true, data: AVALIACAO });
+    const envio = invocacoes[0]!;
+    expect(envio.body.alvo).toEqual({
+      type: "collaborator",
+      id: "00000000-0000-0000-0000-000000000000",
+    });
+    expect(envio.body.matricula_avaliado).toBe(101);
+    expect(envio.body.cycle_id).toBe(CICLO);
+    // O uuid do CICLO nunca é reaproveitado como identidade do avaliado.
+    expect((envio.body.alvo as { id: string }).id).not.toBe(CICLO);
+  });
+
+  it("painel do participante projeta o catálogo congelado e SOMENTE a própria ocorrência", async () => {
+    const { cliente } = clienteFalso({
+      data: {
+        ok: true,
+        resultado: {
+          evaluation_id: AVALIACAO,
+          organization_id: ORG,
+          cycle_id: CICLO,
+          cycle_ano: 2026,
+          cycle_numero: 1,
+          config_version_id: "77777777-7777-4777-8777-777777777777",
+          status: "RASCUNHO",
+          evaluated_collaborator_id: COLABORADOR,
+          meus_papeis: ["GESTAO_CADEIA"],
+          participante_ocorrencia_id: PARTICIPANTE,
+          participante_role_type: "GESTAO_CADEIA",
+          participante_vigencia: {
+            valid_from: "2026-01-01T00:00:00Z",
+            valid_to: null,
+          },
+          criterios: [{ id: "c-1", code: "c1", name: "Criterio", position: 0 }],
+          subcriterios: [
+            {
+              id: SUB,
+              code: "s1",
+              name: "Sub",
+              position: 0,
+              criterion_code: "c1",
+            },
+          ],
+          minhas_notas: [{ subcriterion_id: SUB, nota: 4 }],
+          meus_comentarios: [
+            { escopo: "FINAL", criterion_id: null, texto: "Meu feedback" },
+          ],
+          papeis_com_feedback_final: ["GESTAO_CADEIA"],
+        },
+      },
+    });
+    const repo = criarRepositorioAvaliacoesSupabase(cliente);
+
+    const resultado = await repo.painelParticipante({
+      organizationId: ORG,
+      evaluationId: AVALIACAO,
+    });
+
+    expect(resultado.ok).toBe(true);
+    if (!resultado.ok) return;
+
+    // Ids do catálogo CONGELADO: indispensáveis para gravar sem inventar id.
+    expect(resultado.data.criterios[0]?.criterionId).toBe("c-1");
+    expect(resultado.data.subcriterios[0]?.subcriterionId).toBe(SUB);
+    // Contexto do ciclo vem da linha real do banco.
+    expect(resultado.data.cycleAno).toBe(2026);
+    expect(resultado.data.cycleNumero).toBe(1);
+    // Somente a PRÓPRIA ocorrência: nenhum dado de terceiro.
+    expect(resultado.data.participanteOcorrenciaId).toBe(PARTICIPANTE);
+    const serializado = JSON.stringify(resultado.data);
+    expect(serializado).not.toContain("voto");
+    expect(serializado).not.toContain("terceiro");
+  });
+
   it("transparência NUNCA expõe voto/nota individual nem participant_id", async () => {
     const { cliente, invocacoes } = clienteFalso({
       data: {

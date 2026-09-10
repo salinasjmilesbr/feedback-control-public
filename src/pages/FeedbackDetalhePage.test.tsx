@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it } from "vitest";
 import { UsuarioAtualContext } from "../contexts/UsuarioAtualContext";
 import { instalarLocalStorageEmMemoria } from "../test/localStorageMock";
+import { ProvedorAuthTeste } from "../test/authTeste";
 import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
 import type { Feedback, StatusFeedback } from "../types/Feedback";
@@ -70,26 +71,28 @@ function renderizar(
   );
 
   return renderToStaticMarkup(
-    <UsuarioAtualContext.Provider
-      value={{
-        usuarioAtual: actor,
-        usuariosDisponiveis: colaboradores,
-        selecionarUsuario: () => undefined,
-      }}
-    >
-      <MemoryRouter
-        initialEntries={[
-          `/colaborador/${avaliado.matricula}/feedback/${feedbackBase.id}`,
-        ]}
+    <ProvedorAuthTeste>
+      <UsuarioAtualContext.Provider
+        value={{
+          usuarioAtual: actor,
+          usuariosDisponiveis: colaboradores,
+          selecionarUsuario: () => undefined,
+        }}
       >
-        <Routes>
-          <Route
-            path="/colaborador/:id/feedback/:feedbackId"
-            element={<FeedbackDetalhePage />}
-          />
-        </Routes>
-      </MemoryRouter>
-    </UsuarioAtualContext.Provider>
+        <MemoryRouter
+          initialEntries={[
+            `/colaborador/${avaliado.matricula}/feedback/${feedbackBase.id}`,
+          ]}
+        >
+          <Routes>
+            <Route
+              path="/colaborador/:id/feedback/:feedbackId"
+              element={<FeedbackDetalhePage />}
+            />
+          </Routes>
+        </MemoryRouter>
+      </UsuarioAtualContext.Provider>
+    </ProvedorAuthTeste>
   );
 }
 

@@ -28,6 +28,7 @@ const AVALIACAO = "33333333-3333-4333-8333-333333333333";
 const AVALIADO = "44444444-4444-4444-8444-444444444444";
 const OCORRENCIA = "55555555-5555-4555-8555-555555555555";
 const SUB = "66666666-6666-4666-8666-666666666666";
+const CRITERIO = "88888888-8888-4888-8888-888888888888";
 
 const CHAVE_LEGADO = "feedback-control-feedbacks";
 
@@ -36,6 +37,8 @@ function painel(parcial: Partial<PainelParticipante> = {}): PainelParticipante {
     evaluationId: AVALIACAO,
     organizationId: ORG,
     cycleId: CICLO,
+    cycleAno: 2026,
+    cycleNumero: 1,
     configVersionId: "77777777-7777-4777-8777-777777777777",
     status: "RASCUNHO",
     evaluatedCollaboratorId: AVALIADO,
@@ -43,9 +46,15 @@ function painel(parcial: Partial<PainelParticipante> = {}): PainelParticipante {
     participanteOcorrenciaId: OCORRENCIA,
     participanteRoleType: "GESTAO_CADEIA",
     participanteVigencia: { validFrom: "2025-01-01T00:00:00Z", validTo: null },
-    criterios: [{ code: "c1", name: "Criterio", position: 0 }],
+    criterios: [{ criterionId: CRITERIO, code: "c1", name: "Criterio", position: 0 }],
     subcriterios: [
-      { code: "s1", name: "Sub", position: 0, criterionCode: "c1" },
+      {
+        subcriterionId: SUB,
+        code: "s1",
+        name: "Sub",
+        position: 0,
+        criterionCode: "c1",
+      },
     ],
     minhasNotas: [{ subcriterionId: SUB, nota: 4 }],
     meusComentarios: [],
@@ -108,7 +117,13 @@ describe("cutover: criação, edição e encerramento soberanos", () => {
   });
 
   it("criação resolve ano+ciclo e matrícula e NUNCA escreve no localStorage", async () => {
-    const repositorio = repositorioFalso();
+    const envios: unknown[] = [];
+    const repositorio = repositorioFalso({
+      criar: async (entrada) => {
+        envios.push(entrada);
+        return { ok: true, data: AVALIACAO };
+      },
+    });
     const cutover = criarCutoverAvaliacoes({
       repositorio,
       armazenamento: criarArmazenamentoMemoria(),
@@ -126,6 +141,13 @@ describe("cutover: criação, edição e encerramento soberanos", () => {
     expect(resultado.data?.cutoverRegistrado).toBe(true);
     // Ordem: resolve o ciclo ANTES de criar.
     expect(repositorio.chamadas).toEqual(["resolverCiclo", "criar"]);
+    // O cliente NÃO apresenta alvo autorizável: a identidade do avaliado é
+    // derivada server-side da matrícula (ponte F3-01), e o UUID do CICLO não é
+    // reutilizado como se fosse o do colaborador.
+    expect(envios).toEqual([
+      expect.objectContaining({ cycleId: CICLO, matriculaAvaliado: 101 }),
+    ]);
+    expect(envios[0]).not.toHaveProperty("evaluatedCollaboratorId");
     // Nenhuma avaliação foi persistida no legado.
     expect(localStorage.getItem(CHAVE_LEGADO)).toBeNull();
   });
@@ -186,23 +208,96 @@ describe("cutover: criação, edição e encerramento soberanos", () => {
   });
 
   it("grava notas usando SEMPRE a ocorrência resolvida no painel", async () => {
-    const repositorio = repositorioFalso();
+    const registros: unknown[] = [];
+    const repositorio = repositorioFalso({
+      gravarNotas: async (entrada) => {
+        registros.push(entrada);
+        return { ok: true, data: 3.5 };
+      },
+    });
     const cutover = criarCutoverAvaliacoes({ repositorio });
     const painelCarregado = painel();
 
+    // A tela informa o NOME do subcritério; o id do catálogo CONGELADO vem do
+    // painel (server-side) e nunca é inventado no cliente.
     const resultado = await cutover.gravarNotasDoPainel({
       organizationId: ORG,
       evaluationId: AVALIACAO,
       painel: painelCarregado,
-      notas: [{ subcriterionId: SUB, nota: 5 }],
+      notas: [{ subcriterio: "Sub", nota: 5 }],
     });
 
     expect(resultado.ok).toBe(true);
-    const envio = (repositorio.gravarNotas as unknown as { mock?: unknown }) && undefined;
-    void envio;
-    expect(repositorio.chamadas).toContain("gravarNotas");
-    // O ocorrência do painel é a única fonte possível de participant_id.
+    expect(registros).toEqual([
+      expect.objectContaining({
+        participantId: OCORRENCIA,
+        notas: [{ subcriterion_id: SUB, nota: 5 }],
+      }),
+    ]);
+    // A ocorrência do painel é a única fonte possível de participant_id.
     expect(painelCarregado.participanteOcorrenciaId).toBe(OCORRENCIA);
+  });
+
+  it("subcritério fora da configuração congela o lote (fail-closed)", async () => {
+    const repositorio = repositorioFalso();
+    const cutover = criarCutoverAvaliacoes({ repositorio });
+
+    const resultado = await cutover.gravarNotasDoPainel({
+      organizationId: ORG,
+      evaluationId: AVALIACAO,
+      painel: painel(),
+      notas: [{ subcriterio: "Subcritério inexistente", nota: 5 }],
+    });
+
+    expect(resultado.ok).toBe(false);
+    expect(repositorio.chamadas).not.toContain("gravarNotas");
+  });
+
+  it("grava observações de critério pelo CODE do catálogo congelado", async () => {
+    const registros: unknown[] = [];
+    const repositorio = repositorioFalso({
+      gravarComentario: async (entrada) => {
+        registros.push(entrada);
+        return { ok: true, data: null };
+      },
+    });
+    const cutover = criarCutoverAvaliacoes({ repositorio });
+
+    const resultado = await cutover.gravarObservacoesDoPainel({
+      organizationId: ORG,
+      evaluationId: AVALIACAO,
+      painel: painel(),
+      observacoes: [
+        { criterioCode: "c1", texto: "Observação do papel" },
+        { criterioCode: "c1", texto: "   " },
+      ],
+    });
+
+    expect(resultado.ok).toBe(true);
+    // Observação em branco não vira comentário vazio no banco.
+    expect(registros).toEqual([
+      expect.objectContaining({
+        participantId: OCORRENCIA,
+        escopo: "CRITERIO",
+        criterionId: CRITERIO,
+        texto: "Observação do papel",
+      }),
+    ]);
+  });
+
+  it("comentário final vazio não gera chamada ao servidor", async () => {
+    const repositorio = repositorioFalso();
+    const cutover = criarCutoverAvaliacoes({ repositorio });
+
+    const resultado = await cutover.gravarComentarioFinalDoPainel({
+      organizationId: ORG,
+      evaluationId: AVALIACAO,
+      painel: painel(),
+      texto: "   ",
+    });
+
+    expect(resultado.ok).toBe(true);
+    expect(repositorio.chamadas).not.toContain("gravarComentario");
   });
 
   it("painel sem ocorrência resolvida ⇒ recusa fail-closed (nada gravado)", async () => {
@@ -215,7 +310,7 @@ describe("cutover: criação, edição e encerramento soberanos", () => {
       organizationId: ORG,
       evaluationId: AVALIACAO,
       painel: painel({ participanteOcorrenciaId: "" }),
-      notas: [{ subcriterionId: SUB, nota: 5 }],
+      notas: [{ subcriterio: "Sub", nota: 5 }],
     });
 
     expect(resultado.ok).toBe(false);

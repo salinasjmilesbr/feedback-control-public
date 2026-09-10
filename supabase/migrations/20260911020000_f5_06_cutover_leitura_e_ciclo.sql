@@ -107,9 +107,12 @@ declare
   v_resultado jsonb;
 begin
   select e.id, e.organization_id, e.config_version_id, e.cycle_id, e.status,
-         e.evaluated_collaborator_id, coalesce(e.data_conclusao, now()) as instante
+         e.evaluated_collaborator_id, coalesce(e.data_conclusao, now()) as instante,
+         c.ano as ciclo_ano, c.numero as ciclo_numero
     into v_eval
     from public.evaluations e
+    join public.evaluation_cycles c
+      on c.id = e.cycle_id and c.organization_id = e.organization_id
    where e.id = p_evaluation_id;
   if not found then
     raise exception 'F5-06: avaliacao inexistente';
@@ -170,6 +173,8 @@ begin
     'evaluation_id', v_eval.id,
     'organization_id', v_eval.organization_id,
     'cycle_id', v_eval.cycle_id,
+    'cycle_ano', v_eval.ciclo_ano,
+    'cycle_numero', v_eval.ciclo_numero,
     'config_version_id', v_eval.config_version_id,
     'status', v_eval.status,
     'evaluated_collaborator_id', v_eval.evaluated_collaborator_id,
@@ -181,9 +186,12 @@ begin
       'valid_to', v_participante.valid_to
     ),
     -- Catálogo CONGELADO da avaliação: necessário para montar a tela; não é
-    -- dado de terceiros.
+    -- dado de terceiros. Os IDs são os da PRÓPRIA configuração congelada (o
+    -- cliente precisa deles para gravar nota/comentário do seu papel); não
+    -- revelam ocorrência, voto ou nota de terceiro algum.
     'criterios', coalesce((
-      select jsonb_agg(jsonb_build_object('code', cri.code, 'name', cri.name,
+      select jsonb_agg(jsonb_build_object('id', cri.id, 'code', cri.code,
+                                          'name', cri.name,
                                           'position', cri.position)
                        order by cri.position)
         from public.evaluation_config_criteria cri
@@ -191,7 +199,8 @@ begin
          and cri.config_version_id = v_eval.config_version_id
     ), '[]'::jsonb),
     'subcriterios', coalesce((
-      select jsonb_agg(jsonb_build_object('code', sub.code, 'name', sub.name,
+      select jsonb_agg(jsonb_build_object('id', sub.id, 'code', sub.code,
+                                          'name', sub.name,
                                           'position', sub.position,
                                           'criterion_code', cri.code)
                        order by cri.position, sub.position)
@@ -240,13 +249,14 @@ $$;
 
 comment on function public.evaluation_painel_participante(uuid, uuid) is
   'F5-06: LEITURA DE EDICAO do participante autenticado. Devolve o catalogo '
-  'congelado da avaliacao e SOMENTE a propria ocorrencia (notas e comentarios '
-  'lancados pelo ator) + os papeis que lhe foram atribuidos. NAO devolve voto ou '
-  'nota individual de terceiros nem participant_id alheio; a ocorrencia propria '
-  'e resolvida server-side pelo vinculo F5-02 + vigencia (o participant_id do '
-  'cliente nunca e prova de identidade). D20 (transparencia do AVALIADO) '
-  'permanece inalterada em evaluation_leitura_avaliado. EXECUTE somente '
-  'service_role.';
+  'congelado da avaliacao (ids/codigos/nomes dos criterios e subcriterios da '
+  'PROPRIA configuracao congelada, necessarios para gravar o que cabe ao ator) '
+  'e SOMENTE a propria ocorrencia (notas e comentarios lancados pelo ator) + os '
+  'papeis que lhe foram atribuidos. NAO devolve voto ou nota individual de '
+  'terceiros nem participant_id alheio; a ocorrencia propria e resolvida '
+  'server-side pelo vinculo F5-02 + vigencia (o participant_id do cliente nunca '
+  'e prova de identidade). D20 (transparencia do AVALIADO) permanece inalterada '
+  'em evaluation_leitura_avaliado. EXECUTE somente service_role.';
 
 -- ----------------------------------------------------------------------------
 -- Grants: EXECUTE somente service_role (sem superfície para authenticated)

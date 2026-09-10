@@ -156,3 +156,84 @@ export function avaliacaoVinculadaAoBanco(
   if (!ehIdTecnicoPostgres(evaluationId)) return false;
   return lerAvaliacoesCortadas(armazenamento).has(evaluationId.trim());
 }
+
+// ---------------------------------------------------------------------------
+// Índice de LEITURA por ciclo (ano+número) → ids soberanos
+// ---------------------------------------------------------------------------
+
+/**
+ * Chave local do índice ano+ciclo → ids técnicos. É apenas LIVRO-CAIXA de
+ * navegação do cliente: NÃO é tenant, NÃO é autorização, NÃO é prova de
+ * existência (a fonte soberana continua sendo o PostgreSQL, consultado pela
+ * fronteira confiável a cada operação).
+
+ * Ele existe porque o produto precisa alcançar as avaliações de um ciclo sem
+ * varrer o `localStorage` legado, que nunca contém avaliação nova.
+ */
+export const CHAVE_CICLO_AVALIACOES = "feedback-control-ciclo-avaliacoes-postgres";
+
+interface IndiceCiclo {
+  readonly [chaveAnoCiclo: string]: readonly string[];
+}
+
+/** Chave canônica do índice. Ano+número são INTENÇÃO; nada de tenant aqui. */
+export function chaveAnoCiclo(ano: number, ciclo: number): string {
+  return `${ano}-${ciclo}`;
+}
+
+function lerIndiceCiclo(
+  armazenamento: ArmazenamentoCutover
+): Record<string, string[]> {
+  const bruto = armazenamento.getItem(CHAVE_CICLO_AVALIACOES);
+  if (!bruto) return {};
+  try {
+    const dados = JSON.parse(bruto);
+    if (typeof dados !== "object" || dados === null || Array.isArray(dados)) return {};
+
+    const indice: Record<string, string[]> = {};
+    for (const [chave, valor] of Object.entries(dados as IndiceCiclo)) {
+      if (!Array.isArray(valor)) continue;
+      // Somente ids técnicos contam como evidência do caminho novo.
+      const ids = valor.filter((item): item is string => ehIdTecnicoPostgres(item));
+      if (ids.length > 0) indice[chave] = ids;
+    }
+    return indice;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Associa ids soberanos ao ciclo (ano+número). Só registra id técnico válido;
+ * idempotente e sem duplicar entradas. Nada é gravado quando não há evidência
+ * do caminho novo.
+ */
+export function registrarAvaliacoesDoCiclo(
+  ano: number,
+  ciclo: number,
+  evaluationIds: readonly unknown[],
+  armazenamento: ArmazenamentoCutover | null = armazenamentoPadrao()
+): readonly string[] {
+  const novos = evaluationIds
+    .filter((id): id is string => ehIdTecnicoPostgres(id))
+    .map((id) => id.trim());
+  if (!armazenamento || novos.length === 0) return novos;
+
+  const chave = chaveAnoCiclo(ano, ciclo);
+  const indice = lerIndiceCiclo(armazenamento);
+  const atuais = new Set(indice[chave] ?? []);
+  for (const id of novos) atuais.add(id);
+  indice[chave] = Array.from(atuais);
+  armazenamento.setItem(CHAVE_CICLO_AVALIACOES, JSON.stringify(indice));
+  return indice[chave];
+}
+
+/** Ids soberanos já conhecidos de um ciclo (ano+número). Nunca inclui legado. */
+export function lerAvaliacoesDoCiclo(
+  ano: number,
+  ciclo: number,
+  armazenamento: ArmazenamentoCutover | null = armazenamentoPadrao()
+): readonly string[] {
+  if (!armazenamento) return [];
+  return lerIndiceCiclo(armazenamento)[chaveAnoCiclo(ano, ciclo)] ?? [];
+}

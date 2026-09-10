@@ -1,4 +1,4 @@
-﻿import { type CSSProperties } from "react";
+import { type CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useState } from "react";
 import type { AuthorizationContext } from "../authorization/AuthorizationContext";
@@ -9,6 +9,7 @@ import CriterionIcon from "../components/CriterionIcon";
 import CollaboratorIdentity from "../components/CollaboratorIdentity";
 import RoleExpectationsCard from "../components/RoleExpectationsCard";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
+import { useAuth } from "../auth/AuthContext";
 import { cancelarAvaliacao } from "../services/cancelamentoAvaliacaoService";
 import { reabrirAvaliacao } from "../services/reaberturaAvaliacaoService";
 import { getCiclosAvaliacao } from "../services/cicloAvaliacaoStorage";
@@ -38,7 +39,10 @@ function FeedbackDetalhePage() {
   const navigate = useNavigate();
   const { id, feedbackId } = useParams();
   const { usuarioAtual } = useUsuarioAtual();
+  const { organizacaoAtivaId } = useAuth();
   const [versao, setVersao] = useState(0);
+  const [processando, setProcessando] = useState(false);
+  const [erroAcao, setErroAcao] = useState("");
   void versao;
   const matricula = Number(id);
   const colaborador = Number.isFinite(matricula)
@@ -171,38 +175,70 @@ function FeedbackDetalhePage() {
   );
 
   function handleCancelarAvaliacao() {
-    if (!usuarioAtual) return;
+    void executarCancelamento();
+  }
+
+  function handleReabrirAvaliacao() {
+    void executarReabertura();
+  }
+
+  async function executarCancelamento() {
     const motivo = window.prompt("Informe o motivo do cancelamento:");
     if (motivo === null) return;
 
+    setErroAcao("");
+    setProcessando(true);
     try {
-      cancelarAvaliacao(feedback!.id, motivo, usuarioAtual);
+      // Soberano: a autorização e o efeito são decididos/executados server-side.
+      const resultado = await cancelarAvaliacao(
+        feedback!.id,
+        motivo,
+        organizacaoAtivaId ?? ""
+      );
+      if (!resultado.ok) {
+        setErroAcao(resultado.erro ?? "Não foi possível cancelar a avaliação.");
+        return;
+      }
       setVersao((atual) => atual + 1);
       alert("Avaliação cancelada com sucesso.");
     } catch (error) {
-      alert(
+      setErroAcao(
         error instanceof Error
           ? error.message
           : "Não foi possível cancelar a avaliação."
       );
+    } finally {
+      setProcessando(false);
     }
   }
 
-  function handleReabrirAvaliacao() {
-    if (!usuarioAtual) return;
+  async function executarReabertura() {
     const motivo = window.prompt("Informe o motivo da reabertura:");
     if (motivo === null) return;
 
+    setErroAcao("");
+    setProcessando(true);
     try {
-      reabrirAvaliacao(feedback!.id, motivo, usuarioAtual);
+      // Soberano: a autorização e o efeito são decididos/executados server-side.
+      const resultado = await reabrirAvaliacao(
+        feedback!.id,
+        motivo,
+        organizacaoAtivaId ?? ""
+      );
+      if (!resultado.ok) {
+        setErroAcao(resultado.erro ?? "Não foi possível reabrir a avaliação.");
+        return;
+      }
       setVersao((atual) => atual + 1);
       alert("Avaliação reaberta com sucesso.");
     } catch (error) {
-      alert(
+      setErroAcao(
         error instanceof Error
           ? error.message
           : "Não foi possível reabrir a avaliação."
       );
+    } finally {
+      setProcessando(false);
     }
   }
 
@@ -227,6 +263,7 @@ function FeedbackDetalhePage() {
               type="button"
               className="evaluation-btn evaluation-btn--secondary"
               onClick={handleReabrirAvaliacao}
+              disabled={processando}
             >
               Reabrir avaliação
             </button>
@@ -236,6 +273,7 @@ function FeedbackDetalhePage() {
               type="button"
               className="evaluation-btn evaluation-btn--secondary"
               onClick={handleCancelarAvaliacao}
+              disabled={processando}
             >
               Cancelar avaliação
             </button>
@@ -245,12 +283,26 @@ function FeedbackDetalhePage() {
               type="button"
               className="evaluation-btn evaluation-btn--primary"
               onClick={() => navigate(`/colaborador/${colaborador.matricula}/feedback/${feedback.id}/editar`)}
+              disabled={processando}
             >
               Editar avaliação
             </button>
           )}
         </div>
       </section>
+
+      {processando && (
+        <section className="evaluation-alert" role="status" aria-live="polite">
+          Processando a operação no servidor…
+        </section>
+      )}
+
+      {erroAcao && (
+        <section className="evaluation-alert evaluation-alert--warning" role="alert">
+          <strong>Operação não concluída.</strong>
+          <p>{erroAcao}</p>
+        </section>
+      )}
 
       {feedback.status === "CANCELADA" && (
         <section className="evaluation-alert evaluation-alert--warning">

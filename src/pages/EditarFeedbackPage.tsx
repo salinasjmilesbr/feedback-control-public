@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { can } from "../authorization/authorizationPolicy";
 import type { AuthorizationContext } from "../authorization/AuthorizationContext";
@@ -15,8 +15,22 @@ import {
   getEscalaAvaliacao,
   getItemEscalaPorNota,
 } from "../services/escalaAvaliacaoStorage";
-import { getFeedbacksByColaborador, updateFeedback, } from "../services/feedbackStorage";
+import { getFeedbacksByColaborador } from "../services/feedbackStorage";
 import type { Feedback } from "../types/Feedback";
+import { useAuth } from "../auth/AuthContext";
+import {
+  carregarPainelSoberano,
+  concluirAvaliacaoSoberana,
+  gravarComentarioFinalSoberano,
+  gravarNotasSoberanas,
+  gravarObservacoesSoberanas,
+} from "../services/acessoAvaliacoesSoberanas";
+import type {
+  ObservacaoDoPainel,
+  NotaDoPainelPorNome,
+} from "../services/avaliacoesSoberanas/cutoverAvaliacoesService";
+import type { PainelParticipante } from "../infrastructure/supabase/avaliacoes/repositorioAvaliacoes";
+import { ehAvaliacaoNova } from "../services/origemAvaliacaoTela";
 import {
   getMetasDoColaboradorNoCiclo,
   metaEstaAprovada,
@@ -189,10 +203,108 @@ function criarVotosColegiadoIniciais(feedback?: Feedback) {
   return votos;
 }
 
+/** Coluna do formulário correspondente ao papel do ator na ocorrência. */
+function colunaDoPapel(roleType: string): keyof NotasPorAvaliador {
+  return roleType.startsWith("GESTAO_CADEIA")
+    ? "gerente"
+    : roleType.startsWith("GESTAO_DIRETA")
+      ? "coordenador"
+      : "colegiado";
+}
+
+interface EstadoInicialEdicao {
+  readonly avaliacoes: Avaliacoes;
+  readonly feedbackFinalGerente: string;
+  readonly feedbackFinalCoordenador: string;
+  readonly status: Feedback["status"];
+}
+
+/**
+ * Estado inicial do formulário, derivado PURAMENTE da origem da avaliação:
+ * - avaliação NOVA ⇒ da PRÓPRIA ocorrência devolvida pelo painel (o catálogo
+ *   congelado do banco é traduzido para o vocabulário da tela pelo NOME);
+ * - legado ⇒ do registro local (somente leitura).
+ *
+ * Sem estado derivado em efeito: a tela só monta quando a leitura terminou.
+ */
+function criarEstadoInicialDaOrigem(
+  painel: PainelParticipante | null,
+  feedbackLegado?: Feedback
+): EstadoInicialEdicao {
+  if (!painel) {
+    return {
+      avaliacoes: criarEstadoInicialEdicao(feedbackLegado),
+      feedbackFinalGerente: feedbackLegado?.feedbackFinalGerente ?? "",
+      feedbackFinalCoordenador: feedbackLegado?.feedbackFinalCoordenador ?? "",
+      status: feedbackLegado?.status ?? "RASCUNHO",
+    };
+  }
+
+  const avaliacoes = criarEstadoInicial();
+  const coluna = colunaDoPapel(painel.participanteRoleType);
+  const notaPorOcorrencia = new Map(
+    painel.minhasNotas.map((registro) => [registro.subcriterionId, registro.nota])
+  );
+
+  // Tradução ESTRUTURAL banco → tela: o critério é identificado pelo NOME do
+  // catálogo congelado e o subcritério pelo nome dentro do critério correto.
+  for (const criterio of criterios) {
+    const criterioCongelado = painel.criterios.find(
+      (item) => item.name === criterio.nome
+    );
+    if (!criterioCongelado) continue;
+
+    for (const subcriterio of criterio.subcriterios) {
+      const subcriterioCongelado = painel.subcriterios.find(
+        (item) =>
+          item.criterionCode === criterioCongelado.code &&
+          item.name === subcriterio
+      );
+      if (!subcriterioCongelado) continue;
+
+      const nota = notaPorOcorrencia.get(subcriterioCongelado.subcriterionId) ?? 0;
+      if (nota > 0) avaliacoes[criterio.id].notas[subcriterio][coluna] = nota;
+    }
+  }
+
+  const comentarioDoCriterio = new Map(
+    painel.meusComentarios
+      .filter(
+        (comentario) =>
+          comentario.escopo === "CRITERIO" && comentario.criterionId !== null
+      )
+      .map((comentario) => [String(comentario.criterionId), comentario.texto])
+  );
+  for (const criterio of criterios) {
+    const criterioCongelado = painel.criterios.find(
+      (item) => item.name === criterio.nome
+    );
+    if (!criterioCongelado) continue;
+    const texto = comentarioDoCriterio.get(criterioCongelado.criterionId) ?? "";
+    if (!texto) continue;
+    if (coluna === "gerente") avaliacoes[criterio.id].observacaoGerente = texto;
+    if (coluna === "coordenador") {
+      avaliacoes[criterio.id].observacaoCoordenador = texto;
+    }
+  }
+
+  const textoFinal =
+    painel.meusComentarios.find((comentario) => comentario.escopo === "FINAL")
+      ?.texto ?? "";
+
+  return {
+    avaliacoes,
+    feedbackFinalGerente: coluna === "gerente" ? textoFinal : "",
+    feedbackFinalCoordenador: coluna === "coordenador" ? textoFinal : "",
+    status: (painel.status as Feedback["status"]) ?? "RASCUNHO",
+  };
+}
+
 function EditarFeedbackPage() {
   const { id, feedbackId } = useParams();
   const navigate = useNavigate();
   const { usuarioAtual } = useUsuarioAtual();
+  const { organizacaoAtivaId } = useAuth();
 
   const matricula = Number(id);
   const colaborador = Number.isFinite(matricula)
@@ -205,26 +317,63 @@ function EditarFeedbackPage() {
     ? getFeedbacksByColaborador(colaborador.matricula)
     : [];
 
-  const feedback = feedbacks.find((item) => item.id === feedbackId);
+  const feedbackLegado = feedbacks.find((item) => item.id === feedbackId);
+  // Id técnico (UUID) ⇒ a avaliação é NOVA e vive exclusivamente no PostgreSQL.
+  const avaliacaoNova = ehAvaliacaoNova(feedbackId);
 
-  const [avaliacoes, setAvaliacoes] = useState<Avaliacoes>(() =>
-    criarEstadoInicialEdicao(feedback)
-  );
+  const [painel, setPainel] = useState<PainelParticipante | null>(null);
+  const [carregandoNova, setCarregandoNova] = useState(avaliacaoNova);
+  const [erroLeitura, setErroLeitura] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const [erroAcao, setErroAcao] = useState("");
+
+  // Estado EDITADO pelo usuário. `null` = ainda não editado, e o valor exibido é
+  // derivado da origem (painel do banco ou registro legado).
+  const [avaliacoesEditadas, setAvaliacoes] = useState<Avaliacoes | null>(null);
   const [votosColegiado, setVotosColegiado] = useState<
     Record<string, Record<string, Record<number, number>>>
-  >(() => criarVotosColegiadoIniciais(feedback));
-  const [feedbackFinalGerente, setFeedbackFinalGerente] = useState(
-    feedback?.feedbackFinalGerente ?? ""
-  );
-  const [feedbackFinalCoordenador, setFeedbackFinalCoordenador] = useState(
-    feedback?.feedbackFinalCoordenador ?? ""
-  );
-  const [status, setStatus] = useState<Feedback["status"]>(
-    feedback?.status ?? "RASCUNHO"
-  );
+  >(() => criarVotosColegiadoIniciais(feedbackLegado));
+  const [feedbackFinalGerenteEditado, setFeedbackFinalGerente] = useState<
+    string | null
+  >(null);
+  const [feedbackFinalCoordenadorEditado, setFeedbackFinalCoordenador] = useState<
+    string | null
+  >(null);
+  const [statusEditado, setStatus] = useState<Feedback["status"] | null>(null);
   const [criterioAberto, setCriterioAberto] = useState<string>(criterios[0].id);
   const [criterioParaAlinhar, setCriterioParaAlinhar] = useState<string | null>(null);
   const [feedbackFinalAberto, setFeedbackFinalAberto] = useState(false);
+
+  // Leitura da avaliação NOVA: o painel do próprio participante (server-side)
+  // devolve o catálogo congelado e SOMENTE a própria ocorrência. Nenhum
+  // fallback para o acervo local quando a leitura é recusada (fail-closed).
+  useEffect(() => {
+    if (!avaliacaoNova) return;
+    let ativo = true;
+
+    void (async () => {
+      const resultado = await carregarPainelSoberano({
+        organizationId: organizacaoAtivaId ?? "",
+        evaluationId: feedbackId ?? "",
+      });
+      if (!ativo) return;
+
+      if (!resultado.ok || !resultado.data) {
+        setErroLeitura(
+          resultado.erro ?? "Avaliação não encontrada para o seu acesso."
+        );
+        setCarregandoNova(false);
+        return;
+      }
+
+      setPainel(resultado.data);
+      setCarregandoNova(false);
+    })();
+
+    return () => {
+      ativo = false;
+    };
+  }, [avaliacaoNova, feedbackId, organizacaoAtivaId]);
 
   useEffect(() => {
     if (!criterioParaAlinhar) return;
@@ -261,7 +410,50 @@ function EditarFeedbackPage() {
     );
   }
 
-  if (!feedback) {
+  if (carregandoNova) {
+    return (
+      <div style={{ padding: "30px" }} role="status" aria-live="polite">
+        <h1>Carregando a avaliação…</h1>
+      </div>
+    );
+  }
+
+  // Uma avaliação NOVA existe apenas no PostgreSQL: se a leitura do painel
+  // falhou, NÃO há fallback para o acervo local (fail-closed).
+  if (erroLeitura) {
+    return (
+      <div style={{ padding: "30px" }}>
+        <button
+          onClick={() => navigate(`/colaborador/${colaborador.matricula}`)}
+          style={{ marginBottom: "20px", padding: "10px 16px" }}
+        >
+          ← Voltar
+        </button>
+        <h1>Avaliação indisponível</h1>
+        <p>{erroLeitura}</p>
+      </div>
+    );
+  }
+
+  const feedbackAtual = feedbackLegado;
+  // Contexto do ciclo: o da avaliação NOVA vem da própria linha do banco; o do
+  // legado vem do registro local.
+  const anoAvaliacao = feedbackAtual?.ano ?? painel?.cycleAno;
+  const cicloAvaliacao = feedbackAtual?.ciclo ?? painel?.cycleNumero;
+
+  // Estado inicial do formulário derivado da ORIGEM (painel do banco ou registro
+  // local). Derivar aqui — e não em efeito — evita estado espelhado e mantém a
+  // autoridade onde ela pertence: no servidor para a avaliação nova.
+  const estadoInicialDaOrigem = criarEstadoInicialDaOrigem(painel, feedbackLegado);
+  const avaliacoes = avaliacoesEditadas ?? estadoInicialDaOrigem.avaliacoes;
+  const feedbackFinalGerente =
+    feedbackFinalGerenteEditado ?? estadoInicialDaOrigem.feedbackFinalGerente;
+  const feedbackFinalCoordenador =
+    feedbackFinalCoordenadorEditado ??
+    estadoInicialDaOrigem.feedbackFinalCoordenador;
+  const status = statusEditado ?? estadoInicialDaOrigem.status;
+
+  if (!feedbackAtual && !painel) {
     return (
       <div style={{ padding: "30px" }}>
         <button
@@ -285,11 +477,16 @@ function EditarFeedbackPage() {
     );
   }
 
-  const feedbackAtual = feedback;
+  if (anoAvaliacao === undefined || cicloAvaliacao === undefined) {
+    return (
+      <div style={{ padding: "30px" }}>
+        <h1>Avaliação sem ciclo associado</h1>
+      </div>
+    );
+  }
+
   const cicloDaAvaliacao = getCiclosAvaliacao().find(
-    (item) =>
-      item.ano === feedbackAtual.ano &&
-      item.ciclo === feedbackAtual.ciclo
+    (item) => item.ano === anoAvaliacao && item.ciclo === cicloAvaliacao
   );
   const colaboradorEfetivo = cicloDaAvaliacao
     ? getColaboradorEfetivoNoCiclo(
@@ -299,8 +496,6 @@ function EditarFeedbackPage() {
       )
     : colaborador;
 
-  const anoAvaliacao = feedbackAtual.ano;
-  const cicloAvaliacao = feedbackAtual.ciclo;
   const escalaAvaliacao = getEscalaAvaliacao();
 
   const metasDoCiclo = cicloDaAvaliacao
@@ -335,7 +530,7 @@ function EditarFeedbackPage() {
     evaluatedCollaborator: colaborador,
     collaborators: colaboradores,
     cycle: cicloDaAvaliacao,
-    evaluationStatus: feedbackAtual.status,
+    evaluationStatus: feedbackAtual?.status ?? status,
   };
   const podeAvaliarComoGerente = authorizationContext
     ? can(authorizationContext, "evaluation.edit.manager", evaluationResource)
@@ -382,19 +577,22 @@ function EditarFeedbackPage() {
     papel: PapelAvaliador,
     nota: number
   ) {
-    setAvaliacoes((estadoAtual) => ({
-      ...estadoAtual,
-      [criterioId]: {
-        ...estadoAtual[criterioId],
-        notas: {
-          ...estadoAtual[criterioId].notas,
-          [subcriterio]: {
-            ...estadoAtual[criterioId].notas[subcriterio],
-            [papel]: nota,
+    setAvaliacoes((estadoAtual) => {
+      const base = estadoAtual ?? criarEstadoInicial();
+      return {
+        ...base,
+        [criterioId]: {
+          ...base[criterioId],
+          notas: {
+            ...base[criterioId].notas,
+            [subcriterio]: {
+              ...base[criterioId].notas[subcriterio],
+              [papel]: nota,
+            },
           },
         },
-      },
-    }));
+      } satisfies Avaliacoes;
+    });
   }
 
   function atualizarVotoColegiado(
@@ -406,7 +604,10 @@ function EditarFeedbackPage() {
     if (usuarioAtual?.matricula !== avaliadorMatricula) return;
 
     setVotosColegiado((estadoAtual) => {
-      const votosAtualizados = {
+      const votosAtualizados: Record<
+        string,
+        Record<string, Record<number, number>>
+      > = {
         ...estadoAtual,
         [criterioId]: {
           ...(estadoAtual[criterioId] ?? {}),
@@ -417,7 +618,7 @@ function EditarFeedbackPage() {
         },
       };
 
-      const notas = Object.values(
+      const notas = Object.values<number>(
         votosAtualizados[criterioId][subcriterio]
       ).filter((valor) => valor > 0);
 
@@ -426,19 +627,22 @@ function EditarFeedbackPage() {
           ? 0
           : notas.reduce((total, valor) => total + valor, 0) / notas.length;
 
-      setAvaliacoes((avaliacoesAtuais) => ({
-        ...avaliacoesAtuais,
-        [criterioId]: {
-          ...avaliacoesAtuais[criterioId],
-          notas: {
-            ...avaliacoesAtuais[criterioId].notas,
-            [subcriterio]: {
-              ...avaliacoesAtuais[criterioId].notas[subcriterio],
-              colegiado: mediaColegiado,
+      setAvaliacoes((avaliacoesAtuais) => {
+        const base = avaliacoesAtuais ?? criarEstadoInicial();
+        return {
+          ...base,
+          [criterioId]: {
+            ...base[criterioId],
+            notas: {
+              ...base[criterioId].notas,
+              [subcriterio]: {
+                ...base[criterioId].notas[subcriterio],
+                colegiado: mediaColegiado,
+              },
             },
           },
-        },
-      }));
+        } satisfies Avaliacoes;
+      });
 
       return votosAtualizados;
     });
@@ -511,13 +715,16 @@ function EditarFeedbackPage() {
     campo: "observacaoGerente" | "observacaoCoordenador",
     valor: string
   ) {
-    setAvaliacoes((estadoAtual) => ({
-      ...estadoAtual,
-      [criterioId]: {
-        ...estadoAtual[criterioId],
-        [campo]: valor,
-      },
-    }));
+    setAvaliacoes((estadoAtual) => {
+      const base = estadoAtual ?? criarEstadoInicial();
+      return {
+        ...base,
+        [criterioId]: {
+          ...base[criterioId],
+          [campo]: valor,
+        },
+      } satisfies Avaliacoes;
+    });
   }
 
   function calcularMediaSubcriterio(criterioId: string, subcriterio: string) {
@@ -790,7 +997,21 @@ function EditarFeedbackPage() {
     );
   }
 
-  function handleSalvarAlteracoes() {
+  /**
+   * F5-06 (Issue #103) — CUTOVER da edição.
+   *
+   * A edição de avaliação NOVA passa exclusivamente pelo PostgreSQL: a tela NÃO
+   * grava mais no `localStorage` (o acervo legado é somente leitura) e NÃO
+   * calcula a nota oficial — o agregado é materializado pelo servidor.
+   *
+   * Notas e comentários são gravados na PRÓPRIA ocorrência, resolvida
+   * server-side pelo painel; o status é ajustado pelas operações de domínio
+   * (`concluir`), porque completude e imutabilidade são regras do servidor.
+   *
+   * Qualquer falha é FAIL-CLOSED: a tela reporta o erro público e nada é
+   * gravado localmente como compensação (D12/§11.3).
+   */
+  async function handleSalvarAlteracoes() {
     if (status !== "RASCUNHO" && !progressoAvaliacao.completo) {
       alert(
         `Não é possível salvar com este status.\n\n${progressoAvaliacao.pendencias.join(
@@ -800,81 +1021,126 @@ function EditarFeedbackPage() {
       return;
     }
 
-    const agora = new Date().toISOString();
+    setErroAcao("");
 
-    const feedbackAtualizado = {
-      ...feedbackAtual,
+    // Avaliação NOVA: caminho soberano (o painel é obrigatório).
+    if (avaliacaoNova) {
+      if (!painel) {
+        setErroAcao("Painel da avaliação indisponível para gravação.");
+        return;
+      }
 
-      dataUltimaAtualizacao: agora,
-      dataConclusao:
-        status === "CONCLUIDA"
-          ? feedbackAtual.dataConclusao ?? agora
-          : feedbackAtual.dataConclusao,
+      setSalvando(true);
+      try {
+        const colunaDoAtor: keyof NotasPorAvaliador =
+          painel.participanteRoleType.startsWith("GESTAO_CADEIA")
+            ? "gerente"
+            : painel.participanteRoleType.startsWith("GESTAO_DIRETA")
+              ? "coordenador"
+              : "colegiado";
 
-      status,
-    
-      notaMedia,
-      competencias: criterios.map((criterio) => {
-        const avaliacao = avaliacoes[criterio.id];
+        // Notas PREENCHIDAS da própria coluna (o banco valida a ocorrência e o
+        // subcritério contra a configuração congelada).
+        const notas: NotaDoPainelPorNome[] = [];
+        for (const criterio of criterios) {
+          for (const subcriterio of criterio.subcriterios) {
+            const nota = avaliacoes[criterio.id].notas[subcriterio][colunaDoAtor];
+            if (nota > 0) notas.push({ subcriterio, nota });
+          }
+        }
 
-        return {
-          competenciaId: criterio.id,
-          competenciaNome: criterio.nome,
-          nota: calcularNotaCriterio(criterio.id),
-          comentario: [
-            avaliacao.observacaoGerente
-              ? `Observação do Gerente: ${avaliacao.observacaoGerente}`
-              : "",
-            avaliacao.observacaoCoordenador
-              ? `Observação do Coordenador: ${avaliacao.observacaoCoordenador}`
-              : "",
-          ]
-            .filter(Boolean)
-            .join("\n\n"),
-        };
-      }),
-      criteriosDetalhados: criterios.map((criterio) => ({
-        criterioId: criterio.id,
-        criterioNome: criterio.nome,
-        nota: calcularNotaCriterio(criterio.id),
-        subcriterios: criterio.subcriterios.map((subcriterio) => {
-          const notas = avaliacoes[criterio.id].notas[subcriterio];
+        const gravouNotas = await gravarNotasSoberanas({
+          organizationId: organizacaoAtivaId ?? "",
+          evaluationId: painel.evaluationId,
+          painel,
+          notas,
+        });
+        if (!gravouNotas.ok) {
+          setErroAcao(gravouNotas.erro ?? "Não foi possível gravar as notas.");
+          return;
+        }
 
-          return {
-            nome: subcriterio,
-            notaGerente: notas.gerente,
-            notaCoordenador: notas.coordenador,
-            notaColegiado: notas.colegiado,
-            votosColegiado: avaliadoresColegiado
-              .map((avaliador) => {
-                const nota =
-                  votosColegiado[criterio.id]?.[subcriterio]?.[
-                    avaliador.matricula
-                  ] ?? 0;
+        const observacoes: ObservacaoDoPainel[] = [];
+        criterios.forEach((criterio, indice) => {
+          const code = painel.criterios[indice]?.code;
+          if (!code) return;
+          const texto =
+            colunaDoAtor === "gerente"
+              ? avaliacoes[criterio.id].observacaoGerente
+              : colunaDoAtor === "coordenador"
+                ? avaliacoes[criterio.id].observacaoCoordenador
+                : "";
+          if (texto.trim()) observacoes.push({ criterioCode: code, texto });
+        });
 
-                return nota > 0
-                  ? {
-                      avaliadorMatricula: avaliador.matricula,
-                      avaliadorNome: avaliador.nome,
-                      nota,
-                      dataAtualizacao: new Date().toISOString(),
-                    }
-                  : undefined;
-              })
-              .filter((voto) => voto !== undefined),
-            notaFinal: calcularMediaSubcriterio(criterio.id, subcriterio),
-          };
-        }),
-        observacaoGerente: avaliacoes[criterio.id].observacaoGerente,
-        observacaoCoordenador: avaliacoes[criterio.id].observacaoCoordenador,
-      })),
-      feedbackFinalGerente,
-      feedbackFinalCoordenador,
-    } as Feedback;
+        const gravouObservacoes = await gravarObservacoesSoberanas({
+          organizationId: organizacaoAtivaId ?? "",
+          evaluationId: painel.evaluationId,
+          painel,
+          observacoes,
+        });
+        if (!gravouObservacoes.ok) {
+          setErroAcao(
+            gravouObservacoes.erro ?? "Não foi possível gravar as observações."
+          );
+          return;
+        }
 
-    updateFeedback(feedbackAtualizado, usuarioAtual);
-    alert("Avaliação atualizada com sucesso.");
-    navigate(`/colaborador/${colaborador!.matricula}/feedback/${feedback!.id}`);
+        const textoFinal =
+          colunaDoAtor === "gerente"
+            ? feedbackFinalGerente
+            : colunaDoAtor === "coordenador"
+              ? feedbackFinalCoordenador
+              : "";
+
+        const gravouFinal = await gravarComentarioFinalSoberano({
+          organizationId: organizacaoAtivaId ?? "",
+          evaluationId: painel.evaluationId,
+          painel,
+          texto: textoFinal,
+        });
+        if (!gravouFinal.ok) {
+          setErroAcao(
+            gravouFinal.erro ?? "Não foi possível gravar o feedback final."
+          );
+          return;
+        }
+
+        // Conclusão é operação de domínio do servidor (D18): o frontend só a
+        // solicita, e o banco decide se há completude.
+        if (status === "CONCLUIDA") {
+          const conclusao = await concluirAvaliacaoSoberana({
+            organizationId: organizacaoAtivaId ?? "",
+            evaluationId: painel.evaluationId,
+          });
+          if (!conclusao.ok) {
+            setErroAcao(
+              conclusao.erro ?? "Não foi possível concluir a avaliação."
+            );
+            return;
+          }
+        }
+
+        alert("Avaliação atualizada com sucesso.");
+        navigate(
+          `/colaborador/${colaborador!.matricula}/feedback/${painel.evaluationId}`
+        );
+      } catch (error) {
+        setErroAcao(
+          error instanceof Error
+            ? error.message
+            : "Não foi possível salvar a avaliação."
+        );
+      } finally {
+        setSalvando(false);
+      }
+      return;
+    }
+
+    // Acervo LEGADO: permanece somente leitura — não existe mais gravação local.
+    setErroAcao(
+      "Avaliações criadas antes do cutover são somente leitura. Use o caminho de avaliações no PostgreSQL para editar."
+    );
   }
 
   return (
@@ -906,7 +1172,7 @@ function EditarFeedbackPage() {
       </section>
 
       <RoleExpectationsCard
-        expectativa={feedback.expectativaCargoSnapshot}
+        expectativa={feedbackAtual?.expectativaCargoSnapshot}
       />
 
       <section className="new-evaluation-overview">
@@ -1604,22 +1870,40 @@ function EditarFeedbackPage() {
           Preencher notas para teste
         </button>
 <button
-          onClick={handleSalvarAlteracoes}
-          disabled={!podeAvaliar}
+          onClick={() => {
+            void handleSalvarAlteracoes();
+          }}
+          disabled={!podeAvaliar || salvando}
           style={{
             padding: "12px 24px",
             borderRadius: "10px",
             border: "none",
-            cursor: "pointer",
-            backgroundColor: "#660099",
+            cursor: salvando ? "progress" : "pointer",
+            backgroundColor: salvando ? "#B98FD0" : "#660099",
             color: "#fff",
             fontWeight: "bold",
             fontSize: "15px",
           }}
         >
-          Salvar Avaliação
+          {salvando ? "Salvando no servidor…" : "Salvar Avaliação"}
         </button>
       </div>
+
+      {erroAcao && (
+        <section
+          className="new-evaluation-goals-warning"
+          role="alert"
+          style={{ marginTop: "16px" }}
+        >
+          <div className="new-evaluation-goals-warning__icon" aria-hidden="true">
+            !
+          </div>
+          <div>
+            <strong>Alterações não salvas</strong>
+            <p>{erroAcao}</p>
+          </div>
+        </section>
+      )}
     </main>
   );
 }

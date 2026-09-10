@@ -1,14 +1,33 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { AuthorizationError } from "../authorization/authorizationError";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { can } from "../authorization/authorizationPolicy";
 import type { AuthorizationContext } from "../authorization/AuthorizationContext";
 import type { EvaluationResource } from "../authorization/ResourceContext";
 import { instalarLocalStorageEmMemoria } from "../test/localStorageMock";
+import { criarArmazenamentoMemoria } from "../infrastructure/supabase/avaliacoes/cutover";
+import { criarCutoverAvaliacoes } from "./avaliacoesSoberanas/cutoverAvaliacoesService";
+import type { RepositorioAvaliacoes } from "../infrastructure/supabase/avaliacoes/repositorioAvaliacoes";
 import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
-import type { Feedback } from "../types/Feedback";
-import { getFeedbacks, updateFeedback } from "./feedbackStorage";
 import { reabrirAvaliacao } from "./reaberturaAvaliacaoService";
+
+/**
+ * F5-06 (Issue #103) — REABERTURA SOBERANA.
+ *
+ * A reabertura deixou de ser decidida/executada no navegador: o serviço envia a
+ * INTENÇÃO (id + motivo + organização ativa) e o Policy Engine decide ALLOW/DENY
+ * com a capability `evaluation.reopen` server-side. O estado do domínio
+ * (reabertura exige `CONCLUIDA`, ciclo não encerrado/cancelado) também é
+ * responsabilidade do servidor — por isso os cenários abaixo verificam a
+ * DELEGAÇÃO e o fail-closed, e não uma cópia local das regras.
+ *
+ * A verificação de capability/scope que antes vivia aqui permanece coberta pelo
+ * Policy Engine (ver `authorization/f4-09-functional.test.ts`); mantemos neste
+ * arquivo apenas a checagem de UX (`can`) que a tela usa.
+ */
+
+const ORG = "11111111-1111-4111-8111-111111111111";
+const AVALIACAO = "33333333-3333-4333-8333-333333333333";
+const CHAVE_LEGADO = "feedback-control-feedbacks";
 
 function pessoa(
   matricula: number,
@@ -43,52 +62,6 @@ const ciclo: CicloAvaliacao = {
   dataCriacao: "2026-01-01T00:00:00.000Z",
   dataUltimaAtualizacao: "2026-01-01T00:00:00.000Z",
 };
-const feedback: Feedback = {
-  id: "avaliacao-concluida",
-  colaboradorId: avaliado.matricula,
-  colaboradorNome: avaliado.nome,
-  status: "CONCLUIDA",
-  data: "2026-01-10T00:00:00.000Z",
-  dataConclusao: "2026-02-01T00:00:00.000Z",
-  ano: 2026,
-  ciclo: 1,
-  notaMedia: 4,
-  competencias: [
-    {
-      competenciaId: "qualidade",
-      competenciaNome: "Qualidade",
-      nota: 4,
-      comentario: "Comentário preservado",
-    },
-  ],
-  criteriosDetalhados: [
-    {
-      criterioId: "entrega",
-      criterioNome: "Entrega",
-      nota: 4,
-      observacaoGerente: "Observação preservada",
-      observacaoCoordenador: "Outra observação",
-      subcriterios: [
-        {
-          nome: "Qualidade",
-          notaGerente: 4,
-          notaCoordenador: 4,
-          notaColegiado: 5,
-          votosColegiado: [
-            {
-              avaliadorMatricula: colegiado.matricula,
-              avaliadorNome: colegiado.nome,
-              nota: 5,
-            },
-          ],
-          notaFinal: 4.3,
-        },
-      ],
-    },
-  ],
-  feedbackFinalGerente: "Feedback final preservado",
-  feedbackFinalCoordenador: "Feedback da coordenação preservado",
-};
 
 function contexto(actor: Colaborador): AuthorizationContext {
   return {
@@ -100,100 +73,144 @@ function contexto(actor: Colaborador): AuthorizationContext {
   };
 }
 
-describe("reabrirAvaliacao", () => {
+function repositorioFalso(
+  comportamentos: Partial<RepositorioAvaliacoes> = {}
+): RepositorioAvaliacoes & { readonly chamadas: string[] } {
+  const chamadas: string[] = [];
+  const base: RepositorioAvaliacoes = {
+    criar: async () => ({ ok: true, data: AVALIACAO }),
+    ler: async () => ({ ok: true, data: null }),
+    gravarNotas: async () => ({ ok: true, data: null }),
+    gravarComentario: async () => ({ ok: true, data: null }),
+    concluir: async () => ({ ok: true, data: null }),
+    reabrir: async () => ({ ok: true, data: null }),
+    cancelar: async () => ({ ok: true, data: null }),
+    realinharParticipantes: async () => ({ ok: true, data: 0 }),
+    transparenciaDoAvaliado: async () => {
+      throw new Error("não usado neste teste");
+    },
+    painelParticipante: async () => {
+      throw new Error("não usado neste teste");
+    },
+    resolverCiclo: async () => ({ ok: true, data: "22222222-2222-4222-8222-222222222222" }),
+  };
+
+  const instrumentado = Object.fromEntries(
+    Object.entries({ ...base, ...comportamentos }).map(([nome, fn]) => [
+      nome,
+      async (...args: unknown[]) => {
+        chamadas.push(nome);
+        return (fn as (...a: unknown[]) => unknown)(...args);
+      },
+    ])
+  ) as unknown as RepositorioAvaliacoes;
+
+  return Object.assign(instrumentado, { chamadas });
+}
+
+function deps(comportamentos: Partial<RepositorioAvaliacoes> = {}) {
+  const repositorio = repositorioFalso(comportamentos);
+  return {
+    repositorio,
+    criarCutover: () =>
+      criarCutoverAvaliacoes({
+        repositorio,
+        armazenamento: criarArmazenamentoMemoria(),
+      }),
+  };
+}
+
+describe("reabrirAvaliacao (soberano)", () => {
   beforeEach(() => {
     instalarLocalStorageEmMemoria();
-    localStorage.setItem("feedback-control-colaboradores", JSON.stringify(colaboradores));
-    localStorage.setItem("feedback-control-ciclos", JSON.stringify([ciclo]));
-    localStorage.setItem("feedback-control-feedbacks", JSON.stringify([feedback]));
+    localStorage.setItem(CHAVE_LEGADO, JSON.stringify([{ id: AVALIACAO }]));
   });
 
-  it("permite ao gerente responsável reabrir com auditoria e preserva o conteúdo", () => {
-    const reaberta = reabrirAvaliacao(feedback.id, "  Corrigir lançamento  ", gerente);
+  it("envia a intenção ao servidor e NÃO escreve no localStorage", async () => {
+    const dependencias = deps();
+    const legadoAntes = localStorage.getItem(CHAVE_LEGADO);
 
-    expect(reaberta).toMatchObject({
-      ...feedback,
-      status: "RASCUNHO",
-      competencias: feedback.competencias,
-      criteriosDetalhados: feedback.criteriosDetalhados,
-      feedbackFinalGerente: feedback.feedbackFinalGerente,
-      feedbackFinalCoordenador: feedback.feedbackFinalCoordenador,
-    });
-    expect(reaberta.reaberturas).toHaveLength(1);
-    expect(reaberta.reaberturas![0]).toMatchObject({
-      motivo: "Corrigir lançamento",
-      autorMatricula: gerente.matricula,
-      autorNome: gerente.nome,
-      data: expect.any(String),
-    });
-    expect(Number.isNaN(Date.parse(reaberta.reaberturas![0].data))).toBe(false);
-    expect(getFeedbacks()).toEqual([reaberta]);
+    const resultado = await reabrirAvaliacao(
+      AVALIACAO,
+      "  Corrigir lançamento  ",
+      ORG,
+      dependencias
+    );
 
+    expect(resultado.ok).toBe(true);
+    expect(dependencias.repositorio.chamadas).toEqual(["reabrir"]);
+    // Sem dual-write: o histórico legado permanece intacto.
+    expect(localStorage.getItem(CHAVE_LEGADO)).toBe(legadoAntes);
+  });
+
+  it("recusa motivo vazio antes de chamar o servidor", async () => {
+    const dependencias = deps();
+
+    await expect(
+      reabrirAvaliacao(AVALIACAO, "   ", ORG, dependencias)
+    ).rejects.toThrow("Informe o motivo da reabertura.");
+    expect(dependencias.repositorio.chamadas).toEqual([]);
+  });
+
+  it.each(["FORBIDDEN", "CONFLICT"] as const)(
+    "recusa %s do servidor vira erro público sem gravar localmente",
+    async (code) => {
+      const dependencias = deps({
+        reabrir: async () => ({ ok: false, error: { code, message: "recusado" } }),
+      });
+      const legadoAntes = localStorage.getItem(CHAVE_LEGADO);
+
+      const resultado = await reabrirAvaliacao(
+        AVALIACAO,
+        "Motivo válido",
+        ORG,
+        dependencias
+      );
+
+      expect(resultado.ok).toBe(false);
+      expect(resultado.erro).toBeTruthy();
+      expect(localStorage.getItem(CHAVE_LEGADO)).toBe(legadoAntes);
+    }
+  );
+
+  it("sem caminho soberano configurado a operação é recusada (fail-closed)", async () => {
+    const legadoAntes = localStorage.getItem(CHAVE_LEGADO);
+    const resultado = await reabrirAvaliacao(AVALIACAO, "Motivo válido", ORG, {
+      criarCutover: () => null,
+    });
+
+    expect(resultado.ok).toBe(false);
+    expect(resultado.erro).toContain("PostgreSQL");
+    expect(localStorage.getItem(CHAVE_LEGADO)).toBe(legadoAntes);
+  });
+
+  it("propaga erro de rede do repositório sem cair para o caminho legado", async () => {
+    const dependencias = deps({
+      reabrir: vi.fn(async () => {
+        throw new Error("rede indisponível");
+      }) as unknown as RepositorioAvaliacoes["reabrir"],
+    });
+
+    await expect(
+      reabrirAvaliacao(AVALIACAO, "Motivo válido", ORG, dependencias)
+    ).rejects.toThrow("rede indisponível");
+    expect(localStorage.getItem(CHAVE_LEGADO)).not.toBeNull();
+  });
+
+  it("mantém a checagem de UX (can) coerente para os papéis da cadeia", () => {
     const resource: EvaluationResource = {
       kind: "evaluation",
       evaluatedCollaborator: avaliado,
       collaborators: colaboradores,
       cycle: ciclo,
-      evaluationStatus: reaberta.status,
+      evaluationStatus: "CONCLUIDA",
     };
-    expect(can(contexto(gerente), "evaluation.edit.manager", resource)).toBe(true);
-    expect(can(contexto(coordenador), "evaluation.edit.coordinator", resource)).toBe(true);
-    expect(can(contexto(colegiado), "evaluation.edit.board", resource)).toBe(true);
-  });
 
-  it("rejeita motivo vazio", () => {
-    expect(() => reabrirAvaliacao(feedback.id, "   ", gerente)).toThrow(
-      "Informe o motivo da reabertura."
-    );
-  });
-
-  it.each([
-    ["COORDENADOR", coordenador],
-    ["COLEGIADO", colegiado],
-    ["AVALIADO", avaliado],
-  ] as const)("rejeita reabertura por %s", (_papel, actor) => {
-    expect(() => reabrirAvaliacao(feedback.id, "Motivo válido", actor)).toThrow(
-      AuthorizationError
-    );
-    expect(getFeedbacks()[0].status).toBe("CONCLUIDA");
-  });
-
-  it.each(["CANCELADA", "RASCUNHO", "PRONTA_PARA_FEEDBACK"] as const)(
-    "rejeita avaliação com status %s",
-    (status) => {
-      localStorage.setItem(
-        "feedback-control-feedbacks",
-        JSON.stringify([{ ...feedback, status }])
-      );
-
-      expect(() =>
-        reabrirAvaliacao(feedback.id, "Motivo válido", gerente)
-      ).toThrow(AuthorizationError);
-    }
-  );
-
-  it("rejeita reabertura quando o ciclo está encerrado", () => {
-    localStorage.setItem(
-      "feedback-control-ciclos",
-      JSON.stringify([{ ...ciclo, status: "ENCERRADO" }])
-    );
-
-    expect(() =>
-      reabrirAvaliacao(feedback.id, "Motivo válido", gerente)
-    ).toThrow(AuthorizationError);
-  });
-
-  it("preserva todos os eventos após nova conclusão e múltiplas reaberturas", () => {
-    const primeira = reabrirAvaliacao(feedback.id, "Primeira correção", gerente);
-    updateFeedback({ ...primeira, status: "CONCLUIDA" });
-
-    expect(getFeedbacks()[0].reaberturas).toEqual(primeira.reaberturas);
-
-    const segunda = reabrirAvaliacao(feedback.id, "Segunda correção", gerente);
-    expect(segunda.reaberturas).toHaveLength(2);
-    expect(segunda.reaberturas?.map((evento) => evento.motivo)).toEqual([
-      "Primeira correção",
-      "Segunda correção",
-    ]);
+    // `can()` é SOMENTE UX; a decisão efetiva é do Policy Engine server-side.
+    // Aqui garantimos apenas que a tela não libera edição para o próprio
+    // avaliado, que não pertence à cadeia de gestão dele.
+    expect(can(contexto(avaliado), "evaluation.edit.manager", resource)).toBe(false);
+    expect(can(contexto(avaliado), "evaluation.edit.coordinator", resource)).toBe(false);
+    expect(can(contexto(avaliado), "evaluation.edit.board", resource)).toBe(false);
   });
 });
