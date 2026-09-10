@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import catalogoF401 from "../../../supabase/migrations/20260908000001_authorization_system_catalog.sql?raw";
-import catalogoF504 from "../../../supabase/migrations/20260910000000_f5_04_catalog_reconciliation.sql?raw";
+import catalogoF401 from "../../supabase/migrations/20260908000001_authorization_system_catalog.sql?raw";
+import catalogoF504 from "../../supabase/migrations/20260910000000_f5_04_catalog_reconciliation.sql?raw";
 import {
   CAPABILIDADES_CANONICAS,
   CAPABILIDADES_DEPRECIADAS,
