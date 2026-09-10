@@ -26,6 +26,11 @@ export type Capability =
   | "observation.delete"
   | "report.read"
   | "settings.manage"
+  | "membership.read"
+  | "membership.manage"
+  | "access_role.manage"
+  | "org.structure.manage"
+  | "org.catalog.manage"
   | "exceptional_access.grant"
   | "pilot_full_access.grant"
   // ---------------------------------------------------------------

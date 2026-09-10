@@ -68,7 +68,8 @@ begin
       'collegiate_cycle_snapshot_members','evaluation_succession_events',
       'capabilities','access_roles','access_role_capabilities',
       'membership_access_role_assignments','membership_collaborator_links',
-      'access_role_assignment_scopes','access_role_assignment_unit_targets');
+      'access_role_assignment_scopes','access_role_assignment_unit_targets',
+      'privilege_mutation_audit');
   if v_t is null or v_t not like '%_mut_nao_class%' then
     raise exception '[MUT FAIL] guard nao detectou tabela nao classificada (v_t=%)', v_t;
   end if;
@@ -93,7 +94,8 @@ begin
       'collegiate_cycle_snapshot_members','evaluation_succession_events',
       'capabilities','access_roles','access_role_capabilities',
       'membership_access_role_assignments','membership_collaborator_links',
-      'access_role_assignment_scopes','access_role_assignment_unit_targets');
+      'access_role_assignment_scopes','access_role_assignment_unit_targets',
+      'privilege_mutation_audit');
   if v_t is not null then raise exception '[MUT FAIL] catalogo nao voltou ao estado limpo (%)', v_t; end if;
   raise notice '[PASS] mutacao B: tabela nao classificada detectada e revertida';
 end $$;
