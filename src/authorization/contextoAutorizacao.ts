@@ -224,6 +224,19 @@ export interface DepsContextoAutorizacao {
   ): Promise<ContextoAvaliacaoSoberano | null>;
   /** ASSIGNED soberano (F3-08/09), quando disponível. */
   readonly assigned?: DadosAssignedSoberanos;
+  /**
+   * F5-06: resolve o ASSIGNED **por operação**, depois de conhecidos o vínculo
+   * do ator e o tenant validados. O ator/membership nunca vêm do cliente: os
+   * argumentos são derivados server-side nos passos anteriores. Ausente ⇒
+   * comportamento anterior (sem ASSIGNED).
+   */
+  resolverAssigned?(entrada: {
+    readonly authUserId: string;
+    readonly collaboratorId: string | null;
+    readonly organizationId: string;
+    readonly target: TargetRef;
+    readonly cycleId?: string;
+  }): Promise<DadosAssignedSoberanos | null>;
   /** Origens independentes (D11). */
   readonly temporary?: TemporaryProvider;
   readonly exceptional?: ExceptionalProvider;
@@ -351,6 +364,21 @@ export async function avaliarOperacaoAutorizacao(
       : negar("TARGET_INVALID");
   }
 
+  // 7.2) ASSIGNED soberano POR OPERAÇÃO (F5-06, F3-08/F3-09): resolvido somente
+  // depois de conhecidos o vínculo do ator, o tenant validado e o CICLO do
+  // recurso. `null` ⇒ sem ASSIGNED (o provider nega o alcance — fail-closed).
+  const blocoAssigned = deps.resolverAssigned
+    ? await deps.resolverAssigned({
+        authUserId: entrada.authUserId,
+        collaboratorId: atorComVinculo.actorContext.collaboratorId,
+        organizationId: atorComVinculo.actorContext.organizationId,
+        target: entrada.alvo,
+        ...(recursoContexto.resourceContext.cycleId
+          ? { cycleId: recursoContexto.resourceContext.cycleId }
+          : {}),
+      })
+    : null;
+
   // 8) alvos por scope (F4-02/F3) para os scopes efetivos do ator.
   // ORGANIZATIONAL_UNIT é resolvido por unidade-alvo da atribuição (F4-02);
   // os demais scopes não usam unidade.
@@ -401,6 +429,9 @@ export async function avaliarOperacaoAutorizacao(
       ? { avaliadoDoAlvo: recursoContexto.resourceContext.ownerCollaboratorId }
       : {}),
     ...(deps.assigned ? { assigned: deps.assigned } : {}),
+    // ASSIGNED resolvido POR OPERAÇÃO (F5-06): tem precedência sobre um valor
+    // estático injetado, porque reflete o ator/ciclo/alvo reais desta decisão.
+    ...(blocoAssigned ? { assigned: blocoAssigned } : {}),
     ...(deps.temporary ? { temporary: deps.temporary } : {}),
     ...(deps.exceptional ? { exceptional: deps.exceptional } : {}),
     ...(deps.pilot ? { pilot: deps.pilot } : {}),

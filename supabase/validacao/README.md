@@ -1094,6 +1094,30 @@ resultado alternativo `(4+4+2+4)/4 = 3.5`, que apareceria se o colegiado pesasse
 > comandos foram executados com acesso ampliado. É limitação do **sandbox de
 > execução**, não da aplicação nem do repositório.
 
+## F5-06 — caminho TypeScript (aplicação → PostgreSQL)
+
+Além dos validadores SQL, a F5-06 tem um caminho de aplicação exercitado por
+testes automatizados (Vitest):
+
+```
+UI/componente → hook → controlador → service → repository → Edge Function
+              → ActorContext + ResourceContext reais → Policy Engine → RPC
+```
+
+| Camada | Arquivo | O que é verificado por teste |
+| --- | --- | --- |
+| Edge Function | `supabase/functions/avaliacoes/{core,index}.ts` | 401 sem JWT, 400 em corpo forjado (`actor_id`), 403 quando o Policy Engine nega **sem executar a RPC**, 404 cross-tenant, 409 sem vazar mensagem interna, ALLOW executa com o ator VERIFICADO |
+| ASSIGNED (F3-08/09) | `supabase/functions/avaliacoes/assignedSupabase.ts` + `src/services/avaliacoesSoberanas/assignedSoberano.ts` | vigência da responsabilidade, tradução (ano,ciclo) → UUID do ciclo, alvo com o mesmo ciclo do ResourceContext, fail-closed em ausência/divergência |
+| Repositório | `src/infrastructure/supabase/avaliacoes/repositorioAvaliacoes.ts` | payload só de INTENÇÃO (sem actor, sem `config_version_id`, sem participantes), projeção de leitura, transparência sem voto individual |
+| Serviço | `src/services/avaliacoesSoberanas/serviceAvaliacoes.ts` | criação só no banco + registro de cutover, acervo banco × legado, isolamento por ciclo/tenant, mensagens públicas |
+| Controlador | `src/services/avaliacoesSoberanas/controladorAvaliacoes.ts` | recarga do SERVIDOR após mutação, erro público sem lançar, sem fallback para o legado |
+| Apresentação | `src/components/ExibicaoAvaliacoesSoberanas.tsx` | carregando/erro/vazio, estado real do banco e legado sempre `editavel: false` |
+| Cutover | `src/infrastructure/supabase/avaliacoes/cutover.ts` + `src/services/cutoverAvaliacoes.test.ts` | sem dual-write, legado somente leitura, avaliação cortada não volta ao legado |
+
+A Edge Function está registrada em `supabase/config.toml`
+(`[functions.avaliacoes]`, `verify_jwt = true`) — a identidade continua sendo
+resolvida com `auth.getUser` dentro da função e passada pelo Policy Engine.
+
 ## Limitações e notas registradas
 
 - **JWT é stateless**: após logout, o refresh token é revogado, mas um access

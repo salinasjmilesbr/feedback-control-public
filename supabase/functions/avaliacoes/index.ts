@@ -11,6 +11,7 @@ import type { CapabilityComEscopos } from "../../../src/authorization/providers/
 import type { ScopeType } from "../../../src/authorization/policyEngine/types.ts";
 import type { RecursoSoberanoCarregado } from "../../../src/authorization/resourceContextReal.ts";
 import { CAPABILITY_POR_OPERACAO } from "../../../src/infrastructure/supabase/avaliacoes/contrato.ts";
+import { carregarAssignedDaOperacao } from "./assignedSupabase.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -203,6 +204,18 @@ Deno.serve(async (req) => {
 
       return null;
     },
+
+    // ASSIGNED soberano POR OPERAÇÃO (F5-06, F3-08/F3-09): membro de colegiado
+    // e responsável avaliativo alcançam a avaliação. Sem vínculo/registro
+    // soberano ⇒ `null` ⇒ o Policy Engine nega o alcance (fail-closed).
+    resolverAssigned: async ({ collaboratorId, organizationId, target, cycleId }) =>
+      carregarAssignedDaOperacao(admin, {
+        collaboratorId,
+        organizationId,
+        target,
+        cycleId,
+        agora: () => new Date(),
+      }),
 
     // Estado de domínio derivado SERVER-SIDE (o cliente nunca declara estado).
     carregarContextoAvaliacao: async ({ target, organizationId }) => {

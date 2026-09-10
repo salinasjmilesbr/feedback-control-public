@@ -20,6 +20,9 @@ import {
   type DadosAcervoAvaliacoes,
   type ServiceAvaliacoes,
 } from "./serviceAvaliacoes.ts";
+import { statusEditavel } from "./estadoAvaliacao.ts";
+
+export { statusEditavel };
 
 export interface EstadoAvaliacoesSoberanas<Registro = unknown> {
   readonly carregando: boolean;
@@ -37,10 +40,6 @@ export interface EntradaControladorAvaliacoes<Registro = unknown> {
   /** Regra de domínio declarada pela fronteira (nunca autorização de UI). */
   readonly ehEditavel?: (avaliacao: AvaliacaoSoberana) => boolean;
   readonly aoMudar?: (estado: EstadoAvaliacoesSoberanas<Registro>) => void;
-}
-
-export function statusEditavel(avaliacao: AvaliacaoSoberana): boolean {
-  return avaliacao.status === "RASCUNHO" || avaliacao.status === "PRONTA_PARA_FEEDBACK";
 }
 
 export interface ControladorAvaliacoes<Registro = unknown> {
