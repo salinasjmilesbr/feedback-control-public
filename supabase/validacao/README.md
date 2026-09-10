@@ -965,6 +965,114 @@ Observações:
    histórico.
 6. **Limpeza**: cenário sintético removido ao final.
 
+## F5-06 — Avaliações no PostgreSQL (Issue #103)
+
+Validação estrutural contra o **Supabase local** das migrations F5-06
+(`20260911000000_f5_06_evaluation_schema.sql` e
+`20260911010000_f5_06_evaluation_functions.sql`): modelo orientado a
+**participantes** (sem colunas fixas de gerente/coordenador/colegiado),
+participantes como **ocorrências históricas** (vigência + exclusion, sem unique
+eterno), cálculo oficial no servidor com o **colegiado como UMA parcela
+agregada** (D25), `numeric(12,8)` sem arredondamento intermediário (D24),
+completude exigida para conclusão normal (D18), marcador permanente de
+pendência no fechamento incompleto de ciclo (D11), transparência do avaliado sem
+expor voto individual (D20), reabertura/cancelamento auditados (D7/D26) e
+isolamento de tenant server-side (D27).
+
+### Como reproduzir
+
+Requisitos: Docker Desktop em execução e o CLI Supabase da raiz
+(`npx --yes supabase@2.116.0`).
+
+```powershell
+# 1) subir a stack local (rebuild limpo: migrations em ordem + seed)
+npx --yes supabase@2.116.0 start
+
+# 2) aplicar o cenário sintético no banco local (idempotente)
+Get-Content supabase/validacao/01-cenario-f5-06.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+
+# 3) executar a validação (exit code 0 = todas as verificações passaram)
+Get-Content supabase/validacao/02-validar-f5-06.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+
+# 4) regressão das barreiras de RLS (F4-08) com as 13 tabelas novas catalogadas
+Get-Content supabase/validacao/02-validar-f4-08.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+Get-Content supabase/validacao/03-validar-f4-08-mutacoes.sql -Raw -Encoding UTF8 |
+  docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1
+```
+
+Observações:
+
+- os scripts **não tocam projeto remoto**, **não alteram nenhuma policy RLS** e
+  usam apenas UUIDs fixos com prefixo `d6`, sem colidir com os cenários
+  anteriores;
+- `01-cenario-f5-06.sql` cria duas organizações, ator autenticado com membership,
+  quatro colaboradores (gestor da cadeia, avaliado e dois membros de colegiado) e
+  um ciclo `ATIVO`; a configuração baseline (8 critérios, 25 subcritérios, 5
+  faixas de escala, 3 papéis de participante) é criada pela própria RPC
+  `evaluation_config_bootstrap`;
+- o cenário fixa `GESTAO_CADEIA=4` e votos de colegiado `2` e `4`. Como o
+  colegiado é **uma** parcela, o subcritério fecha em `(4+3)/2 = 3.5`; se cada
+  membro pesasse individualmente o resultado seria `3.3333` — o validador
+  distingue os dois casos e rejeita o segundo;
+- a regressão F4-08 é preservada: as 13 tabelas novas foram catalogadas em
+  `02-validar-f4-08.sql` (42 tabelas, 21 fechadas) e em
+  `03-validar-f4-08-mutacoes.sql`; nenhum `SECURITY DEFINER` novo foi
+  introduzido (a F4-08 continua esperando exatamente 4).
+
+### O que é verificado (02-validar-f5-06.sql)
+
+1. **Estrutura**: 13 tabelas novas (`evaluation_config_versions`,
+   `evaluation_config_criteria`, `evaluation_config_subcriteria`,
+   `evaluation_config_scale_bands`, `evaluation_config_participant_roles`,
+   `evaluation_cycles`, `evaluations`, `evaluation_participants`,
+   `evaluation_scores`, `evaluation_comments`, `evaluation_events`,
+   `evaluation_pendencies`, `evaluation_aggregates`) com RLS habilitado e
+   **zero policies** (deny-by-default estrutural); 12 FKs compostas de tenant;
+   `numeric(12,8)` nos agregados e nenhuma coluna `float`.
+2. **Constraints (D4/D9/D23)**: unique **parcial** de avaliação não cancelada
+   por `(organização, ciclo, colaborador)`; exclusion de vigência de
+   participante por `tstzrange(valid_from, coalesce(valid_to,'infinity'))`;
+   check de nota `1..5`; ausência de unique eterno
+   `(evaluation, role, collaborator)`.
+3. **Funções (F4-08/D18)**: todas as funções F5-06 `SECURITY INVOKER`, zero
+   `EXECUTE` para `public`/`anon`/`authenticated` e `EXECUTE` para
+   `service_role`; trigger append-only de `evaluation_events` presente.
+4. **RLS em execução**: como `authenticated`, nenhuma leitura direta nas tabelas
+   do domínio (a projeção do avaliado é exclusivamente via RPC).
+5. **Cálculo oficial (D24/D25)**: `nota_media = 3.5` com o colegiado agregado
+   como **uma** parcela; 8 agregados de critério e 25 de subcritério em `3.5`;
+   recomputação igual ao materializado (D13); ausência representada por linha
+   inexistente (nunca zero) e notas persistidas sempre `1..5`.
+6. **Workflow (D8/D18)**: conclusão de avaliação **incompleta é rejeitada** e a
+   avaliação permanece `RASCUNHO` (sem conversão automática); conclusão completa
+   registra o evento `CONCLUIDA` com autoria soberana na mesma transação;
+   avaliação `CONCLUIDA` é imutável; reabertura exige motivo não vazio, volta a
+   `RASCUNHO`, limpa `data_conclusao` e grava evento `REABERTA`.
+7. **Transparência (D20)**: a projeção do avaliado traz agregados e a lista de
+   membros do colegiado, **nunca** voto/nota individual nem `participant_id`.
+8. **Cancelamento e fechamento (D7/D11/D26)**: cancelamento auditado grava
+   `CANCELADA` + motivo + autoria e libera a unique parcial para nova avaliação;
+   o fechamento de ciclo marca **pendência permanente** e persiste
+   `evaluation_pendencies` **sem** converter a avaliação incompleta em
+   `CONCLUIDA`.
+9. **Append-only e tenant (D26/D27)**: `UPDATE` da trilha de eventos é negado;
+   ator de outro tenant é rejeitado na revalidação de membership; ciclo/tenant
+   divergente (IDOR) é rejeitado fail-closed.
+
+### Execução registrada
+
+**Não executada nesta entrega.** O Docker Desktop não estava disponível no
+ambiente de trabalho (`npipe:////./pipe/dockerDesktopLinuxEngine` inexistente),
+portanto nem `npx --yes supabase@2.116.0 start` nem os passos 2–4 acima puderam
+rodar. A conferência possível no ambiente foi estática: consistência de nomes de
+constraints/índices/tabelas/funções entre validador, cenário e migrations,
+`GRANT EXECUTE` restrito a `service_role`, ausência de `SECURITY DEFINER` novo e
+balanceamento dos blocos `do $$`. A execução completa no Supabase local fica
+**pendente** e deve ser anexada à revisão antes do merge.
+
 ## Limitações e notas registradas
 
 - **JWT é stateless**: após logout, o refresh token é revogado, mas um access
