@@ -3,7 +3,14 @@ import { capabilityConhecida } from "./catalogoCapabilities.ts";
 import type { Capability } from "./Capability.ts";
 import { ehActorContextSoberano, montarActorContext, type ActorContext } from "./actorContext.ts";
 import { codigoPublicoDeNegacao } from "./policyEngine/errors.ts";
-import { authorize as authorizeEngine, can as canEngine } from "./policyEngine/policyEngine.ts";
+import {
+  authorize as authorizeEngine,
+  can as canEngine,
+} from "./policyEngine/policyEngine.ts";
+import {
+  estadoDominioAvaliacao,
+  estadoDominioCriacaoAvaliacao,
+} from "./estadoDominioAvaliacao.ts";
 import type {
   AuthorizationDecision,
   AuthorizationRequest,
@@ -171,6 +178,19 @@ export interface EntradaCarregarRecurso {
   readonly organizationId: string;
 }
 
+/**
+ * F5-06: contexto soberano necessário ao `domainState` do recurso de avaliação.
+ * Para o recurso `evaluation` o estado é o status real da linha; para o alvo de
+ * CRIAÇÃO (`collaborator`) o ciclo vigente e a aptidão do avaliado são
+ * resolvidos server-side — nunca declarados pelo cliente.
+ */
+export interface ContextoAvaliacaoSoberano {
+  readonly status: string;
+  readonly encerradaComPendencias?: boolean;
+  readonly cicloPermiteNovaAvaliacao?: boolean;
+  readonly avaliadoApto?: boolean;
+}
+
 export interface DepsContextoAutorizacao {
   /** Relógio server-side confiável (D21). */
   agora(): Date;
@@ -194,6 +214,14 @@ export interface DepsContextoAutorizacao {
   carregarRecurso(
     entrada: EntradaCarregarRecurso
   ): Promise<RecursoSoberanoCarregado | null>;
+  /**
+   * F5-06: contexto soberano da avaliação/colaborador da operação. Usado para
+   * montar o `domainState` do recurso (fronteira confiável) — o browser nunca
+   * declara estado de domínio.
+   */
+  carregarContextoAvaliacao?(
+    entrada: EntradaCarregarRecurso
+  ): Promise<ContextoAvaliacaoSoberano | null>;
   /** ASSIGNED soberano (F3-08/09), quando disponível. */
   readonly assigned?: DadosAssignedSoberanos;
   /** Origens independentes (D11). */
@@ -287,10 +315,35 @@ export async function avaliarOperacaoAutorizacao(
   });
   if (!recurso) return negar("TARGET_INVALID");
 
+  // 7.1) ESTADO DE DOMÍNIO derivado server-side (F5-06 §8.1): o cliente pode
+  // declarar estado (uso interno/testes), mas quando a fronteira confiável
+  // carrega o contexto soberano ele PREVALECE — o browser nunca declara o
+  // estado do recurso. Sem contexto para um alvo de avaliação ⇒ DENY.
+  const contextoAvaliacao = deps.carregarContextoAvaliacao
+    ? await deps.carregarContextoAvaliacao({
+        target: entrada.alvo,
+        organizationId: atorComVinculo.actorContext.organizationId,
+      })
+    : null;
+
+  const domainState = contextoAvaliacao
+    ? entrada.alvo.type === "evaluation"
+      ? estadoDominioAvaliacao({
+          status: contextoAvaliacao.status,
+          ...(contextoAvaliacao.encerradaComPendencias === undefined
+            ? {}
+            : { encerradaComPendencias: contextoAvaliacao.encerradaComPendencias }),
+        })
+      : estadoDominioCriacaoAvaliacao({
+          cicloPermiteNovaAvaliacao: contextoAvaliacao.cicloPermiteNovaAvaliacao === true,
+          avaliadoApto: contextoAvaliacao.avaliadoApto === true,
+        })
+    : entrada.domainState;
+
   const recursoContexto = montarResourceContextSoberano({
     recurso,
     organizationIdEsperada: atorComVinculo.actorContext.organizationId,
-    ...(entrada.domainState ? { domainState: entrada.domainState } : {}),
+    ...(domainState ? { domainState } : {}),
   });
   if (!recursoContexto.ok) {
     return recursoContexto.motivo === "TENANT_DIVERGENTE"
@@ -343,6 +396,10 @@ export async function avaliarOperacaoAutorizacao(
     escoposResolvidos,
     alvo: recursoContexto.resourceContext.target,
     tenantDoAlvo: recursoContexto.resourceContext.organizationId,
+    // F5-06: dono do recurso de avaliação (colaborador avaliado), quando houver.
+    ...(recursoContexto.resourceContext.ownerCollaboratorId
+      ? { avaliadoDoAlvo: recursoContexto.resourceContext.ownerCollaboratorId }
+      : {}),
     ...(deps.assigned ? { assigned: deps.assigned } : {}),
     ...(deps.temporary ? { temporary: deps.temporary } : {}),
     ...(deps.exceptional ? { exceptional: deps.exceptional } : {}),

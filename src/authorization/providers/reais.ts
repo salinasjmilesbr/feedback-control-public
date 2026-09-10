@@ -82,6 +82,12 @@ export interface DadosProvidersReais {
   readonly tenantDoAlvo: string | undefined;
   /** ASSIGNED: fontes soberanas F3-08/09 quando carregadas. */
   readonly assigned?: DadosAssignedSoberanos;
+  /**
+   * F5-06: colaborador AVALIADO quando o alvo é um recurso de avaliação
+   * (`ownerCollaboratorId` do ResourceContext real). `null`/ausente ⇒ a
+   * relação SELF/DIRECT_REPORTS/DESCENDANTS/UNIT não é satisfeita por avaliação.
+   */
+  readonly avaliadoDoAlvo?: string | null;
   /** Origens independentes (D11) — repassadas sem alteração. */
   readonly temporary?: TemporaryProvider;
   readonly exceptional?: ExceptionalProvider;
@@ -100,6 +106,26 @@ function alvoEscopoCorresponde(alvo: AlvoEscopoResolvido, target: TargetRef): bo
     return alvo.positionId !== null && alvo.positionId === target.id;
   }
   return false;
+}
+
+/**
+ * F5-06 (§8.1): o recurso AVALIAÇÃO é autorizável, mas o alvo é
+ * `{ type: "evaluation", id }`. A relação (SELF/DIRECT_REPORTS/DESCENDANTS/
+ * ORGANIZATIONAL_UNIT) é definida sobre o COLABORADOR AVALIADO — dono derivado
+ * da linha real da avaliação —, nunca sobre o id da avaliação. Este predicado
+ * traduz o alvo de avaliação para o colaborador avaliado já em escopo.
+ */
+function alvoAvaliacaoCorresponde(
+  alvo: AlvoEscopoResolvido,
+  target: TargetRef,
+  avaliadoDoAlvo: string | null
+): boolean {
+  if (target.type !== "evaluation") return false;
+  return (
+    avaliadoDoAlvo !== null &&
+    alvo.collaboratorId !== null &&
+    alvo.collaboratorId === avaliadoDoAlvo
+  );
 }
 
 /**
@@ -179,9 +205,15 @@ export function criarProvidersReais(dados: DadosProvidersReais): PolicyEnginePro
 
         // SELF / DIRECT_REPORTS / DESCENDANTS / ORGANIZATIONAL_UNIT: alvos
         // pré-resolvidos server-side pelos contratos F4-02/F3.
+        // F5-06: para o alvo AVALIAÇÃO a relação é lida sobre o COLABORADOR
+        // AVALIADO (dono do recurso) — o id da avaliação não define relação.
         const escopo = dados.escoposResolvidos.find((item) => item.scope === scope);
         if (!escopo) return false;
-        return escopo.alvos.some((alvo) => alvoEscopoCorresponde(alvo, target));
+        return escopo.alvos.some(
+          (alvo) =>
+            alvoEscopoCorresponde(alvo, target) ||
+            alvoAvaliacaoCorresponde(alvo, target, dados.avaliadoDoAlvo ?? null)
+        );
       },
     },
     ...(dados.temporary ? { temporary: dados.temporary } : {}),

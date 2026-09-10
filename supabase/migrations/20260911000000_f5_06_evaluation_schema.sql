@@ -399,6 +399,17 @@ create table public.evaluation_comments (
     )
 );
 
+-- Contrato 3.6: unique (participant_id, escopo, criterion_id). Como
+-- 'criterion_id' e NULL no escopo FINAL, a unicidade exige dois indices
+-- parciais: um UNIQUE simples nao bloqueia NULL (NULL <> NULL) e permitiria
+-- comentario FINAL duplicado para a mesma ocorrencia (achado da auditoria).
+create unique index uq_evaluation_comments_participant_escopo_criterion
+  on public.evaluation_comments (participant_id, escopo, criterion_id)
+  where escopo = 'CRITERIO';
+create unique index uq_evaluation_comments_participant_final
+  on public.evaluation_comments (participant_id)
+  where escopo = 'FINAL';
+
 create index ix_evaluation_comments_evaluation_id on public.evaluation_comments (evaluation_id);
 
 -- ----------------------------------------------------------------------------
@@ -528,6 +539,117 @@ create trigger trg_evaluation_events_append_only
   for each row execute function public.enforce_evaluation_events_append_only();
 
 -- ----------------------------------------------------------------------------
+-- 12.1) Configuração VERSIONADA IMUTÁVEL (D5/D6/D22 — enforcement REAL)
+-- ----------------------------------------------------------------------------
+-- O contrato exige que a versão publicada seja imutável e que alterações criem
+-- NOVA versão. Conceder UPDATE ao caminho server-side não garante isso: era
+-- possível alterar critério/subcritério/faixa/papel sob uma avaliação já
+-- existente, mudando silenciosamente a regra de uma avaliação em curso. As
+-- funções abaixo fecham o buraco no BANCO, não apenas na aplicação.
+create or replace function public.enforce_evaluation_config_version_imutavel()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_em_uso boolean;
+  v_tem_filhos boolean;
+begin
+  select exists (
+    select 1 from public.evaluations e
+     where e.config_version_id = old.id and e.organization_id = old.organization_id
+  ) or exists (
+    select 1 from public.evaluation_cycles c
+     where c.config_version_id = old.id and c.organization_id = old.organization_id
+  ) into v_em_uso;
+
+  select exists (
+      select 1 from public.evaluation_config_criteria c
+       where c.config_version_id = old.id and c.organization_id = old.organization_id
+    ) or exists (
+      select 1 from public.evaluation_config_scale_bands b
+       where b.config_version_id = old.id and b.organization_id = old.organization_id
+    ) or exists (
+      select 1 from public.evaluation_config_participant_roles r
+       where r.config_version_id = old.id and r.organization_id = old.organization_id
+    ) into v_tem_filhos;
+
+  -- Versão ainda vazia e não referenciada = rascunho: o bootstrap pode ajustar.
+  if v_em_uso or v_tem_filhos then
+    raise exception 'F5-06 D5/D22: versao de configuracao publicada/em uso e '
+      'imutavel (crie uma NOVA versao para alterar)';
+  end if;
+
+  return new;
+end;
+$$;
+
+comment on function public.enforce_evaluation_config_version_imutavel() is
+  'F5-06 D5/D6/D22: uma versao de configuracao que possui criterios/faixas/'
+  'papeis ou que ja e referenciada por avaliacao/ciclo e IMUTAVEL — qualquer '
+  'UPDATE e recusado e a alteracao exige nova versao.';
+
+create trigger trg_evaluation_config_versions_imutavel
+  before update on public.evaluation_config_versions
+  for each row execute function public.enforce_evaluation_config_version_imutavel();
+
+-- Filhos da versão: bloqueados quando o pai já está materializado/em uso.
+create or replace function public.enforce_evaluation_config_children_imutaveis()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_pai uuid;
+  v_org uuid;
+  v_bloqueado boolean;
+begin
+  v_pai := coalesce(new.config_version_id, old.config_version_id);
+  v_org := coalesce(new.organization_id, old.organization_id);
+
+  select exists (
+      select 1 from public.evaluation_config_criteria c
+       where c.config_version_id = v_pai and c.organization_id = v_org
+    ) or exists (
+      select 1 from public.evaluation_config_scale_bands b
+       where b.config_version_id = v_pai and b.organization_id = v_org
+    ) or exists (
+      select 1 from public.evaluation_config_participant_roles r
+       where r.config_version_id = v_pai and r.organization_id = v_org
+    ) or exists (
+      select 1 from public.evaluations e
+       where e.config_version_id = v_pai and e.organization_id = v_org
+    ) into v_bloqueado;
+
+  if v_bloqueado then
+    raise exception 'F5-06 D5/D22: item de configuracao publicada/em uso e '
+      'imutavel (crie uma NOVA versao para alterar)';
+  end if;
+
+  return coalesce(new, old);
+end;
+$$;
+
+comment on function public.enforce_evaluation_config_children_imutaveis() is
+  'F5-06 D5/D22: criterios, subcriterios, faixas e papeis de participante de '
+  'uma versao ja materializada/publicada nao podem ser alterados in-place.';
+
+create trigger trg_evaluation_config_criteria_imutavel
+  before update or delete on public.evaluation_config_criteria
+  for each row execute function public.enforce_evaluation_config_children_imutaveis();
+create trigger trg_evaluation_config_subcriteria_imutavel
+  before update or delete on public.evaluation_config_subcriteria
+  for each row execute function public.enforce_evaluation_config_children_imutaveis();
+create trigger trg_evaluation_config_scale_bands_imutavel
+  before update or delete on public.evaluation_config_scale_bands
+  for each row execute function public.enforce_evaluation_config_children_imutaveis();
+create trigger trg_evaluation_config_participant_roles_imutavel
+  before update or delete on public.evaluation_config_participant_roles
+  for each row execute function public.enforce_evaluation_config_children_imutaveis();
+
+-- ----------------------------------------------------------------------------
 -- 13) RLS deny-by-default + least privilege (padrão F4-08/D16)
 -- ----------------------------------------------------------------------------
 alter table public.evaluation_config_versions enable row level security;
@@ -580,7 +702,11 @@ grant insert, update on public.evaluation_config_scale_bands to service_role;
 grant insert, update on public.evaluation_config_participant_roles to service_role;
 grant insert, update on public.evaluation_cycles to service_role;
 grant insert, update on public.evaluations to service_role;
+-- Sem DELETE: avaliacao e decisao auditada (historico preservado).
+revoke delete on public.evaluations from service_role;
 grant insert, update on public.evaluation_participants to service_role;
+-- Sem DELETE: ocorrencias historicas nunca sao apagadas (D23).
+revoke delete on public.evaluation_participants from service_role;
 grant insert, update, delete on public.evaluation_scores to service_role;
 grant insert, update, delete on public.evaluation_comments to service_role;
 grant insert on public.evaluation_events to service_role;
