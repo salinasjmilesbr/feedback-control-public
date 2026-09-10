@@ -185,11 +185,51 @@ export function criarProvidersMundoFuncional(
   }
 
   const ehRaiz = !actor.gestorDiretoMatricula;
-  const scopes: ScopeType[] = ["SELF"];
-  if (meusSubordinados.length > 0) scopes.push("DIRECT_REPORTS");
-  if (meusDescendentes.size > 0) scopes.push("DESCENDANTS");
-  if (ehColegiadoDeAlguem) scopes.push("ASSIGNED");
-  if (ehRaiz) scopes.push("ORGANIZATION");
+  const temSubordinados = meusSubordinados.length > 0;
+  const capsDoAtor = bindings.get(actor.matricula);
+
+  /**
+   * ACHADO 1 (F5-05): os scopes são atribuídos POR CAPABILITY — cada grupo de
+   * binding concede o seu próprio alcance. O provider nunca devolve a união de
+   * scopes de outras capabilities (uma ação não herda o alcance de outra).
+   */
+  function escoposDaCapability(capability: Capability): ScopeType[] {
+    const canonica = canonicalizarCapability(capability);
+    const resultado = new Set<ScopeType>();
+
+    // Fluxos próprios (SELF) — disponíveis a todo colaborador ativo.
+    if (CAPABILIDADES_SELF.includes(canonica)) resultado.add("SELF");
+
+    // Gestão de cadeia (raiz): organização, descendentes e diretos.
+    if (ehRaiz && CAPABILIDADES_GESTAO.includes(canonica)) {
+      resultado.add("SELF");
+      resultado.add("DIRECT_REPORTS");
+      resultado.add("DESCENDANTS");
+      resultado.add("ORGANIZATION");
+    }
+
+    // Coordenação (gestor de 1º nível): equipe direta (e descendentes, quando
+    // houver estrutura abaixo).
+    if (!ehRaiz && temSubordinados && CAPABILIDADES_COORDENACAO.includes(canonica)) {
+      resultado.add("SELF");
+      resultado.add("DIRECT_REPORTS");
+      if (meusDescendentes.size > 0) resultado.add("DESCENDANTS");
+    }
+
+    // Colegiado: somente o avaliado atribuído. A ação de LISTAGEM operacional
+    // (`collaborator.read`) preserva a regra de produto já testada — o painel
+    // da equipe inclui o avaliado atribuído ao colegiado. A atribuição é feita
+    // POR CAPABILITY (nenhuma ação herda o alcance de outra).
+    const capabilityDeListagem = canonica === "collaborator.read";
+    if (
+      ehColegiadoDeAlguem &&
+      (CAPABILIDADES_COLEGIADO.includes(canonica) || capabilityDeListagem)
+    ) {
+      resultado.add("ASSIGNED");
+    }
+
+    return Array.from(resultado);
+  }
 
   return {
     identity: {
@@ -211,7 +251,14 @@ export function criarProvidersMundoFuncional(
       },
     },
     scopes: {
-      getActiveScopes: () => scopes,
+      // Scopes da CAPABILITY avaliada (achado 1 F5-05): sem união global.
+      getActiveScopes: (_id, _org, capability) => {
+        const canonica = canonicalizarCapability(capability);
+        const possui =
+          capsDoAtor?.has(canonica) || CAPABILIDADES_SELF.includes(canonica);
+        if (!possui) return [];
+        return escoposDaCapability(canonica);
+      },
     },
     targets: {
       resolveTargetTenant: (target: TargetRef) => {

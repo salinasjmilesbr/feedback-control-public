@@ -14,16 +14,23 @@ import type { ActorRef } from "./policyEngine/types.ts";
  * CLIENTE NÃO CONFIÁVEL: nenhum deles pode montar/fornecer este contexto como
  * prova de autorização.
  *
- * Marco de soberania: o contexto é marcado com um símbolo PRIVADO do módulo
- * (`MARCA_ATOR_SOBERANO`), criado apenas por `montarActorContext`. Um objeto
- * literal vindo do browser — ainda que estruturalmente idêntico — NÃO passa em
- * `ehActorContextSoberano` e é recusado pelo enforcement.
+ * Guarda ESTRUTURAL intra-runtime: o contexto é marcado com um símbolo privado
+ * do módulo (`MARCA_ATOR_SOBERANO`), criado apenas por `montarActorContext`.
+ * Um objeto literal vindo do browser — ainda que estruturalmente idêntico —
+ * NÃO passa em `ehActorContextSoberano` e é recusado pelo enforcement.
+ *
+ * LIMITE DESTA MARCA: é defesa **estrutural/ergonômica** contra montagem
+ * acidental de contexto no cliente; **não** é prova criptográfica de origem nem
+ * substituto da fronteira de confiança. A verdadeira trust boundary continua
+ * sendo a fronteira server-side (Edge Function / RPC / backend confiável) que
+ * revalida `auth.uid()`/`auth.getUser()`, tenant, membership e recurso por
+ * operação (D20).
  */
 
 const MARCA_ATOR_SOBERANO: unique symbol = Symbol("virtus.f5-05.actorContext.soberano");
 
 export interface ActorContext {
-  /** Marca privada de soberania — ver `ehActorContextSoberano`. */
+  /** Marca estrutural privada (guard intra-runtime) — ver `ehActorContextSoberano`. */
   readonly [MARCA_ATOR_SOBERANO]: true;
   /** Snapshot de identidade (F5-01): authUserId, perfil ativo, memberships ativas. */
   readonly identity: AuthIdentity;
@@ -125,8 +132,11 @@ export function montarActorContext(entrada: EntradaMontagemAtor): ResultadoMonta
 }
 
 /**
- * Guarda de runtime da marca de soberania (D20). Um contexto forjado no browser
- * (objeto literal, cópia, JSON.parse) NÃO é reconhecido.
+ * Guarda ESTRUTURAL de runtime (D20): reconhece o contexto produzido por
+ * `montarActorContext` e recusa objetos forjados no browser (literal, cópia,
+ * `JSON.parse`). É defesa em profundidade **intra-runtime** — NÃO é prova
+ * criptográfica de origem; a autoridade real vem da fronteira server-side que
+ * revalida `auth.uid()`/`auth.getUser()`, tenant, membership e recurso.
  */
 export function ehActorContextSoberano(valor: unknown): valor is ActorContext {
   if (typeof valor !== "object" || valor === null) return false;

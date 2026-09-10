@@ -6,6 +6,7 @@ import {
   autorizarOperacao,
   montarRequisicaoAutorizacao,
   podeOperacao,
+  validarDataNegocio,
   type DepsContextoAutorizacao,
 } from "./contextoAutorizacao";
 import { montarActorContext } from "./actorContext";
@@ -605,7 +606,7 @@ describe("F5-05 — providers reais: isolamento e fail-closed", () => {
     expect(providers.identity.isProfileActive("outro")).toBe(false);
     expect(providers.identity.isMembershipActive(USER, "org-2")).toBe(false);
     expect(providers.capabilities.hasCapability(USER, "org-2", "collaborator.read")).toBe(false);
-    expect(providers.scopes.getActiveScopes("outro", ORG)).toEqual([]);
+    expect(providers.scopes.getActiveScopes("outro", ORG, "collaborator.read")).toEqual([]);
     // tenant de alvo não carregado ⇒ undefined (TARGET_INVALID no engine)
     expect(providers.targets.resolveTargetTenant({ type: "collaborator", id: OUTRO })).toBeUndefined();
   });
@@ -634,5 +635,139 @@ describe("F5-05 — providers reais: isolamento e fail-closed", () => {
       }),
     };
     await expect(avaliarOperacaoAutorizacao(entrada(), d)).rejects.toThrow("banco indisponível");
+  });
+});
+
+describe("F5-05 — achado 1: o scope NÃO vaza entre capabilities (capability × scope)", () => {
+  const alvosSelf: Partial<Record<ScopeType, readonly AlvoEscopoResolvido[]>> = {
+    SELF: [{ collaboratorId: COL, positionId: null }],
+  };
+
+  const capabilitiesMistas: CapabilityComEscopos[] = [
+    capability("collaborator.read", ["SELF"]),
+    capability("collaborator.edit", ["ORGANIZATION"]),
+  ];
+
+  it("provider real devolve scopes POR capability, sem união global", () => {
+    const providers = criarProvidersReais({
+      actorId: USER,
+      collaboratorId: COL,
+      organizationId: ORG,
+      perfilAtivo: true,
+      membershipAtiva: true,
+      capabilities: capabilitiesMistas,
+      escoposResolvidos: [
+        { scope: "SELF", unitId: null, alvos: [{ collaboratorId: COL, positionId: null }] },
+      ],
+      alvo: { type: "collaborator", id: OUTRO },
+      tenantDoAlvo: ORG,
+    });
+
+    expect(providers.scopes.getActiveScopes(USER, ORG, "collaborator.read")).toEqual(["SELF"]);
+    expect(providers.scopes.getActiveScopes(USER, ORG, "collaborator.edit")).toEqual([
+      "ORGANIZATION",
+    ]);
+    // capability sem atribuição de scope ⇒ nenhum alcance (fail-closed)
+    expect(providers.scopes.getActiveScopes(USER, ORG, "report.read")).toEqual([]);
+  });
+
+  it("NEGATIVO: capability com SELF não herda ORGANIZATION de outra capability", async () => {
+    const decisao = await avaliarOperacaoAutorizacao(
+      entrada({ alvo: { type: "collaborator", id: OUTRO } }),
+      deps({ capabilities: capabilitiesMistas, alvos: alvosSelf, recurso: recurso({ id: OUTRO }) })
+    );
+    expect(decisao.allowed).toBe(false);
+    expect(decisao.denial?.reason).toBe("SCOPE_INSUFFICIENT");
+  });
+
+  it("CONTROLE POSITIVO: a capability que possui ORGANIZATION usa o alcance", async () => {
+    const decisao = await avaliarOperacaoAutorizacao(
+      entrada({
+        capability: "collaborator.edit",
+        alvo: { type: "collaborator", id: OUTRO },
+      }),
+      deps({ capabilities: capabilitiesMistas, alvos: alvosSelf, recurso: recurso({ id: OUTRO }) })
+    );
+    expect(decisao.allowed).toBe(true);
+    expect(decisao.diagnostics?.matchedScope).toBe("ORGANIZATION");
+  });
+});
+
+describe("F5-05 — achado 2: data de negócio (ISO via JSON) × instante soberano (D21)", () => {
+  const permitido: Cenario = {
+    capabilities: [capability("collaborator.read", ["SELF"])],
+    alvos: { SELF: [{ collaboratorId: COL, positionId: null }] },
+  };
+
+  it("aceita string ISO válida transportada por JSON (não nega por formato)", async () => {
+    for (const iso of ["2026-02-15", "2026-02-15T13:45:00Z", "2026-02-15 13:45:00"]) {
+      const decisao = await avaliarOperacaoAutorizacao(
+        entrada({ dataNegocio: iso }),
+        deps(permitido)
+      );
+      expect(decisao.allowed).toBe(true);
+    }
+  });
+
+  it("rejeita data de negócio inválida/ambígua ⇒ DENY fail-closed", async () => {
+    const invalidos: unknown[] = [
+      "nao-e-data",
+      "2026-02-30",
+      "2026-13-01",
+      "",
+      "  ",
+      1234567890,
+      1750000000000,
+      true,
+      {},
+      { data: "2026-02-15" },
+      ["2026-02-15"],
+      new Date("invalida"),
+    ];
+    for (const valor of invalidos) {
+      const decisao = await avaliarOperacaoAutorizacao(
+        entrada({ dataNegocio: valor }),
+        deps(permitido)
+      );
+      expect(decisao.allowed).toBe(false);
+      expect(decisao.denial?.reason).toBe("INDETERMINATE");
+    }
+  });
+
+  it("data de negócio NÃO substitui o instante soberano do servidor", async () => {
+    const instante = new Date("2026-03-01T00:00:00Z");
+    let dataDaResolucao: Date | undefined;
+    const d: DepsContextoAutorizacao = {
+      ...deps({ ...permitido, agora: instante }),
+      resolverAlvosEscopo: async ({ data }) => {
+        dataDaResolucao = data;
+        return [{ collaboratorId: COL, positionId: null }];
+      },
+    };
+
+    const decisao = await avaliarOperacaoAutorizacao(
+      entrada({ dataNegocio: "2020-01-01" }),
+      d
+    );
+    expect(decisao.allowed).toBe(true);
+    expect(dataDaResolucao?.toISOString()).toBe(instante.toISOString());
+  });
+
+  it("validarDataNegocio normaliza ISO e recusa formatos ambíguos", () => {
+    expect(validarDataNegocio(undefined)).toBeNull();
+    expect(validarDataNegocio(null)).toBeNull();
+
+    const tipada = new Date("2026-05-05T10:00:00Z");
+    expect(validarDataNegocio(tipada)).toBe(tipada);
+    expect(validarDataNegocio("2026-05-05")?.toISOString()).toBe("2026-05-05T00:00:00.000Z");
+    expect(validarDataNegocio("2026-05-05T10:00:00Z")?.toISOString()).toBe(
+      "2026-05-05T10:00:00.000Z"
+    );
+
+    expect(validarDataNegocio("2026-02-30")).toBeUndefined();
+    expect(validarDataNegocio("")).toBeUndefined();
+    expect(validarDataNegocio(1750000000000)).toBeUndefined();
+    expect(validarDataNegocio({})).toBeUndefined();
+    expect(validarDataNegocio(new Date("x"))).toBeUndefined();
   });
 });

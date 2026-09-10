@@ -109,10 +109,6 @@ function alvoEscopoCorresponde(alvo: AlvoEscopoResolvido, target: TargetRef): bo
 export function criarProvidersReais(dados: DadosProvidersReais): PolicyEngineProviders {
   const { actorId, organizationId } = dados;
 
-  const scopesAtivos: ScopeType[] = Array.from(
-    new Set(dados.capabilities.flatMap((item) => item.scopes))
-  );
-
   return {
     identity: {
       isProfileActive: (id) => id === actorId && dados.perfilAtivo,
@@ -128,8 +124,18 @@ export function criarProvidersReais(dados: DadosProvidersReais): PolicyEnginePro
       },
     },
     scopes: {
-      getActiveScopes: (id, org) =>
-        id === actorId && org === organizationId ? scopesAtivos : [],
+      /**
+       * ACHADO 1 (F5-05): devolve os scopes EXCLUSIVAMENTE da capability
+       * avaliada (F4-02: scope pertence à atribuição da capability). Nunca
+       * devolve a união de scopes das demais capabilities do ator — uma
+       * capability não herda alcance de outra.
+       */
+      getActiveScopes: (id, org, capability) => {
+        if (id !== actorId || org !== organizationId) return [];
+        const item = dados.capabilities.find((c) => c.capability === capability);
+        if (!item) return [];
+        return Array.from(new Set(item.scopes));
+      },
     },
     targets: {
       resolveTargetTenant: (target) =>

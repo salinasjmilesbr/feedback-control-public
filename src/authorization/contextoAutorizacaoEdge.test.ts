@@ -190,14 +190,27 @@ describe("F5-05 — Edge Function da fronteira confiável (D20)", () => {
     expect(corpoInexistente.code).toBe("NOT_FOUND");
   });
 
+  it("data de negócio ISO válida (string JSON) ⇒ não nega por formato (achado 2)", async () => {
+    for (const iso of ["2026-02-15", "2026-02-15T13:45:00Z"]) {
+      const resposta = await avaliarRequisicaoAutorizacao(
+        requisicao({ ...corpoOk, data_negocio: iso }, "Bearer jwt"),
+        deps(cenarioPermitido)
+      );
+      const corpo = (await resposta.json()) as { allowed: boolean; code?: string };
+      expect(corpo.allowed).toBe(true);
+    }
+  });
+
   it("data de negócio inválida ⇒ DENY (validação server-side — D21)", async () => {
-    const resposta = await avaliarRequisicaoAutorizacao(
-      requisicao({ ...corpoOk, data_negocio: "nao-e-data" }, "Bearer jwt"),
-      deps(cenarioPermitido)
-    );
-    const corpo = (await resposta.json()) as { allowed: boolean; code: string };
-    expect(corpo.allowed).toBe(false);
-    expect(corpo.code).toBe("FORBIDDEN");
+    for (const invalida of ["nao-e-data", "2026-02-30", 1750000000000, { d: "2026-02-15" }]) {
+      const resposta = await avaliarRequisicaoAutorizacao(
+        requisicao({ ...corpoOk, data_negocio: invalida }, "Bearer jwt"),
+        deps(cenarioPermitido)
+      );
+      const corpo = (await resposta.json()) as { allowed: boolean; code: string };
+      expect(corpo.allowed).toBe(false);
+      expect(corpo.code).toBe("FORBIDDEN");
+    }
   });
 
   it("resolve a identidade a partir do JWT (o corpo não participa)", async () => {

@@ -98,9 +98,15 @@ export function decidir(
     return negar("TARGET_INCOMPATIBLE");
   }
 
-  // 6) scope membership (pelo menos um ativo com alvo no alcance)
+  // 6) scope DA CAPABILITY avaliada (achado 1 F5-05): o alcance pertence à
+  // capability — o provider recebe a capability e nunca devolve a união de
+  // scopes de outras ações.
   let matchedScope: ScopeType | undefined;
-  const scopes = providers.scopes.getActiveScopes(actor.actorId, actor.organizationId);
+  const scopes = providers.scopes.getActiveScopes(
+    actor.actorId,
+    actor.organizationId,
+    capability
+  );
   if (scopes.length > 0) {
     for (const scope of scopes) {
       if (providers.relations.isTargetInScope(actor.actorId, actor.organizationId, scope, target, context.date, context.cycleId)) {

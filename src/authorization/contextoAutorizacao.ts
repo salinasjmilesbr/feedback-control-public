@@ -59,14 +59,44 @@ function dataValida(valor: unknown): valor is Date {
 }
 
 /**
+ * Formato aceito para a DATA DE NEGÓCIO transportada por JSON (Edge Function):
+ * ISO-8601 (`YYYY-MM-DD` ou `YYYY-MM-DDThh:mm[:ss[.sss]][Z|±hh:mm]`).
+ */
+const FORMATO_DATA_NEGOCIO_ISO =
+  /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
+
+/**
  * Valida a DATA DE NEGÓCIO (intenção funcional enviada pelo cliente — D21).
- * Retorna `null` quando ausente; `undefined` quando presente e inválida
- * (o chamador trata como DENY/erro de validação). NUNCA substitui o instante
- * soberano da decisão.
+ *
+ * - ausente/null ⇒ `null` (sem data de negócio);
+ * - `Date` válido (chamadas internas tipadas) ⇒ `Date`;
+ * - string **ISO válida** (transporte JSON da Edge Function) ⇒ normalizada
+ *   server-side em `Date`;
+ * - string inválida/ambígua, números, booleanos, objetos e arrays ⇒ `undefined`
+ *   (o chamador trata como DENY/validação — fail-closed).
+ *
+ * NUNCA substitui o instante soberano da decisão (`deps.agora()`); serve apenas
+ * como parâmetro funcional validado.
  */
 export function validarDataNegocio(valor: unknown): Date | null | undefined {
   if (valor === undefined || valor === null) return null;
-  return dataValida(valor) ? valor : undefined;
+
+  if (valor instanceof Date) return dataValida(valor) ? valor : undefined;
+
+  if (typeof valor === "string") {
+    const texto = valor.trim();
+    if (!FORMATO_DATA_NEGOCIO_ISO.test(texto)) return undefined;
+    const convertida = new Date(texto);
+    if (!dataValida(convertida)) return undefined;
+    // Data sem hora: recusa "rollover" (ex.: 2026-02-30 ⇒ 2026-03-02).
+    if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) {
+      return convertida.toISOString().slice(0, 10) === texto ? convertida : undefined;
+    }
+    return convertida;
+  }
+
+  // Números, booleanos, objetos, arrays e formatos ambíguos ⇒ DENY.
+  return undefined;
 }
 
 export interface EntradaRequisicaoAutorizacao {
