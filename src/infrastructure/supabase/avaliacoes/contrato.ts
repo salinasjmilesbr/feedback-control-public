@@ -45,6 +45,12 @@ export interface EntradaAvaliacao {
   readonly motivo?: string;
   /** Ciclo pretendido (intenção) na criação da avaliação. */
   readonly cycle_id?: string;
+  /**
+   * Matrícula do colaborador avaliado — usado SOMENTE na criação, para a ponte
+   * matrícula → UUID resolvida na fronteira confiável (F3-01). Continua sendo
+   * INTENÇÃO: o valor autoritativo é o UUID resolvido server-side.
+   */
+  readonly matricula_avaliado?: number | string;
 }
 
 export type CodigoPublico =
@@ -143,6 +149,15 @@ export function validarEntradaAvaliacao(corpo: unknown): ResultadoValidacao {
 
   if (cru.cycle_id !== undefined && cru.cycle_id !== null && !ehUuid(cru.cycle_id)) {
     return { ok: false, code: "INVALID_INPUT", message: "cycle_id inválido." };
+  }
+  // Matrícula é INTENÇÃO (ponte resolvida server-side): aceita número inteiro
+  // positivo ou sua forma textual; qualquer outro valor é recusado.
+  if (cru.matricula_avaliado !== undefined && cru.matricula_avaliado !== null) {
+    const bruto = cru.matricula_avaliado;
+    const texto = typeof bruto === "number" ? String(bruto) : bruto;
+    if (typeof texto !== "string" || !/^\d+$/.test(texto.trim()) || Number(texto.trim()) <= 0) {
+      return { ok: false, code: "INVALID_INPUT", message: "matricula_avaliado inválida." };
+    }
   }
   if (cru.participant_id !== undefined && cru.participant_id !== null && !ehUuid(cru.participant_id)) {
     return { ok: false, code: "INVALID_INPUT", message: "participant_id inválido." };

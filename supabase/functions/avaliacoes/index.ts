@@ -12,6 +12,7 @@ import type { ScopeType } from "../../../src/authorization/policyEngine/types.ts
 import type { RecursoSoberanoCarregado } from "../../../src/authorization/resourceContextReal.ts";
 import { CAPABILITY_POR_OPERACAO } from "../../../src/infrastructure/supabase/avaliacoes/contrato.ts";
 import { carregarAssignedDaOperacao } from "./assignedSupabase.ts";
+import { criarPonteColaborador } from "./ponteColaborador.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -276,10 +277,35 @@ Deno.serve(async (req) => {
         if (!execucao.cycleId) {
           return { error: { code: "INVALID_INPUT", message: "cycle_id obrigatório." } };
         }
+
+        // PONTE matrícula → UUID (F3-01) resolvida AQUI, na fronteira
+        // confiável: a tela legada envia a matrícula como INTENÇÃO e o valor
+        // autoritativo é o UUID resolvido. Sem resolução ⇒ recusa (a tela não
+        // pode inventar identidade, e a criação NUNCA cai para o localStorage).
+        const avaliadoId = execucao.matriculaAvaliado
+          ? await criarPonteColaborador({
+              buscarIdentificadoresPorCodigo: async ({ organizationId, businessCode }) =>
+                admin
+                  .from("collaborator_identifiers")
+                  .select("collaborator_id, organization_id, business_code, valid_to")
+                  .eq("organization_id", organizationId)
+                  .eq("business_code", businessCode),
+            }).resolver({ organizationId: org, matricula: execucao.matriculaAvaliado })
+          : null;
+
+        if (!avaliadoId) {
+          return {
+            error: {
+              code: "INVALID_INPUT",
+              message: "Colaborador avaliado não resolvido para a matrícula informada.",
+            },
+          };
+        }
+
         return admin.rpc("evaluation_criar", {
           p_organization_id: org,
           p_cycle_id: execucao.cycleId,
-          p_evaluated_collaborator_id: execucao.evaluatedCollaboratorId,
+          p_evaluated_collaborator_id: avaliadoId,
           p_actor_user_profile_id: ator,
         });
       }

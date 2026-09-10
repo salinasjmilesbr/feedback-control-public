@@ -223,7 +223,49 @@ describe("fronteira confiÃ¡vel do caminho novo", () => {
     expect(execucao.notas).toHaveLength(1);
   });
 
-  it("mÃ©todo nÃ£o permitido â‡’ 405", async () => {
+  it("matrícula do avaliado é encaminhada como INTENÇÃO (ponte resolvida no Edge)", async () => {
+    const { d, executarRpc } = deps({ rpcData: AVALIACAO });
+    const resposta = await avaliacoes(
+      requisicao(
+        {
+          organization_id: ORG,
+          operacao: "evaluation.criar",
+          alvo: { type: "collaborator", id: COLABORADOR },
+          cycle_id: CICLO,
+          matricula_avaliado: 101,
+        },
+        { Authorization: "Bearer ok" }
+      ),
+      d
+    );
+
+    expect(resposta.status).toBe(200);
+    const execucao = executarRpc.mock.calls[0]![0];
+    expect(execucao.matriculaAvaliado).toBe(101);
+    expect(execucao.cycleId).toBe(CICLO);
+  });
+
+  it("matrícula inválida no corpo ⇒ 400 e nenhuma execução", async () => {
+    const { d, executarRpc } = deps();
+    const resposta = await avaliacoes(
+      requisicao(
+        {
+          organization_id: ORG,
+          operacao: "evaluation.criar",
+          alvo: { type: "collaborator", id: COLABORADOR },
+          cycle_id: CICLO,
+          matricula_avaliado: "abc",
+        },
+        { Authorization: "Bearer ok" }
+      ),
+      d
+    );
+
+    expect(resposta.status).toBe(400);
+    expect(executarRpc).not.toHaveBeenCalled();
+  });
+
+  it("método não permitido ⇒ 405", async () => {
     const { d } = deps();
     const resposta = await avaliacoes(
       new Request("http://localhost/functions/v1/avaliacoes", { method: "GET" }),

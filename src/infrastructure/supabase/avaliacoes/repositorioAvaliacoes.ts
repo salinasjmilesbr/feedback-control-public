@@ -71,6 +71,12 @@ export interface EntradaCriarAvaliacao {
   readonly organizationId: string;
   readonly cycleId: string;
   readonly evaluatedCollaboratorId: string;
+  /**
+   * Matrícula do avaliado (tela legada). Quando presente, a fronteira confiável
+   * resolve a ponte para o UUID (F3-01) — a matrícula é INTENÇÃO, nunca
+   * identidade autoritativa.
+   */
+  readonly matriculaAvaliado?: number | string | null;
 }
 
 export interface EntradaGravarNotas {
@@ -206,10 +212,21 @@ export function criarRepositorioAvaliacoesSupabase(
   return {
     criar: (entrada) =>
       invocar(
-        montarCorpo("evaluation.criar", entrada.organizationId, {
-          type: "collaborator",
-          id: entrada.evaluatedCollaboratorId,
-        }, { cycle_id: entrada.cycleId }),
+        montarCorpo(
+          "evaluation.criar",
+          entrada.organizationId,
+          {
+            type: "collaborator",
+            id: entrada.evaluatedCollaboratorId,
+          },
+          {
+            cycle_id: entrada.cycleId,
+            ...(entrada.matriculaAvaliado === undefined ||
+            entrada.matriculaAvaliado === null
+              ? {}
+              : { matricula_avaliado: entrada.matriculaAvaliado }),
+          }
+        ),
         (resultado) => {
           if (typeof resultado !== "string" || !ehUuid(resultado)) {
             throw new Error("id de avaliação ausente");

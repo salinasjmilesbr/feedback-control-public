@@ -69,6 +69,11 @@ export interface ExecucaoAvaliacao {
   readonly texto: string | null;
   readonly motivo: string | null;
   readonly notas: readonly { readonly subcriterion_id: string; readonly nota: number }[];
+  /**
+   * Matrícula do avaliado (INTENÇÃO da tela legada). A fronteira confiável
+   * resolve para `evaluatedCollaboratorId` (UUID) via F3-01 antes da RPC.
+   */
+  readonly matriculaAvaliado: number | string | null;
   /** `auth.uid()` VERIFICADO server-side — nunca do corpo. */
   readonly actorUserProfileId: string;
 }
@@ -167,6 +172,7 @@ export async function avaliacoes(
     texto: entrada.texto ?? null,
     motivo: entrada.motivo ?? null,
     notas: entrada.notas ?? [],
+    matriculaAvaliado: entrada.matricula_avaliado ?? null,
     actorUserProfileId: callerId,
   });
 
