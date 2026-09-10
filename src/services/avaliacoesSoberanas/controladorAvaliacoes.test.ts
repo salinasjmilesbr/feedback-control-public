@@ -56,6 +56,11 @@ function montar(
     reabrir: async () => ({ ok: true, data: null }),
     cancelar: async () => ({ ok: true, data: null }),
     realinharParticipantes: async () => ({ ok: true, data: 1 }),
+    painelParticipante: async () => ({
+      ok: false,
+      error: { code: "INTERNAL", message: "nao usado neste teste" },
+    }),
+    resolverCiclo: async () => ({ ok: false, error: { code: "INTERNAL", message: "nao usado neste teste" } }),
     transparenciaDoAvaliado: async () => ({
       ok: true,
       data: {

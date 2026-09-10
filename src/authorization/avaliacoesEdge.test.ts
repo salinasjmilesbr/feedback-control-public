@@ -32,6 +32,8 @@ interface Cenario {
   readonly caller?: string | null;
   readonly rpcError?: { code?: string; message?: string } | null;
   readonly rpcData?: unknown;
+  /** Resultado da ponte matrícula → UUID (`null` força a recusa). */
+  readonly matriculaResolvida?: string | null;
 }
 
 function deps(cenario: Cenario = {}) {
@@ -48,6 +50,9 @@ function deps(cenario: Cenario = {}) {
       cenario.caller === undefined ? CALLER : cenario.caller,
     avaliarAutorizacao,
     executarRpc,
+    // Ponte matrícula → UUID na fronteira (o alvo autorizável é o UUID).
+    resolverMatricula: async () =>
+      cenario.matriculaResolvida === undefined ? COLABORADOR : cenario.matriculaResolvida,
   };
   return { d, executarRpc, avaliarAutorizacao };
 }

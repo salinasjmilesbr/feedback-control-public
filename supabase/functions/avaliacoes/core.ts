@@ -74,6 +74,9 @@ export interface ExecucaoAvaliacao {
    * resolve para `evaluatedCollaboratorId` (UUID) via F3-01 antes da RPC.
    */
   readonly matriculaAvaliado: number | string | null;
+  /** Ano/ciclo pretendidos (INTENÇÃO) na resolução do ciclo soberano. */
+  readonly ano: number | null;
+  readonly numero: number | null;
   /** `auth.uid()` VERIFICADO server-side — nunca do corpo. */
   readonly actorUserProfileId: string;
 }
@@ -95,6 +98,16 @@ export interface DepsAvaliacoes {
   }): Promise<{ readonly allowed: boolean; readonly code?: ApplicationErrorCode }>;
   /** Executa a RPC `evaluation_*` com credencial privilegiada e ator verificado. */
   executarRpc(execucao: ExecucaoAvaliacao): Promise<ResultadoRpcAvaliacao>;
+  /**
+   * Resolve a matrícula (INTENÇÃO da tela) para o UUID do colaborador avaliado,
+   * na fronteira confiável (ponte F3-01). Necessária em `criar` e
+   * `resolver_ciclo`, porque o alvo autorizável precisa ser o UUID soberano.
+   * Ausente ⇒ a operação que depende dela é recusada (fail-closed).
+   */
+  resolverMatricula?(
+    matricula: number | string,
+    organizationId: string
+  ): Promise<string | null>;
 }
 
 function codigoPublico(valor: string | undefined): CodigoPublico {
@@ -146,12 +159,36 @@ export async function avaliacoes(
   }
   const entrada: EntradaAvaliacao = validacao.entrada;
 
+  // 2.1) Alvo SOBERANO: quando a tela informa a MATRÍCULA do avaliado (criação e
+  // resolução de ciclo), a fronteira confiável a resolve para o UUID (ponte
+  // F3-01) ANTES do Policy Engine — o alvo autorizável é o colaborador
+  // resolvido, nunca um valor enviado pelo cliente. Sem resolução ⇒ recusa.
+  let alvoDaOperacao = entrada.alvo;
+  const operacaoComMatricula =
+    entrada.operacao === "evaluation.criar" ||
+    entrada.operacao === "evaluation.resolver_ciclo";
+
+  if (operacaoComMatricula && entrada.matricula_avaliado !== undefined && entrada.matricula_avaliado !== null) {
+    const resolvido = await deps.resolverMatricula?.(
+      entrada.matricula_avaliado,
+      entrada.organization_id
+    );
+    if (!resolvido) {
+      return erro(
+        "INVALID_INPUT",
+        "Colaborador avaliado não resolvido para a matrícula informada.",
+        400
+      );
+    }
+    alvoDaOperacao = { type: "collaborator", id: resolvido };
+  }
+
   // 3) Policy Engine (capability × scope × recurso REAL).
   const decisao = await deps.avaliarAutorizacao({
     authUserId: callerId,
     organizationId: entrada.organization_id,
     operacao: entrada.operacao,
-    alvo: entrada.alvo,
+    alvo: alvoDaOperacao,
   });
   if (!decisao.allowed) {
     const code = codigoPublico(decisao.code);
@@ -163,8 +200,8 @@ export async function avaliacoes(
   const resultado = await deps.executarRpc({
     operacao: entrada.operacao,
     organizationId: entrada.organization_id,
-    evaluationId: entrada.alvo.id,
-    evaluatedCollaboratorId: entrada.alvo.id,
+    evaluationId: alvoDaOperacao.id,
+    evaluatedCollaboratorId: alvoDaOperacao.id,
     cycleId: entrada.cycle_id ?? null,
     participantId: entrada.participant_id ?? null,
     escopo: entrada.escopo ?? null,
@@ -173,6 +210,8 @@ export async function avaliacoes(
     motivo: entrada.motivo ?? null,
     notas: entrada.notas ?? [],
     matriculaAvaliado: entrada.matricula_avaliado ?? null,
+    ano: entrada.ano ?? null,
+    numero: entrada.numero ?? null,
     actorUserProfileId: callerId,
   });
 

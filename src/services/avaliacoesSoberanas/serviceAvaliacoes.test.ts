@@ -62,7 +62,14 @@ function repositorioFalso(
     concluir: (entrada) => registrar("concluir", entrada, { ok: true, data: null }),
     reabrir: (entrada) => registrar("reabrir", entrada, { ok: true, data: null }),
     cancelar: (entrada) => registrar("cancelar", entrada, { ok: true, data: null }),
-    realinharParticipantes: (entrada) =>
+    painelParticipante: async () => ({
+      ok: false,
+      error: { code: "INTERNAL" as const, message: "nao usado neste teste" },
+    }),
+    resolverCiclo: async () => ({
+      ok: false,
+      error: { code: "INTERNAL" as const, message: "nao usado neste teste" },
+    }),    realinharParticipantes: (entrada) =>
       registrar("realinharParticipantes", entrada, { ok: true, data: 1 }),
     transparenciaDoAvaliado: (entrada) =>
       registrar("transparenciaDoAvaliado", entrada, {

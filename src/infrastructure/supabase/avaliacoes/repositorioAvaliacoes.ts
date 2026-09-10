@@ -72,9 +72,8 @@ export interface EntradaCriarAvaliacao {
   readonly cycleId: string;
   readonly evaluatedCollaboratorId: string;
   /**
-   * Matrícula do avaliado (tela legada). Quando presente, a fronteira confiável
-   * resolve a ponte para o UUID (F3-01) — a matrícula é INTENÇÃO, nunca
-   * identidade autoritativa.
+   * Matrícula do avaliado (INTENÇÃO da tela): a fronteira confiável resolve a
+   * ponte para o UUID (F3-01) e é ele que prevalece na criação.
    */
   readonly matriculaAvaliado?: number | string | null;
 }
@@ -158,6 +157,22 @@ export interface RepositorioAvaliacoes {
     readonly organizationId: string;
     readonly evaluationId: string;
   }): Promise<ResultadoRepositorio<TransparenciaAvaliado>>;
+  /** Painel de EDIÇÃO da própria ocorrência (decisão 1). */
+  painelParticipante(entrada: {
+    readonly organizationId: string;
+    readonly evaluationId: string;
+  }): Promise<ResultadoRepositorio<PainelParticipante>>;
+  /**
+   * Resolve ano+ciclo (INTENÇÃO) para o UUID soberano do ciclo, dentro do
+   * tenant validado. A matrícula do avaliado acompanha a intenção para que o
+   * Edge resolva o ALVO autorizável (ponte F3-01) antes do Policy Engine.
+   */
+  resolverCiclo(entrada: {
+    readonly organizationId: string;
+    readonly ano: number;
+    readonly numero: number;
+    readonly matriculaAvaliado: number | string;
+  }): Promise<ResultadoRepositorio<string>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -364,6 +379,89 @@ export function criarRepositorioAvaliacoesSupabase(
         }),
         (resultado) => projetarTransparencia(resultado)
       ),
+
+    painelParticipante: (entrada) =>
+      invocar(
+        montarCorpo("evaluation.painel_participante", entrada.organizationId, {
+          type: "evaluation",
+          id: entrada.evaluationId,
+        }),
+        (resultado) => projetarPainel(resultado)
+      ),
+
+    resolverCiclo: (entrada) =>
+      invocar(
+        montarCorpo(
+          "evaluation.resolver_ciclo",
+          entrada.organizationId,
+          // Alvo temporário: o Edge o SUBSTITUI pelo UUID do colaborador
+          // resolvido a partir da matrícula (ponte F3-01) ANTES do Policy
+          // Engine. O cliente nunca fornece o alvo autorizável.
+          { type: "collaborator", id: "00000000-0000-0000-0000-000000000000" },
+          {
+            ano: entrada.ano,
+            numero: entrada.numero,
+            matricula_avaliado: entrada.matriculaAvaliado,
+          }
+        ),
+        (resultado) => projetarCicloResolvido(resultado)
+      ),
+  };
+}
+
+function projetarCicloResolvido(valor: unknown): string {
+  if (typeof valor === "string") return valor;
+  const registro = comoRegistro(valor ?? {});
+  return String(registro.cycle_id ?? "");
+}
+
+function projetarPainel(valor: unknown): PainelParticipante {
+  const registro = comoRegistro(valor);
+  const vigencia = (registro.participante_vigencia ?? {}) as Record<string, unknown>;
+  const lista = <T>(chave: string, mapear: (item: Record<string, unknown>) => T): T[] =>
+    Array.isArray(registro[chave])
+      ? (registro[chave] as Record<string, unknown>[]).map(mapear)
+      : [];
+
+  return {
+    evaluationId: String(registro.evaluation_id),
+    organizationId: String(registro.organization_id),
+    cycleId: String(registro.cycle_id),
+    configVersionId: String(registro.config_version_id),
+    status: String(registro.status),
+    evaluatedCollaboratorId: String(registro.evaluated_collaborator_id),
+    meusPapeis: Array.isArray(registro.meus_papeis)
+      ? (registro.meus_papeis as unknown[]).map(String)
+      : [],
+    participanteOcorrenciaId: String(registro.participante_ocorrencia_id),
+    participanteRoleType: String(registro.participante_role_type),
+    participanteVigencia: {
+      validFrom: String(vigencia.valid_from ?? ""),
+      validTo: typeof vigencia.valid_to === "string" ? vigencia.valid_to : null,
+    },
+    criterios: lista("criterios", (item) => ({
+      code: String(item.code),
+      name: String(item.name),
+      position: Number(item.position),
+    })),
+    subcriterios: lista("subcriterios", (item) => ({
+      code: String(item.code),
+      name: String(item.name),
+      position: Number(item.position),
+      criterionCode: String(item.criterion_code),
+    })),
+    minhasNotas: lista("minhas_notas", (item) => ({
+      subcriterionId: String(item.subcriterion_id),
+      nota: Number(item.nota),
+    })),
+    meusComentarios: lista("meus_comentarios", (item) => ({
+      escopo: String(item.escopo),
+      criterionId: item.criterion_id === null ? null : String(item.criterion_id),
+      texto: String(item.texto),
+    })),
+    papeisComFeedbackFinal: Array.isArray(registro.papeis_com_feedback_final)
+      ? (registro.papeis_com_feedback_final as unknown[]).map(String)
+      : [],
   };
 }
 

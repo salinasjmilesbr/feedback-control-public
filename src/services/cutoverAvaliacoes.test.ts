@@ -68,7 +68,14 @@ function repositorioFalso(): RepositorioAvaliacoes {
     concluir: async () => ({ ok: true, data: null }),
     reabrir: async () => ({ ok: true, data: null }),
     cancelar: async () => ({ ok: true, data: null }),
-    realinharParticipantes: async () => ({ ok: true, data: 0 }),
+    painelParticipante: async () => ({
+      ok: false,
+      error: { code: "INTERNAL" as const, message: "nao usado neste teste" },
+    }),
+    resolverCiclo: async () => ({
+      ok: false,
+      error: { code: "INTERNAL" as const, message: "nao usado neste teste" },
+    }),    realinharParticipantes: async () => ({ ok: true, data: 0 }),
     transparenciaDoAvaliado: async () => ({
       ok: true,
       data: {

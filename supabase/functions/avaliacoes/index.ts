@@ -379,6 +379,28 @@ Deno.serve(async (req) => {
           p_actor_user_profile_id: ator,
         });
       }
+      case "evaluation.resolver_ciclo": {
+        // ano+ciclo (INTENÇÃO) → UUID soberano do ciclo, dentro do tenant. O
+        // alvo já foi resolvido (colaborador avaliado) antes do Policy Engine.
+        if (execucao.ano === null || execucao.numero === null) {
+          return { error: { code: "INVALID_INPUT", message: "ano e numero obrigatórios." } };
+        }
+        return admin.rpc("evaluation_resolver_ciclo", {
+          p_organization_id: org,
+          p_ano: execucao.ano,
+          p_numero: execucao.numero,
+          p_matricula_avaliado: execucao.matriculaAvaliado,
+          p_actor_user_profile_id: ator,
+        });
+      }
+      case "evaluation.painel_participante": {
+        // LEITURA DE EDIÇÃO: a RPC resolve a ocorrência do PRÓPRIO ator pelo
+        // vínculo (F5-02) + vigência; nada de participant_id do cliente.
+        return admin.rpc("evaluation_painel_participante", {
+          p_evaluation_id: avaliacao,
+          p_actor_user_profile_id: ator,
+        });
+      }
       case "evaluation.transparencia": {
         // Projeção server-side do avaliado (D20): a própria RPC restringe a
         // leitura ao colaborador avaliado vinculado ao ator.
@@ -418,6 +440,18 @@ Deno.serve(async (req) => {
     },
 
     executarRpc,
+
+    // Ponte matrícula → UUID (F3-01) na fronteira confiável: o alvo autorizável
+    // de criação/resolução de ciclo é sempre o UUID resolvido server-side.
+    resolverMatricula: async (matricula, organizationId) =>
+      criarPonteColaborador({
+        buscarIdentificadoresPorCodigo: async ({ organizationId: org, businessCode }) =>
+          admin
+            .from("collaborator_identifiers")
+            .select("collaborator_id, organization_id, business_code, valid_to")
+            .eq("organization_id", org)
+            .eq("business_code", businessCode),
+      }).resolver({ organizationId, matricula }),
   };
 
   return avaliacoes(req, deps);
