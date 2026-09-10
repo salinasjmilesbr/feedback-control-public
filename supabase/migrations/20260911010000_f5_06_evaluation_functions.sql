@@ -1453,4 +1453,3 @@ grant execute on function public.evaluation_reabrir(uuid, text, uuid) to service
 grant execute on function public.evaluation_cancelar(uuid, text, uuid) to service_role;
 grant execute on function public.evaluation_fechar_ciclo_pendencias(uuid, uuid, uuid) to service_role;
 grant execute on function public.evaluation_leitura_avaliado(uuid, uuid) to service_role;
-

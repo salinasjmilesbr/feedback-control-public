@@ -38,4 +38,3 @@ export function ProvedorAuthTeste({ children }: { children: ReactNode }) {
     </AuthContext.Provider>
   );
 }
-
