@@ -1,8 +1,8 @@
 # F5-04 — Access roles / capabilities reais (contrato arquitetural e desenho)
 
 > Documento de desenho técnico — **etapa de análise e desenho, sem código funcional**.
-> Estado: **PROPOSTA para revisão** — decisões D1–D13 propostas; questões Q1–Q5
-> registradas para validação (podem permanecer abertas no PR).
+> Estado: **FECHADO — contrato pronto para implementação** (revisão no PR #166).
+> Q1–Q5 **resolvidas** e incorporadas como **D14–D18**; D1–D18 **FECHADAS**.
 >
 > Fase: 5 — Identidade e Multiusuário · Atividade: F5-04 · Issue #165
 > Base: `main` (F5-01, F5-02 e F5-03 concluídas)
@@ -120,8 +120,9 @@ espelham 1:1 o TS (ex.: `collaborator.create/edit` e `cycle.period.correct` não
 existem no DB; `observation.create/edit/delete` vs `observation.write`;
 `membership.*`, `access_role.manage`, `org.*` não existem no TS). Também
 `exceptional_access.grant`/`pilot_full_access.grant` (engine) **não** estão no
-catálogo DB. Sem reconciliação, o provider real do engine não consegue traduzir
-DB→engine de forma segura (false-ALLOW/DENY ou códigos órfãos).
+catálogo DB. **Fechado por D14/D15** (ver §17): o **DB é a fonte canônica** dos
+códigos concedíveis por role, com **convergência controlada DB ↔ engine** e
+teste de paridade.
 
 ---
 
@@ -169,6 +170,7 @@ concedida fora de role (D3 F4-01). Scopes existem por assignment (F4-02).
 | Membership ativa | `user_organization_memberships` | Soberana |
 | Access roles do usuário na org | `membership_access_role_assignments` (active) → `access_roles` | Soberana (servidor) |
 | Capabilities das roles | `access_role_capabilities` → `capabilities` | Soberana (servidor) |
+| Catálogo de códigos concedíveis | **`public.capabilities` (DB)** — espelho TS literal só verifica (D14) | Soberana (servidor) |
 | Scopes por assignment | `access_role_assignment_scopes` (+targets de unidade) | Soberana (servidor) |
 | “Role/capability” informada pelo cliente | payload/JWT/localStorage/React | **Não confiável** (intenção nunca concede) |
 | `actorId`/`organizationId` no engine | Derivado pela camada de aplicação (F5-05) do servidor | Derivada |
@@ -200,12 +202,24 @@ Espelhada por `resolver_capabilities_efetivas` (sem escopo) e por
 `resolver_capabilities_escopos_efetivas` (com escopo) — **chamadas por operação
 no servidor**, sem cache de decisão entre requisições.
 
-### 4.5 Capabilities diretas?
+**Fail-closed do vocabulário (D14):** código de capability **desconhecido/que
+não existe no catálogo DB** ⇒ tratado como **DENY** — **nenhuma tradução
+fuzzy/permissiva** entre DB e engine; a convergência é feita **no catálogo**
+(migration aditiva) e verificada por **teste de paridade**, nunca por mapper em
+runtime.
 
-**Não** (D3 F4-01): capability é sempre herdada de uma access role. A F5-04
-mantém esse contrato; capabilities “extras” só entram via **nova role** ou
-**adição de capability a role existente** (server-side). Não há tabela de
-“capability direta por usuário/membership”.
+### 4.5 Capabilities diretas e plano administrativo
+
+- **Capabilities funcionais:** sempre herdadas de access role (D3 F4-01); não há
+  tabela de “capability direta por usuário/membership”.
+- **Plano funcional × plano administrativo (D15):** capabilities que administram
+  o próprio mecanismo (`membership.manage`, `access_role.manage` e as de C/D —
+  `exceptional_access.grant`, `pilot_full_access.grant`) **não são concedíveis
+  por role auto-servida**: pertencem ao plano administrativo de controle,
+  restritas a caminhos server-side auditados; **prevenção de self-escalation**
+  (quem concede não pode se auto-conceder plano administrativo). `exceptional_
+  access.grant` e `pilot_full_access.grant` ficam **fora do catálogo concedível
+  por role**.
 
 ### 4.6 Interação com scopes
 
@@ -232,7 +246,7 @@ RelationProvider / TargetProvider
 
 Contrato F5-04: fornecer (server-side) o **conjunto efetivo** e a **tradução
 DB→engine** dos códigos; o engine decide. Nenhuma capability/scope chega do
-cliente.
+cliente. Código desconhecido pelo engine ⇒ DENY (D14).
 
 ---
 
@@ -245,22 +259,32 @@ cliente.
 - Resolução sempre por `(user_profile_id, organization_id)` com membership ativa
   — sem vazamento cross-tenant (validado F4-01: usuário sem membership na org
   resolve vazio).
+- Operações administrativas revalidam o **tenant** contra membership ativa do
+  ator (D16); cross-tenant = DENY.
 - RLS mantém as tabelas de autorização **fechadas** a `authenticated` (F4-08);
   nenhuma abertura genérica.
 
 ---
 
-## 6. Revogação e TOCTOU
+## 6. Revogação, TOCTOU e trilha de mutações
 
 - Revogação: `revogar_acesso_role` (status `revoked`, sem delete); desativar a
   **role** (`access_roles.status='disabled'`) ou a **capability**
   (`capabilities.status='disabled'`) ou a **membership** também cortam o efeito,
   porque o resolver reavalia **todos os elos ativos** a cada chamada.
-- **Anti-stale:** nenhum cache de ALLOW entre operações; a decisão do engine e
-  o RLS reavaliam membership/role/capability/scope no momento da operação.
+- **Sem cache de ALLOW entre requisições (D17):** cache no máximo **intra-
+  request**; a decisão do engine e o RLS reavaliam membership/role/capability/
+  scope no momento da operação — **revogação efetiva na operação subsequente**.
   TOCTOU (revogação entre T0 e T2) ⇒ DENY na operação em T2 — mesmo princípio da
   F5-03 (§6).
 - Reativação no lugar (uma linha por par) preserva histórico.
+- **Trilha de mutações (D18):** mutações de privilégio (conceder/revogar
+  atribuições e alterações de role/capability que afetem privilégios) geram
+  registro **append-only** (ou equivalente rastreável) com **autoria soberana**
+  (o ator é derivado de `auth.uid()` e validado server-side), registrando quem
+  mutou, o quê, quando e com qual organização — preservando a trilha existente
+  (`created_by`/`version` já presentes) e evoluindo para tabela de eventos quando
+  o domínio administrativo exigir.
 
 ---
 
@@ -271,7 +295,8 @@ cliente.
   (Q1/Q2 F5-02 e F4-08 preservados).
 - Nenhum `SECURITY DEFINER` novo **sem** necessidade explícita: os DEFINER já
   existentes (conceder/revogar/resolver F4-01) são suficientes; novas funções
-  (se aprovadas em Q1/Q2) seguem o mesmo padrão de grants (service_role).
+  seguem o mesmo padrão de grants (service_role) e são **transacionais/
+  server-side** (D16).
 
 ---
 
@@ -281,14 +306,17 @@ Existentes e reutilizados: `resolver_capabilities_efetivas`,
 `resolver_capabilities_escopos_efetivas`, `conceder_acesso_role`,
 `revogar_acesso_role`, helpers F4-08.
 
-Possíveis acréscimos (condicionados às questões):
-- **Q1:** migration aditiva de **reconciliação de catálogo** (códigos DB =
-  canônicos do engine; deprecação de aliases) e ajuste do espelho TS + teste de
-  paridade DB↔TS.
-- **Q2:** se capabilities de gestão de acesso (ex.: `membership.manage`,
-  `access_role.manage`) e as de C/D (`exceptional_access.grant`,
-  `pilot_full_access.grant`) entrarem no catálogo concedível — decisão e
-  possíveis funções de gestão de role por organização (server-side) e guards.
+Acréscimos (conforme decisões fechadas):
+- **D14:** migration aditiva de **reconciliação de catálogo** (códigos DB =
+  canônicos do engine; deprecação de aliases sem remoção física) + **teste de
+  paridade** DB↔TS.
+- **D15:** **separação do plano administrativo**: capabilities de controle e de
+  C/D fora do concedível por role; funções/guards de gestão restritas a
+  server-side/transacional com validação do ator e anti-self-escalation.
+- **D16:** operações administrativas (conceder/revogar/gerir roles) via RPC/Edge
+  transacional (DEFINER service_role), ator soberano `auth.uid()` + tenant
+  revalidado.
+- **D18:** funções/registro append-only da trilha de mutações de privilégio.
 - Nenhuma função executável pelo frontend.
 
 ---
@@ -299,9 +327,9 @@ Possíveis acréscimos (condicionados às questões):
   de capabilities para UI passa (em F5-05) a ser o resultado **server-side**
   (nunca role/capability em localStorage/estado). Nesta F5-04 não há mudança de
   UI obrigatória.
-- **Backend/Supabase:** a F5-04 consolida a resolução efetiva (DB +
-  contrato) e prevê a migration aditiva de reconciliação do catálogo; mantém o
-  modelo F4-01/02 intacto no que não é defeito.
+- **Backend/Supabase:** a F5-04 consolida a resolução efetiva (DB + contrato) e
+  prevê a migration aditiva de reconciliação do catálogo; mantém o modelo
+  F4-01/02 intacto no que não é defeito.
 
 ---
 
@@ -312,8 +340,10 @@ Possíveis acréscimos (condicionados às questões):
   origem B é alternativa/união na decisão do engine, não “role”.
 - **C** (excepcional): grants por `beneficiaryUserProfileId`; não dependem de
   role; a F5-04 não os altera. C é consultado **somente** quando A/B DENY e o
-  alvo é confidencial (contrato F4-06).
-- **D** (pilot): dev-only, perfil fechado; não vira role.
+  alvo é confidencial (contrato F4-06). `exceptional_access.grant` (gestão de C)
+  fica **fora do catálogo concedível por role** (D15).
+- **D** (pilot): dev-only, perfil fechado; não vira role;
+  `pilot_full_access.grant` fica **fora do catálogo concedível por role** (D15).
 - A F5-04 apenas garante que a origem **A** (membership→role→capability) seja a
   fonte real e que C/D continuem **independentes** e com seus guards.
 
@@ -322,7 +352,8 @@ Possíveis acréscimos (condicionados às questões):
 ## 11. Limites F5-04 × F5-05
 
 - **F5-04:** contrato da resolução efetiva de roles/capabilities/scopes por
-  membership/org; catálogo reconciliado; invariantes; testes; server-side.
+  membership/org; catálogo reconciliado; invariantes; plano administrativo
+  separado; testes; server-side.
 - **F5-05:** montar `ActorContext`/`ResourceContext` — instanciar o provider
   real no engine com `actorId=auth.uid()` + org validada + vínculo, carregar
   recursos por tenant e alimentar `authorize()/can()` reais. **Não antecipar.**
@@ -331,44 +362,63 @@ Possíveis acréscimos (condicionados às questões):
 
 ## 12. Estratégia de implementação futura (pós-aprovação)
 
-1. Reconciliação de catálogo (Q1) com migration aditiva + espelho TS + teste de
-   paridade.
-2. Ajuste (se necessário) dos validadores F4-01/F4-02 para o novo catálogo
-   (contagens/bundles) sem reescrever o contrato.
-3. Definição/implementação de quaisquer funções server-side novas (Q2/Q3).
-4. Testes de contrato (seção 14) via `supabase/validacao`.
-5. F5-05 consome o resultado.
+1. **D14 — Reconciliação de catálogo:** migration aditiva alinhando o catálogo DB
+   ao vocabulário canônico do engine; espelho TS literal; **teste de paridade**
+   (DB↔TS) em CI; ajuste aditivo dos validadores F4-01/F4-02 (contagens/bundles).
+2. **D15 — Plano administrativo separado:** definir/implementar restrições para
+   capabilities de controle e C/D fora do concedível por role; guards de
+   anti-self-escalation.
+3. **D16 — Operações administrativas server-side/transacionais:** RPC/Edge com
+   ator soberano `auth.uid()` + tenant revalidado, sobre as funções DEFINER
+   existentes.
+4. **D17 — Política de cache:** nenhum cache de ALLOW entre requisições.
+5. **D18 — Trilha append-only** de mutações de privilégio com autoria soberana.
+6. Testes do contrato (seção 14) via `supabase/validacao` + TS.
+7. F5-05 consome o resultado.
 
 ---
 
-## 13. Critérios de aceite (propostos)
+## 13. Critérios de aceite
 
 1. Resolução efetiva por `(auth.uid, org validada)` derivada somente do banco
-   (membership → role → capability → scope), fail-closed e sem cache entre
-   operações.
-2. Catálogo DB ↔ vocabulário TS do engine reconciliados (sem códigos órfãos);
-   teste de paridade.
-3. Múltiplas roles ⇒ união; sem role ⇒ vazio; membership/perfil/role/capability
-   desabilitados ⇒ vazio.
-4. Cross-tenant impossível (roles/atribuições/resolução); nenhuma superfície nova
+   (membership → role → capability → scope), fail-closed e sem cache de ALLOW
+   entre requisições (D17).
+2. **DB é a fonte canônica dos códigos concedíveis por role (D14)**; convergência
+   controlada DB↔engine com **migration aditiva** e **teste automatizado de
+   paridade**; **código desconhecido ⇒ DENY** (fail-closed); **sem tradução
+   fuzzy/permissiva** em runtime.
+3. **Plano funcional de roles separado do plano administrativo de controle
+   (D15)**; `exceptional_access.grant` e `pilot_full_access.grant` **fora do
+   catálogo concedível por role**; **prevenção de self-escalation**.
+4. **Operações administrativas exclusivamente server-side/transacionais (D16)**;
+   ator soberano derivado de `auth.uid()`; **tenant revalidado** contra
+   membership ativa; **cross-tenant DENY**.
+5. Múltiplas roles ⇒ união; sem role ⇒ vazio; membership/perfil/role/capability
+   desabilitados ⇒ vazio; **revogação efetiva na operação subsequente**.
+6. **Trilha append-only/equivalente** para mutações de privilégio, com autoria
+   soberana (D18).
+7. Cross-tenant impossível (roles/atribuições/resolução); nenhuma superfície nova
    a `authenticated`; nenhum `SECURITY DEFINER` novo desnecessário.
-5. ADMIN sem collaborator resolve capabilities org-scoped; scopes estruturais
+8. ADMIN sem collaborator resolve capabilities org-scoped; scopes estruturais
    vazios; ADMIN não lê confidencial (bundle sem conteúdo).
-6. Revogação/desativação ⇒ efeito imediato na próxima operação (sem stale);
-   TOCTOU coberto.
-7. F4-05/06/07 e F5-01/02/03 preservados.
+9. F4-05/06/07 e F5-01/02/03 preservados.
 
 ---
 
-## 14. Estratégia de testes (proposta)
+## 14. Estratégia de testes
 
 - **SQL (`supabase/validacao`):** reexecutar/estender F4-01/F4-02 (união de
-  roles, revogação, reativação, lifecycle, cross-tenant, RLS fechado) e cenários
-  novos: reconhecimento do catálogo reconciliado; nenhum código órfão.
-- **TS:** teste de **paridade DB↔TS** (conjunto de códigos do espelho == união
-  canônica do engine); providers reais (F5-05) apenas tipados nesta fase.
+  roles, revogação, reativação, lifecycle, cross-tenant, RLS fechado) + cenários
+  novos: catálogo reconciliado sem códigos órfãos; concessão de capability de
+  controle/C-D **fora do concedível** ⇒ negada; self-escalation ⇒ negada;
+  operação administrativa cross-tenant ⇒ negada; trilha append-only registrada
+  com autoria.
+- **TS:** **teste de paridade DB↔TS** (conjunto de códigos do catálogo DB ==
+  união canônica do engine); teste de **código desconhecido ⇒ DENY** (provider
+  real tipado em F5-05); regressão F4/F5-01..03.
 - **Segurança:** spoofing de role/capability pelo cliente ⇒ sem efeito; payload
-  com capability extra ⇒ DENY; IDOR cross-tenant; revogação mid-session ⇒ DENY.
+  com capability extra/desconhecida ⇒ DENY; IDOR cross-tenant; revogação
+  mid-session ⇒ DENY na operação seguinte.
 
 ---
 
@@ -376,11 +426,12 @@ Possíveis acréscimos (condicionados às questões):
 
 | Risco | Mitigação |
 | --- | --- |
-| Divergência de catálogo DB×TS causando false-ALLOW/DENY | Q1: reconciliação + teste de paridade |
-| Capabilities de gestão de acesso viram privilégio | Q2: restrição (system-only) + least privilege |
-| Stale após revogação | Reavaliação por operação; sem cache de ALLOW |
-| C/D “misturados” a roles | Origem C/D permanece independente (F4-06/07) |
+| Divergência de catálogo DB×TS causando false-ALLOW/DENY | D14: reconciliação + teste de paridade; desconhecido ⇒ DENY |
+| Capabilities de gestão/controle viram privilégio auto-servido | D15: plano administrativo separado; C/D fora do concedível; anti-self-escalation |
+| Stale após revogação | D17: sem cache de ALLOW entre requisições; revogação na operação seguinte |
+| C/D “misturados” a roles | D15/D12: origens C/D independentes (F4-06/07) e fora do concedível |
 | Frontend confiando em role/capability local | Nunca; só UX (`can`) com fonte server-side (F5-05) |
+| Auditoria insuficiente de mutações | D18: trilha append-only com autoria soberana |
 | Regressão de fixtures/validadores F4 | Ajuste aditivo de validadores, sem reescrever contrato |
 
 ---
@@ -395,132 +446,113 @@ Possíveis acréscimos (condicionados às questões):
 
 ---
 
-## 17. Decisões arquiteturais (D1–D13 — PROPOSTAS)
+## 17. Decisões arquiteturais (D1–D18 — FECHADAS)
 
 | # | Decisão | Conteúdo | Status |
 | --- | --- | --- | --- |
-| D1 | Role = única via de capability | Mantém D3 F4-01: nenhuma capability direta por usuário/membership; novas capabilities entram por role | PROPOSTA |
-| D2 | Fonte soberana de privilégios | `(auth.uid, org validada)` → membership → assignments → roles → capabilities (+scopes), resolvido no servidor; nunca do cliente/JWT/localStorage/estado | PROPOSTA |
-| D3 | Múltiplas roles = união | 0..N roles por membership; capabilities efetivas = união das roles ativas (F4-01) | PROPOSTA |
-| D4 | Scope acompanha assignment | Par (capability, scope) efetivo vem da F4-02 por (user_profile, org); scopes estruturais exigem vínculo (D17 F4-02) | PROPOSTA |
-| D5 | Engine consumidor final | Providers reais (F5-05) usam `resolver_capabilities_efetivas`/`resolver_capabilities_escopos_efetivas`; engine decide | PROPOSTA |
-| D6 | Catálogo DB = fonte dos códigos concedíveis | TS mantém união literal espelhando o DB; teste de paridade; reconciliação via migration aditiva (Q1) | PROPOSTA (depende Q1) |
-| D7 | Sem capability direta e sem role fantasma por cargo | Nenhuma role/capability derivada de job_role/função; ADMIN é role de sistema atribuível por membership | PROPOSTA |
-| D8 | Revogação por estado, efeito imediato | `revoked`/`disabled` cortam o efeito na próxima operação; reativação no lugar; sem cache de ALLOW (TOCTOU) | PROPOSTA |
-| D9 | Isolamento por organização | Roles customizadas org-scoped; atribuição com tenant por FK/trigger; resolução por org validada; cross-tenant DENY | PROPOSTA |
-| D10 | Nenhuma superfície nova a authenticated | Tabelas fechadas; resolvers sem `EXECUTE` p/ `authenticated`; DEFINER novos só com necessidade explícita (Q2) | PROPOSTA |
-| D11 | ADMIN sem colaborador | Roles/capabilities org-scoped resolvem; scopes estruturais vazios; ADMIN sem conteúdo confidencial | PROPOSTA |
-| D12 | C/D/B independentes de role | Substituição temporária, acesso excepcional e pilot continuam origens próprias no engine (F4-05/06/07) | PROPOSTA |
-| D13 | Limite F5-04 × F5-05 | F5-04 fecha o contrato de privilégios efetivos; ActorContext/ResourceContext é F5-05 | PROPOSTA |
+| D1 | Role = única via de capability | Mantém D3 F4-01: nenhuma capability direta por usuário/membership; novas capabilities entram por role | FECHADA |
+| D2 | Fonte soberana de privilégios | `(auth.uid, org validada)` → membership → assignments → roles → capabilities (+scopes), resolvido no servidor; nunca do cliente/JWT/localStorage/estado | FECHADA |
+| D3 | Múltiplas roles = união | 0..N roles por membership; capabilities efetivas = união das roles ativas (F4-01) | FECHADA |
+| D4 | Scope acompanha assignment | Par (capability, scope) efetivo vem da F4-02 por (user_profile, org); scopes estruturais exigem vínculo (D17 F4-02) | FECHADA |
+| D5 | Engine consumidor final | Providers reais (F5-05) usam `resolver_capabilities_efetivas`/`resolver_capabilities_escopos_efetivas`; engine decide | FECHADA |
+| D6 | Catálogo DB = fonte dos códigos concedíveis | TS mantém união literal espelhando o DB; teste de paridade; reconciliação via migration aditiva (detalhe em D14) | FECHADA |
+| D7 | Sem capability direta e sem role fantasma por cargo | Nenhuma role/capability derivada de job_role/função; ADMIN é role de sistema atribuível por membership | FECHADA |
+| D8 | Revogação por estado, efeito imediato | `revoked`/`disabled` cortam o efeito na próxima operação; reativação no lugar; sem cache de ALLOW (D17) | FECHADA |
+| D9 | Isolamento por organização | Roles customizadas org-scoped; atribuição com tenant por FK/trigger; resolução por org validada; cross-tenant DENY | FECHADA |
+| D10 | Nenhuma superfície nova a authenticated | Tabelas fechadas; resolvers sem `EXECUTE` p/ `authenticated`; DEFINER novos só com necessidade explícita | FECHADA |
+| D11 | ADMIN sem colaborador | Roles/capabilities org-scoped resolvem; scopes estruturais vazios; ADMIN sem conteúdo confidencial | FECHADA |
+| D12 | C/D/B independentes de role | Substituição temporária, acesso excepcional e pilot continuam origens próprias no engine (F4-05/06/07) | FECHADA |
+| D13 | Limite F5-04 × F5-05 | F5-04 fecha o contrato de privilégios efetivos; ActorContext/ResourceContext é F5-05 | FECHADA |
+| D14 | Catálogo canônico = DB; convergência controlada (resolve Q1) | DB é a **fonte canônica** dos códigos concedíveis por role; espelho TS literal + **teste automatizado de paridade**; **migration aditiva**; **código desconhecido ⇒ DENY (fail-closed)**; **sem tradução fuzzy/permissiva** em runtime | FECHADA |
+| D15 | Plano funcional × plano administrativo (resolve Q2) | Capabilities funcionais por role; capabilities de **controle** (`membership.manage`, `access_role.manage`) e **C/D** (`exceptional_access.grant`, `pilot_full_access.grant`) **fora do catálogo concedível por role**; **prevenção de self-escalation** | FECHADA |
+| D16 | Operações administrativas server-side/transacionais (resolve Q3) | Conceder/revogar/gerir roles via RPC/Edge transacional (DEFINER service_role); **ator soberano derivado de auth.uid()**; **tenant revalidado** contra membership ativa; **cross-tenant DENY** | FECHADA |
+| D17 | Sem cache de ALLOW entre requisições (resolve Q4) | Cache no máx. intra-request; **revogação efetiva na operação subsequente** (TOCTOU) | FECHADA |
+| D18 | Trilha append-only de mutações de privilégio (resolve Q5) | Mutações de privilégio geram registro **append-only/equivalente** com **autoria soberana** (ator `auth.uid()` validado server-side) | FECHADA |
 
 ---
 
-## 18. Questões para validação
+## 18. Questões para validação (Q1–Q5 — FECHADAS/APROVADAS)
 
-### Q1 — Reconciliação do catálogo DB × vocabulário canônico do engine
+Rastreabilidade: cada questão foi **resolvida** na revisão (PR #166) e incorporada
+como **decisão fechada (D14–D18)**. Mantidas abaixo apenas para rastreamento.
 
-- **Contexto:** o engine (F4-09 §6.3) decide sobre o vocabulário TS canônico
-  (`src/authorization/Capability.ts`), mas as roles no banco concedem códigos do
-  catálogo DB (F4-01, 21 códigos) que **não espelham 1:1** o TS (ex.:
-  `collaborator.create/edit` e `cycle.period.correct` ausentes no DB;
-  `observation.write` vs `observation.create/edit/delete`; `membership.*`,
-  `access_role.manage`, `org.*` ausentes no TS; `exceptional_access.grant`/
-  `pilot_full_access.grant` ausentes no DB).
-- **Problema:** sem alinhamento, o provider real DB→engine não consegue
-  traduzir de forma segura → false-ALLOW/DENY ou códigos órfãos.
-- **Alternativas:**
-  - (A) **DB = fonte**: migration aditiva adiciona ao catálogo os códigos
-    canônicos ausentes (e deprecia/mantém os existentes), e o TS mantém união
-    literal + lista-espelho com **teste de paridade** (DB↔TS) — recomendada;
-  - (B) renomear códigos do DB para bater com o TS (mais invasivo; exige
-    atualização de fixtures/validadores/seed);
-  - (C) tradução runtime DB→TS em um mapper (tabela de equivalência) — frágil,
-    duplica verdade.
-- **Recomendação:** (A) — fonte única no DB; espelho TS verificável; aliases
-  legados só para regressão.
-- **Impacto/risco:** migration aditiva + ajuste de validadores F4-01 (contagem de
-  capabilities/bundle admin) e de testes TS; baixo se aditivo.
-- **Seções dependentes:** 2.4, 4.4, 8, 12, 14, D6.
+### Q1 — Reconciliação do catálogo DB × vocabulário canônico do engine — **FECHADA (resolvida por D14)**
 
-### Q2 — Capabilities de gestão de acesso e de C/D no catálogo concedível?
+- **Contexto:** o engine decide sobre o vocabulário TS canônico, mas as roles no
+  banco concedem códigos do catálogo DB que não espelham 1:1 o TS.
+- **Problema:** sem alinhamento, o provider real DB→engine não traduz de forma
+  segura.
+- **Alternativas:** (A) DB = fonte + migration aditiva + espelho TS + teste de
+  paridade; (B) renomear códigos DB; (C) mapper de equivalência em runtime.
+- **Decisão (A — D14):** DB como fonte canônica; convergência controlada DB↔engine;
+  migration aditiva; teste automatizado de paridade; código desconhecido ⇒ DENY;
+  sem tradução fuzzy/permissiva.
+- **Impacto/risco:** migration aditiva + ajuste de validadores; baixo se aditivo.
+- **Seções dependentes:** 2.4, 4.4, 8, 12, 14, D6, D14.
 
-- **Contexto:** o catálogo DB contém `membership.manage`, `access_role.manage`
-  (gestão de acesso) e o engine usa `exceptional_access.grant`,
-  `pilot_full_access.grant` (gestão de C/D) — estes últimos **não** existem no
-  DB.
-- **Problema:** se concedíveis por roles customizadas/org, criam vetor de
-  **privilege escalation** (quem gerencia roles concede a si mesmo mais roles) e
-  podem expor C/D de forma indevida.
-- **Alternativas:**
-  - (A) capabilities de **gestão de acesso** e de **C/D** ficam **fora do
-    catálogo concedível por role** (ou restritas a roles de sistema/allowlist
-    server-side explícita) — recomendada (least privilege);
-  - (B) concedíveis por role, com auditoria e restrições adicionais.
-- **Recomendação:** (A) — restringir a concessão de “meta-capabilities” de
-  acesso a caminhos administrativos auditados (allowlist/funções DEFINER já
-  existentes), nunca a roles auto-servidas.
-- **Impacto/risco:** define limites da “gestão de acesso” (Q3); evita
-  escalation; pode exigir migration para separar meta-capabilities.
-- **Seções dependentes:** 2.4, 4.5, 8, 10, D10, Q3.
+### Q2 — Capabilities de gestão de acesso e de C/D no catálogo concedível? — **FECHADA (resolvida por D15)**
 
-### Q3 — Fluxo administrativo de concessão/revogação por organização (quem administra roles)
+- **Contexto:** catálogo contém `membership.manage`/`access_role.manage`; engine
+  usa `exceptional_access.grant`/`pilot_full_access.grant`, ausentes no DB.
+- **Problema:** risco de privilege escalation e exposição de C/D.
+- **Alternativas:** (A) fora do concedível por role (controle restrito server-
+  side); (B) concedíveis por role com auditoria.
+- **Decisão (A — D15):** separação entre plano funcional de roles e plano
+  administrativo de controle; C/D fora do catálogo concedível por role;
+  prevenção de self-escalation.
+- **Impacto/risco:** limita a gestão de acesso a caminhos auditados; evita
+  escalation.
+- **Seções dependentes:** 4.5, 8, 10, D10, D15, Q3.
+
+### Q3 — Fluxo administrativo de concessão/revogação por organização — **FECHADA (resolvida por D16)**
 
 - **Contexto:** `conceder_acesso_role`/`revogar_acesso_role` são DEFINER
-  service_role; a autorização administrativa atual é provisória (allowlist em
-  Edge F2-06/07); não há UI de gestão de roles.
-- **Problema:** F5-04 precisa definir **quem** pode atribuir roles em uma
-  organização e por qual caminho, sem abrir DML/execução a `authenticated`.
-- **Alternativas:**
-  - (A) caminho server-side transacional (Edge Function/RPC) que valida
-    `membership.manage`/`access_role.manage` do ator (resolvido server-side)
-    antes de chamar as funções DEFINER — recomendada;
-  - (B) manter apenas service_role/tooling interno nesta fase (gestão de roles
-    fora do produto até F5 posterior).
-- **Recomendação:** (A) desenhada, implementada com capacidade de gestão
-  restrita (Q2) e auditoria (`created_by` já existe).
-- **Impacto/risco:** superfície administrativa nova; mitigada por grants
-  service_role + validação server-side.
-- **Seções dependentes:** 4.3, 8, 12, D8/D9/D10, Q2.
+  service_role; autorização administrativa atual provisória (allowlist); sem UI.
+- **Problema:** definir quem atribui roles e por qual caminho.
+- **Alternativas:** (A) RPC/Edge transacional validando o ator e a capacidade de
+  gestão restrita (server-side); (B) apenas service_role/tooling nesta fase.
+- **Decisão (A — D16):** operações administrativas **exclusivamente
+  server-side/transacionais**; ator soberano derivado de `auth.uid()`; tenant
+  revalidado; cross-tenant DENY.
+- **Impacto/risco:** superfície nova mitigada por grants service_role + validação
+  server-side + auditoria (D18).
+- **Seções dependentes:** 4.3, 8, 12, D8/D9/D10/D16, Q2.
 
-### Q4 — Cache intra-requisição de capabilities/roles: permitido?
+### Q4 — Cache intra-requisição de capabilities/roles — **FECHADA (resolvida por D17)**
 
-- **Contexto:** o resolver é chamado por operação; caro para consultas
-  frequentes; um cache mal feito geraria stale.
-- **Problema:** decidir onde (se) cachear sem violar revogação/TOCTOU.
-- **Alternativas:**
-  - (A) **sem cache entre requisições**; no máximo cache **dentro da mesma
-    requisição/transação** (igual para todas as chamadas do engine naquele
-    request) — recomendada;
-  - (B) cache com TTL curto — rejeitada (janela de stale).
-- **Recomendação:** (A).
+- **Contexto:** resolver chamado por operação; cache mal feito geraria stale.
+- **Problema:** decidir onde cachear sem violar revogação/TOCTOU.
+- **Alternativas:** (A) sem cache entre requisições (no máx. intra-request);
+  (B) cache com TTL curto.
+- **Decisão (A — D17):** sem cache de ALLOW entre requisições; revogação efetiva
+  na operação subsequente.
 - **Impacto/risco:** custo de resolução por operação; aceitável (queries
   indexadas).
-- **Seções dependentes:** 6, 13, D8.
+- **Seções dependentes:** 6, 13, D8, D17.
 
-### Q5 — Como o `created_by`/auditoria de atribuições deve evoluir (rastreabilidade completa)?
+### Q5 — Auditoria/rastreabilidade de mutações de privilégio — **FECHADA (resolvida por D18)**
 
-- **Contexto:** atribuições têm `created_by` mínimo (D13 F4-01) e
-  `updated_at/version`; não há histórico por evento de concessão/revogação.
-- **Problema:** produto pode exigir trilha de auditoria completa de quem
-  concedeu/revogou e quando.
-- **Alternativas:**
-  - (A) manter mínimo nesta fase (atributo/autor + timestamps bastam) —
-    recomendada; histórico por eventos quando o domínio de gestão de acesso
-    existir;
-  - (B) criar tabela de eventos de atribuição (append-only) agora.
-- **Recomendação:** (A) — sem nova tabela nesta F5-04; requisito registrado.
-- **Impacto/risco:** rastreabilidade limitada à linha; aceitável enquanto a
-  gestão de acesso é restrita (Q2/Q3).
-- **Seções dependentes:** 4.3, 8, D8.
+- **Contexto:** atribuições têm `created_by`/`version`; não há histórico por
+  evento.
+- **Problema:** trilha completa de quem concedeu/revogou.
+- **Alternativas:** (A) manter mínimo nesta fase; (B) tabela de eventos
+  append-only agora.
+- **Decisão (B — D18):** trilha **append-only/equivalente** para mutações de
+  privilégio, com **autoria soberana**; evolução para tabela de eventos quando o
+  domínio administrativo exigir.
+- **Impacto/risco:** novo artefato de auditoria (design); sem abrir superfície a
+  `authenticated`.
+- **Seções dependentes:** 4.3, 6, 8, 13, 14, D18.
 
 ---
 
 ## 19. Confirmações desta atividade
 
-- Nenhuma implementação funcional; **somente** este documento.
-- Análise baseada no estado real: migrations F4-01/F4-02 e catálogo de sistema,
-  validadores `02-validar-f4-01.sql`, `mundoFuncional.ts` (binding DEV
-  transitório), `Capability.ts`/`canonical.ts` e o grep de ausência de consumo
-  TS dos resolvers DB.
-- Decisões D1–D13 **propostas**; questões Q1–Q5 registradas (podem permanecer
-  abertas no PR). **Não implementar enquanto houver decisão aberta.**
+- Nenhuma implementação funcional; **somente** este documento (atualização na
+  mesma branch/PR #166).
+- Q1–Q5 **FECHADAS/APROVADAS** e incorporadas como **D14–D18** (rastreabilidade
+  explícita na §18); nenhuma questão arquitetural permanece aberta.
+- D1–D18 **FECHADAS**; estado “PROPOSTA” removido; critérios de aceite e
+  estratégia de testes atualizados conforme a revisão.
+- Contratos F4 e F5 anteriores **preservados**; F5-05 **não antecipada**.
+- Próximo passo: implementação da F5-04 em PR próprio, seguindo D1–D18.
