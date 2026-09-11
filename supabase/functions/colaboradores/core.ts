@@ -144,6 +144,12 @@ export interface ContextoAtorColaborador {
   readonly referenceCycleId: string | null;
   /** UUID soberano do colaborador alvo (quando a operação tem alvo). */
   readonly collaboratorId: string | null;
+  /**
+   * UUID do colaborador VINCULADO ao ator (F5-02) na organização revalidada —
+   * âncora autorizável das operações sem alvo explícito (criar/listar).
+   * null ⇒ ator sem vínculo: a operação funcional sem alvo é negada.
+   */
+  readonly atorCollaboratorId: string | null;
   /** Matrícula resolvida (quando a tela informou matrícula como intenção). */
   readonly matriculaResolvida: string | null;
 }
@@ -206,6 +212,17 @@ export interface DepsColaboradores {
     readonly organizationId: string;
     readonly matricula: string;
   }): Promise<string | null>;
+  /**
+   * Vínculo soberano do ATOR (F5-02): (authUserId, organizationId) → colaborador.
+   * É a ÂNCORA autorizável das operações FUNCIONAIS sem alvo explícito
+   * (collaborator.criar, collaborator.listar): um colaborador REAL do tenant,
+   * resolvido server-side — nunca UUID neutro, nunca id do cliente e nunca uma
+   * linha fictícia. Sem vínculo ⇒ null ⇒ o gate nega (fail-closed).
+   */
+  resolverColaboradorVinculado(
+    authUserId: string,
+    organizationId: string
+  ): Promise<string | null>;
   /** Gate FUNCIONAL: Policy Engine com ActorContext/ResourceContext reais. */
   avaliarAutorizacao(entrada: {
     readonly actorUserProfileId: string;
@@ -349,8 +366,12 @@ export async function resolverContextoAtor(
     return { ok: false, code: "FORBIDDEN" };
   }
 
+  // A matrícula é IDENTIDADE apenas quando a operação endereça um colaborador
+  // EXISTENTE. Em collaborator.criar ela é DADO A CRIAR: resolvê-la devolveria
+  // null (ainda não existe) e a criação terminaria em NOT_FOUND ANTES do gate.
+  // Na criação a matrícula segue para a RPC apenas como DADO (p_matricula).
   let collaboratorId: string | null = null;
-  if (intencao.matricula !== null) {
+  if (operacaoTemAlvo(intencao.operacao) && intencao.matricula !== null) {
     // Matrícula → UUID na fronteira: ambígua/ausente ⇒ não encontrado.
     const resolvido = await deps.resolverMatricula({
       actorUserProfileId: authUserId,
@@ -375,6 +396,17 @@ export async function resolverContextoAtor(
     if (!pertence) return { ok: false, code: "NOT_FOUND" };
   }
 
+  /**
+   * Âncora soberana das operações FUNCIONAIS sem alvo explícito (criar/listar):
+   * o PRÓPRIO colaborador vinculado do ator (F5-02), resolvido server-side na
+   * organização JÁ revalidada. Nunca vem do corpo, nunca é UUID neutro e não
+   * cria linha fictícia. Sem vínculo ⇒ null.
+   */
+  const atorCollaboratorId =
+    ehOperacaoFuncional(intencao.operacao) && !operacaoTemAlvo(intencao.operacao)
+      ? await deps.resolverColaboradorVinculado(authUserId, intencao.organizationId)
+      : null;
+
   return {
     ok: true,
     contexto: {
@@ -385,6 +417,7 @@ export async function resolverContextoAtor(
       dataReferencia: intencao.dataReferencia,
       referenceCycleId: intencao.referenceCycleId,
       collaboratorId,
+      atorCollaboratorId,
       matriculaResolvida: intencao.matricula === null ? null : collaboratorId,
     },
   };
@@ -399,9 +432,19 @@ export async function resolverContextoAtor(
  * conhecido ANTES da RPC: o alvo neutro é NEGADO pelo engine caso o recurso não
  * exista (fail-closed) — o cliente nunca fornece o alvo autorizável.
  */
-export function alvoDaDecisao(entrada: EntradaColaborador, contexto: ContextoAtorColaborador): string {
+export function alvoDaDecisao(
+  entrada: EntradaColaborador,
+  contexto: ContextoAtorColaborador
+): string | null {
   if ("alvo" in entrada && entrada.alvo.id !== ID_NEUTRO) return entrada.alvo.id;
-  return contexto.collaboratorId ?? ID_NEUTRO;
+  // Operação que endereça um colaborador EXISTENTE: o alvo é o UUID resolvido
+  // na fronteira (matrícula como INTENÇÃO ou id informado).
+  if (contexto.collaboratorId) return contexto.collaboratorId;
+  // Sem alvo explícito (criar/listar): a âncora é o colaborador VINCULADO do
+  // ator — recurso REAL do tenant, resolvido server-side. O ID_NEUTRO do
+  // contrato é apenas marcador de ausência de alvo no corpo e NUNCA chega ao
+  // engine (não existe colaborador placeholder).
+  return contexto.atorCollaboratorId;
 }
 
 /**
@@ -521,21 +564,28 @@ export async function colaboradores(
 
   // 4) gate por operação (funcional × administrativo — §9.2).
   const alvoId = alvoDaDecisao(entrada, contexto);
-  const decisao = ehOperacaoFuncional(operacao)
-    ? await avaliarGateFuncional(
-        callerId,
-        operacao,
-        alvoId,
-        contexto.organizationId,
-        contexto.dataReferencia,
-        deps
-      )
-    : await avaliarGateAdministrativo(
-        callerId,
-        contexto.organizationId,
-        capacidadeDaOperacao(operacao),
-        deps
-      );
+  let decisao: { readonly permitido: boolean; readonly code?: CodigoPublico };
+  if (ehOperacaoFuncional(operacao)) {
+    // Operação FUNCIONAL sem âncora soberana (ator sem vínculo F5-02): não há
+    // recurso autorizável ⇒ fail-closed, sem recurso fictício e sem tocar a RPC.
+    decisao = alvoId
+      ? await avaliarGateFuncional(
+          callerId,
+          operacao,
+          alvoId,
+          contexto.organizationId,
+          contexto.dataReferencia,
+          deps
+        )
+      : { permitido: false, code: "FORBIDDEN" };
+  } else {
+    decisao = await avaliarGateAdministrativo(
+      callerId,
+      contexto.organizationId,
+      capacidadeDaOperacao(operacao),
+      deps
+    );
+  }
 
   if (!decisao.permitido) {
     const code = decisao.code ?? "FORBIDDEN";

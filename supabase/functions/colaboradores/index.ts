@@ -303,6 +303,24 @@ Deno.serve(async (req) => {
   // Fronteira confiável: ActorContext + ResourceContext + Policy Engine (gate
   // FUNCIONAL) e capabilities efetivas (gate ADMINISTRATIVO — D19).
   // ---------------------------------------------------------------------------
+  /**
+   * Vínculo F5-02 do ator (auth.uid → membership → colaborador). Usado pela
+   * âncora autorizável das operações funcionais sem alvo (criar/listar) e pelo
+   * ActorContext do Policy Engine — MESMA implementação, uma só resolução.
+   */
+  const resolverColaboradorVinculado = async (
+    authUserId: string,
+    organizationId: string
+  ): Promise<string | null> => {
+    const { data, error } = await admin.rpc("resolver_collaborador_vinculado", {
+      p_user_profile_id: authUserId,
+      p_organization_id: organizationId,
+    });
+    if (error) return null;
+    const primeira = ((data ?? []) as { collaborator_id: string | null }[])[0];
+    return primeira?.collaborator_id ?? null;
+  };
+
   const autorizacao: DepsContextoAutorizacao = {
     agora: () => new Date(),
 
@@ -358,15 +376,7 @@ Deno.serve(async (req) => {
       };
     },
 
-    resolverColaboradorVinculado: async (authUserId, organizationId) => {
-      const { data, error } = await admin.rpc("resolver_collaborador_vinculado", {
-        p_user_profile_id: authUserId,
-        p_organization_id: organizationId,
-      });
-      if (error) return null;
-      const primeira = ((data ?? []) as { collaborator_id: string | null }[])[0];
-      return primeira?.collaborator_id ?? null;
-    },
+    resolverColaboradorVinculado,
 
     resolverCapabilitiesEscopos: async (authUserId, organizationId) => {
       const { data, error } = await admin.rpc("resolver_capabilities_escopos_efetivas", {
@@ -449,6 +459,8 @@ Deno.serve(async (req) => {
   };
 
   const deps: DepsColaboradores = {
+    // Âncora soberana do ator para operações funcionais sem alvo (F5-07 BLOCKER).
+    resolverColaboradorVinculado,
     resolveCaller: async (authHeader) => {
       const caller = createClient(url, anonKey, {
         global: { headers: { Authorization: authHeader } },
