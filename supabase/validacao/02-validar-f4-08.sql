@@ -118,6 +118,11 @@ declare v_tab text;
     'cycle_evaluation_responsibilities','collaborator_status_periods',
     'collegiate_cycle_snapshots','collegiate_cycle_snapshot_positions',
     'collegiate_cycle_snapshot_members','capabilities'];
+  -- F5-07: `collaborator_events` e APPEND-ONLY. Recebe policy SELECT
+  -- own-tenant (contrato F5-07 §10.2) mas NAO recebe grant a `authenticated`
+  -- (espinha F5-07 §1.2): leitura somente pela RPC server-side. Categoria
+  -- explicita para o catalogo nao confundir "tem policy" com "e legivel".
+  v_policy_sem_grant text[] := array['collaborator_events'];
 begin
   foreach v_tab in array v_readable loop
     if not exists (select 1 from pg_policies p where p.schemaname='public'
@@ -125,7 +130,20 @@ begin
       raise exception '[FAIL] tabela legivel sem policy SELECT para authenticated: %', v_tab;
     end if;
   end loop;
-  raise notice '[PASS] 18 tabelas legiveis possuem policy SELECT para authenticated';
+  foreach v_tab in array v_policy_sem_grant loop
+    if not exists (select 1 from pg_policies p where p.schemaname='public'
+      and p.tablename=v_tab and p.cmd='SELECT' and 'authenticated'::name = any(p.roles)) then
+      raise exception '[FAIL] log append-only sem policy SELECT own-tenant: %', v_tab;
+    end if;
+    if exists (select 1 from pg_policies p where p.schemaname='public'
+      and p.tablename=v_tab and p.cmd <> 'SELECT') then
+      raise exception '[FAIL] log append-only com policy de escrita: %', v_tab;
+    end if;
+    if has_table_privilege('authenticated', format('public.%I', v_tab), 'SELECT') then
+      raise exception '[FAIL] authenticated com SELECT no log append-only public.%', v_tab;
+    end if;
+  end loop;
+  raise notice '[PASS] 18 tabelas legiveis com policy SELECT e 1 log append-only com policy own-tenant sem grant';
 end $$;
 
 do $$
@@ -152,8 +170,8 @@ do $$
 declare v_n int;
 begin
   select count(*) into v_n from pg_policies p where p.schemaname='public';
-  if v_n <> 21 then raise exception '[FAIL] policies esperadas=21, encontradas=%', v_n; end if;
-  raise notice '[PASS] 21 policies (3 identidade + 18 F4-08)';
+  if v_n <> 22 then raise exception '[FAIL] policies esperadas=22, encontradas=%', v_n; end if;
+  raise notice '[PASS] 22 policies (3 identidade + 18 F4-08 + 1 F5-07 append-only)';
 end $$;
 
 -- ----------------------------------------------------------------------------
@@ -179,7 +197,8 @@ declare
     'evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria',
     'evaluation_config_scale_bands','evaluation_config_participant_roles','evaluation_cycles',
     'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
-    'evaluation_events','evaluation_pendencies','evaluation_aggregates'];
+    'evaluation_events','evaluation_pendencies','evaluation_aggregates',
+    'collaborator_events'];
   v_privs text[] := array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'];
 begin
   foreach v_tab in array v_todos loop
@@ -189,7 +208,7 @@ begin
       end if;
     end loop;
   end loop;
-  raise notice '[PASS] anon sem qualquer privilegio de tabela (42 tabelas x 7 privs)';
+  raise notice '[PASS] anon sem qualquer privilegio de tabela (43 tabelas x 7 privs)';
 end $$;
 
 do $$
@@ -213,7 +232,8 @@ declare
     'evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria',
     'evaluation_config_scale_bands','evaluation_config_participant_roles','evaluation_cycles',
     'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
-    'evaluation_events','evaluation_pendencies','evaluation_aggregates'];
+    'evaluation_events','evaluation_pendencies','evaluation_aggregates',
+    'collaborator_events'];
 begin
   foreach v_tab in array v_todos loop
     foreach v_priv in array v_dml loop
@@ -222,7 +242,7 @@ begin
       end if;
     end loop;
   end loop;
-  raise notice '[PASS] authenticated sem INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER (42 tabelas)';
+  raise notice '[PASS] authenticated sem INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER (43 tabelas)';
 end $$;
 
 do $$
@@ -245,6 +265,9 @@ declare v_tab text;
     'evaluation_config_scale_bands','evaluation_config_participant_roles','evaluation_cycles',
     'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
     'evaluation_events','evaluation_pendencies','evaluation_aggregates'];
+  -- F5-07: log append-only — tem policy SELECT own-tenant mas NAO tem grant a
+  -- `authenticated` (categoria propria; nao e "legivel" nem "fechada").
+  v_policy_sem_grant text[] := array['collaborator_events'];
 begin
   foreach v_tab in array v_readable loop
     if not has_table_privilege('authenticated', format('public.%I', v_tab), 'SELECT') then
@@ -256,7 +279,12 @@ begin
       raise exception '[FAIL] authenticated com SELECT em tabela fechada public.%', v_tab;
     end if;
   end loop;
-  raise notice '[PASS] authenticated com SELECT somente nas 21 tabelas legiveis (21 fechadas sem SELECT)';
+  foreach v_tab in array v_policy_sem_grant loop
+    if has_table_privilege('authenticated', format('public.%I', v_tab), 'SELECT') then
+      raise exception '[FAIL] authenticated com SELECT no log append-only public.%', v_tab;
+    end if;
+  end loop;
+  raise notice '[PASS] authenticated com SELECT somente nas 21 tabelas legiveis (21 fechadas + 1 log append-only sem SELECT)';
 end $$;
 
 -- ----------------------------------------------------------------------------
@@ -284,11 +312,12 @@ begin
       'evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria',
       'evaluation_config_scale_bands','evaluation_config_participant_roles','evaluation_cycles',
       'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
-      'evaluation_events','evaluation_pendencies','evaluation_aggregates');
+      'evaluation_events','evaluation_pendencies','evaluation_aggregates',
+      'collaborator_events');
   if v_t is not null then
     raise exception '[FAIL] tabela public nao classificada (D16 — catalogacao explicita obrigatoria): %', v_t;
   end if;
-  raise notice '[PASS] todas as 42 tabelas public estao explicitamente classificadas (D16)';
+  raise notice '[PASS] todas as 43 tabelas public estao explicitamente classificadas (D16)';
 end $$;
 
 do $$
@@ -694,14 +723,14 @@ end $$;
 
 do $$
 declare v_t text; v_ok boolean;
-  v_closed text[] := array['access_roles','access_role_capabilities','membership_access_role_assignments','membership_collaborator_links','access_role_assignment_scopes','access_role_assignment_unit_targets','evaluation_succession_events','privilege_mutation_audit','evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria','evaluation_config_scale_bands','evaluation_config_participant_roles','evaluation_cycles','evaluations','evaluation_participants','evaluation_scores','evaluation_comments','evaluation_events','evaluation_pendencies','evaluation_aggregates'];
+  v_closed text[] := array['access_roles','access_role_capabilities','membership_access_role_assignments','membership_collaborator_links','access_role_assignment_scopes','access_role_assignment_unit_targets','evaluation_succession_events','privilege_mutation_audit','evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria','evaluation_config_scale_bands','evaluation_config_participant_roles','evaluation_cycles','evaluations','evaluation_participants','evaluation_scores','evaluation_comments','evaluation_events','evaluation_pendencies','evaluation_aggregates','collaborator_events'];
 begin
   foreach v_t in array v_closed loop
     v_ok := false;
     begin execute format('select count(*) from public.%I', v_t); exception when insufficient_privilege then v_ok := true; end;
     if not v_ok then raise exception '[FAIL] authenticated leu tabela fechada %', v_t; end if;
   end loop;
-  raise notice '[PASS] 21 tabelas fechadas invisiveis (permission denied) apesar de dados de fixture';
+  raise notice '[PASS] 22 tabelas fechadas invisiveis (permission denied) apesar de dados de fixture';
 end $$;
 
 do $$
