@@ -2005,7 +2005,7 @@ begin
   end if;
 
   begin
-    update public.collaborator_events set reason = 'adulterado' 
+    update public.collaborator_events set reason = 'adulterado'
      where organization_id = 'd7a00000-0000-0000-0000-0000000000a1';
   exception when others then
     v_msg := SQLERRM; v_state := SQLSTATE;
