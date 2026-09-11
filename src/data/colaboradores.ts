@@ -120,4 +120,56 @@ export const colaboradores: Colaborador[] = [
     respondePara: "RENATO FONSECA LIMA",
     gerente: "RICARDO MENEZES BARROS",
   },
+
+  // F5-07 (I7/D15): os gestores abaixo eram INJETADOS na leitura por
+  // `garantirGestores` (removido). A leitura nunca escreve nem inventa
+  // registros, então a fixture DEV passa a ser AUTOSSUFICIENTE: os gestores
+  // referenciados por `gestorDiretoMatricula` (900002-900004) e a raiz da
+  // cadeia (900001) vivem aqui, explicitamente, como dados fictícios de DEV.
+  {
+    matricula: 900001,
+    status: "ATIVO",
+    nome: "RICARDO MENEZES BARROS",
+    email: "ricardo.barros@example.com",
+    cargo: "Gerente",
+    area: "Gerência de Operações Digitais",
+    funcao: "GERENTE",
+    respondePara: "",
+  },
+  {
+    matricula: 900002,
+    status: "ATIVO",
+    nome: "MARCOS ALMEIDA COSTA",
+    email: "marcos.costa@example.com",
+    cargo: "Coordenador",
+    area: "Coordenação de Operações Digitais",
+    funcao: "COORDENADOR",
+    gestorDiretoMatricula: 900001,
+    respondePara: "RICARDO MENEZES BARROS",
+    gerente: "RICARDO MENEZES BARROS",
+  },
+  {
+    matricula: 900003,
+    status: "ATIVO",
+    nome: "PAULA RIBEIRO SANTOS",
+    email: "paula.santos@example.com",
+    cargo: "Coordenador",
+    area: "Coordenação de Criação e Conteúdo",
+    funcao: "COORDENADOR",
+    gestorDiretoMatricula: 900001,
+    respondePara: "RICARDO MENEZES BARROS",
+    gerente: "RICARDO MENEZES BARROS",
+  },
+  {
+    matricula: 900004,
+    status: "ATIVO",
+    nome: "RENATO FONSECA LIMA",
+    email: "renato.lima@example.com",
+    cargo: "Coordenador",
+    area: "Coordenação de Tecnologia e Autoração",
+    funcao: "COORDENADOR",
+    gestorDiretoMatricula: 900001,
+    respondePara: "RICARDO MENEZES BARROS",
+    gerente: "RICARDO MENEZES BARROS",
+  },
 ];

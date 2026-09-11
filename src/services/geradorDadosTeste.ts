@@ -1,4 +1,5 @@
 import { criteriosAvaliacao } from "../data/modeloAvaliacao";
+import { simulacaoDevPermitida } from "../config/ambiente";
 import { getColaboradores } from "./colaboradorStorage";
 import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
@@ -433,6 +434,12 @@ export interface ResultadoGeracaoDadosTeste {
   colaboradores: number;
 }
 
+/**
+ * Mensagem da barreira de ambiente: o gerador só existe em DEV.
+ */
+export const ERRO_GERADOR_FORA_DE_DEV =
+  "A geração de dados de teste é uma conveniência de DEV e não está disponível fora do ambiente de desenvolvimento.";
+
 export function gerarDadosTesteDoCiclo(
   ciclo: CicloAvaliacao,
   usuarioAtual: Colaborador
@@ -444,10 +451,14 @@ export function gerarDadosTesteDoCiclo(
     throw new Error("Dados de ciclo cancelado não podem ser alterados.");
   }
 
-  if (usuarioAtual.funcao !== "GERENTE") {
-    throw new Error(
-      "A geração de dados de teste está disponível apenas para o perfil Gerente."
-    );
+  // F5-07: a decisão de ACESSO não é feita aqui. A comparação por `funcao`
+  // ("GERENTE") foi removida por ser autorização por cargo fora do Policy
+  // Engine; a tela já oculta o painel pela capability de UX
+  // (`collaborator.create` / `can()`) e o Policy Engine é o gate soberano.
+  // O que resta neste serviço é o gate de AMBIENTE: gerador de fixtures
+  // sintéticas, explicitamente restrito ao DEV.
+  if (!simulacaoDevPermitida) {
+    throw new Error(ERRO_GERADOR_FORA_DE_DEV);
   }
 
   const todos = getColaboradores();

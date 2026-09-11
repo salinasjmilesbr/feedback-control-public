@@ -4,11 +4,17 @@ import type { Colaborador } from "../types/Colaborador";
 import type { MovimentacaoOrganizacional } from "../types/HistoricoOrganizacional";
 import { instalarLocalStorageEmMemoria } from "../test/localStorageMock";
 import {
+  ERRO_HISTORICO_ORGANIZACIONAL_SOBERANO,
   getHistoricoOrganizacional,
   getSnapshotOrganizacionalNoCiclo,
   registrarMovimentacaoOrganizacional,
 } from "./historicoOrganizacionalStorage";
 
+/**
+ * F5-07 — o histórico organizacional é soberano em `collaborator_events`:
+ * `registrarMovimentacaoOrganizacional` é BARREIRA (lança e não grava) e a
+ * LEITURA legada permanece pura, servindo o acervo já existente.
+ */
 const HISTORY_STORAGE_KEY = "feedback-control-historico-organizacional";
 const CYCLES_STORAGE_KEY = "feedback-control-ciclos";
 
@@ -60,6 +66,47 @@ describe("historicoOrganizacionalStorage", () => {
   const gestorNovo = pessoa(3, "COORDENADOR", gerente.matricula);
   const colaborador = pessoa(4, "ANALISTA", gestorAnterior.matricula);
   const equipe = [gerente, gestorAnterior, gestorNovo, colaborador];
+  const transferido: Colaborador = {
+    ...colaborador,
+    gestorDiretoMatricula: gestorNovo.matricula,
+    respondePara: gestorNovo.nome,
+  };
+
+  /** Acervo legado já existente (gravado quando o storage ainda era soberano). */
+  const movimentoTransferencia: MovimentacaoOrganizacional = {
+    id: "movimento-transferencia",
+    colaboradorMatricula: colaborador.matricula,
+    colaboradorNome: colaborador.nome,
+    tipo: "ALTERACAO_ESTRUTURA",
+    dataVigencia: "2026-03-15",
+    dataRegistro: "2026-03-15T12:00:00.000Z",
+    escopo: "CICLO_ATUAL_E_POSTERIORES",
+    motivo: "Transferência entre equipes",
+    anterior: {
+      status: "ATIVO",
+      cargo: colaborador.cargo,
+      area: colaborador.area,
+      funcao: colaborador.funcao,
+      senioridade: colaborador.senioridade,
+      gestorDiretoMatricula: gestorAnterior.matricula,
+      gestorDiretoNome: gestorAnterior.nome,
+      avaliadoresColegiadoMatriculas: [],
+      avaliadoresColegiadoNomes: [],
+    },
+    atual: {
+      status: "ATIVO",
+      cargo: colaborador.cargo,
+      area: colaborador.area,
+      funcao: colaborador.funcao,
+      senioridade: colaborador.senioridade,
+      gestorDiretoMatricula: gestorNovo.matricula,
+      gestorDiretoNome: gestorNovo.nome,
+      avaliadoresColegiadoMatriculas: [],
+      avaliadoresColegiadoNomes: [],
+    },
+    autorMatricula: gerente.matricula,
+    autorNome: gerente.nome,
+  };
 
   beforeEach(() => {
     instalarLocalStorageEmMemoria();
@@ -69,87 +116,60 @@ describe("historicoOrganizacionalStorage", () => {
     );
   });
 
-  it("registra origem, destino, autor, vigência e motivo na transferência", () => {
-    const transferido: Colaborador = {
-      ...colaborador,
-      gestorDiretoMatricula: gestorNovo.matricula,
-      respondePara: gestorNovo.nome,
-    };
+  it("barreira: transferência não é registrada localmente", () => {
+    expect(() =>
+      registrarMovimentacaoOrganizacional({
+        anterior: colaborador,
+        atual: transferido,
+        colaboradores: equipe,
+        dataVigencia: "2026-03-15",
+        escopo: "CICLO_ATUAL_E_POSTERIORES",
+        motivo: "Transferência entre equipes",
+        autorMatricula: gerente.matricula,
+        autorNome: gerente.nome,
+      })
+    ).toThrow(ERRO_HISTORICO_ORGANIZACIONAL_SOBERANO);
 
-    const movimento = registrarMovimentacaoOrganizacional({
-      anterior: colaborador,
-      atual: transferido,
-      colaboradores: equipe,
-      dataVigencia: "2026-03-15",
-      escopo: "CICLO_ATUAL_E_POSTERIORES",
-      motivo: "Transferência entre equipes",
-      autorMatricula: gerente.matricula,
-      autorNome: gerente.nome,
-    });
-
-    expect(movimento).toMatchObject({
-      tipo: "ALTERACAO_ESTRUTURA",
-      dataVigencia: "2026-03-15",
-      motivo: "Transferência entre equipes",
-      autorMatricula: gerente.matricula,
-      autorNome: gerente.nome,
-      anterior: {
-        gestorDiretoMatricula: gestorAnterior.matricula,
-        gestorDiretoNome: gestorAnterior.nome,
-      },
-      atual: {
-        gestorDiretoMatricula: gestorNovo.matricula,
-        gestorDiretoNome: gestorNovo.nome,
-      },
-    });
+    // Fail-closed: nada foi gravado no acervo local.
+    expect(localStorage.getItem(HISTORY_STORAGE_KEY)).toBeNull();
+    expect(getHistoricoOrganizacional(colaborador.matricula)).toEqual([]);
   });
 
   it.each([
-    ["ATIVO → LICENCA", "ATIVO", "LICENCA", "LICENCA"],
-    ["LICENCA → ATIVO", "LICENCA", "ATIVO", "RETORNO_LICENCA"],
-    ["ATIVO → DESLIGADO", "ATIVO", "DESLIGADO", "DESLIGAMENTO"],
+    ["ATIVO → LICENCA", "ATIVO", "LICENCA"],
+    ["LICENCA → ATIVO", "LICENCA", "ATIVO"],
+    ["ATIVO → DESLIGADO", "ATIVO", "DESLIGADO"],
   ] as const)(
-    "registra a mudança de status %s com estado anterior e novo",
-    (_cenario, statusAnterior, statusAtual, tipoEsperado) => {
+    "barreira: mudança de status %s não é registrada localmente",
+    (_cenario, statusAnterior, statusAtual) => {
       const anterior: Colaborador = { ...colaborador, status: statusAnterior };
       const atual: Colaborador = { ...colaborador, status: statusAtual };
 
-      const movimento = registrarMovimentacaoOrganizacional({
-        anterior,
-        atual,
-        colaboradores: equipe,
-        dataVigencia: "2026-04-10",
-        escopo: "CICLO_ATUAL_E_POSTERIORES",
-        autorMatricula: gerente.matricula,
-        autorNome: gerente.nome,
-      });
+      expect(() =>
+        registrarMovimentacaoOrganizacional({
+          anterior,
+          atual,
+          colaboradores: equipe,
+          dataVigencia: "2026-04-10",
+          escopo: "CICLO_ATUAL_E_POSTERIORES",
+          autorMatricula: gerente.matricula,
+          autorNome: gerente.nome,
+        })
+      ).toThrow(ERRO_HISTORICO_ORGANIZACIONAL_SOBERANO);
 
-      expect(movimento.tipo).toBe(tipoEsperado);
-      expect(movimento.anterior?.status).toBe(statusAnterior);
-      expect(movimento.atual.status).toBe(statusAtual);
-      expect(getHistoricoOrganizacional(colaborador.matricula)).toContainEqual(
-        movimento
-      );
+      expect(localStorage.getItem(HISTORY_STORAGE_KEY)).toBeNull();
+      expect(getHistoricoOrganizacional(colaborador.matricula)).toEqual([]);
     }
   );
 
-  it("preserva a estrutura do ciclo anterior após movimentação atual", () => {
-    const transferido: Colaborador = {
-      ...colaborador,
-      gestorDiretoMatricula: gestorNovo.matricula,
-      respondePara: gestorNovo.nome,
-    };
+  it("preserva a estrutura do ciclo anterior a partir do acervo legado", () => {
+    localStorage.setItem(
+      HISTORY_STORAGE_KEY,
+      JSON.stringify([movimentoTransferencia])
+    );
+    const antes = localStorage.getItem(HISTORY_STORAGE_KEY);
 
-    registrarMovimentacaoOrganizacional({
-      anterior: colaborador,
-      atual: transferido,
-      colaboradores: equipe,
-      dataVigencia: "2026-03-15",
-      escopo: "CICLO_ATUAL_E_POSTERIORES",
-      autorMatricula: gerente.matricula,
-      autorNome: gerente.nome,
-    });
-
+    // A LEITURA reconstrói o snapshot por ciclo sem regravar o storage.
     expect(
       getSnapshotOrganizacionalNoCiclo(
         transferido,
@@ -164,6 +184,7 @@ describe("historicoOrganizacionalStorage", () => {
         "2026-03-15"
       ).gestorDiretoMatricula
     ).toBe(gestorNovo.matricula);
+    expect(localStorage.getItem(HISTORY_STORAGE_KEY)).toBe(antes);
   });
 
   it("mantém compatibilidade com movimentação antiga sem autoria", () => {
