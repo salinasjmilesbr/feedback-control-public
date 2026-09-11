@@ -80,16 +80,22 @@ describe("impersonação DEV (F2-09) — provider e helpers", () => {
     it("carrega somente colaboradores ativos sintéticos e preserva a seleção anterior válida", () => {
       semearColaboradores();
       localStorage.setItem(CHAVE_USUARIO_ATUAL_DEV, "1002");
+      const cadastroAntes = localStorage.getItem(CHAVE_COLABORADORES);
 
       const html = renderizar(true);
 
       expect(html).toContain('data-simulacao="ativa"');
-      // A fonte do provider é o seed sintético (getColaboradores mescla os
-      // gestores iniciais sintéticos ausentes) — a expectativa é derivada dela.
+      // F5-07 (I7): a fonte do provider é EXATAMENTE o cadastro local — sem
+      // migração e sem gestores sintéticos injetados na leitura.
       const esperados = candidatosImpersonacaoDev(true, getColaboradores());
+      expect(esperados.map((colaborador) => colaborador.matricula)).toEqual([
+        1001, 1002,
+      ]);
       expect(html).toContain(`data-quantidade="${esperados.length}"`);
       expect(html).toContain("Coordenadora Sintetica Dois");
       expect(html).not.toContain("Desligado Sintetico Tres");
+      // A leitura do provider não regrava a base.
+      expect(localStorage.getItem(CHAVE_COLABORADORES)).toBe(cadastroAntes);
     });
 
     it("sem seleção anterior usa o primeiro perfil GERENTE ativo como padrão", () => {

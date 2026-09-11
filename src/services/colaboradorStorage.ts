@@ -1,169 +1,45 @@
-import type {
-  Colaborador,
-  FuncaoColaborador,
-  SenioridadeColaborador,
-} from "../types/Colaborador";
+/**
+ * F5-07 (I7) — LEITURA LEGADA SEM EFEITO COLATERAL; ESCRITA SOBERANA.
+ *
+ * `PostgreSQL` é a fonte soberana do cadastro de colaboradores
+ * (`collaborators` + `collaborator_identifiers`). Este módulo é LEGADO e
+ * permanece apenas como LEITURA para as telas ainda não migradas para a porta
+ * única `src/services/colaboradoresSoberanos/acessoColaboradoresSoberanos.ts`:
+ *
+ * - `getColaboradores` / `getColaboradorByMatricula` apenas LEEM o que existe
+ *   na chave local; NÃO gravam, NÃO migram/normalizam registros e NÃO injetam
+ *   gestores sintéticos. O seed de `src/data/colaboradores` é usado como
+ *   fixture de DEV somente quando a chave não existe — e não é regravado;
+ * - `saveColaborador` / `updateColaborador` são BARREIRAS fail-closed: lançam
+ *   erro explícito, porque a escrita de colaborador é soberana no PostgreSQL.
+ */
 import { colaboradores as colaboradoresIniciais } from "../data/colaboradores";
+import type { Colaborador } from "../types/Colaborador";
 
 const STORAGE_KEY = "feedback-control-colaboradores";
 
-const gestoresIniciais: Colaborador[] = [
-  {
-    matricula: 900001,
-    status: "ATIVO",
-    nome: "RICARDO MENEZES BARROS",
-    email: "ricardo.barros@example.com",
-    cargo: "Gerente",
-    area: "Gerência de Operações Digitais",
-    funcao: "GERENTE",
-    respondePara: "",
-  },
-  {
-    matricula: 900002,
-    status: "ATIVO",
-    nome: "MARCOS ALMEIDA COSTA",
-    email: "marcos.costa@example.com",
-    cargo: "Coordenador",
-    area: "Coordenação de Operações Digitais",
-    funcao: "COORDENADOR",
-    gestorDiretoMatricula: 900001,
-    respondePara: "RICARDO MENEZES BARROS",
-    gerente: "RICARDO MENEZES BARROS",
-  },
-  {
-    matricula: 900003,
-    status: "ATIVO",
-    nome: "PAULA RIBEIRO SANTOS",
-    email: "paula.santos@example.com",
-    cargo: "Coordenador",
-    area: "Coordenação de Criação e Conteúdo",
-    funcao: "COORDENADOR",
-    gestorDiretoMatricula: 900001,
-    respondePara: "RICARDO MENEZES BARROS",
-    gerente: "RICARDO MENEZES BARROS",
-  },
-  {
-    matricula: 900004,
-    status: "ATIVO",
-    nome: "RENATO FONSECA LIMA",
-    email: "renato.lima@example.com",
-    cargo: "Coordenador",
-    area: "Coordenação de Tecnologia e Autoração",
-    funcao: "COORDENADOR",
-    gestorDiretoMatricula: 900001,
-    respondePara: "RICARDO MENEZES BARROS",
-    gerente: "RICARDO MENEZES BARROS",
-  },
-];
+/**
+ * Mensagem única das barreiras de escrita (F5-07/I7). O cadastro é soberano no
+ * `PostgreSQL`; nenhuma mutação de colaborador passa por `localStorage`.
+ */
+export const ERRO_ESCRITA_COLABORADOR_SOBERANA =
+  "A escrita de colaborador é soberana no PostgreSQL (F5-07): use a porta única " +
+  "src/services/colaboradoresSoberanos/acessoColaboradoresSoberanos.ts. " +
+  "O localStorage não é fonte de verdade do cadastro e não deve ser gravado.";
 
-const gestorMatriculaPorNome: Record<string, number> = {
-  "RICARDO MENEZES BARROS": 900001,
-  "MARCOS ALMEIDA COSTA": 900002,
-  "PAULA RIBEIRO SANTOS": 900003,
-  "RENATO FONSECA LIMA": 900004,
-};
+/** Leitura pura: devolve a base existente sem normalizar nem persistir. */
+function lerBaseLegada(): Colaborador[] {
+  const data = localStorage.getItem(STORAGE_KEY);
 
-function formatarNomePessoa(nome?: string): string {
-  const texto = (nome ?? "").trim().replace(/\s+/g, " ");
-  if (!texto) return "";
+  // Fixture de DEV: chave ausente cai no seed sintético do repositório, sem
+  // regravá-lo (I7 — a leitura nunca escreve).
+  if (!data) return [...colaboradoresIniciais];
 
-  const particulas = new Set(["da", "das", "de", "do", "dos", "e"]);
-
-  return texto
-    .toLocaleLowerCase("pt-BR")
-    .split(" ")
-    .map((parte, indice) => {
-      if (indice > 0 && particulas.has(parte)) return parte;
-      return parte
-        .split("-")
-        .map((trecho) =>
-          trecho ? trecho.charAt(0).toLocaleUpperCase("pt-BR") + trecho.slice(1) : trecho
-        )
-        .join("-");
-    })
-    .join(" ");
-}
-function normalizarNome(nome?: string): string {
-  return (nome ?? "").trim().toUpperCase();
-}
-
-function migrarColaborador(colaborador: Colaborador): Colaborador {
-  const gestorDiretoMatricula =
-    colaborador.gestorDiretoMatricula ??
-    gestorMatriculaPorNome[normalizarNome(colaborador.respondePara)];
-
-  const funcao: FuncaoColaborador =
-    colaborador.funcao ?? "ANALISTA";
-
-  let senioridade = colaborador.senioridade;
-
-  if (funcao === "ANALISTA" && !senioridade) {
-    const cargoNormalizado = colaborador.cargo
-      .trim()
-      .toUpperCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
-
-    const senioridadePorCargo: Array<{
-      termo: string;
-      senioridade: SenioridadeColaborador;
-    }> = [
-      { termo: "JUNIOR", senioridade: "JUNIOR" },
-      { termo: "PLENO", senioridade: "PLENO" },
-      { termo: "SENIOR", senioridade: "SENIOR" },
-    ];
-
-    const senioridadeEncontrada = senioridadePorCargo.find(
-      (item) => cargoNormalizado.includes(item.termo)
-    );
-
-    senioridade = senioridadeEncontrada?.senioridade;
-  }
-
-  return {
-    ...colaborador,
-    nome: formatarNomePessoa(colaborador.nome),
-    respondePara: formatarNomePessoa(colaborador.respondePara),
-    gerente: colaborador.gerente
-      ? formatarNomePessoa(colaborador.gerente)
-      : colaborador.gerente,
-    funcao,
-    senioridade,
-    gestorDiretoMatricula,
-  };
-}
-
-function garantirGestores(
-  colaboradores: Colaborador[]
-): Colaborador[] {
-  const matriculasExistentes = new Set(
-    colaboradores.map((colaborador) => colaborador.matricula)
-  );
-
-  const gestoresFaltantes = gestoresIniciais.filter(
-    (gestor) => !matriculasExistentes.has(gestor.matricula)
-  );
-
-  return [...colaboradores, ...gestoresFaltantes];
+  return JSON.parse(data) as Colaborador[];
 }
 
 export function getColaboradores(): Colaborador[] {
-  const data = localStorage.getItem(STORAGE_KEY);
-
-  const base: Colaborador[] = data
-    ? (JSON.parse(data) as Colaborador[])
-    : colaboradoresIniciais;
-
-  const comGestores = garantirGestores(base);
-
-  const migrados = comGestores.map(migrarColaborador);
-
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify(migrados)
-  );
-
-  return migrados;
+  return lerBaseLegada();
 }
 
 export function getColaboradorByMatricula(
@@ -175,35 +51,13 @@ export function getColaboradorByMatricula(
 }
 
 export function saveColaborador(colaborador: Colaborador): void {
-  const colaboradores = getColaboradores();
-
-  if (
-    colaboradores.some(
-      (item) => item.matricula === colaborador.matricula
-    )
-  ) {
-    throw new Error("Já existe um colaborador com esta matrícula.");
-  }
-
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify([...colaboradores, colaborador])
+  throw new Error(
+    `${ERRO_ESCRITA_COLABORADOR_SOBERANA} A matrícula ${colaborador.matricula} não foi gravada localmente.`
   );
 }
 
-export function updateColaborador(
-  updatedColaborador: Colaborador
-): void {
-  const colaboradores = getColaboradores();
-
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify(
-      colaboradores.map((colaborador) =>
-        colaborador.matricula === updatedColaborador.matricula
-          ? updatedColaborador
-          : colaborador
-      )
-    )
+export function updateColaborador(updatedColaborador: Colaborador): void {
+  throw new Error(
+    `${ERRO_ESCRITA_COLABORADOR_SOBERANA} A matrícula ${updatedColaborador.matricula} não foi atualizada localmente.`
   );
 }

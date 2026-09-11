@@ -34,9 +34,33 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
-- **Atividade (rodada atual):** BUG #170 — item "Ciclos" duplicado no menu para
-  Gerente e Coordenador (Issue #170, **aberta**). Correção de **navegação/UX**.
-- **Branch:** `fix/170-ciclos-menu-duplicado` (sem PR; sem merge).
+- **Atividade (rodada atual):** F5-07 — Colaboradores e histórico organizacional
+  soberanos (**implementação**; contrato em `docs/F5-07-desenho-tecnico.md`, D1–D20).
+- **Branch:** `feat/f5-07-colaboradores-soberanos` (sem PR; sem merge).
+- **Último commit:** consultar `git log --oneline -1` na branch.
+- **Entregue:** migrations `20260913000000`/`20260913010000` (extensões aditivas em
+  `collaborators`, `job_roles.code`, log append-only `collaborator_events`, helper
+  de ator e 16 funções/RPCs), Edge `colaboradores` (15 operações, com gate
+  funcional no Policy Engine e gate administrativo da F5-04 **separados**), porta
+  única `acessoColaboradoresSoberanos`, barreiras fail-closed em
+  `colaboradorStorage`/`historicoOrganizacionalStorage`, telas migradas para UUID
+  com matrícula resolvida no servidor e remoção do código morto.
+- **Validação:** `npm test` 94 arquivos / 1346 testes; `build`, `lint` e
+  `git diff --check` verdes; validadores SQL após `db reset` — F5-07 (44 PASS +
+  22 PASS de cutover), F4-08 (56 + 8) e F5-06 (25 + 13).
+- **Limites assumidos:** alocação/estrutura (cargo, área, função, senioridade,
+  gestor, colegiado) é **F5-08** — a F5-07 não fabrica estrutura sintética e as
+  telas exibem "sem alocação". Ciclos/metas/observações seguem legados.
+- **Defeito PREEXISTENTE em `main`, não corrigido aqui:** a Edge
+  `supabase/functions/avaliacoes/index.ts:8` importa
+  `src/authorization/catalogoCapacidades.ts` (inexistente; o módulo real é
+  `catalogoCapabilities.ts`), o que impede o bundle da função F5-06.
+
+### 3.1 BUG #170 (concluída e integrada)
+
+- **Atividade:** BUG #170 — item "Ciclos" duplicado no menu para Gerente e
+  Coordenador (Issue #170). Correção de **navegação/UX**, integrada em `main`.
+- **Branch:** `fix/170-ciclos-menu-duplicado`.
 - **Último commit:** consultar `git log --oneline -1` na branch.
 - **Causa raiz:** `NavegacaoPrincipal` tinha DOIS gates de menu para o MESMO
   assunto — `cycle.management.view` (`/ciclos`) e `cycle.coordinator.list`

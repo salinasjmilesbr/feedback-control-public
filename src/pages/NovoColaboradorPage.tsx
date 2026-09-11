@@ -1,188 +1,150 @@
+/**
+ * F5-07 — Novo colaborador: cadastro SOMENTE pela porta única.
+ *
+ * Escopo desta tela: dados de PESSOA (nome, e-mail, data de admissão), matrícula
+ * como INTENÇÃO e status inicial. Nada de estrutura organizacional aqui — cargo,
+ * unidade, gestor, senioridade e colegiado pertencem à F5-08 e saíram do
+ * formulário; o colaborador nasce explicitamente SEM ALOCAÇÃO.
+ *
+ * Não existe escrita local: nenhuma chamada a `localStorage`, nenhum dual-write e
+ * nenhum fallback. A autorização é do servidor (`collaborator.create`): a porta
+ * devolve `FORBIDDEN`/`INVALID_INPUT`/`CONFLICT` e a tela mostra o estado.
+ */
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { authorize, can } from "../authorization/authorizationPolicy";
-import type { AuthorizationContext } from "../authorization/AuthorizationContext";
-import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
-import type {
-  Colaborador,
-  FuncaoColaborador,
-  SenioridadeColaborador,
-  StatusColaborador,
-} from "../types/Colaborador";
-import { funcaoUsaEstruturaAvaliacaoAnalista } from "../types/Colaborador";
+import { useAuth } from "../auth/AuthContext";
+import type { CodigoPublico } from "../infrastructure/supabase/colaboradores/contrato";
 import {
-  getColaboradores,
-  saveColaborador,
-} from "../services/colaboradorStorage";
-import { registrarMovimentacaoOrganizacional } from "../services/historicoOrganizacionalStorage";
+  criarColaborador,
+  type DependenciasAcessoColaboradores,
+} from "../services/colaboradoresSoberanos/acessoColaboradoresSoberanos";
 import "../styles/colaborador-form.css";
-import "../styles/historico-organizacional.css";
 
-function hojeLocal() {
+/** Estado explícito do fluxo de criação (nunca inferido de storage local). */
+export type EstadoCriacaoColaborador =
+  | { readonly fase: "inicial" }
+  | { readonly fase: "processando" }
+  | {
+      readonly fase: "erro";
+      readonly codigo: CodigoPublico;
+      readonly mensagem: string;
+    }
+  | { readonly fase: "sucesso"; readonly collaboratorId: string };
+
+type NovoColaboradorPageProps = {
+  /** Operações da porta (injeção de teste); produção usa o caminho padrão. */
+  readonly deps?: DependenciasAcessoColaboradores;
+  /** Semente de estado (SSR/teste determinístico). */
+  readonly estadoInicial?: EstadoCriacaoColaborador;
+};
+
+type StatusInicialSoberano = "active" | "leave";
+
+const SEM_DEPENDENCIAS: DependenciasAcessoColaboradores = {};
+
+const SEM_ORGANIZACAO_ATIVA =
+  "Selecione uma organização ativa para cadastrar colaboradores.";
+
+const AVISO_ESTRUTURA =
+  "Cargo, unidade, gestor direto, senioridade e colegiado não são definidos neste cadastro: " +
+  "eles pertencem à estrutura organizacional (F5-08). O colaborador é criado SEM ALOCAÇÃO e " +
+  "passa a exibir \"sem alocação\" até que a ocupação seja definida no módulo de estrutura.";
+
+function hojeLocal(): string {
   const agora = new Date();
   const offset = agora.getTimezoneOffset();
-  return new Date(agora.getTime() - offset * 60000)
-    .toISOString()
-    .slice(0, 10);
+  return new Date(agora.getTime() - offset * 60000).toISOString().slice(0, 10);
 }
 
-function NovoColaboradorPage() {
+/**
+ * `operation_id` (idempotência da mutação, §13.5) gerado pelo chamador. Não é
+ * identidade nem autoridade: serve apenas para a fronteira não duplicar efeitos.
+ */
+function novoOperationId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (caractere) => {
+    const aleatorio = Math.floor(Math.random() * 16);
+    const valor = caractere === "x" ? aleatorio : (aleatorio & 0x3) | 0x8;
+    return valor.toString(16);
+  });
+}
+
+function NovoColaboradorPage({
+  deps,
+  estadoInicial,
+}: NovoColaboradorPageProps = {}) {
   const navigate = useNavigate();
-  const { usuarioAtual } = useUsuarioAtual();
-  const colaboradoresExistentes = getColaboradores();
+  const { organizacaoAtivaId } = useAuth();
+  const [depsInjetadas] = useState<DependenciasAcessoColaboradores>(
+    () => deps ?? SEM_DEPENDENCIAS
+  );
+  const [estado, setEstado] = useState<EstadoCriacaoColaborador>(
+    estadoInicial ?? { fase: "inicial" }
+  );
 
   const [matricula, setMatricula] = useState("");
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
-  const [cargo, setCargo] = useState("");
-  const [area, setArea] = useState("");
-  const [funcao, setFuncao] = useState<FuncaoColaborador>("ANALISTA");
-  const [senioridade, setSenioridade] =
-    useState<SenioridadeColaborador>("JUNIOR");
-  const [avaliadoresColegiadoMatriculas, setAvaliadoresColegiadoMatriculas] =
-    useState<number[]>([]);
-  const [gestorDiretoMatricula, setGestorDiretoMatricula] = useState("");
-  const [status, setStatus] = useState<StatusColaborador>("ATIVO");
-  const [dataAdmissao, setDataAdmissao] = useState(hojeLocal());
-  const [erro, setErro] = useState("");
+  const [dataAdmissao, setDataAdmissao] = useState(hojeLocal);
+  const [statusInicial, setStatusInicial] =
+    useState<StatusInicialSoberano>("active");
+  const [erroLocal, setErroLocal] = useState("");
 
-  const authorizationContext: AuthorizationContext | undefined = usuarioAtual
-    ? {
-        actor: {
-          matricula: usuarioAtual.matricula,
-          funcao: usuarioAtual.funcao,
-          status: usuarioAtual.status,
-        },
-      }
-    : undefined;
-  const podeCriarColaborador = authorizationContext
-    ? can(authorizationContext, "collaborator.create", { kind: "global" })
-    : false;
+  const processando = estado.fase === "processando";
 
-  if (!usuarioAtual || !authorizationContext || !podeCriarColaborador) {
-    return (
-      <main className="virtus-page collaborator-form-page">
-        <section className="collaborator-form-empty-state">
-          <h1>Acesso restrito</h1>
-          <p>A gestão de colaboradores está disponível apenas para gerentes.</p>
-          <button
-            type="button"
-            className="collaborator-form-btn collaborator-form-btn--secondary"
-            onClick={() => navigate("/")}
-          >
-            Voltar aos colaboradores
-          </button>
-        </section>
-      </main>
-    );
-  }
+  async function handleSalvar() {
+    if (processando) return;
 
-  const contextoAutorizado = authorizationContext;
-  const autorAtual = usuarioAtual;
+    setErroLocal("");
 
-  const gestoresDisponiveis = colaboradoresExistentes
-    .filter(
-      (colaborador) =>
-        colaborador.status === "ATIVO" &&
-        (funcaoUsaEstruturaAvaliacaoAnalista(funcao)
-          ? colaborador.funcao === "GERENTE" ||
-            colaborador.funcao === "COORDENADOR"
-          : colaborador.funcao === "GERENTE")
-    )
-    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
-
-  const avaliadoresDisponiveis = colaboradoresExistentes
-    .filter(
-      (colaborador) =>
-        colaborador.status === "ATIVO" &&
-        (colaborador.funcao === "GERENTE" ||
-          colaborador.funcao === "COORDENADOR")
-    )
-    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
-
-  function toggleAvaliador(matriculaAvaliador: number) {
-    setAvaliadoresColegiadoMatriculas((atuais) =>
-      atuais.includes(matriculaAvaliador)
-        ? atuais.filter((item) => item !== matriculaAvaliador)
-        : [...atuais, matriculaAvaliador]
-    );
-  }
-
-  function handleSalvar() {
-    setErro("");
-
-    if (
-      !matricula.trim() ||
-      !nome.trim() ||
-      !email.trim() ||
-      !cargo.trim() ||
-      !area.trim() ||
-      !dataAdmissao
-    ) {
-      setErro("Preencha todos os campos obrigatórios.");
+    if (!matricula.trim() || !nome.trim() || !email.trim()) {
+      setErroLocal("Preencha todos os campos obrigatórios.");
       return;
     }
 
-    const novaMatricula = Number(matricula);
-
-    if (!Number.isInteger(novaMatricula) || novaMatricula <= 0) {
-      setErro("Informe uma matrícula válida.");
+    if (!/^\d+$/.test(matricula.trim()) || Number(matricula.trim()) <= 0) {
+      setErroLocal("Informe uma matrícula válida (somente dígitos).");
       return;
     }
 
-    const gestorDireto = gestorDiretoMatricula
-      ? colaboradoresExistentes.find(
-          (colaborador) =>
-            colaborador.matricula === Number(gestorDiretoMatricula)
-        )
-      : undefined;
-
-    const novoColaborador: Colaborador = {
-      matricula: novaMatricula,
-      nome: nome.trim(),
-      email: email.trim(),
-      cargo: cargo.trim(),
-      area: area.trim(),
-      funcao,
-      senioridade: funcao === "ANALISTA" ? senioridade : undefined,
-      avaliadoresColegiadoMatriculas:
-        funcaoUsaEstruturaAvaliacaoAnalista(funcao)
-          ? avaliadoresColegiadoMatriculas
-          : [],
-      gestorDiretoMatricula: gestorDireto?.matricula,
-      respondePara: gestorDireto?.nome ?? "",
-      status,
-      dataAdmissao,
-      dataInicioLicenca: status === "LICENCA" ? dataAdmissao : undefined,
-      dataDesligamento: status === "DESLIGADO" ? dataAdmissao : undefined,
-    };
-
-    try {
-      authorize(
-        contextoAutorizado,
-        "collaborator.create",
-        { kind: "global" }
-      );
-      saveColaborador(novoColaborador);
-
-      registrarMovimentacaoOrganizacional({
-        atual: novoColaborador,
-        colaboradores: colaboradoresExistentes,
-        dataVigencia: dataAdmissao,
-        escopo: "CICLO_ATUAL_E_POSTERIORES",
-        motivo: "Admissão / inclusão do colaborador no Virtus",
-        autorMatricula: autorAtual.matricula,
-        autorNome: autorAtual.nome,
+    if (!organizacaoAtivaId) {
+      setEstado({
+        fase: "erro",
+        codigo: "FORBIDDEN",
+        mensagem: SEM_ORGANIZACAO_ATIVA,
       });
-
-      navigate("/");
-    } catch (error) {
-      setErro(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível salvar o colaborador."
-      );
+      return;
     }
+
+    setEstado({ fase: "processando" });
+
+    const resultado = await criarColaborador(
+      {
+        fullName: nome.trim(),
+        email: email.trim(),
+        matricula: matricula.trim(),
+        ...(dataAdmissao ? { admissionDate: dataAdmissao } : {}),
+        statusInicial,
+        operationId: novoOperationId(),
+        organizationId: organizacaoAtivaId,
+      },
+      depsInjetadas
+    );
+
+    if (!resultado.ok) {
+      setEstado({
+        fase: "erro",
+        codigo: resultado.codigo,
+        mensagem: resultado.mensagem,
+      });
+      return;
+    }
+
+    setEstado({ fase: "sucesso", collaboratorId: resultado.dados });
+    navigate(`/colaborador/${resultado.dados}`);
   }
 
   return (
@@ -199,166 +161,133 @@ function NovoColaboradorPage() {
           <span className="collaborator-form-eyebrow">Cadastro</span>
           <h1>Novo colaborador</h1>
           <p>
-            Cadastre os dados profissionais, vínculo de gestão e participação no
-            colegiado.
+            Cadastre os dados de pessoa, a matrícula e o status inicial. O
+            cadastro é gravado no PostgreSQL pela porta soberana.
           </p>
         </div>
       </section>
 
       <section className="collaborator-form-card">
         <div className="collaborator-form-card__heading">
-          <span className="collaborator-form-card__icon" aria-hidden="true">01</span>
+          <span className="collaborator-form-card__icon" aria-hidden="true">
+            01
+          </span>
           <div>
             <h2>Dados do colaborador</h2>
-            <p>Informações básicas e início do vínculo profissional.</p>
+            <p>
+              Informações de pessoa, matrícula vigente e situação inicial do
+              vínculo.
+            </p>
           </div>
         </div>
 
         <div className="collaborator-form-grid">
           <label className="collaborator-field">
             <span>Matrícula *</span>
-            <input type="number" value={matricula} onChange={(e) => setMatricula(e.target.value)} placeholder="Ex.: 123456" />
+            <input
+              type="text"
+              inputMode="numeric"
+              value={matricula}
+              onChange={(event) => setMatricula(event.target.value)}
+              placeholder="Ex.: 123456"
+            />
+            <small>
+              A matrícula é uma intenção: o servidor resolve o identificador.
+            </small>
           </label>
 
           <label className="collaborator-field">
-            <span>Data de admissão *</span>
-            <input type="date" value={dataAdmissao} onChange={(e) => setDataAdmissao(e.target.value)} />
+            <span>Data de admissão</span>
+            <input
+              type="date"
+              value={dataAdmissao}
+              onChange={(event) => setDataAdmissao(event.target.value)}
+            />
           </label>
 
           <label className="collaborator-field collaborator-field--wide">
             <span>Nome *</span>
-            <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome completo" />
+            <input
+              type="text"
+              value={nome}
+              onChange={(event) => setNome(event.target.value)}
+              placeholder="Nome completo"
+            />
           </label>
 
           <label className="collaborator-field collaborator-field--wide">
             <span>E-mail *</span>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nome@empresa.com.br" />
+            <input
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="nome@empresa.com.br"
+            />
           </label>
 
           <label className="collaborator-field">
-            <span>Cargo *</span>
-            <input type="text" value={cargo} onChange={(e) => setCargo(e.target.value)} placeholder="Ex.: Analista de Operações" />
-          </label>
-
-          <label className="collaborator-field">
-            <span>Área *</span>
-            <input type="text" value={area} onChange={(e) => setArea(e.target.value)} placeholder="Ex.: Operações Digitais" />
+            <span>Status inicial *</span>
+            <select
+              value={statusInicial}
+              onChange={(event) =>
+                setStatusInicial(event.target.value as StatusInicialSoberano)
+              }
+            >
+              <option value="active">Ativo</option>
+              <option value="leave">Em licença</option>
+            </select>
           </label>
         </div>
       </section>
 
       <section className="collaborator-form-card">
         <div className="collaborator-form-card__heading">
-          <span className="collaborator-form-card__icon" aria-hidden="true">02</span>
+          <span className="collaborator-form-card__icon" aria-hidden="true">
+            02
+          </span>
           <div>
-            <h2>Estrutura organizacional</h2>
-            <p>Defina função, senioridade e gestor direto do colaborador.</p>
+            <h2>Estrutura organizacional (F5-08)</h2>
+            <p>
+              Cargo, unidade, gestor, senioridade e colegiado não fazem parte
+              deste cadastro.
+            </p>
           </div>
         </div>
 
-        <div className="collaborator-form-grid">
-          <label className="collaborator-field">
-            <span>Função *</span>
-            <select value={funcao} onChange={(e) => setFuncao(e.target.value as FuncaoColaborador)}>
-              <option value="ESTAGIARIO">Estagiário</option>
-              <option value="ANALISTA">Analista</option>
-              <option value="COORDENADOR">Coordenador</option>
-              <option value="CONSULTOR">Consultor</option>
-              <option value="GERENTE">Gerente</option>
-            </select>
-          </label>
-
-          {funcao === "ANALISTA" && (
-            <label className="collaborator-field">
-              <span>Senioridade *</span>
-              <select value={senioridade} onChange={(e) => setSenioridade(e.target.value as SenioridadeColaborador)}>
-                <option value="JUNIOR">Júnior</option>
-                <option value="PLENO">Pleno</option>
-                <option value="SENIOR">Sênior</option>
-              </select>
-            </label>
-          )}
-
-          <label className="collaborator-field">
-            <span>Gestor direto</span>
-            <select value={gestorDiretoMatricula} onChange={(e) => setGestorDiretoMatricula(e.target.value)}>
-              <option value="">Sem gestor direto</option>
-              {gestoresDisponiveis.map((gestor) => (
-                <option key={gestor.matricula} value={gestor.matricula}>
-                  {gestor.nome}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="collaborator-field">
-            <span>Status *</span>
-            <select value={status} onChange={(e) => setStatus(e.target.value as StatusColaborador)}>
-              <option value="ATIVO">Ativo</option>
-              <option value="LICENCA">Em licença</option>
-              <option value="DESLIGADO">Desligado</option>
-            </select>
-          </label>
-        </div>
+        <div className="collaborator-form-empty">{AVISO_ESTRUTURA}</div>
       </section>
 
-      {funcaoUsaEstruturaAvaliacaoAnalista(funcao) && (
-        <section className="collaborator-form-card">
-          <div className="collaborator-form-card__heading">
-            <span className="collaborator-form-card__icon" aria-hidden="true">03</span>
-            <div>
-              <h2>Avaliadores do colegiado</h2>
-              <p>
-                Selecione quantos gestores forem necessários. A composição será
-                preservada no histórico de cada vigência.
-              </p>
-            </div>
-          </div>
-
-          {avaliadoresDisponiveis.length === 0 ? (
-            <div className="collaborator-form-empty">
-              Nenhum gerente ou coordenador ativo disponível.
-            </div>
-          ) : (
-            <div className="collaborator-reviewers">
-              {avaliadoresDisponiveis.map((avaliador) => {
-                const selecionado =
-                  avaliadoresColegiadoMatriculas.includes(avaliador.matricula);
-
-                return (
-                  <label
-                    key={avaliador.matricula}
-                    className={`collaborator-reviewer ${selecionado ? "is-selected" : ""}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selecionado}
-                      onChange={() => toggleAvaliador(avaliador.matricula)}
-                    />
-                    <span className="collaborator-reviewer__avatar">
-                      {avaliador.nome
-                        .split(" ")
-                        .filter(Boolean)
-                        .slice(0, 2)
-                        .map((parte) => parte[0])
-                        .join("")
-                        .toUpperCase()}
-                    </span>
-                    <span className="collaborator-reviewer__copy">
-                      <strong>{avaliador.nome}</strong>
-                      <small>
-                        {avaliador.funcao === "GERENTE" ? "Gerente" : "Coordenador"}
-                      </small>
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          )}
-        </section>
+      {erroLocal && (
+        <div className="collaborator-form-error" role="alert">
+          {erroLocal}
+        </div>
       )}
 
-      {erro && <div className="collaborator-form-error">{erro}</div>}
+      {estado.fase === "processando" && (
+        <div className="collaborator-form-info" role="status" aria-live="polite">
+          Gravando o cadastro no servidor…
+        </div>
+      )}
+
+      {estado.fase === "sucesso" && (
+        <div className="collaborator-form-info" role="status">
+          Colaborador criado no cadastro soberano.
+        </div>
+      )}
+
+      {estado.fase === "erro" && (
+        <div className="collaborator-form-error" role="alert">
+          <strong>
+            {estado.codigo === "FORBIDDEN"
+              ? "Acesso restrito"
+              : estado.codigo === "CONFLICT"
+                ? "Conflito ao cadastrar"
+                : "Não foi possível cadastrar o colaborador"}
+          </strong>
+          <p>{estado.mensagem}</p>
+          <p>Nenhum registro foi gravado localmente.</p>
+        </div>
+      )}
 
       <div className="collaborator-form-actions">
         <button
@@ -372,9 +301,12 @@ function NovoColaboradorPage() {
         <button
           type="button"
           className="collaborator-form-btn collaborator-form-btn--primary"
-          onClick={handleSalvar}
+          onClick={() => {
+            void handleSalvar();
+          }}
+          disabled={processando}
         >
-          Salvar colaborador
+          {processando ? "Salvando…" : "Salvar colaborador"}
         </button>
       </div>
     </main>

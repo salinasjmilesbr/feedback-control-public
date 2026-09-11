@@ -1,14 +1,37 @@
+/**
+ * F5-07 — HISTÓRICO ORGANIZACIONAL SOBERANO; LEITURA LEGADA SOMENTE LEITURA.
+ *
+ * O histórico organizacional é soberano no `PostgreSQL`: as movimentações são
+ * append-only em `collaborator_events`, gravadas pela porta única
+ * `src/services/colaboradoresSoberanos/acessoColaboradoresSoberanos.ts`
+ * (`definirOcupacao`, `definirReportingLine`, ...). Portanto:
+ *
+ * - `registrarMovimentacaoOrganizacional` é BARREIRA fail-closed: lança erro
+ *   explícito e não grava nada em `localStorage`;
+ * - as funções de LEITURA permanecem apenas para exibir o acervo legado das
+ *   telas ainda não migradas. Elas são puras: não regravam, não migram e não
+ *   persistem a estrutura reconstruída (nenhum snapshot é salvo no storage).
+ */
 import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
 import type {
   EscopoMovimentacaoOrganizacional,
   MovimentacaoOrganizacional,
   SnapshotOrganizacional,
-  TipoMovimentacaoOrganizacional,
 } from "../types/HistoricoOrganizacional";
-import { getCicloAtivo, getCiclosAvaliacao } from "./cicloAvaliacaoStorage";
+import { getCiclosAvaliacao } from "./cicloAvaliacaoStorage";
 
 const STORAGE_KEY = "feedback-control-historico-organizacional";
+
+/**
+ * Mensagem única da barreira de escrita (F5-07). Movimentações organizacionais
+ * vivem em `collaborator_events`; o `localStorage` é somente leitura legada.
+ */
+export const ERRO_HISTORICO_ORGANIZACIONAL_SOBERANO =
+  "O histórico organizacional é soberano no PostgreSQL (F5-07): as movimentações são " +
+  "append-only em collaborator_events, gravadas pela porta única " +
+  "src/services/colaboradoresSoberanos/acessoColaboradoresSoberanos.ts. " +
+  "O localStorage é somente leitura legada e não deve ser gravado.";
 
 function lerTodas(): MovimentacaoOrganizacional[] {
   const data = localStorage.getItem(STORAGE_KEY);
@@ -19,10 +42,6 @@ function lerTodas(): MovimentacaoOrganizacional[] {
   } catch {
     return [];
   }
-}
-
-function persistir(movimentacoes: MovimentacaoOrganizacional[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(movimentacoes));
 }
 
 function timestampData(data?: string): number {
@@ -90,23 +109,6 @@ export function getHistoricoOrganizacional(
     );
 }
 
-function detectarTipo(
-  anterior: Colaborador | undefined,
-  atual: Colaborador
-): TipoMovimentacaoOrganizacional {
-  if (!anterior) return "ADMISSAO";
-
-  if (anterior.status !== atual.status) {
-    if (atual.status === "DESLIGADO") return "DESLIGAMENTO";
-    if (atual.status === "LICENCA") return "LICENCA";
-    if (anterior.status === "LICENCA" && atual.status === "ATIVO") {
-      return "RETORNO_LICENCA";
-    }
-  }
-
-  return "ALTERACAO_ESTRUTURA";
-}
-
 export function houveMudancaOrganizacional(
   anterior: Colaborador,
   atual: Colaborador
@@ -130,7 +132,7 @@ export function houveMudancaOrganizacional(
   );
 }
 
-export function registrarMovimentacaoOrganizacional(params: {
+export interface RegistrarMovimentacaoOrganizacionalParams {
   anterior?: Colaborador;
   atual: Colaborador;
   colaboradores: Colaborador[];
@@ -139,38 +141,20 @@ export function registrarMovimentacaoOrganizacional(params: {
   motivo?: string;
   autorMatricula: number;
   autorNome: string;
-}): MovimentacaoOrganizacional {
-  const cicloAtivo = getCicloAtivo();
-  const agora = new Date().toISOString();
+}
 
-  const movimentacao: MovimentacaoOrganizacional = {
-    id: crypto.randomUUID(),
-    colaboradorMatricula: params.atual.matricula,
-    colaboradorNome: params.atual.nome,
-    tipo: detectarTipo(params.anterior, params.atual),
-    dataVigencia: params.dataVigencia,
-    dataRegistro: agora,
-    escopo: params.escopo,
-    cicloIdReferencia: cicloAtivo?.id,
-    cicloReferenciaLabel: cicloAtivo
-      ? `${cicloAtivo.ano}.${cicloAtivo.ciclo}`
-      : undefined,
-    motivo: params.motivo?.trim() || undefined,
-    anterior: params.anterior
-      ? criarSnapshotOrganizacional(params.anterior, params.colaboradores)
-      : undefined,
-    atual: criarSnapshotOrganizacional(params.atual, [
-      ...params.colaboradores.filter(
-        (item) => item.matricula !== params.atual.matricula
-      ),
-      params.atual,
-    ]),
-    autorMatricula: params.autorMatricula,
-    autorNome: params.autorNome,
-  };
-
-  persistir([...lerTodas(), movimentacao]);
-  return movimentacao;
+/**
+ * BARREIRA fail-closed (F5-07): o histórico organizacional é soberano no
+ * PostgreSQL (`collaborator_events`, append-only). Nenhuma movimentação é
+ * registrada em `localStorage` — use a porta única
+ * `src/services/colaboradoresSoberanos/acessoColaboradoresSoberanos.ts`.
+ */
+export function registrarMovimentacaoOrganizacional(
+  params: RegistrarMovimentacaoOrganizacionalParams
+): MovimentacaoOrganizacional {
+  throw new Error(
+    `${ERRO_HISTORICO_ORGANIZACIONAL_SOBERANO} A movimentação da matrícula ${params.atual.matricula} não foi registrada localmente.`
+  );
 }
 
 function movimentoValeParaCiclo(

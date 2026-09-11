@@ -134,16 +134,26 @@ function AppRoutes() {
               element={<NovoColaboradorPage />}
             />
 
+            {/*
+              F5-07: identidade canônica por UUID (`collaboratorId`). A URL legada
+              com matrícula continua aceita no MESMO caminho — a matrícula é
+              resolvida no servidor pela porta única (ausente/ambígua ⇒ erro
+              fail-closed), nunca no cliente.
+            */}
             <Route
-              path="/colaborador/:id"
+              path="/colaborador/:collaboratorId"
               element={<ColaboradorDetalhePage />}
             />
 
             <Route
-              path="/colaborador/:id/editar"
+              path="/colaborador/:collaboratorId/editar"
               element={<EditarColaboradorPage />}
             />
 
+            {/*
+              Rotas ainda por MATRÍCULA: consumidores fora do escopo F5-07
+              (avaliação/observação legadas) continuam recebendo `:id` numérico.
+            */}
             <Route
               path="/colaborador/:id/novo-feedback"
               element={<NovoFeedbackPage />}
