@@ -1,258 +1,195 @@
-import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { authorize, can } from "../authorization/authorizationPolicy";
-import type { AuthorizationContext } from "../authorization/AuthorizationContext";
-import CollaboratorIdentity from "../components/CollaboratorIdentity";
-import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
-import type {
-  Colaborador,
-  FuncaoColaborador,
-  SenioridadeColaborador,
-  StatusColaborador,
-} from "../types/Colaborador";
-import { funcaoUsaEstruturaAvaliacaoAnalista } from "../types/Colaborador";
-import type { EscopoMovimentacaoOrganizacional } from "../types/HistoricoOrganizacional";
-import {
-  getColaboradorByMatricula,
-  getColaboradores,
-  updateColaborador,
-} from "../services/colaboradorStorage";
-import {
-  houveMudancaOrganizacional,
-  registrarMovimentacaoOrganizacional,
-} from "../services/historicoOrganizacionalStorage";
-import { getCicloAtivo } from "../services/cicloAvaliacaoStorage";
-import "../styles/colaborador-form.css";
-import "../styles/historico-organizacional.css";
+/**
+ * F5-07 — Editar colaborador: LEITURA por UUID e ESCRITA pela porta única.
+ *
+ * - o parâmetro de rota é `collaboratorId` (UUID canônico). URL legada com
+ *   matrícula continua resolvida — mas SEMPRE no servidor, via
+ *   `obterColaborador({ matricula })`: ausente/ambígua ⇒ `NOT_FOUND` (fail-closed,
+ *   sem heurística de cliente e sem cair para o legado);
+ * - a projeção traz `version` e TODA mutação envia `expectedVersion`; divergência
+ *   vira estado de CONFLITO explícito (§13.1);
+ * - operações separadas: dados de pessoa (`editarColaborador`), matrícula
+ *   (`definirIdentificadorColaborador`) e status/licença/inativação
+ *   (`alterarStatusColaborador`);
+ * - NADA de estrutura organizacional (cargo/unidade/gestor/colegiado/senioridade):
+ *   isso é F5-08. Sem alocação soberana a tela diz explicitamente "sem alocação";
+ * - nenhuma escrita em `localStorage`, nenhum dual-write e nenhum histórico local.
+ */
 
-function hojeLocal() {
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
+import {
+  ehUuid,
+  type CodigoPublico,
+} from "../infrastructure/supabase/colaboradores/contrato";
+import {
+  alterarStatusColaborador,
+  definirIdentificadorColaborador,
+  editarColaborador,
+  obterColaborador,
+  type ColaboradorSoberano,
+  type DependenciasAcessoColaboradores,
+} from "../services/colaboradoresSoberanos/acessoColaboradoresSoberanos";
+import "../styles/collaborator-identity.css";
+import "../styles/colaborador-form.css";
+
+/** Estado da leitura/gravação: carregando, erro público, conflito ou projeção. */
+export type EstadoEdicaoColaborador =
+  | { readonly fase: "carregando" }
+  | {
+      readonly fase: "erro";
+      readonly codigo: CodigoPublico;
+      readonly mensagem: string;
+    }
+  | { readonly fase: "conflito"; readonly mensagem: string }
+  | { readonly fase: "pronto"; readonly colaborador: ColaboradorSoberano };
+
+type EditarColaboradorPageProps = {
+  /** Operações da porta (injeção de teste); produção usa o caminho padrão. */
+  readonly deps?: DependenciasAcessoColaboradores;
+  /** Semente de estado (SSR/teste determinístico). */
+  readonly estadoInicial?: EstadoEdicaoColaborador;
+};
+
+type StatusSoberano = "active" | "leave" | "inactive";
+
+const SEM_DEPENDENCIAS: DependenciasAcessoColaboradores = {};
+
+const SEM_ORGANIZACAO_ATIVA =
+  "Selecione uma organização ativa para editar colaboradores.";
+
+const AVISO_SEM_ALOCACAO =
+  "Sem alocação: cargo, unidade, senioridade e gestor vêm da estrutura organizacional (F5-08). " +
+  "A alocação não é editada nesta tela.";
+
+function hojeLocal(): string {
   const agora = new Date();
   const offset = agora.getTimezoneOffset();
-  return new Date(agora.getTime() - offset * 60000)
-    .toISOString()
-    .slice(0, 10);
+  return new Date(agora.getTime() - offset * 60000).toISOString().slice(0, 10);
 }
 
-function EditarColaboradorPage() {
+function rotuloStatus(status: string): string {
+  if (status === "active") return "Ativo";
+  if (status === "leave") return "Em licença";
+  if (status === "inactive") return "Desligado";
+  return status || "—";
+}
+
+function possuiAlocacao(colaborador: ColaboradorSoberano): boolean {
+  return Boolean(
+    colaborador.unitName ??
+      colaborador.jobRoleName ??
+      colaborador.seniorityName ??
+      colaborador.managerFullName
+  );
+}
+
+/** `operation_id` da mutação (idempotência §13.5) — não é identidade. */
+function novoOperationId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (caractere) => {
+    const aleatorio = Math.floor(Math.random() * 16);
+    const valor = caractere === "x" ? aleatorio : (aleatorio & 0x3) | 0x8;
+    return valor.toString(16);
+  });
+}
+
+function EditarColaboradorPage({
+  deps,
+  estadoInicial,
+}: EditarColaboradorPageProps = {}) {
   const navigate = useNavigate();
-  const { id } = useParams();
-  const { usuarioAtual } = useUsuarioAtual();
-
-  const matricula = Number(id);
-  const colaborador = Number.isFinite(matricula)
-    ? getColaboradorByMatricula(matricula)
-    : undefined;
-
-  const colaboradoresExistentes = getColaboradores();
-  const cicloAtivo = getCicloAtivo();
-
-  const [nome, setNome] = useState(colaborador?.nome ?? "");
-  const [email, setEmail] = useState(colaborador?.email ?? "");
-  const [cargo, setCargo] = useState(colaborador?.cargo ?? "");
-  const [area, setArea] = useState(colaborador?.area ?? "");
-  const [funcao, setFuncao] = useState<FuncaoColaborador>(
-    colaborador?.funcao ?? "ANALISTA"
+  const { collaboratorId } = useParams();
+  const { organizacaoAtivaId } = useAuth();
+  const [depsInjetadas] = useState<DependenciasAcessoColaboradores>(
+    () => deps ?? SEM_DEPENDENCIAS
   );
-  const [senioridade, setSenioridade] = useState<SenioridadeColaborador>(
-    colaborador?.senioridade ?? "JUNIOR"
-  );
-  const [avaliadoresColegiadoMatriculas, setAvaliadoresColegiadoMatriculas] =
-    useState<number[]>(colaborador?.avaliadoresColegiadoMatriculas ?? []);
-  const [gestorDiretoMatricula, setGestorDiretoMatricula] =
-    useState(colaborador?.gestorDiretoMatricula?.toString() ?? "");
-  const [status, setStatus] = useState<StatusColaborador>(
-    colaborador?.status ?? "ATIVO"
-  );
-  const [dataAdmissao, setDataAdmissao] = useState(
-    colaborador?.dataAdmissao ?? ""
-  );
-  const [dataVigencia, setDataVigencia] = useState(hojeLocal());
-  const [escopo, setEscopo] =
-    useState<EscopoMovimentacaoOrganizacional>(
-      "CICLO_ATUAL_E_POSTERIORES"
-    );
-  const [motivo, setMotivo] = useState("");
-  const [erro, setErro] = useState("");
+  const [carregamento, setCarregamento] = useState<{
+    readonly chave: string;
+    readonly estado: EstadoEdicaoColaborador;
+  } | null>(null);
+  const [versao, setVersao] = useState(0);
+  /** Conflito de versão (§13.1): exibido até a projeção ser recarregada. */
+  const [conflito, setConflito] = useState<string | null>(null);
 
-  const authorizationContext: AuthorizationContext | undefined = usuarioAtual
-    ? {
-        actor: {
-          matricula: usuarioAtual.matricula,
-          funcao: usuarioAtual.funcao,
-          status: usuarioAtual.status,
-        },
-      }
-    : undefined;
+  const identificador = (collaboratorId ?? "").trim();
 
-  if (!colaborador) {
-    return (
-      <main className="virtus-page collaborator-form-page">
-        <section className="collaborator-form-empty-state">
-          <h1>Colaborador não encontrado</h1>
-          <p>Não foi possível localizar o cadastro solicitado.</p>
-          <button
-            type="button"
-            className="collaborator-form-btn collaborator-form-btn--secondary"
-            onClick={() => navigate("/")}
-          >
-            Voltar aos colaboradores
-          </button>
-        </section>
-      </main>
-    );
-  }
+  /** Chave da leitura corrente: organização + identificador + versão de recarga. */
+  const chaveCarregamento = `${organizacaoAtivaId ?? "sem-organizacao"}|${identificador}|${versao}`;
 
-  const colaboradorAtual = colaborador;
-  const collaboratorResource = {
-    kind: "collaborator" as const,
-    collaborator: colaboradorAtual,
-  };
-  const podeEditarColaborador = authorizationContext
-    ? can(
-        authorizationContext,
-        "collaborator.edit",
-        collaboratorResource
-      )
-    : false;
+  useEffect(() => {
+    if (estadoInicial || !organizacaoAtivaId || !identificador) return;
 
-  if (!usuarioAtual || !authorizationContext || !podeEditarColaborador) {
-    return (
-      <main className="virtus-page collaborator-form-page">
-        <section className="collaborator-form-empty-state">
-          <h1>Acesso restrito</h1>
-          <p>A gestão de colaboradores está disponível apenas para gerentes.</p>
-          <button
-            type="button"
-            className="collaborator-form-btn collaborator-form-btn--secondary"
-            onClick={() => navigate(`/colaborador/${colaboradorAtual.matricula}`)}
-          >
-            Voltar ao colaborador
-          </button>
-        </section>
-      </main>
-    );
-  }
+    let vigente = true;
 
-  const contextoAutorizado = authorizationContext;
-  const autorAtual = usuarioAtual;
+    // UUID = identidade canônica. Qualquer outro valor é tratado como INTENÇÃO de
+    // matrícula e resolvido NO SERVIDOR (nunca no cliente).
+    const entrada = ehUuid(identificador)
+      ? { collaboratorId: identificador }
+      : { matricula: identificador };
 
-  const gestoresDisponiveis = colaboradoresExistentes
-    .filter(
-      (item) =>
-        item.matricula !== colaboradorAtual.matricula &&
-        item.status === "ATIVO" &&
-        (funcaoUsaEstruturaAvaliacaoAnalista(funcao)
-          ? item.funcao === "GERENTE" || item.funcao === "COORDENADOR"
-          : item.funcao === "GERENTE")
-    )
-    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+    void obterColaborador(
+      { ...entrada, organizationId: organizacaoAtivaId },
+      depsInjetadas
+    ).then((resultado) => {
+      if (!vigente) return;
+      setCarregamento({
+        chave: chaveCarregamento,
+        estado: resultado.ok
+          ? { fase: "pronto", colaborador: resultado.dados }
+          : {
+              fase: "erro",
+              codigo: resultado.codigo,
+              mensagem: resultado.mensagem,
+            },
+      });
+    });
 
-  const avaliadoresDisponiveis = colaboradoresExistentes
-    .filter(
-      (item) =>
-        item.matricula !== colaboradorAtual.matricula &&
-        item.status === "ATIVO" &&
-        (item.funcao === "GERENTE" || item.funcao === "COORDENADOR")
-    )
-    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
-
-  function toggleAvaliador(matriculaAvaliador: number) {
-    setAvaliadoresColegiadoMatriculas((atuais) =>
-      atuais.includes(matriculaAvaliador)
-        ? atuais.filter((item) => item !== matriculaAvaliador)
-        : [...atuais, matriculaAvaliador]
-    );
-  }
-
-  function handleSalvar() {
-    setErro("");
-
-    if (!nome.trim() || !email.trim() || !cargo.trim() || !area.trim()) {
-      setErro("Preencha todos os campos obrigatórios.");
-      return;
-    }
-
-    const gestorDireto = gestorDiretoMatricula
-      ? colaboradoresExistentes.find(
-          (item) =>
-            item.matricula === Number(gestorDiretoMatricula)
-        )
-      : undefined;
-
-    const mudouParaLicenca =
-      colaboradorAtual.status !== "LICENCA" && status === "LICENCA";
-    const retornouLicenca =
-      colaboradorAtual.status === "LICENCA" && status === "ATIVO";
-    const mudouParaDesligado =
-      colaboradorAtual.status !== "DESLIGADO" && status === "DESLIGADO";
-
-    const colaboradorAtualizado: Colaborador = {
-      ...colaboradorAtual,
-      nome: nome.trim(),
-      email: email.trim(),
-      cargo: cargo.trim(),
-      area: area.trim(),
-      funcao,
-      senioridade:
-        funcao === "ANALISTA" ? senioridade : undefined,
-      gestorDiretoMatricula: gestorDireto?.matricula,
-      respondePara: gestorDireto?.nome ?? "",
-      avaliadoresColegiadoMatriculas:
-        funcaoUsaEstruturaAvaliacaoAnalista(funcao)
-          ? avaliadoresColegiadoMatriculas
-          : [],
-      status,
-      dataAdmissao: dataAdmissao || colaboradorAtual.dataAdmissao,
-      dataInicioLicenca: mudouParaLicenca
-        ? dataVigencia
-        : colaboradorAtual.dataInicioLicenca,
-      dataFimLicenca: retornouLicenca
-        ? dataVigencia
-        : colaboradorAtual.dataFimLicenca,
-      dataDesligamento: mudouParaDesligado
-        ? dataVigencia
-        : colaboradorAtual.dataDesligamento,
+    return () => {
+      vigente = false;
     };
+  }, [
+    chaveCarregamento,
+    identificador,
+    organizacaoAtivaId,
+    estadoInicial,
+    depsInjetadas,
+  ]);
 
-    const mudouEstrutura = houveMudancaOrganizacional(
-      colaboradorAtual,
-      colaboradorAtualizado
+  /**
+   * Estado exibido DERIVADO (sem `setState` síncrono no efeito): sem resultado
+   * para a chave corrente a tela está carregando; sem organização ativa ou sem
+   * identificador na rota o caminho é fail-closed e nada é lido.
+   */
+  const estado: EstadoEdicaoColaborador =
+    conflito && !estadoInicial
+      ? { fase: "conflito", mensagem: conflito }
+      : !organizacaoAtivaId && !estadoInicial
+        ? { fase: "erro", codigo: "FORBIDDEN", mensagem: SEM_ORGANIZACAO_ATIVA }
+        : !identificador && !estadoInicial
+          ? {
+              fase: "erro",
+              codigo: "NOT_FOUND",
+              mensagem: "Colaborador não informado na rota.",
+            }
+          : (estadoInicial ??
+            (carregamento?.chave === chaveCarregamento
+              ? carregamento.estado
+              : { fase: "carregando" }));
+
+  function recarregar() {
+    setConflito(null);
+    setVersao((valor) => valor + 1);
+  }
+
+  function voltar() {
+    navigate(
+      estado.fase === "pronto"
+        ? `/colaborador/${estado.colaborador.collaboratorId}`
+        : "/"
     );
-
-    if (mudouEstrutura && !dataVigencia) {
-      setErro("Informe a data de vigência da movimentação.");
-      return;
-    }
-
-    try {
-      authorize(
-        contextoAutorizado,
-        "collaborator.edit",
-        collaboratorResource
-      );
-      updateColaborador(colaboradorAtualizado);
-
-      if (mudouEstrutura) {
-        registrarMovimentacaoOrganizacional({
-          anterior: colaboradorAtual,
-          atual: colaboradorAtualizado,
-          colaboradores: colaboradoresExistentes,
-          dataVigencia,
-          escopo,
-          motivo,
-          autorMatricula: autorAtual.matricula,
-          autorNome: autorAtual.nome,
-        });
-      }
-
-      navigate(`/colaborador/${colaboradorAtual.matricula}`);
-    } catch (error) {
-      setErro(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível atualizar o colaborador."
-      );
-    }
   }
 
   return (
@@ -262,47 +199,296 @@ function EditarColaboradorPage() {
           <button
             type="button"
             className="collaborator-form-back"
-            onClick={() =>
-              navigate(`/colaborador/${colaboradorAtual.matricula}`)
-            }
+            onClick={voltar}
           >
-            ← Voltar ao colaborador
+            ← Voltar
           </button>
           <span className="collaborator-form-eyebrow">Cadastro</span>
           <h1>Editar colaborador</h1>
           <p>
-            Atualize dados profissionais e registre mudanças de estrutura com
-            vigência definida.
+            Dados de pessoa, matrícula e status vigentes no PostgreSQL. Cada
+            gravação exige a versão lida do servidor.
           </p>
         </div>
       </section>
 
-      <section className="collaborator-form-identity-card">
-        <CollaboratorIdentity
-          colaborador={colaboradorAtual}
-          variant="profile"
-          gestorNome={colaboradorAtual.respondePara || undefined}
+      {estado.fase === "carregando" && (
+        <section className="collaborator-form-empty-state" role="status" aria-live="polite">
+          <h2>Carregando colaborador…</h2>
+          <p>Consultando a projeção soberana no servidor.</p>
+        </section>
+      )}
+
+      {estado.fase === "erro" && (
+        <section className="collaborator-form-empty-state" role="alert">
+          <h2>
+            {estado.codigo === "FORBIDDEN"
+              ? "Acesso restrito"
+              : estado.codigo === "NOT_FOUND"
+                ? "Colaborador não encontrado"
+                : "Não foi possível carregar o colaborador"}
+          </h2>
+          <p>{estado.mensagem}</p>
+          {estado.codigo === "NOT_FOUND" && (
+            <p>
+              A matrícula da URL é resolvida no servidor: ausente ou ambígua não
+              cai para nenhum cadastro local.
+            </p>
+          )}
+          <button
+            type="button"
+            className="collaborator-form-btn collaborator-form-btn--secondary"
+            onClick={recarregar}
+          >
+            Tentar novamente
+          </button>
+        </section>
+      )}
+
+      {estado.fase === "conflito" && (
+        <section className="collaborator-form-empty-state" role="alert">
+          <h2>Conflito de versão</h2>
+          <p>{estado.mensagem}</p>
+          <p>
+            Os dados foram alterados por outra pessoa desde a sua leitura.
+            Recarregue a projeção antes de gravar novamente.
+          </p>
+          <button
+            type="button"
+            className="collaborator-form-btn collaborator-form-btn--primary"
+            onClick={recarregar}
+          >
+            Recarregar dados
+          </button>
+        </section>
+      )}
+
+      {estado.fase === "pronto" && (
+        <FormularioEdicao
+          key={`${estado.colaborador.collaboratorId}-${estado.colaborador.version}`}
+          colaborador={estado.colaborador}
+          organizacaoAtivaId={organizacaoAtivaId ?? ""}
+          deps={depsInjetadas}
+          aoConflitar={(mensagem) => setConflito(mensagem)}
+          aoAtualizar={recarregar}
         />
+      )}
+    </main>
+  );
+}
+
+type FormularioEdicaoProps = {
+  readonly colaborador: ColaboradorSoberano;
+  readonly organizacaoAtivaId: string;
+  readonly deps: DependenciasAcessoColaboradores;
+  readonly aoConflitar: (mensagem: string) => void;
+  readonly aoAtualizar: () => void;
+};
+
+function FormularioEdicao({
+  colaborador,
+  organizacaoAtivaId,
+  deps,
+  aoConflitar,
+  aoAtualizar,
+}: FormularioEdicaoProps) {
+  const navigate = useNavigate();
+  const [nome, setNome] = useState(colaborador.fullName);
+  const [email, setEmail] = useState(colaborador.email);
+  const [dataAdmissao, setDataAdmissao] = useState(
+    colaborador.admissionDate ?? ""
+  );
+  const [novaMatricula, setNovaMatricula] = useState(colaborador.matricula ?? "");
+  const [vigenciaMatricula, setVigenciaMatricula] = useState(hojeLocal);
+  const [motivoMatricula, setMotivoMatricula] = useState("");
+  const [novoStatus, setNovoStatus] = useState<StatusSoberano>(
+    colaborador.status === "leave" || colaborador.status === "inactive"
+      ? colaborador.status
+      : "active"
+  );
+  const [vigenciaStatus, setVigenciaStatus] = useState(hojeLocal);
+  const [motivoStatus, setMotivoStatus] = useState("");
+  const [erro, setErro] = useState("");
+  const [aviso, setAviso] = useState("");
+  const [processando, setProcessando] = useState(false);
+
+  const expectedVersion = colaborador.version;
+
+  async function salvarPessoa() {
+    if (processando) return;
+    setErro("");
+    setAviso("");
+
+    if (!nome.trim() || !email.trim()) {
+      setErro("Preencha nome e e-mail.");
+      return;
+    }
+
+    setProcessando(true);
+    const resultado = await editarColaborador(
+      {
+        collaboratorId: colaborador.collaboratorId,
+        operationId: novoOperationId(),
+        expectedVersion,
+        fullName: nome.trim(),
+        email: email.trim(),
+        ...(dataAdmissao ? { admissionDate: dataAdmissao } : {}),
+        organizationId: organizacaoAtivaId,
+      },
+      deps
+    );
+    setProcessando(false);
+
+    if (!resultado.ok) {
+      if (resultado.codigo === "CONFLICT") {
+        aoConflitar(resultado.mensagem);
+        return;
+      }
+      setErro(resultado.mensagem);
+      return;
+    }
+
+    navigate(`/colaborador/${colaborador.collaboratorId}`);
+  }
+
+  async function salvarMatricula() {
+    if (processando) return;
+    setErro("");
+    setAviso("");
+
+    if (!/^\d+$/.test(novaMatricula.trim()) || Number(novaMatricula.trim()) <= 0) {
+      setErro("Informe uma matrícula válida (somente dígitos).");
+      return;
+    }
+    if (!vigenciaMatricula || !motivoMatricula.trim()) {
+      setErro("Informe a vigência e o motivo da alteração de matrícula.");
+      return;
+    }
+
+    setProcessando(true);
+    const resultado = await definirIdentificadorColaborador(
+      {
+        collaboratorId: colaborador.collaboratorId,
+        operationId: novoOperationId(),
+        novaMatricula: novaMatricula.trim(),
+        vigencia: vigenciaMatricula,
+        motivo: motivoMatricula.trim(),
+        expectedVersion,
+        organizationId: organizacaoAtivaId,
+      },
+      deps
+    );
+    setProcessando(false);
+
+    if (!resultado.ok) {
+      if (resultado.codigo === "CONFLICT") {
+        aoConflitar(resultado.mensagem);
+        return;
+      }
+      setErro(resultado.mensagem);
+      return;
+    }
+
+    setAviso("Matrícula atualizada no cadastro soberano.");
+    setMotivoMatricula("");
+    aoAtualizar();
+  }
+
+  async function salvarStatus() {
+    if (processando) return;
+    setErro("");
+    setAviso("");
+
+    if (!vigenciaStatus || !motivoStatus.trim()) {
+      setErro("Informe a vigência e o motivo da alteração de status.");
+      return;
+    }
+
+    setProcessando(true);
+    const resultado = await alterarStatusColaborador(
+      {
+        collaboratorId: colaborador.collaboratorId,
+        operationId: novoOperationId(),
+        novoStatus,
+        vigencia: vigenciaStatus,
+        motivo: motivoStatus.trim(),
+        expectedVersion,
+        organizationId: organizacaoAtivaId,
+      },
+      deps
+    );
+    setProcessando(false);
+
+    if (!resultado.ok) {
+      if (resultado.codigo === "CONFLICT") {
+        aoConflitar(resultado.mensagem);
+        return;
+      }
+      setErro(resultado.mensagem);
+      return;
+    }
+
+    setAviso("Status atualizado no cadastro soberano.");
+    setMotivoStatus("");
+    aoAtualizar();
+  }
+
+  return (
+    <>
+      <section className="collaborator-form-identity-card">
+        <div className="collaborator-identity collaborator-identity--profile">
+          <div className="collaborator-identity__body">
+            <div className="collaborator-identity__title">
+              <strong>{colaborador.fullName}</strong>
+              <span className="collaborator-identity__status is-active">
+                {rotuloStatus(colaborador.status)}
+              </span>
+            </div>
+            <div className="collaborator-identity__role">
+              {colaborador.matricula
+                ? `Matrícula ${colaborador.matricula}`
+                : "Sem matrícula vigente"}
+            </div>
+            <div className="collaborator-identity__details">
+              <span className="collaborator-identity__detail">
+                <span>{colaborador.email}</span>
+              </span>
+              <span className="collaborator-identity__detail">
+                <span>Versão da projeção: {colaborador.version}</span>
+              </span>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section className="collaborator-form-card">
         <div className="collaborator-form-card__heading">
-          <span className="collaborator-form-card__icon" aria-hidden="true">01</span>
+          <span className="collaborator-form-card__icon" aria-hidden="true">
+            01
+          </span>
           <div>
-            <h2>Dados do colaborador</h2>
-            <p>Informações cadastrais e vínculo profissional.</p>
+            <h2>Dados de pessoa</h2>
+            <p>Nome, e-mail e data de admissão do cadastro soberano.</p>
           </div>
         </div>
 
         <div className="collaborator-form-grid">
-          <label className="collaborator-field">
-            <span>Matrícula</span>
+          <label className="collaborator-field collaborator-field--wide">
+            <span>Nome *</span>
             <input
-              type="number"
-              value={colaboradorAtual.matricula}
-              disabled
+              type="text"
+              value={nome}
+              onChange={(event) => setNome(event.target.value)}
             />
-            <small>A matrícula não pode ser alterada.</small>
+          </label>
+
+          <label className="collaborator-field collaborator-field--wide">
+            <span>E-mail *</span>
+            <input
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
           </label>
 
           <label className="collaborator-field">
@@ -310,229 +496,202 @@ function EditarColaboradorPage() {
             <input
               type="date"
               value={dataAdmissao}
-              onChange={(e) => setDataAdmissao(e.target.value)}
+              onChange={(event) => setDataAdmissao(event.target.value)}
             />
           </label>
+        </div>
 
-          <label className="collaborator-field collaborator-field--wide">
-            <span>Nome *</span>
-            <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} />
-          </label>
-
-          <label className="collaborator-field collaborator-field--wide">
-            <span>E-mail *</span>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          </label>
-
-          <label className="collaborator-field">
-            <span>Cargo *</span>
-            <input type="text" value={cargo} onChange={(e) => setCargo(e.target.value)} />
-          </label>
-
-          <label className="collaborator-field">
-            <span>Área *</span>
-            <input type="text" value={area} onChange={(e) => setArea(e.target.value)} />
-          </label>
+        <div className="collaborator-form-actions">
+          <button
+            type="button"
+            className="collaborator-form-btn collaborator-form-btn--primary"
+            onClick={() => {
+              void salvarPessoa();
+            }}
+            disabled={processando}
+          >
+            Salvar dados de pessoa
+          </button>
         </div>
       </section>
 
       <section className="collaborator-form-card">
         <div className="collaborator-form-card__heading">
-          <span className="collaborator-form-card__icon" aria-hidden="true">02</span>
+          <span className="collaborator-form-card__icon" aria-hidden="true">
+            02
+          </span>
           <div>
-            <h2>Estrutura organizacional</h2>
-            <p>Defina função, senioridade, gestor direto e situação atual.</p>
-          </div>
-        </div>
-
-        <div className="collaborator-form-grid">
-          <label className="collaborator-field">
-            <span>Função *</span>
-            <select value={funcao} onChange={(e) => setFuncao(e.target.value as FuncaoColaborador)}>
-              <option value="ESTAGIARIO">Estagiário</option>
-              <option value="ANALISTA">Analista</option>
-              <option value="COORDENADOR">Coordenador</option>
-              <option value="CONSULTOR">Consultor</option>
-              <option value="GERENTE">Gerente</option>
-            </select>
-          </label>
-
-          {funcao === "ANALISTA" && (
-            <label className="collaborator-field">
-              <span>Senioridade *</span>
-              <select value={senioridade} onChange={(e) => setSenioridade(e.target.value as SenioridadeColaborador)}>
-                <option value="JUNIOR">Júnior</option>
-                <option value="PLENO">Pleno</option>
-                <option value="SENIOR">Sênior</option>
-              </select>
-            </label>
-          )}
-
-          <label className="collaborator-field">
-            <span>Gestor direto</span>
-            <select value={gestorDiretoMatricula} onChange={(e) => setGestorDiretoMatricula(e.target.value)}>
-              <option value="">Sem gestor direto</option>
-              {gestoresDisponiveis.map((gestor) => (
-                <option key={gestor.matricula} value={gestor.matricula}>
-                  {gestor.nome}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="collaborator-field">
-            <span>Status *</span>
-            <select value={status} onChange={(e) => setStatus(e.target.value as StatusColaborador)}>
-              <option value="ATIVO">Ativo</option>
-              <option value="LICENCA">Em licença</option>
-              <option value="DESLIGADO">Desligado</option>
-            </select>
-          </label>
-
-          {status === "DESLIGADO" && (
-            <div
-              className="collaborator-form-warning collaborator-field--wide"
-              role="status"
-            >
-              Após o desligamento, não será possível criar novas avaliações ou
-              observações para este colaborador. O histórico existente
-              permanecerá disponível.
-            </div>
-          )}
-        </div>
-      </section>
-
-      {funcaoUsaEstruturaAvaliacaoAnalista(funcao) && (
-        <section className="collaborator-form-card">
-          <div className="collaborator-form-card__heading">
-            <span className="collaborator-form-card__icon" aria-hidden="true">03</span>
-            <div>
-              <h2>Avaliadores do colegiado</h2>
-              <p>
-                Selecione quantos gestores forem necessários. Cada alteração
-                será preservada no histórico.
-              </p>
-            </div>
-          </div>
-
-          {avaliadoresDisponiveis.length === 0 ? (
-            <div className="collaborator-form-empty">
-              Nenhum gerente ou coordenador ativo disponível.
-            </div>
-          ) : (
-            <div className="collaborator-reviewers">
-              {avaliadoresDisponiveis.map((avaliador) => {
-                const selecionado =
-                  avaliadoresColegiadoMatriculas.includes(avaliador.matricula);
-
-                return (
-                  <label
-                    key={avaliador.matricula}
-                    className={`collaborator-reviewer ${selecionado ? "is-selected" : ""}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selecionado}
-                      onChange={() => toggleAvaliador(avaliador.matricula)}
-                    />
-                    <span className="collaborator-reviewer__avatar">
-                      {avaliador.nome
-                        .split(" ")
-                        .filter(Boolean)
-                        .slice(0, 2)
-                        .map((parte) => parte[0])
-                        .join("")
-                        .toUpperCase()}
-                    </span>
-                    <span className="collaborator-reviewer__copy">
-                      <strong>{avaliador.nome}</strong>
-                      <small>
-                        {avaliador.funcao === "GERENTE" ? "Gerente" : "Coordenador"}
-                      </small>
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          )}
-        </section>
-      )}
-
-      <section className="collaborator-form-card collaborator-form-card--movement">
-        <div className="collaborator-form-card__heading">
-          <span className="collaborator-form-card__icon" aria-hidden="true">04</span>
-          <div>
-            <h2>Vigência da alteração</h2>
+            <h2>Matrícula</h2>
             <p>
-              Mudanças de estrutura, função, status, gestor ou colegiado ficam
-              registradas sem reescrever o histórico anterior.
+              A matrícula vigente é encerrada e uma nova linha é aberta na
+              vigência informada. O identificador funcional continua sendo o UUID.
             </p>
           </div>
         </div>
 
         <div className="collaborator-form-grid">
           <label className="collaborator-field">
-            <span>Data de vigência *</span>
-            <input type="date" value={dataVigencia} onChange={(e) => setDataVigencia(e.target.value)} />
+            <span>Nova matrícula *</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={novaMatricula}
+              onChange={(event) => setNovaMatricula(event.target.value)}
+            />
           </label>
 
           <label className="collaborator-field">
-            <span>Aplicar a *</span>
-            <select value={escopo} onChange={(e) => setEscopo(e.target.value as EscopoMovimentacaoOrganizacional)}>
-              <option value="CICLO_ATUAL_E_POSTERIORES">
-                {cicloAtivo
-                  ? `Ciclo atual (${cicloAtivo.ano}.${cicloAtivo.ciclo}) e posteriores`
-                  : "Estrutura atual e ciclos posteriores"}
-              </option>
-              <option value="SOMENTE_CICLOS_POSTERIORES">
-                Somente ciclos posteriores
-              </option>
-            </select>
+            <span>Vigência *</span>
+            <input
+              type="date"
+              value={vigenciaMatricula}
+              onChange={(event) => setVigenciaMatricula(event.target.value)}
+            />
           </label>
 
           <label className="collaborator-field collaborator-field--wide">
-            <span>Motivo da movimentação</span>
+            <span>Motivo *</span>
             <input
               type="text"
-              value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
-              placeholder="Ex.: transferência de equipe, promoção, reorganização..."
+              value={motivoMatricula}
+              onChange={(event) => setMotivoMatricula(event.target.value)}
+              placeholder="Ex.: correção de matrícula"
             />
-            <small>
-              Opcional, mas recomendado para mudanças de gestor, função ou
-              desligamento.
-            </small>
           </label>
         </div>
 
-        <div className="collaborator-form-info">
-          O cadastro representa a situação atual. O histórico preserva a
-          estrutura anterior e a nova estrutura com a data efetiva da mudança.
+        <div className="collaborator-form-actions">
+          <button
+            type="button"
+            className="collaborator-form-btn collaborator-form-btn--primary"
+            onClick={() => {
+              void salvarMatricula();
+            }}
+            disabled={processando}
+          >
+            Alterar matrícula
+          </button>
         </div>
       </section>
 
-      {erro && <div className="collaborator-form-error">{erro}</div>}
+      <section className="collaborator-form-card">
+        <div className="collaborator-form-card__heading">
+          <span className="collaborator-form-card__icon" aria-hidden="true">
+            03
+          </span>
+          <div>
+            <h2>Status, licença e inativação</h2>
+            <p>
+              Transições permitidas: ativo↔licença, ativo→desligado e
+              licença→desligado. A inativação com ocupação vigente é recusada pelo
+              servidor (pendências de estrutura).
+            </p>
+          </div>
+        </div>
 
-      <div className="collaborator-form-actions">
-        <button
-          type="button"
-          className="collaborator-form-btn collaborator-form-btn--secondary"
-          onClick={() =>
-            navigate(`/colaborador/${colaboradorAtual.matricula}`)
-          }
-        >
-          Cancelar
-        </button>
+        <div className="collaborator-form-grid">
+          <label className="collaborator-field">
+            <span>Novo status *</span>
+            <select
+              value={novoStatus}
+              onChange={(event) =>
+                setNovoStatus(event.target.value as StatusSoberano)
+              }
+            >
+              <option value="active">Ativo</option>
+              <option value="leave">Em licença</option>
+              <option value="inactive">Desligado</option>
+            </select>
+          </label>
 
-        <button
-          type="button"
-          className="collaborator-form-btn collaborator-form-btn--primary"
-          onClick={handleSalvar}
-        >
-          Salvar alterações
-        </button>
-      </div>
-    </main>
+          <label className="collaborator-field">
+            <span>Vigência *</span>
+            <input
+              type="date"
+              value={vigenciaStatus}
+              onChange={(event) => setVigenciaStatus(event.target.value)}
+            />
+          </label>
+
+          <label className="collaborator-field collaborator-field--wide">
+            <span>Motivo *</span>
+            <input
+              type="text"
+              value={motivoStatus}
+              onChange={(event) => setMotivoStatus(event.target.value)}
+              placeholder="Ex.: início de licença médica"
+            />
+          </label>
+        </div>
+
+        {novoStatus === "inactive" && (
+          <div className="collaborator-form-warning" role="status">
+            Após a inativação não é possível abrir novas avaliações ou
+            observações para este colaborador. O histórico existente permanece.
+          </div>
+        )}
+
+        <div className="collaborator-form-actions">
+          <button
+            type="button"
+            className="collaborator-form-btn collaborator-form-btn--primary"
+            onClick={() => {
+              void salvarStatus();
+            }}
+            disabled={processando}
+          >
+            Alterar status
+          </button>
+        </div>
+      </section>
+
+      <section className="collaborator-form-card">
+        <div className="collaborator-form-card__heading">
+          <span className="collaborator-form-card__icon" aria-hidden="true">
+            04
+          </span>
+          <div>
+            <h2>Estrutura organizacional (F5-08)</h2>
+            <p>Somente leitura: a estrutura é definida no módulo próprio.</p>
+          </div>
+        </div>
+
+        {possuiAlocacao(colaborador) ? (
+          <div className="collaborator-form-grid">
+            <div className="collaborator-field">
+              <span>Unidade</span>
+              <strong>{colaborador.unitName ?? "—"}</strong>
+            </div>
+            <div className="collaborator-field">
+              <span>Cargo / função</span>
+              <strong>{colaborador.jobRoleName ?? "—"}</strong>
+            </div>
+            <div className="collaborator-field">
+              <span>Senioridade</span>
+              <strong>{colaborador.seniorityName ?? "—"}</strong>
+            </div>
+            <div className="collaborator-field">
+              <span>Gestor</span>
+              <strong>{colaborador.managerFullName ?? "—"}</strong>
+            </div>
+          </div>
+        ) : (
+          <div className="collaborator-form-empty">{AVISO_SEM_ALOCACAO}</div>
+        )}
+      </section>
+
+      {erro && (
+        <div className="collaborator-form-error" role="alert">
+          {erro}
+        </div>
+      )}
+
+      {aviso && (
+        <div className="collaborator-form-info" role="status">
+          {aviso}
+        </div>
+      )}
+    </>
   );
 }
 
