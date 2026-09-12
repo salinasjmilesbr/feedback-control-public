@@ -560,8 +560,6 @@ const RESPONSABILIDADES = ["operational", "evaluative", "operational_evaluative"
 const CICLO_ESCOPOS = ["CICLO_ATUAL_E_POSTERIORES", "SOMENTE_CICLOS_POSTERIORES"] as const;
 /** Status dos catálogos (D17): inativação no lugar, nunca DELETE. */
 const STATUS_CATALOGO = ["active", "disabled"] as const;
-/** Cardinalidade máxima do conjunto de membros do colegiado (0..N). */
-const MAX_MEMBROS_COLEGIADO = 200;
 
 type StatusColaborador = (typeof STATUS_COLABORADOR)[number];
 type StatusInicial = (typeof STATUS_INICIAIS)[number];
@@ -619,11 +617,14 @@ function uuidOpcional(
 }
 
 /**
- * Lista de UUIDs que ACEITA VAZIO: o colegiado é 0..N e lista vazia é
- * "sem colegiado" EXPLÍCITO (F3-08 D8), distinto de ausência de configuração.
+ * Lista de UUIDs que ACEITA VAZIO: o colegiado é 0..N no contrato e lista
+ * vazia é "sem colegiado" EXPLÍCITO (F3-08 D8), distinto de ausência de
+ * configuração. A fronteira valida SOMENTE forma (array + UUIDs):
+ * duplicidade, self-member, tenant e qualquer cardinalidade de domínio
+ * continuam na RPC/banco — nenhum teto arbitrário é imposto aqui.
  */
-function listaUuidPermitindoVazio(valor: unknown, max: number): readonly string[] | null {
-  if (!Array.isArray(valor) || valor.length > max) return null;
+function listaUuidPermitindoVazio(valor: unknown): readonly string[] | null {
+  if (!Array.isArray(valor)) return null;
   const itens: string[] = [];
   for (const item of valor) {
     if (!ehUuid(item)) return null;
@@ -1531,10 +1532,7 @@ export function validarEntradaColaborador(corpo: unknown): ResultadoValidacaoCol
       if (!ehUuid(cru.collaboratorId)) {
         return { ok: false, code: "INVALID_INPUT", message: "collaboratorId inválido." };
       }
-      const membros = listaUuidPermitindoVazio(
-        cru.memberCollaboratorIds,
-        MAX_MEMBROS_COLEGIADO
-      );
+      const membros = listaUuidPermitindoVazio(cru.memberCollaboratorIds);
       if (!membros) {
         return { ok: false, code: "INVALID_INPUT", message: "memberCollaboratorIds inválido." };
       }

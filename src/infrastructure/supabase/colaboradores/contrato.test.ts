@@ -933,7 +933,6 @@ describe("F5-08 P3 — contrato.ts: nuláveis, arrays e domínios das operaçõe
     ["não-array", "membro"],
     ["com item inválido", [MEMBRO_A, "membro-1"]],
     ["com null", [MEMBRO_A, null]],
-    ["acima do limite", Array.from({ length: 201 }, () => MEMBRO_A)],
   ])("recusa memberCollaboratorIds %s", (_nome, memberCollaboratorIds) => {
     const resultado = validar({
       ...corpoValido("estrutura.colegiado.definir"),
@@ -942,6 +941,21 @@ describe("F5-08 P3 — contrato.ts: nuláveis, arrays e domínios das operaçõe
     expect(resultado.ok).toBe(false);
     if (resultado.ok) return;
     expect(resultado.message).toBe("memberCollaboratorIds inválido.");
+  });
+
+  it("NÃO impõe teto de membros: 250 UUIDs válidos continuam válidos (0..N)", () => {
+    const muitos = Array.from(
+      { length: 250 },
+      (_, indice) => "00000000-0000-4000-8000-" + String(indice).padStart(12, "0")
+    );
+    const resultado = validar({
+      ...corpoValido("estrutura.colegiado.definir"),
+      memberCollaboratorIds: muitos,
+    });
+
+    expect(resultado.ok, JSON.stringify(resultado)).toBe(true);
+    if (!resultado.ok) return;
+    expect(resultado.entrada).toMatchObject({ memberCollaboratorIds: muitos });
   });
 
   it("normaliza `code` do cargo para caixa alta e aceita ausência", () => {

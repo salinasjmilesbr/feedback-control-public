@@ -501,6 +501,36 @@ describe("F5-08 P3 — plano administrativo (D19) das operações de estrutura/c
     expect(execucao.entrada.memberCollaboratorIds).toEqual([]);
   });
 
+  it("aceita colegiado com mais de 200 membros (nenhum teto na Edge)", async () => {
+    const { d, executarRpc } = montarDeps({
+      capabilities: [{ capability_code: "org.structure.manage" }],
+    });
+    const muitos = Array.from(
+      { length: 250 },
+      (_, indice) => "00000000-0000-4000-8000-" + String(indice).padStart(12, "0")
+    );
+
+    const resposta = await colaboradores(
+      requisicao({
+        organization_id: ORG,
+        operacao: "estrutura.colegiado.definir",
+        operationId: OPERATION_ID,
+        collaboratorId: ATOR_COLLAB,
+        memberCollaboratorIds: muitos,
+        validFrom: VALID_FROM,
+        motivo: "colegiado grande",
+      }),
+      d
+    );
+
+    expect(resposta.status).toBe(200);
+    expect(executarRpc).toHaveBeenCalledTimes(1);
+    const execucao = executarRpc.mock.calls[0]![0];
+    expect(execucao.operacao).toBe("estrutura.colegiado.definir");
+    if (execucao.operacao !== "estrutura.colegiado.definir") return;
+    expect(execucao.entrada.memberCollaboratorIds).toHaveLength(250);
+  });
+
   it("nega operação de OUTRA organização do payload (tenant é revalidado)", async () => {
     const { d, executarRpc } = montarDeps({
       capabilities: [{ capability_code: "org.structure.manage" }],
