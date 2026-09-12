@@ -156,14 +156,15 @@ declare v_tab text;
     'evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria',
     'evaluation_config_scale_bands','evaluation_config_participant_roles','evaluation_cycles',
     'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
-    'evaluation_events','evaluation_pendencies','evaluation_aggregates'];
+    'evaluation_events','evaluation_pendencies','evaluation_aggregates',
+    'structure_events'];
 begin
   foreach v_tab in array v_closed loop
     if exists (select 1 from pg_policies p where p.schemaname='public' and p.tablename=v_tab) then
       raise exception '[FAIL] tabela fechada com policy indevida: %', v_tab;
     end if;
   end loop;
-  raise notice '[PASS] 21 tabelas fechadas permanecem sem policy';
+  raise notice '[PASS] 22 tabelas fechadas permanecem sem policy';
 end $$;
 
 do $$
@@ -198,7 +199,8 @@ declare
     'evaluation_config_scale_bands','evaluation_config_participant_roles','evaluation_cycles',
     'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
     'evaluation_events','evaluation_pendencies','evaluation_aggregates',
-    'collaborator_events'];
+    'collaborator_events',
+    'structure_events'];
   v_privs text[] := array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'];
 begin
   foreach v_tab in array v_todos loop
@@ -208,7 +210,7 @@ begin
       end if;
     end loop;
   end loop;
-  raise notice '[PASS] anon sem qualquer privilegio de tabela (43 tabelas x 7 privs)';
+  raise notice '[PASS] anon sem qualquer privilegio de tabela (44 tabelas x 7 privs)';
 end $$;
 
 do $$
@@ -233,7 +235,8 @@ declare
     'evaluation_config_scale_bands','evaluation_config_participant_roles','evaluation_cycles',
     'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
     'evaluation_events','evaluation_pendencies','evaluation_aggregates',
-    'collaborator_events'];
+    'collaborator_events',
+    'structure_events'];
 begin
   foreach v_tab in array v_todos loop
     foreach v_priv in array v_dml loop
@@ -242,7 +245,7 @@ begin
       end if;
     end loop;
   end loop;
-  raise notice '[PASS] authenticated sem INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER (43 tabelas)';
+  raise notice '[PASS] authenticated sem INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER (44 tabelas)';
 end $$;
 
 do $$
@@ -264,7 +267,8 @@ declare v_tab text;
     'evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria',
     'evaluation_config_scale_bands','evaluation_config_participant_roles','evaluation_cycles',
     'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
-    'evaluation_events','evaluation_pendencies','evaluation_aggregates'];
+    'evaluation_events','evaluation_pendencies','evaluation_aggregates',
+    'structure_events'];
   -- F5-07: log append-only — tem policy SELECT own-tenant mas NAO tem grant a
   -- `authenticated` (categoria propria; nao e "legivel" nem "fechada").
   v_policy_sem_grant text[] := array['collaborator_events'];
@@ -284,7 +288,7 @@ begin
       raise exception '[FAIL] authenticated com SELECT no log append-only public.%', v_tab;
     end if;
   end loop;
-  raise notice '[PASS] authenticated com SELECT somente nas 21 tabelas legiveis (21 fechadas + 1 log append-only sem SELECT)';
+  raise notice '[PASS] authenticated com SELECT somente nas 21 tabelas legiveis (22 fechadas + 1 log append-only sem SELECT)';
 end $$;
 
 -- ----------------------------------------------------------------------------
@@ -313,11 +317,12 @@ begin
       'evaluation_config_scale_bands','evaluation_config_participant_roles','evaluation_cycles',
       'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
       'evaluation_events','evaluation_pendencies','evaluation_aggregates',
-      'collaborator_events');
+      'collaborator_events',
+      'structure_events');
   if v_t is not null then
     raise exception '[FAIL] tabela public nao classificada (D16 — catalogacao explicita obrigatoria): %', v_t;
   end if;
-  raise notice '[PASS] todas as 43 tabelas public estao explicitamente classificadas (D16)';
+  raise notice '[PASS] todas as 44 tabelas public estao explicitamente classificadas (D16)';
 end $$;
 
 do $$
