@@ -223,6 +223,72 @@ describe("F5-08 P4 — telas: carregamento, vazio, erro e identidade por UUID", 
     expect(html).toContain("Renomear");
   });
 
+  it("Unidades: janela FUTURA não é apresentada como vigente (nem encerrável)", () => {
+    // Datas afastadas do relógio: 2099 é futuro e 1900 é passado em qualquer run.
+    const base = estrutura();
+    const comFutura: EstadoEstrutura = {
+      fase: "pronto",
+      estrutura: {
+        ...base,
+        unidades: [
+          ...base.unidades,
+          {
+            unitId: PERIODO,
+            nome: "Unidade Programada Fictícia",
+            validFrom: "2099-01-01T00:00:00.000Z",
+            validTo: null,
+            version: 1,
+          },
+          {
+            unitId: REPORTING,
+            nome: "Unidade Encerrada Fictícia",
+            validFrom: "1900-01-01T00:00:00.000Z",
+            validTo: "1900-06-01T00:00:00.000Z",
+            version: 2,
+          },
+        ],
+      },
+    };
+
+    const html = renderizar(<UnidadesPage estadoInicial={comFutura} />);
+
+    expect(html).toContain("Programada para 01/01/2099");
+    expect(html).toContain("Encerrada em 01/06/1900");
+    // Contagem de vigentes: as DUAS unidades vigentes do fixture (a futura e a
+    // encerrada NÃO contam).
+    expect(html).toContain("2 unidade(s) vigente(s)");
+    // A unidade futura não aparece como vigente.
+    expect(html).not.toContain("Vigente desde 01/01/2099");
+  });
+
+  it("Posições: ocupação/reporting FUTUROS não aparecem como atuais", () => {
+    const base = estrutura();
+    const comFuturos: EstadoEstrutura = {
+      fase: "pronto",
+      estrutura: {
+        ...base,
+        ocupacoes: [
+          {
+            ...base.ocupacoes[0]!,
+            validFrom: "2099-01-01T00:00:00.000Z",
+          },
+        ],
+        reportingLines: [
+          {
+            ...base.reportingLines[0]!,
+            validFrom: "2099-01-01T00:00:00.000Z",
+          },
+        ],
+      },
+    };
+
+    const html = renderizar(<PosicoesPage estadoInicial={comFuturos} />);
+
+    expect(html).toContain("Ocupante: sem ocupante");
+    expect(html).toContain("sem linha de reporting registrada");
+    expect(html).not.toContain("Ocupante: Pessoa Membro Fictícia");
+  });
+
   it("Posições: unidade, cargo, senioridade, ocupante e reporting line derivados", () => {
     const html = renderizar(<PosicoesPage estadoInicial={PRONTO} />);
 

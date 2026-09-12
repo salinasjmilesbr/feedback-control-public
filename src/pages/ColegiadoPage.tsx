@@ -23,11 +23,11 @@ import {
 import {
   SEM_ORGANIZACAO_ATIVA,
   colegiadoVigente,
-  formatarData,
   historicoColegiado,
   hojeLocal,
   nomeDoColaborador,
   novoOperationId,
+  rotuloVigencia,
   type ErroOperacao,
   type EstadoEstrutura,
 } from "./apoioEstrutura";
@@ -425,10 +425,7 @@ function ColegiadoPage({ deps, estadoInicial, avaliadoInicial }: ColegiadoPagePr
             {historico.map((versao) => (
               <li key={versao.colegiadoId} className="estrutura-item" data-id={versao.colegiadoId}>
                 <div className="estrutura-item__copy">
-                  <strong>
-                    {formatarData(versao.validFrom)} —{" "}
-                    {versao.validTo ? formatarData(versao.validTo) : "vigente"}
-                  </strong>
+                  <strong>{rotuloVigencia(versao.validFrom, versao.validTo)}</strong>
                   <span>
                     {versao.membroIds.length === 0
                       ? "sem colegiado (zero membros)"

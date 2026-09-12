@@ -13,6 +13,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import type { CodigoPublico } from "../infrastructure/supabase/colaboradores/contrato";
 import {
   criarUnidade,
   definirParentUnidade,
@@ -26,11 +27,13 @@ import {
 import {
   SEM_ORGANIZACAO_ATIVA,
   TEXTO_ERRO_ESTRUTURA,
+  decidirVersaoOtimista,
   estaVigente,
-  formatarData,
   hojeLocal,
   novoOperationId,
   profundidadeDaUnidade,
+  rotuloVigencia,
+  type DecisaoVersaoOtimista,
   type ErroOperacao,
   type EstadoEstrutura,
 } from "./apoioEstrutura";
@@ -111,6 +114,29 @@ function UnidadesPage({ deps, estadoInicial }: UnidadesPageProps = {}) {
           ? carregamento.estado
           : { fase: "carregando" }));
 
+  /**
+   * Versão otimista da unidade na fotografia CORRENTE. Nunca fabrica versão: se
+   * a unidade não está mais na leitura, devolve `fotografia-desatualizada`.
+   */
+  function versaoDaFotografia(unitId: string): DecisaoVersaoOtimista {
+    return decidirVersaoOtimista(
+      estado.fase === "pronto"
+        ? estado.estrutura.unidades.map((unidade) => ({
+            id: unidade.unitId,
+            version: unidade.version,
+          }))
+        : [],
+      unitId
+    );
+  }
+
+  /** Fecha a edição por leitura desatualizada: sem envio, com recarga. */
+  function invalidarPorFotografia(mensagem: string, codigo: CodigoPublico) {
+    setErro({ codigo, mensagem });
+    setSelecionada(null);
+    setVersao((atual) => atual + 1);
+  }
+
   async function executar(
     operacao: () => Promise<ResultadoColaboradores<unknown>>,
     motivoInformado: string,
@@ -178,7 +204,12 @@ function UnidadesPage({ deps, estadoInicial }: UnidadesPageProps = {}) {
   }
 
   const { unidades } = estado.estrutura;
-  const unidadesVigentes = unidades.filter((unidade) => estaVigente(unidade.validTo));
+  // "Vigente" = janela meio-aberta `[valid_from, valid_to)` na data de hoje —
+  // uma unidade com `valid_to` FUTURO continua vigente; uma com `valid_from`
+  // futuro ainda NÃO está vigente.
+  const unidadesVigentes = unidades.filter((unidade) =>
+    estaVigente(unidade.validFrom, unidade.validTo)
+  );
 
   return (
     <main className="virtus-page estrutura-page">
@@ -282,14 +313,16 @@ function UnidadesPage({ deps, estadoInicial }: UnidadesPageProps = {}) {
           {unidades.map((unidade) => {
             const profundidade = profundidadeDaUnidade(estado.estrutura, unidade.unitId);
             const relacao = estado.estrutura.periodosParent.find(
-              (periodo) => periodo.unitId === unidade.unitId && estaVigente(periodo.validTo)
+              (periodo) =>
+                periodo.unitId === unidade.unitId &&
+                estaVigente(periodo.validFrom, periodo.validTo)
             );
             const pai = relacao
               ? relacao.parentUnitId
                 ? unidades.find((item) => item.unitId === relacao.parentUnitId)?.nome ?? "—"
                 : "Raiz (sem unidade pai)"
               : "Sem relação pai registrada";
-            const vigente = estaVigente(unidade.validTo);
+            const vigente = estaVigente(unidade.validFrom, unidade.validTo);
 
             return (
               <li
@@ -301,10 +334,8 @@ function UnidadesPage({ deps, estadoInicial }: UnidadesPageProps = {}) {
                 <div className="estrutura-item__copy">
                   <strong>{unidade.nome}</strong>
                   <span>
-                    {vigente
-                      ? `Vigente desde ${formatarData(unidade.validFrom)}`
-                      : `Encerrada em ${formatarData(unidade.validTo ?? "")}`}{" "}
-                    • versão {unidade.version} • Pai: {pai}
+                    {rotuloVigencia(unidade.validFrom, unidade.validTo)} • versão{" "}
+                    {unidade.version} • Pai: {pai}
                   </span>
                 </div>
                 <div className="estrutura-item__actions">
@@ -417,13 +448,20 @@ function UnidadesPage({ deps, estadoInicial }: UnidadesPageProps = {}) {
               };
 
               if (selecionada.acao === "renomear") {
+                // `expectedVersion` vem da fotografia CORRENTE (nunca de default
+                // sintético): se a unidade sumiu da leitura, nada é enviado.
+                const decisao = versaoDaFotografia(selecionada.unitId);
+                if (decisao.tipo === "fotografia-desatualizada") {
+                  invalidarPorFotografia(decisao.mensagem, decisao.codigo);
+                  return;
+                }
                 void executar(
                   () =>
                     renomearUnidade(
                       {
                         ...base,
                         nome: nome.trim(),
-                        expectedVersion: selecionada.version,
+                        expectedVersion: decisao.expectedVersion,
                         motivo: motivo.trim(),
                       },
                       depsInjetadas
@@ -435,13 +473,18 @@ function UnidadesPage({ deps, estadoInicial }: UnidadesPageProps = {}) {
               }
 
               if (selecionada.acao === "encerrar") {
+                const decisao = versaoDaFotografia(selecionada.unitId);
+                if (decisao.tipo === "fotografia-desatualizada") {
+                  invalidarPorFotografia(decisao.mensagem, decisao.codigo);
+                  return;
+                }
                 void executar(
                   () =>
                     encerrarUnidade(
                       {
                         ...base,
                         validTo: vigencia,
-                        expectedVersion: selecionada.version,
+                        expectedVersion: decisao.expectedVersion,
                         motivo: motivo.trim(),
                       },
                       depsInjetadas

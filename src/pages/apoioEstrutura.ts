@@ -59,9 +59,94 @@ export function hojeLocal(): string {
   return new Date(agora.getTime() - offset * 60000).toISOString().slice(0, 10);
 }
 
-/** Vigência aberta = `valid_to` nulo (período meio-aberto [from, to)). */
-export function estaVigente(validTo: string | null): boolean {
-  return validTo === null;
+/**
+ * Instante de referência da apresentação temporal (ISO-8601 em UTC).
+ *
+ * É apenas o "agora" usado para decidir o que está VIGENTE na fotografia lida do
+ * servidor. Nenhum fuso é inventado: o valor é um INSTANTE e a comparação é feita
+ * em época (ms), de modo que `2026-06-15T09:00:00-03:00` e
+ * `2026-06-15T12:00:00Z` são o MESMO instante. Injetável em teste.
+ */
+export function agoraIso(): string {
+  return new Date().toISOString();
+}
+
+/** Converte um valor temporal do PostgREST em época (ms); `null` se inválido. */
+function instanteMs(valor: string | null | undefined): number | null {
+  if (typeof valor !== "string") return null;
+  const limpo = valor.trim();
+  if (limpo.length === 0) return null;
+  const ms = Date.parse(limpo);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * Situação de uma janela temporal na data de referência, no modelo MEIO-ABERTO
+ * `[valid_from, valid_to)` do contrato F5-08/F3:
+ *
+ * - `vigente`  ⇒ `valid_from <= referencia && (valid_to === null || referencia < valid_to)`;
+ * - `futura`   ⇒ a janela ainda não começou;
+ * - `encerrada`⇒ a janela já terminou (`referencia >= valid_to`).
+ *
+ * Valor inválido/ausente é FAIL-CLOSED: nunca é tratado como vigente. Isto é
+ * SELEÇÃO/APRESENTAÇÃO temporal da fotografia soberana — as guardas de domínio
+ * (I1–I5, ciclo, imutabilidade) continuam na RPC/banco.
+ */
+export type SituacaoTemporal = "vigente" | "futura" | "encerrada";
+
+export function situacaoTemporal(
+  validFrom: string | null | undefined,
+  validTo: string | null | undefined,
+  referencia: string = agoraIso()
+): SituacaoTemporal | "invalida" {
+  const inicio = instanteMs(validFrom);
+  const ref = instanteMs(referencia);
+  // `null`/ausente = "sem término definido"; presente e inválido = FAIL-CLOSED.
+  const fimBruto = validTo === null || validTo === undefined ? null : validTo;
+  const fim = fimBruto === null ? null : instanteMs(fimBruto);
+
+  if (inicio === null || ref === null) return "invalida";
+  if (fimBruto !== null && fim === null) return "invalida";
+  if (fim !== null && fim <= inicio) return "invalida"; // janela degenerada
+
+  if (ref < inicio) return "futura";
+  if (fim !== null && ref >= fim) return "encerrada";
+  return "vigente";
+}
+
+/**
+ * A janela está VIGENTE na referência? Intervalo meio-aberto `[from, to)`:
+ * o início é INCLUSIVO e o fim é EXCLUSIVO (`referencia === valid_to` ⇒ NÃO
+ * vigente). `valid_to` nulo significa "sem término definido" — inclusive para
+ * uma linha que hoje já tem `valid_to` FUTURO (continua vigente até a data).
+ */
+export function estaVigente(
+  validFrom: string | null | undefined,
+  validTo: string | null | undefined,
+  referencia: string = agoraIso()
+): boolean {
+  return situacaoTemporal(validFrom, validTo, referencia) === "vigente";
+}
+
+/** Rótulo de apresentação da janela temporal (vigente/futura/encerrada). */
+export function rotuloVigencia(
+  validFrom: string | null | undefined,
+  validTo: string | null | undefined,
+  referencia: string = agoraIso()
+): string {
+  const situacao = situacaoTemporal(validFrom, validTo, referencia);
+  if (situacao === "vigente") {
+    return validTo
+      ? `Vigente desde ${formatarData(validFrom ?? "")} até ${formatarData(validTo)}`
+      : `Vigente desde ${formatarData(validFrom ?? "")}`;
+  }
+  if (situacao === "futura") {
+    return `Programada para ${formatarData(validFrom ?? "")}`;
+  }
+  if (situacao === "encerrada") {
+    return `Encerrada em ${formatarData(validTo ?? "")}`;
+  }
+  return "Vigência não informada pelo servidor";
 }
 
 export function rotuloStatusCatalogo(status: string): string {
@@ -126,37 +211,46 @@ export function rotuloDaSenioridade(
   return senioridade?.nome || "—";
 }
 
-/** Períodos pai/filho ABERTOS (vigentes) por unidade. */
+/** Período pai/filho VIGENTE na referência (meio-aberto `[from, to)`). */
 export function periodoParentVigente(
   estrutura: EstruturaSoberana,
-  unitId: string
+  unitId: string,
+  referencia: string = agoraIso()
 ): { readonly parentUnitId: string | null } | null {
-  const aberto = estrutura.periodosParent.find(
-    (periodo) => periodo.unitId === unitId && estaVigente(periodo.validTo)
+  const vigente = estrutura.periodosParent.find(
+    (periodo) =>
+      periodo.unitId === unitId &&
+      estaVigente(periodo.validFrom, periodo.validTo, referencia)
   );
-  return aberto ? { parentUnitId: aberto.parentUnitId } : null;
+  return vigente ? { parentUnitId: vigente.parentUnitId } : null;
 }
 
-/** Ocupação ABERTA de uma posição (quem ocupa hoje), se houver. */
+/** Ocupação VIGENTE de uma posição (quem ocupa hoje), se houver. */
 export function ocupanteDaPosicao(
   estrutura: EstruturaSoberana,
-  posicaoId: string
+  posicaoId: string,
+  referencia: string = agoraIso()
 ): string | null {
-  const aberta = estrutura.ocupacoes.find(
-    (ocupacao) => ocupacao.posicaoId === posicaoId && estaVigente(ocupacao.validTo)
+  const vigente = estrutura.ocupacoes.find(
+    (ocupacao) =>
+      ocupacao.posicaoId === posicaoId &&
+      estaVigente(ocupacao.validFrom, ocupacao.validTo, referencia)
   );
-  return aberta ? aberta.collaboratorId : null;
+  return vigente ? vigente.collaboratorId : null;
 }
 
-/** Reporting line ABERTA de uma posição (superior formal), se houver. */
+/** Reporting line VIGENTE de uma posição (superior formal), se houver. */
 export function superiorDaPosicao(
   estrutura: EstruturaSoberana,
-  posicaoId: string
+  posicaoId: string,
+  referencia: string = agoraIso()
 ): string | null {
-  const aberta = estrutura.reportingLines.find(
-    (linha) => linha.subordinatePositionId === posicaoId && estaVigente(linha.validTo)
+  const vigente = estrutura.reportingLines.find(
+    (linha) =>
+      linha.subordinatePositionId === posicaoId &&
+      estaVigente(linha.validFrom, linha.validTo, referencia)
   );
-  return aberta ? aberta.managerPositionId : null;
+  return vigente ? vigente.managerPositionId : null;
 }
 
 /**
@@ -181,10 +275,13 @@ export function rotuloDaPosicao(estrutura: EstruturaSoberana, posicaoId: string)
  */
 export function colegiadoVigente(
   estrutura: EstruturaSoberana,
-  collaboratorId: string
+  collaboratorId: string,
+  referencia: string = agoraIso()
 ): { readonly colegiadoId: string; readonly membroIds: readonly string[] } | null {
   const vigente = estrutura.colegiados.find(
-    (colegiado) => colegiado.collaboratorId === collaboratorId && estaVigente(colegiado.validTo)
+    (colegiado) =>
+      colegiado.collaboratorId === collaboratorId &&
+      estaVigente(colegiado.validFrom, colegiado.validTo, referencia)
   );
   return vigente
     ? { colegiadoId: vigente.colegiadoId, membroIds: [...vigente.membroIds] }
@@ -216,12 +313,16 @@ export function historicoColegiado(
  * ausência de ciclo é garantida no banco (I1 + trigger), e o corte por
  * `visitados` protege apenas o render contra dado inconsistente.
  */
-export function profundidadeDaUnidade(estrutura: EstruturaSoberana, unitId: string): number {
+export function profundidadeDaUnidade(
+  estrutura: EstruturaSoberana,
+  unitId: string,
+  referencia: string = agoraIso()
+): number {
   let profundidade = 0;
   let atual = unitId;
   const visitados = new Set<string>([unitId]);
   for (let passo = 0; passo < 64; passo += 1) {
-    const periodo = periodoParentVigente(estrutura, atual);
+    const periodo = periodoParentVigente(estrutura, atual, referencia);
     if (!periodo || !periodo.parentUnitId) break;
     if (visitados.has(periodo.parentUnitId)) break;
     visitados.add(periodo.parentUnitId);
@@ -229,4 +330,45 @@ export function profundidadeDaUnidade(estrutura: EstruturaSoberana, unitId: stri
     profundidade += 1;
   }
   return profundidade;
+}
+
+// ---------------------------------------------------------------------------
+// F5-08 P4 — versão otimista a partir da FOTOGRAFIA soberana
+//
+// `expectedVersion` NUNCA é fabricado: ou vem da fotografia lida do servidor, ou
+// a intenção é recusada localmente (fail-closed) por estar construída sobre uma
+// leitura que já não contém a entidade. Nenhuma regra de domínio é replicada: a
+// decisão real de concorrência continua no servidor (`CONFLICT`).
+// ---------------------------------------------------------------------------
+
+export const MENSAGEM_FOTOGRAFIA_DESATUALIZADA =
+  "A estrutura foi atualizada e o item em edição não está mais na leitura atual. " +
+  "A leitura foi recarregada: revise o estado e tente novamente.";
+
+export type DecisaoVersaoOtimista =
+  | { readonly tipo: "enviar"; readonly expectedVersion: number }
+  | {
+      readonly tipo: "fotografia-desatualizada";
+      readonly codigo: CodigoPublico;
+      readonly mensagem: string;
+    };
+
+/**
+ * Decide a versão otimista a enviar com base na fotografia CORRENTE. Devolve
+ * `fotografia-desatualizada` (sem versão alguma) quando a entidade não existe
+ * mais na leitura — jamais `0`, `1` ou qualquer default.
+ */
+export function decidirVersaoOtimista(
+  itens: readonly { readonly id: string; readonly version: number }[],
+  id: string
+): DecisaoVersaoOtimista {
+  const item = itens.find((candidato) => candidato.id === id);
+  if (!item || typeof item.version !== "number" || !Number.isFinite(item.version)) {
+    return {
+      tipo: "fotografia-desatualizada",
+      codigo: "CONFLICT",
+      mensagem: MENSAGEM_FOTOGRAFIA_DESATUALIZADA,
+    };
+  }
+  return { tipo: "enviar", expectedVersion: item.version };
 }

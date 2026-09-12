@@ -13,6 +13,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import type { CodigoPublico } from "../infrastructure/supabase/colaboradores/contrato";
 import {
   criarPosicao,
   encerrarPosicao,
@@ -23,8 +24,8 @@ import {
 import {
   SEM_ORGANIZACAO_ATIVA,
   TEXTO_ERRO_ESTRUTURA,
+  decidirVersaoOtimista,
   estaVigente,
-  formatarData,
   hojeLocal,
   nomeDaUnidade,
   nomeDoColaborador,
@@ -33,7 +34,9 @@ import {
   rotuloDaPosicao,
   rotuloDaSenioridade,
   rotuloDoCargo,
+  rotuloVigencia,
   superiorDaPosicao,
+  type DecisaoVersaoOtimista,
   type ErroOperacao,
   type EstadoEstrutura,
 } from "./apoioEstrutura";
@@ -65,7 +68,6 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
   const [encerrando, setEncerrando] = useState<{
     readonly posicaoId: string;
     readonly rotulo: string;
-    readonly version: number;
   } | null>(null);
   const [vigencia, setVigencia] = useState(hojeLocal);
   const [motivo, setMotivo] = useState("");
@@ -111,6 +113,29 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
         (carregamento?.chave === chaveCarregamento
           ? carregamento.estado
           : { fase: "carregando" }));
+
+  /**
+   * Versão otimista da posição na fotografia CORRENTE. Nunca fabrica versão: se
+   * a posição não está mais na leitura, devolve `fotografia-desatualizada`.
+   */
+  function versaoDaFotografia(posicaoId: string): DecisaoVersaoOtimista {
+    return decidirVersaoOtimista(
+      estado.fase === "pronto"
+        ? estado.estrutura.posicoes.map((posicao) => ({
+            id: posicao.posicaoId,
+            version: posicao.version,
+          }))
+        : [],
+      posicaoId
+    );
+  }
+
+  /** Fecha o encerramento por leitura desatualizada: sem envio, com recarga. */
+  function invalidarPorFotografia(mensagem: string, codigo: CodigoPublico) {
+    setErro({ codigo, mensagem });
+    setEncerrando(null);
+    setVersao((atual) => atual + 1);
+  }
 
   async function executar(
     operacao: () => Promise<ResultadoColaboradores<unknown>>,
@@ -179,7 +204,10 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
   }
 
   const { posicoes, cargos, senioridades, unidades } = estado.estrutura;
-  const unidadesVigentes = unidades.filter((unidade) => estaVigente(unidade.validTo));
+  // "Vigente" = janela meio-aberta `[valid_from, valid_to)` na data de hoje.
+  const unidadesVigentes = unidades.filter((unidade) =>
+    estaVigente(unidade.validFrom, unidade.validTo)
+  );
   const cargosAtivos = cargos.filter((cargo) => cargo.status === "active");
   const senioridadesAtivas = senioridades.filter(
     (senioridade) => senioridade.status === "active"
@@ -343,11 +371,13 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
 
         <ul className="estrutura-lista">
           {posicoesExibidas.map((posicao) => {
-            const vigente = estaVigente(posicao.validTo);
+            const vigente = estaVigente(posicao.validFrom, posicao.validTo);
             const ocupanteId = ocupanteDaPosicao(estado.estrutura, posicao.posicaoId);
             const superiorId = superiorDaPosicao(estado.estrutura, posicao.posicaoId);
             const linha = estado.estrutura.reportingLines.some(
-              (item) => item.subordinatePositionId === posicao.posicaoId && estaVigente(item.validTo)
+              (item) =>
+                item.subordinatePositionId === posicao.posicaoId &&
+                estaVigente(item.validFrom, item.validTo)
             );
 
             return (
@@ -376,10 +406,8 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
                       : "sem linha de reporting registrada"}
                   </span>
                   <span>
-                    {vigente
-                      ? `Vigente desde ${formatarData(posicao.validFrom)}`
-                      : `Encerrada em ${formatarData(posicao.validTo ?? "")}`}{" "}
-                    • versão {posicao.version} • identidade {posicao.posicaoId}
+                    {rotuloVigencia(posicao.validFrom, posicao.validTo)} • versão{" "}
+                    {posicao.version} • identidade {posicao.posicaoId}
                   </span>
                 </div>
                 <div className="estrutura-item__actions">
@@ -391,7 +419,6 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
                         setEncerrando({
                           posicaoId: posicao.posicaoId,
                           rotulo: rotuloDaPosicao(estado.estrutura, posicao.posicaoId),
-                          version: posicao.version,
                         });
                         setVigencia(hojeLocal());
                         setMotivo("");
@@ -429,6 +456,13 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
             className="estrutura-form"
             onSubmit={(evento) => {
               evento.preventDefault();
+              // `expectedVersion` vem da fotografia CORRENTE (nunca de default
+              // sintético): se a posição sumiu da leitura, nada é enviado.
+              const decisao = versaoDaFotografia(encerrando.posicaoId);
+              if (decisao.tipo === "fotografia-desatualizada") {
+                invalidarPorFotografia(decisao.mensagem, decisao.codigo);
+                return;
+              }
               void executar(
                 () =>
                   encerrarPosicao(
@@ -436,7 +470,7 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
                       operationId: novoOperationId(),
                       posicaoId: encerrando.posicaoId,
                       validTo: vigencia,
-                      expectedVersion: encerrando.version,
+                      expectedVersion: decisao.expectedVersion,
                       motivo: motivo.trim(),
                       ...(organizacaoAtivaId ? { organizationId: organizacaoAtivaId } : {}),
                     },

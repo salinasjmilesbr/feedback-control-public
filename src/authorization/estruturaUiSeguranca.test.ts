@@ -24,6 +24,7 @@ import UnidadesFonte from "../pages/UnidadesPage.tsx?raw";
 import PosicoesFonte from "../pages/PosicoesPage.tsx?raw";
 import ColegiadoFonte from "../pages/ColegiadoPage.tsx?raw";
 import ApoioFonte from "../pages/apoioEstrutura.ts?raw";
+import CatalogosEdicaoFonte from "../pages/catalogosEdicao.ts?raw";
 import PortaFonte from "../services/colaboradoresSoberanos/acessoColaboradoresSoberanos.ts?raw";
 import ServiceFonte from "../services/colaboradoresSoberanos/serviceColaboradores.ts?raw";
 import LeituraFonte from "../infrastructure/supabase/estrutura/repositorioEstruturaSoberana.ts?raw";
@@ -37,6 +38,7 @@ const FONTES_UI: readonly (readonly [string, string])[] = [
   ["PosicoesPage", PosicoesFonte as string],
   ["ColegiadoPage", ColegiadoFonte as string],
   ["apoioEstrutura", ApoioFonte as string],
+  ["catalogosEdicao", CatalogosEdicaoFonte as string],
 ];
 
 const FONTES_CLIENTE: readonly (readonly [string, string])[] = [
@@ -122,6 +124,34 @@ describe("F5-08 P4 — nenhuma regra de autorização/tenant no React", () => {
     expect(codigo).toContain(".select(");
     expect(codigo).not.toContain("functions.invoke");
     expect(codigo).not.toContain("FUNCAO_COLABORADORES");
+  });
+});
+
+describe("F5-08 P4 — vigência e versão otimista (correções da auditoria)", () => {
+  it("nenhuma tela fabrica expectedVersion (sem `?? 0` nem `expectedVersion: 0`)", () => {
+    for (const [nome, fonte] of FONTES_UI) {
+      const codigo = apenasCodigo(fonte);
+      expect(codigo, nome).not.toMatch(/\?\?\s*0/);
+      expect(codigo, nome).not.toMatch(/expectedVersion\s*:\s*\d/);
+    }
+  });
+
+  it("a vigência é meio-aberta e derivada de validFrom+validTo (nunca `validTo === null`)", () => {
+    const codigo = apenasCodigo(ApoioFonte as string);
+
+    // Regra do contrato: início inclusivo, fim exclusivo.
+    expect(codigo).toContain("ref < inicio");
+    expect(codigo).toContain("fim !== null && ref >= fim");
+    // O antipadrão corrigido não pode voltar.
+    expect(codigo).not.toMatch(/validTo\s*===\s*null\s*;/);
+  });
+
+  it("as telas que enviam versão usam a decisão sobre a fotografia corrente", () => {
+    expect(apenasCodigo(UnidadesFonte as string)).toContain("decidirVersaoOtimista");
+    expect(apenasCodigo(PosicoesFonte as string)).toContain("decidirVersaoOtimista");
+    expect(apenasCodigo(CatalogosFonte as string)).toContain("confirmarEdicaoCatalogo");
+    expect(apenasCodigo(CatalogosEdicaoFonte as string)).toContain("decidirVersaoOtimista");
+    expect(apenasCodigo(CatalogosEdicaoFonte as string)).not.toMatch(/\?\?\s*0/);
   });
 });
 

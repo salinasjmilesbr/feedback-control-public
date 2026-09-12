@@ -15,16 +15,13 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import {
-  alterarStatusCargo,
-  alterarStatusSenioridade,
   criarCargo,
   criarSenioridade,
   lerEstrutura,
-  renomearCargo,
-  renomearSenioridade,
   type DependenciasAcessoColaboradores,
   type ResultadoColaboradores,
 } from "../services/colaboradoresSoberanos/acessoColaboradoresSoberanos";
+import { confirmarEdicaoCatalogo } from "./catalogosEdicao";
 import {
   SEM_ORGANIZACAO_ATIVA,
   TEXTO_ERRO_ESTRUTURA,
@@ -192,6 +189,61 @@ function CatalogosPage({ deps, estadoInicial }: CatalogosPageProps = {}) {
 
   const { cargos, senioridades } = estado.estrutura;
   const semItens = cargos.length === 0 && senioridades.length === 0;
+
+  /**
+   * Confirma a edição usando a fotografia CORRENTE (`estado.estrutura`). Se o
+   * item sumiu da leitura, nada é enviado: a edição é fechada, a leitura é
+   * recarregada e o estado desatualizado é exibido (fail-closed).
+   */
+  async function confirmarEdicao() {
+    if (!edicao || processando) return;
+    if (estado.fase !== "pronto") return;
+    setErro(null);
+    setSucesso("");
+    setProcessando(true);
+    const desfecho = await confirmarEdicaoCatalogo(
+      {
+        estrutura: estado.estrutura,
+        edicao: {
+          tipo: edicao.tipo,
+          id: edicao.id,
+          acao: edicao.acao,
+          statusAtual: edicao.statusAtual,
+        },
+        nome: edicaoNome,
+        motivo: edicaoMotivo,
+        operationId: novoOperationId(),
+        ...(organizacaoAtivaId ? { organizationId: organizacaoAtivaId } : {}),
+      },
+      depsInjetadas
+    );
+    setProcessando(false);
+
+    if (desfecho.tipo === "sem-motivo") {
+      setErro({ codigo: "INVALID_INPUT", mensagem: "Informe o motivo da alteração." });
+      return;
+    }
+
+    if (desfecho.tipo === "fotografia-desatualizada") {
+      setErro({ codigo: desfecho.codigo, mensagem: desfecho.mensagem });
+      setEdicao(null);
+      setVersao((atual) => atual + 1);
+      return;
+    }
+
+    const resultado = desfecho.resultado;
+    if (!resultado.ok) {
+      setErro({ codigo: resultado.codigo, mensagem: resultado.mensagem });
+      if (resultado.codigo === "CONFLICT" || resultado.codigo === "NOT_FOUND") {
+        setVersao((atual) => atual + 1);
+      }
+      return;
+    }
+
+    setSucesso("Alteração registrada no catálogo.");
+    setEdicao(null);
+    setVersao((atual) => atual + 1);
+  }
 
   return (
     <main className="virtus-page estrutura-page">
@@ -474,88 +526,7 @@ function CatalogosPage({ deps, estadoInicial }: CatalogosPageProps = {}) {
             className="estrutura-form"
             onSubmit={(evento) => {
               evento.preventDefault();
-              const proximoStatus = edicao.statusAtual === "active" ? "disabled" : "active";
-              if (edicao.tipo === "cargo" && edicao.acao === "renomear") {
-                const cargo = cargos.find((item) => item.jobRoleId === edicao.id);
-                void executar(
-                  () =>
-                    renomearCargo(
-                      {
-                        operationId: novoOperationId(),
-                        jobRoleId: edicao.id,
-                        nome: edicaoNome.trim(),
-                        expectedVersion: cargo?.version ?? 0,
-                        motivo: edicaoMotivo.trim(),
-                        ...(organizacaoAtivaId ? { organizationId: organizacaoAtivaId } : {}),
-                      },
-                      depsInjetadas
-                    ),
-                  edicaoMotivo,
-                  () => setEdicao(null)
-                );
-                return;
-              }
-              if (edicao.tipo === "cargo") {
-                const cargo = cargos.find((item) => item.jobRoleId === edicao.id);
-                void executar(
-                  () =>
-                    alterarStatusCargo(
-                      {
-                        operationId: novoOperationId(),
-                        jobRoleId: edicao.id,
-                        status: proximoStatus,
-                        expectedVersion: cargo?.version ?? 0,
-                        motivo: edicaoMotivo.trim(),
-                        ...(organizacaoAtivaId ? { organizationId: organizacaoAtivaId } : {}),
-                      },
-                      depsInjetadas
-                    ),
-                  edicaoMotivo,
-                  () => setEdicao(null)
-                );
-                return;
-              }
-              if (edicao.acao === "renomear") {
-                const senioridade = senioridades.find(
-                  (item) => item.seniorityLevelId === edicao.id
-                );
-                void executar(
-                  () =>
-                    renomearSenioridade(
-                      {
-                        operationId: novoOperationId(),
-                        seniorityLevelId: edicao.id,
-                        nome: edicaoNome.trim(),
-                        expectedVersion: senioridade?.version ?? 0,
-                        motivo: edicaoMotivo.trim(),
-                        ...(organizacaoAtivaId ? { organizationId: organizacaoAtivaId } : {}),
-                      },
-                      depsInjetadas
-                    ),
-                  edicaoMotivo,
-                  () => setEdicao(null)
-                );
-                return;
-              }
-              const senioridade = senioridades.find(
-                (item) => item.seniorityLevelId === edicao.id
-              );
-              void executar(
-                () =>
-                  alterarStatusSenioridade(
-                    {
-                      operationId: novoOperationId(),
-                      seniorityLevelId: edicao.id,
-                      status: proximoStatus,
-                      expectedVersion: senioridade?.version ?? 0,
-                      motivo: edicaoMotivo.trim(),
-                      ...(organizacaoAtivaId ? { organizationId: organizacaoAtivaId } : {}),
-                    },
-                    depsInjetadas
-                  ),
-                edicaoMotivo,
-                () => setEdicao(null)
-              );
+              void confirmarEdicao();
             }}
           >
             {edicao.acao === "renomear" && (
