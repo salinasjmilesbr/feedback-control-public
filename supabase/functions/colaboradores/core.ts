@@ -29,6 +29,7 @@
 // ESTA requisição e é descartado ao fim dela.
 
 import {
+  DEFINICAO_POR_OPERACAO,
   ehOperacaoFuncional,
   ehUuid,
   ID_NEUTRO,
@@ -36,6 +37,21 @@ import {
   type CodigoPublico,
   type EntradaAlterarStatus,
   type EntradaBootstrapCatalogo,
+  type EntradaCargoCriar,
+  type EntradaCargoRenomear,
+  type EntradaCargoStatusAlterar,
+  type EntradaColegiadoDefinir,
+  type EntradaColegiadoEncerrar,
+  type EntradaPosicaoCriar,
+  type EntradaPosicaoEncerrar,
+  type EntradaSenioridadeCriar,
+  type EntradaSenioridadeRenomear,
+  type EntradaSenioridadeStatusAlterar,
+  type EntradaUnidadeCriar,
+  type EntradaUnidadeEncerrar,
+  type EntradaUnidadeParentDefinir,
+  type EntradaUnidadeParentEncerrar,
+  type EntradaUnidadeRenomear,
   type EntradaColaborador,
   type EntradaCriar,
   type EntradaDefinirIdentificador,
@@ -184,6 +200,39 @@ export type OperacaoExecutavel =
   | {
       readonly operacao: "colaborador.catalogo.bootstrap";
       readonly entrada: EntradaBootstrapCatalogo;
+    }
+  | { readonly operacao: "estrutura.unidade.criar"; readonly entrada: EntradaUnidadeCriar }
+  | { readonly operacao: "estrutura.unidade.renomear"; readonly entrada: EntradaUnidadeRenomear }
+  | { readonly operacao: "estrutura.unidade.encerrar"; readonly entrada: EntradaUnidadeEncerrar }
+  | {
+      readonly operacao: "estrutura.unidade.parent.definir";
+      readonly entrada: EntradaUnidadeParentDefinir;
+    }
+  | {
+      readonly operacao: "estrutura.unidade.parent.encerrar";
+      readonly entrada: EntradaUnidadeParentEncerrar;
+    }
+  | { readonly operacao: "estrutura.posicao.criar"; readonly entrada: EntradaPosicaoCriar }
+  | { readonly operacao: "estrutura.posicao.encerrar"; readonly entrada: EntradaPosicaoEncerrar }
+  | { readonly operacao: "estrutura.colegiado.definir"; readonly entrada: EntradaColegiadoDefinir }
+  | {
+      readonly operacao: "estrutura.colegiado.encerrar";
+      readonly entrada: EntradaColegiadoEncerrar;
+    }
+  | { readonly operacao: "catalogo.cargo.criar"; readonly entrada: EntradaCargoCriar }
+  | { readonly operacao: "catalogo.cargo.renomear"; readonly entrada: EntradaCargoRenomear }
+  | {
+      readonly operacao: "catalogo.cargo.status.alterar";
+      readonly entrada: EntradaCargoStatusAlterar;
+    }
+  | { readonly operacao: "catalogo.senioridade.criar"; readonly entrada: EntradaSenioridadeCriar }
+  | {
+      readonly operacao: "catalogo.senioridade.renomear";
+      readonly entrada: EntradaSenioridadeRenomear;
+    }
+  | {
+      readonly operacao: "catalogo.senioridade.status.alterar";
+      readonly entrada: EntradaSenioridadeStatusAlterar;
     };
 
 /**
@@ -257,6 +306,13 @@ export function codigoDeErroRpc(erro: ErroRpcColaborador | null | undefined): Co
   if (assinatura.includes("F5_07_NOT_FOUND")) return "NOT_FOUND";
   if (assinatura.includes("F5_07_CONFLICT")) return "CONFLICT";
   if (assinatura.includes("F5_07_INVALID_INPUT")) return "INVALID_INPUT";
+
+  // F5-08 P2: as RPCs de estrutura/catálogo sinalizam a MESMA taxonomia com
+  // o prefixo `F5_08_*` (contrato §13.6/§23) — o código público é idêntico.
+  if (assinatura.includes("F5_08_FORBIDDEN")) return "FORBIDDEN";
+  if (assinatura.includes("F5_08_NOT_FOUND")) return "NOT_FOUND";
+  if (assinatura.includes("F5_08_CONFLICT")) return "CONFLICT";
+  if (assinatura.includes("F5_08_INVALID_INPUT")) return "INVALID_INPUT";
 
   // Integridade do banco (23503 FK, 23514 check, 23505 unique, 23P01 exclusion)
   // é conflito de DOMÍNIO — a operação foi autorizada e o estado recusou.
@@ -579,12 +635,18 @@ export async function colaboradores(
         )
       : { permitido: false, code: "FORBIDDEN" };
   } else {
-    decisao = await avaliarGateAdministrativo(
-      callerId,
-      contexto.organizationId,
-      capacidadeDaOperacao(operacao),
-      deps
-    );
+    // D19: a capability exigida vem do MAPA EXPLÍCITO do contrato. Operação
+    // fora do plano administrativo (ou desconhecida) ⇒ fail-closed: nenhuma
+    // capability por default e nenhuma RPC privilegiada é tocada.
+    const capabilityExigida = capacidadeDaOperacao(operacao);
+    decisao = capabilityExigida
+      ? await avaliarGateAdministrativo(
+          callerId,
+          contexto.organizationId,
+          capabilityExigida,
+          deps
+        )
+      : { permitido: false, code: "FORBIDDEN" };
   }
 
   if (!decisao.permitido) {
@@ -608,12 +670,15 @@ export async function colaboradores(
   return json({ ok: true, operacao, resultado: projetado.resultado }, 200);
 }
 
-/** Capacidade exigida no plano administrativo (D19) — sem allowlist funcional. */
-function capacidadeDaOperacao(operacao: OperacaoColaborador): string {
-  switch (operacao) {
-    case "colaborador.catalogo.bootstrap":
-      return "org.catalog.manage";
-    default:
-      return "org.structure.manage";
-  }
+/**
+ * Capacidade exigida no plano ADMINISTRATIVO (D19), derivada do mapa
+ * explícito do contrato — SEM fallback. O `default` que devolvia
+ * `org.structure.manage` para QUALQUER operação (inclusive desconhecida) foi
+ * removido no P3: operação fora do plano administrativo devolve `null` e o
+ * chamador nega (fail-closed), sem tocar RPC privilegiada.
+ */
+function capacidadeDaOperacao(operacao: OperacaoColaborador): string | null {
+  const definicao = DEFINICAO_POR_OPERACAO[operacao];
+  if (!definicao || definicao.gate !== "administrativo") return null;
+  return definicao.capability;
 }

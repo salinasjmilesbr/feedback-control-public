@@ -32,6 +32,15 @@ const OPERACAO_ID = "66666666-6666-4666-8666-666666666666";
 const RESPONSABILIDADE = "88888888-8888-4888-8888-888888888888";
 const VIGENCIA = "2026-03-01T00:00:00.000Z";
 const MOTIVO = "ajuste contratual";
+// F5-08 P3 — identificadores das operações de estrutura/catálogo.
+const UNIDADE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const OUTRA_UNIDADE = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const CARGO = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const SENIORIDADE = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const MEMBRO_A = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+const MEMBRO_B = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+const VALID_FROM = "2026-04-01T00:00:00.000Z";
+const VALID_TO = "2026-05-01T00:00:00.000Z";
 
 type Corpo = Record<string, unknown>;
 
@@ -169,6 +178,84 @@ const CASOS_VALIDOS: ReadonlyArray<readonly [string, Corpo]> = [
       motivo: MOTIVO,
     },
   ],
+  // F5-08 P3 — estrutura organizacional (payload público camelCase).
+  [
+    "estrutura.unidade.criar",
+    { organization_id: ORG, operationId: OPERACAO_ID, nome: "Unidade Nova", validFrom: VALID_FROM, motivo: MOTIVO },
+  ],
+  [
+    "estrutura.unidade.renomear",
+    { organization_id: ORG, operationId: OPERACAO_ID, unidadeId: UNIDADE, nome: "Unidade Renomeada", expectedVersion: 0, motivo: MOTIVO },
+  ],
+  [
+    "estrutura.unidade.encerrar",
+    { organization_id: ORG, operationId: OPERACAO_ID, unidadeId: UNIDADE, validTo: VALID_TO, expectedVersion: 1, motivo: MOTIVO },
+  ],
+  [
+    "estrutura.unidade.parent.definir",
+    { organization_id: ORG, operationId: OPERACAO_ID, unidadeId: UNIDADE, parentUnitId: OUTRA_UNIDADE, validFrom: VALID_FROM, motivo: MOTIVO },
+  ],
+  [
+    "estrutura.unidade.parent.definir (raiz)",
+    { organization_id: ORG, operationId: OPERACAO_ID, unidadeId: UNIDADE, parentUnitId: null, validFrom: VALID_FROM, motivo: MOTIVO },
+  ],
+  [
+    "estrutura.unidade.parent.encerrar",
+    { organization_id: ORG, operationId: OPERACAO_ID, unidadeId: UNIDADE, validTo: VALID_TO, motivo: MOTIVO },
+  ],
+  [
+    "estrutura.posicao.criar",
+    { organization_id: ORG, operationId: OPERACAO_ID, unidadeId: UNIDADE, jobRoleId: CARGO, seniorityLevelId: SENIORIDADE, validFrom: VALID_FROM, motivo: MOTIVO },
+  ],
+  [
+    "estrutura.posicao.criar (sem senioridade)",
+    { organization_id: ORG, operationId: OPERACAO_ID, unidadeId: UNIDADE, jobRoleId: CARGO, seniorityLevelId: null, validFrom: VALID_FROM, motivo: MOTIVO },
+  ],
+  [
+    "estrutura.posicao.encerrar",
+    { organization_id: ORG, operationId: OPERACAO_ID, posicaoId: POSICAO, validTo: VALID_TO, expectedVersion: 2, motivo: MOTIVO },
+  ],
+  [
+    "estrutura.colegiado.definir",
+    { organization_id: ORG, operationId: OPERACAO_ID, collaboratorId: COLABORADOR, memberCollaboratorIds: [MEMBRO_A, MEMBRO_B], validFrom: VALID_FROM, motivo: MOTIVO },
+  ],
+  [
+    "estrutura.colegiado.definir (sem membros)",
+    { organization_id: ORG, operationId: OPERACAO_ID, collaboratorId: COLABORADOR, memberCollaboratorIds: [], validFrom: VALID_FROM, motivo: MOTIVO },
+  ],
+  [
+    "estrutura.colegiado.encerrar",
+    { organization_id: ORG, operationId: OPERACAO_ID, collaboratorId: COLABORADOR, validTo: VALID_TO, motivo: MOTIVO },
+  ],
+  // F5-08 P3 — catálogos.
+  [
+    "catalogo.cargo.criar",
+    { organization_id: ORG, operationId: OPERACAO_ID, nome: "Cargo Novo", code: "cargo_novo", motivo: MOTIVO },
+  ],
+  [
+    "catalogo.cargo.criar (sem code)",
+    { organization_id: ORG, operationId: OPERACAO_ID, nome: "Cargo Sem Codigo", code: null, motivo: MOTIVO },
+  ],
+  [
+    "catalogo.cargo.renomear",
+    { organization_id: ORG, operationId: OPERACAO_ID, jobRoleId: CARGO, nome: "Cargo Renomeado", expectedVersion: 0, motivo: MOTIVO },
+  ],
+  [
+    "catalogo.cargo.status.alterar",
+    { organization_id: ORG, operationId: OPERACAO_ID, jobRoleId: CARGO, status: "disabled", expectedVersion: 1, motivo: MOTIVO },
+  ],
+  [
+    "catalogo.senioridade.criar",
+    { organization_id: ORG, operationId: OPERACAO_ID, nome: "Senioridade Nova", motivo: MOTIVO },
+  ],
+  [
+    "catalogo.senioridade.renomear",
+    { organization_id: ORG, operationId: OPERACAO_ID, seniorityLevelId: SENIORIDADE, nome: "Senioridade Renomeada", expectedVersion: 0, motivo: MOTIVO },
+  ],
+  [
+    "catalogo.senioridade.status.alterar",
+    { organization_id: ORG, operationId: OPERACAO_ID, seniorityLevelId: SENIORIDADE, status: "active", expectedVersion: 1, motivo: MOTIVO },
+  ],
   ["colaborador.historico.listar", { organization_id: ORG, collaborator_id: COLABORADOR }],
   [
     "colaborador.catalogo.bootstrap",
@@ -203,6 +290,14 @@ const COM_VERSAO: readonly OperacaoColaborador[] = [
   "collaborator.editar",
   "collaborator.identificador.definir",
   "collaborator.status.alterar",
+  // F5-08 P3
+  "estrutura.unidade.renomear",
+  "estrutura.unidade.encerrar",
+  "estrutura.posicao.encerrar",
+  "catalogo.cargo.renomear",
+  "catalogo.cargo.status.alterar",
+  "catalogo.senioridade.renomear",
+  "catalogo.senioridade.status.alterar",
 ];
 
 /** Operações que exigem `motivo` (trim, não vazio). */
@@ -237,11 +332,11 @@ describe("F5-07 contrato.ts — payloads válidos das 15 operações", () => {
     expect(resultado.ok, JSON.stringify(resultado)).toBe(true);
   });
 
-  it("as 15 operações da espinha estão cobertas e todas validam", () => {
+  it("as 30 operações (F5-07 + F5-08 P3) estão cobertas e todas validam", () => {
     const cobertas = new Set(
       CASOS_VALIDOS.map(([nome]) => nome.split(" ")[0] as OperacaoColaborador)
     );
-    expect(cobertas.size).toBe(15);
+    expect(cobertas.size).toBe(30);
     expect([...cobertas].sort()).toEqual([...OPERACOES_COLABORADOR].sort());
   });
 
@@ -402,6 +497,7 @@ describe("F5-07 contrato.ts — idempotência e concorrência (§13)", () => {
   it.each(MUTACOES)("exige operation_id na mutação %s", (operacao) => {
     const corpo = corpoValido(operacao);
     delete corpo.operation_id;
+    delete corpo.operationId;
 
     const resultado = validar(corpo);
     expect(resultado.ok, operacao).toBe(false);
@@ -430,6 +526,7 @@ describe("F5-07 contrato.ts — idempotência e concorrência (§13)", () => {
   it.each(COM_VERSAO)("exige expected_version em %s", (operacao) => {
     const corpo = corpoValido(operacao);
     delete corpo.expected_version;
+    delete corpo.expectedVersion;
 
     const resultado = validar(corpo);
     expect(resultado.ok, operacao).toBe(false);
@@ -439,7 +536,11 @@ describe("F5-07 contrato.ts — idempotência e concorrência (§13)", () => {
   });
 
   it.each(COM_VERSAO)("recusa expected_version nula em %s (null não é versão)", (operacao) => {
-    const resultado = validar({ ...corpoValido(operacao), expected_version: null });
+    const resultado = validar({
+      ...corpoValido(operacao),
+      expected_version: null,
+      expectedVersion: null,
+    });
     expect(resultado.ok, operacao).toBe(false);
     if (resultado.ok) return;
     expect(resultado.message).toBe("expected_version obrigatório.");
@@ -767,5 +868,183 @@ describe("F5-07 contrato.ts — guardas de vocabulário", () => {
       expect(resultado.code).toBe("INVALID_INPUT");
       expect(mensagem(corpo)).not.toContain("F5_07");
     }
+  });
+});
+
+describe("F5-08 P3 — contrato.ts: nuláveis, arrays e domínios das operações novas", () => {
+  it("aceita parentUnitId null (RAIZ) e também ausente", () => {
+    const explicito = validar({ ...corpoValido("estrutura.unidade.parent.definir") });
+    expect(explicito.ok).toBe(true);
+
+    const raiz = validar({
+      ...corpoValido("estrutura.unidade.parent.definir"),
+      parentUnitId: null,
+    });
+    expect(raiz.ok).toBe(true);
+    if (!raiz.ok) return;
+    expect(raiz.entrada).toMatchObject({ parentUnitId: null });
+
+    const ausente = corpoValido("estrutura.unidade.parent.definir");
+    delete ausente.parentUnitId;
+    const semCampo = validar(ausente);
+    expect(semCampo.ok).toBe(true);
+    if (!semCampo.ok) return;
+    expect(semCampo.entrada).toMatchObject({ parentUnitId: null });
+  });
+
+  it("recusa parentUnitId que não é UUID nem null", () => {
+    const resultado = validar({
+      ...corpoValido("estrutura.unidade.parent.definir"),
+      parentUnitId: "unidade-1",
+    });
+    expect(resultado.ok).toBe(false);
+    if (resultado.ok) return;
+    expect(resultado.message).toBe("parentUnitId inválido.");
+  });
+
+  it("aceita seniorityLevelId null/ausente e recusa seniorityLevelId inválida", () => {
+    const semSenioridade = corpoValido("estrutura.posicao.criar");
+    delete semSenioridade.seniorityLevelId;
+    const ausente = validar(semSenioridade);
+    expect(ausente.ok).toBe(true);
+    if (!ausente.ok) return;
+    expect(ausente.entrada).toMatchObject({ seniorityLevelId: null });
+
+    const invalida = validar({
+      ...corpoValido("estrutura.posicao.criar"),
+      seniorityLevelId: 42,
+    });
+    expect(invalida.ok).toBe(false);
+    if (invalida.ok) return;
+    expect(invalida.message).toBe("seniorityLevelId inválido.");
+  });
+
+  it("aceita lista VAZIA de membros (0..N = 'sem colegiado' explícito)", () => {
+    const resultado = validar({
+      ...corpoValido("estrutura.colegiado.definir"),
+      memberCollaboratorIds: [],
+    });
+    expect(resultado.ok).toBe(true);
+    if (!resultado.ok) return;
+    expect(resultado.entrada).toMatchObject({ memberCollaboratorIds: [] });
+  });
+
+  it.each([
+    ["não-array", "membro"],
+    ["com item inválido", [MEMBRO_A, "membro-1"]],
+    ["com null", [MEMBRO_A, null]],
+    ["acima do limite", Array.from({ length: 201 }, () => MEMBRO_A)],
+  ])("recusa memberCollaboratorIds %s", (_nome, memberCollaboratorIds) => {
+    const resultado = validar({
+      ...corpoValido("estrutura.colegiado.definir"),
+      memberCollaboratorIds,
+    });
+    expect(resultado.ok).toBe(false);
+    if (resultado.ok) return;
+    expect(resultado.message).toBe("memberCollaboratorIds inválido.");
+  });
+
+  it("normaliza `code` do cargo para caixa alta e aceita ausência", () => {
+    const minusculo = validar({
+      ...corpoValido("catalogo.cargo.criar"),
+      code: "  cargo_novo  ",
+    });
+    expect(minusculo.ok).toBe(true);
+    if (!minusculo.ok) return;
+    expect(minusculo.entrada).toMatchObject({ code: "CARGO_NOVO" });
+
+    const semCode = corpoValido("catalogo.cargo.criar");
+    delete semCode.code;
+    const ausente = validar(semCode);
+    expect(ausente.ok).toBe(true);
+    if (!ausente.ok) return;
+    expect(ausente.entrada).toMatchObject({ code: null });
+  });
+
+  it.each([
+    ["vazio", ""],
+    ["em branco", "   "],
+    ["longo demais", "A".repeat(41)],
+    ["número", 7],
+  ])("recusa code %s", (_nome, code) => {
+    const resultado = validar({ ...corpoValido("catalogo.cargo.criar"), code });
+    expect(resultado.ok).toBe(false);
+    if (resultado.ok) return;
+    expect(resultado.message).toBe("code inválido.");
+  });
+
+  it.each([
+    ["fora do domínio", "inativo"],
+    ["caixa alta", "ACTIVE"],
+    ["vazio", ""],
+  ])("recusa status %s nos catálogos", (_nome, status) => {
+    for (const operacao of [
+      "catalogo.cargo.status.alterar",
+      "catalogo.senioridade.status.alterar",
+    ] as const) {
+      const resultado = validar({ ...corpoValido(operacao), status });
+      expect(resultado.ok, operacao).toBe(false);
+      if (resultado.ok) return;
+      expect(resultado.message).toBe("status inválido.");
+    }
+  });
+
+  it.each([
+    ["estrutura.unidade.criar", "validFrom"],
+    ["estrutura.unidade.encerrar", "validTo"],
+    ["estrutura.unidade.parent.definir", "validFrom"],
+    ["estrutura.unidade.parent.encerrar", "validTo"],
+    ["estrutura.posicao.criar", "validFrom"],
+    ["estrutura.posicao.encerrar", "validTo"],
+    ["estrutura.colegiado.definir", "validFrom"],
+    ["estrutura.colegiado.encerrar", "validTo"],
+  ] as const)("recusa %s com data inválida em %s", (operacao, campo) => {
+    const resultado = validar({
+      ...corpoValido(operacao),
+      [campo]: "01/04/2026",
+    });
+    expect(resultado.ok, operacao).toBe(false);
+    if (resultado.ok) return;
+    expect(resultado.message).toBe(`${campo} inválido.`);
+  });
+
+  it.each([
+    "estrutura.unidade.criar",
+    "estrutura.unidade.renomear",
+    "estrutura.unidade.encerrar",
+    "estrutura.posicao.criar",
+    "estrutura.posicao.encerrar",
+    "estrutura.colegiado.definir",
+    "catalogo.cargo.criar",
+    "catalogo.senioridade.criar",
+    "catalogo.senioridade.status.alterar",
+  ] as const)("recusa UUID inválido em %s", (operacao) => {
+    const corpo = corpoValido(operacao);
+    for (const campo of [
+      "unidadeId",
+      "posicaoId",
+      "jobRoleId",
+      "seniorityLevelId",
+      "collaboratorId",
+    ]) {
+      if (!(campo in corpo)) continue;
+      const invalido = validar({ ...corpo, [campo]: "nao-e-uuid" });
+      expect(invalido.ok, `${operacao}.${campo}`).toBe(false);
+    }
+  });
+
+  it("aceita `operationId` do P3 e exige presença em toda mutação nova", () => {
+    const valido = validar(corpoValido("catalogo.senioridade.criar"));
+    expect(valido.ok).toBe(true);
+    if (!valido.ok) return;
+    expect(valido.entrada).toMatchObject({ operationId: OPERACAO_ID });
+
+    const invalido = validar({
+      ...corpoValido("catalogo.senioridade.criar"),
+      operationId: "op-1",
+    });
+    expect(invalido.ok).toBe(false);
+    if (invalido.ok) return;
+    expect(invalido.message).toBe("operation_id inválido.");
   });
 });
