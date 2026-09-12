@@ -1,6 +1,9 @@
 # F5-08 — Estrutura organizacional e catálogos soberanos (contrato arquitetural e desenho)
 
-> **Status deste documento:** DESENHO TÉCNICO — **AGUARDANDO DECISÕES** (Q1–Q5 em §28).
+> **Status deste documento:** DESENHO TÉCNICO — **FECHADO** (decisões D1–D25; Q1–Q5 fechadas).
+> **Revisão arquitetural (PR #182, rodada 1) incorporada integralmente:** Q1–Q5 = alternativa **A**
+> em todos os casos e correção obrigatória de **I2** (encerramento de unidade também quando ela é
+> **pai** de relação vigente). Nenhum código funcional nesta rodada.
 > **Nada foi implementado.** Esta atividade produz análise, decisões dedutíveis dos contratos
 > existentes e registro explícito das dúvidas arquiteturais reais.
 >
@@ -28,7 +31,7 @@
 | Tabelas de entidade novas | **0** — as 8 tabelas exigidas pela F5-07 §20.1 já existem (F3-02/03/04/08) |
 | Tabelas novas | **1** — trilha append-only `structure_events` (D1, D13) |
 | Colunas novas em tabelas existentes | **0** (D1) — motivo/autoria vivem na trilha, não na tabela |
-| Constraints/triggers novos | anti-ciclo de **unidades** (lacuna documentada da F3-03), guarda de encerramento de unidade, guarda de catálogo inativo em relação nova (D6, D7, D17) |
+| Constraints/triggers novos | anti-ciclo de **unidades** (lacuna documentada da F3-03); guarda de encerramento de unidade nos **três** casos de I2 (posição vigente; unidade como **filha**; unidade como **pai**); guarda de catálogo inativo em relação nova (D6, D7, D17) |
 | Índices novos | `organizational_unit_parent_periods.parent_unit_id` (ausente hoje) (D20) |
 | RPCs novas | **15** (`SECURITY INVOKER`, `EXECUTE` só `service_role`) — §13.6/§21 |
 | Capabilities novas | **0** — `org.structure.manage` e `org.catalog.manage` (D19) |
@@ -36,8 +39,8 @@
 | Políticas de RLS novas | **0** — a leitura own-tenant já existe (F4-08 §) (D16) |
 | Fronteira server-side | **estende** a Edge `colaboradores`; nenhuma Edge nova (D9) |
 | Cutover de UI | telas de administração de estrutura/catálogos + remoção da autoridade estrutural local (D18) |
-| Questões abertas | **Q1–Q5** (§28) |
-| Decisões registradas | **D1–D20** (§29) |
+| Questões abertas | **nenhuma** — Q1–Q5 fechadas (§28) e convertidas em D21–D25 (§29) |
+| Decisões registradas | **D1–D25** (§29) |
 
 ---
 
@@ -45,16 +48,16 @@
 
 - **Atividade:** F5-08 — Estrutura organizacional e catálogos soberanos.
 - **Natureza:** contrato arquitetural + desenho técnico (documento único desta atividade).
-- **Status:** **AGUARDANDO DECISÕES** — Q1–Q5 são decisões que **não** são dedutíveis dos
-  contratos fechados nem do estado real do repositório (§28). Não há decisão inventada para
-  evitar questão aberta, nem questão artificial onde contrato/código já decidem.
+- **Status:** **FECHADO**. Q1–Q5 foram decididas por alternativa **A** na revisão arquitetural
+  rodada 1 do PR #182 e convertidas nas decisões normativas D21–D25 (§28/§29). **Nenhuma questão
+  arquitetural permanece aberta.**
 - **O que este documento é:** contrato da futura implementação (fase Pro), com inventário
   verificado, modelo de dados, plano administrativo, matrizes de operação/autorização,
   estratégia de testes e critérios de aceite.
 - **O que este documento não é:** implementação. Nenhuma migration, RPC, tela ou teste é
   criado nesta atividade (F5-08 §BRANCH E COMMIT do enunciado).
-- **Dependência de fechamento:** antes de iniciar a implementação, Q1–Q5 precisam de decisão
-  (recomendações em §28). As decisões D1–D20 são suficientes para todo o restante.
+- **Dependência de fechamento:** **nenhuma**. D1–D25 cobrem integralmente o desenho; a
+  implementação (§27) pode iniciar mediante autorização explícita de atividade.
 
 ## 2. Objetivo
 
@@ -244,7 +247,7 @@ importação de acervo legado).
 | G7 | Sem índice em `parent_unit_id` | Descendência/ancestralidade com custo evitável |
 | G8 | Sem normalização de privilégios de `service_role` (DELETE implícito por default privileges) | Falta de barreira para DELETE físico |
 | G9 | Guard de CI não cobre privilégios de `service_role` nem as tabelas de estrutura/catálogo da F3/F5-07 | Regressão de privilégio passa despercebida |
-| G10 | Nota de lock divergente: trigger anti-ciclo F3-04 usa `hashtext('position_reporting_lines:'||org)`; RPCs estruturais F5-07 usam `hashtext('f5_07_estrutura:'||org)` | Caminhos não serializam entre si (Q4) |
+| G10 | Nota de lock divergente: trigger anti-ciclo F3-04 usa `hashtext('position_reporting_lines:'||org)`; RPCs estruturais F5-07 usam `hashtext('f5_07_estrutura:'||org)` | Caminhos não serializam entre si — **corrigido no escopo da F5-08** (Q4=A/D24) |
 | G11 | Cliente ainda deriva estrutura localmente (§4.5) | Hierarquia/autorização podem divergir do servidor |
 | G12 | Telas de administração inexistentes; portas de ocupação/reporting sem UI | Nenhum caminho de produto para administrar estrutura |
 
@@ -277,8 +280,9 @@ importação de acervo legado).
 6. **Concorrência**: versão otimista, idempotência por `operation_id`, serialização por
    organização, TOCTOU.
 7. **Cutover da UI** das telas que criam/editam/listam/selecionam/relacionam essas entidades,
-   incluindo devolver ao formulário de colaborador as seleções soberanas de unidade, cargo,
-   senioridade e gestor.
+   incluindo a **UI de alocação do colaborador** (ocupação e reporting line, reutilizando as
+   operações soberanas já entregues pela F5-07 — Q5=A/D25) e a devolução ao formulário de
+   colaborador das seleções soberanas de unidade, cargo, senioridade e gestor.
 8. **Remoção de autoridade estrutural local/sintética** (§4.5), preservando apenas cache/DEV
    explicitamente não soberano.
 9. **Validação**: validadores SQL novos, testes TS e regressão dos gates F4/F5.
@@ -291,7 +295,8 @@ importação de acervo legado).
    scope (F4-02 §4), resolvers F3-07/F4-02, projeção do colaborador (F5-07 §6.5/§6.6).
 3. **Nova capability** ou novo plano de autorização (proibido por D19).
 4. **Redesenho do modelo temporal das tabelas F3** (ex.: criar tabela de versões de unidade ou
-   de posição) — tema de Q1/Q2; só entra se as questões forem decididas nesse sentido.
+   de posição) — **decidido fora de escopo** por Q1=A (D21) e Q2=A (D22): nova vigência e
+   reatribuição usam nova entidade, e reabertura real exigiria contrato temporal próprio futuro.
 5. **Correção do defeito preexistente** `supabase/functions/avaliacoes/index.ts` →
    `catalogoCapacidades.ts` inexistente: não é bloqueador desta atividade; permanece como
    finding com manutenção própria (§25.4).
@@ -343,7 +348,8 @@ Alternativa rejeitada: **criar tabelas novas** (ex.: `organizational_unit_versio
 `organizational_position_periods`) para "resolver" reabertura/reatribuição. Rejeitada porque
 (i) duplicaria a fonte de verdade e quebraria FKs de `occupations`, `position_reporting_lines`,
 `collegiate_cycle_snapshot_positions` e `access_role_assignment_unit_targets`;
-(ii) não é exigida por nenhum contrato fechado; (iii) os casos que a motivariam são Q1/Q2.
+(ii) não é exigida por nenhum contrato fechado; (iii) os casos que a motivariam foram decididos
+em Q1/Q2 (D21/D22) — reabertura e reatribuição usam **nova entidade**, não tabela de versões.
 
 ### 8.2 Nenhum campo de motivo nas tabelas F3 (D1)
 
@@ -422,7 +428,7 @@ anti-ciclo percorrem `parent_unit_id → unit_id`; hoje existe índice apenas em
 | coluna de `rank`/ordenação em catálogos | **não** | F3-02 declara explicitamente ausência de coluna de ordenação (`:30-34`); ordenação é UX por `name` |
 | `reason` nas tabelas de estrutura | **não** | Motivo vive na trilha (D1, D13) |
 | `valid_from`/`valid_to` em `job_roles`/`seniority_levels` | **não** | Regime é status (F3-02 `:26-29, 116-118, 186-189`); introduzir vigência quebraria o regime por contrato |
-| tabela de versões de unidade/posição | **não nesta atividade** | Q1/Q2 decidem a necessidade de produto |
+| tabela de versões de unidade/posição | **não** | Decidido por Q1=A (D21) e Q2=A (D22): nova vigência e reatribuição exigem nova entidade; versionar unidade/posição fica fora desta atividade |
 
 ## 9. Modelo temporal
 
@@ -431,14 +437,14 @@ anti-ciclo percorrem `parent_unit_id → unit_id`; hoje existe índice apenas em
 `tstzrange(valid_from, coalesce(valid_to, 'infinity'), '[)')` — meio-aberto à direita, como em
 todo o domínio; `valid_to > valid_from` (`ck_*_valid_to`); vigente na data `d` ⇔
 `valid_from <= d < coalesce(valid_to,'infinity')`. **`valid_to` nunca retrocede** e nenhuma
-linha temporal fechada é alterada (F5-07 §11.4). Mudança = **fechar + abrir**; a exceção de
-retificação é Q3.
+linha temporal fechada é alterada (F5-07 §11.4). Mudança = **fechar + abrir**; **não há exceção de
+retificação** na F5-08 (Q3=A/D23).
 
 ### 9.2 Regime por entidade
 
 | Entidade | Regime | Como se altera | Como se encerra | Histórico |
 | --- | --- | --- | --- | --- |
-| `organizational_units` | **linha única + janela** | `UPDATE name` (rótulo) com `expected_version` e trilha (D4) | `UPDATE valid_to` | nome anterior na trilha; `valid_from/valid_to` são o próprio fato |
+| `organizational_units` | **linha única + janela** | `UPDATE name` (rótulo) com `expected_version` e trilha (D4) | `UPDATE valid_to`, sujeito a I2 nos **três** casos | nome anterior na trilha; `valid_from/valid_to` são o próprio fato |
 | `organizational_unit_parent_periods` | **versionado** | fecha o período vigente (`valid_to`) e abre novo (`valid_from`) na mesma transação | fecha o período vigente | linhas fechadas permanecem |
 | `organizational_positions` | **linha única + janela** | atributos estruturais imutáveis (D5); a posição não tem rótulo próprio | `UPDATE valid_to` | ocupações/reporting lines referenciam o `id` imutável |
 | `position_reporting_lines` | **versionado** | fecha + abre (operação F5-07 já existente) | fecha | linhas fechadas permanecem |
@@ -502,7 +508,7 @@ chamador pedir `valid_from` futuro, a linha vigente é fechada nessa data e exis
 | # | Lacuna | Fechamento proposto | Camada |
 | --- | --- | --- | --- |
 | I1 | **Ciclo entre unidades** (documentado como responsabilidade da aplicação, `20260907130000:62-65, 194-195`) | Função `enforce_organizational_unit_parent_periods_no_cycle()` (BEFORE INSERT/UPDATE), CTE recursiva subindo por `parent_unit_id` na **data da linha**, recusando quando alcança `unit_id`; `pg_advisory_xact_lock(hashtext('position_reporting_lines:' || organization_id))` (mesma chave do trigger F3-04 — D14) | Trigger no banco |
-| I2 | Encerrar **unidade** com posição vigente | Trigger `enforce_organizational_unit_close_requires_no_open_structure()`: recusa `valid_to` quando existe `organizational_positions` vigente na data com `unit_id` = unidade, ou `organizational_unit_parent_periods` vigente com `unit_id` = unidade | Trigger no banco |
+| I2 | Encerrar **unidade** com estrutura vigente dependente dela | Trigger `enforce_organizational_unit_close_requires_no_open_structure()`: na data efetiva do encerramento (`valid_to`), recusa quando existe **(i)** `organizational_positions` vigente com `unit_id` = unidade, **ou (ii)** `organizational_unit_parent_periods` vigente com `unit_id` = unidade (**unidade como filha**), **ou (iii)** `organizational_unit_parent_periods` vigente com `parent_unit_id` = unidade (**unidade como pai**) — os três casos são obrigatórios (revisão PR #182) | Trigger no banco |
 | I3 | Encerrar **posição** com ocupação vigente | Trigger `enforce_organizational_position_close_requires_no_open_occupations()`: recusa `valid_to` quando existe `occupations` vigente na data da posição (análogo ao trigger F3-04 para reporting line, que já existe e é preservado) | Trigger no banco |
 | I4 | Referência **nova** a catálogo inativo | Validação na RPC `estrutura_posicao_criar`: `job_roles.status='active'` e (`seniority_level_id` nulo **ou** `seniority_levels.status='active'`), ambos no mesmo `organization_id` | RPC (mais barato e explícito; **não** vira trigger para não impedir leitura histórica) |
 | I5 | Período parent de unidade **encerrada** | Validação na RPC: unidade filha e pai (quando não nulo) vigentes na data pedida | RPC |
@@ -521,7 +527,8 @@ chamador pedir `valid_from` futuro, a linha vigente é fechada nessa data e exis
    multi-linha (config + N membros) que precisa ser atômica.
 7. **Encerramento com estrutura vigente**: a checagem é feita no trigger (I2/I3) **e**
    pré-validada na RPC, para devolver `CONFLICT` com mensagem pública estável em vez de erro
-   cru do banco.
+   cru do banco. Em I2 a pré-validação cobre os **três** casos (posição vigente; a unidade como
+   **filha**; a unidade como **pai**) e é obrigatória por critério de aceite (§24.2).
 
 ### 10.4 Estruturas impossíveis — resposta direta (pergunta 5)
 
@@ -529,6 +536,7 @@ chamador pedir `valid_from` futuro, a linha vigente é fechada nessa data e exis
 | --- | --- |
 | Unidade ancestral de si mesma (direta ou em N níveis) | I1 |
 | Períodos parent sobrepostos para a mesma unidade | exclusion constraint existente |
+| **Unidade filha vigente apontando para unidade encerrada (pai encerrado)** | **I2 caso (iii)**: encerrar a unidade **pai** é recusado enquanto existir `organizational_unit_parent_periods` vigente com `parent_unit_id` = unidade; a RPC pré-valida a mesma regra e devolve `CONFLICT` |
 | Posição em unidade encerrada / inexistente / de outra organização | I2 + FK composta + I6 |
 | Posição com cargo/senioridade inativo, inexistente ou de outra organização | I4 + FK composta |
 | Reporting line para posição de outra organização | FK composta + trigger F3-04 |
@@ -651,7 +659,7 @@ ampliada (permanece `[]` para as duas, `capabilityTarget.ts:45-46`, com o teste-
 | Escrever diretamente nas tabelas | `revoke all` de `anon`/`authenticated` + sem policy de escrita | `20260908140000:27-28`; §13.2 |
 | Alterar registros de auditoria | append-only por trigger de exceção + ausência de `UPDATE`/`DELETE` | `20260913000000:320-333`; D13 |
 | Race conditions / criação concorrente | Versão otimista (`expected_version`) + advisory lock por organização | §14 |
-| Ciclos gerados por concorrência | Lock **antes** da checagem recursiva, na mesma chave do trigger anti-ciclo | §10.2 I1; §14.3 |
+| Ciclos gerados por concorrência | Lock **antes** da checagem recursiva, em **uma única** chave estrutural por organização (após a correção das 4 ocorrências da F5-07 — Q4=A/D24) | §10.2 I1; §14.3 |
 | Usar registros inativos (cargo/senioridade) | Recusa em relação **nova** (I4); leitura histórica preservada | §10.2 I4 |
 | Usar períodos históricos fora de vigência | Predicado de vigência em toda resolução; guardas I2/I3 | §9.1, §10.2 |
 | Payload manipulado para "provar" tenant/ator | `actor_user_profile_id`/`organization_id` nunca vêm do corpo como prova | §11.1; F5-07 §12.2 |
@@ -784,12 +792,14 @@ O trigger anti-ciclo da F3-04 documenta: "o caminho de escrita futuro deve mante
 (unidades, parent periods, posições, reporting lines via UI, colegiado). Efeito: as mutações da
 F5-08 serializam com a checagem anti-ciclo do banco e entre si, por organização.
 
-**Divergência registrada (não silenciada):** as RPCs estruturais da F5-07 usam
+**Divergência corrigida dentro do escopo (Q4=A/D24):** as RPCs estruturais da F5-07 usam hoje
 `hashtext('f5_07_estrutura:' || organization_id)` (`20260913010000:864, 1031, 1179, 1344`) —
 chave diferente. Consequência real: uma mutação estrutural da F5-07 (ex.: definir reporting
-line) **não** serializa com o trigger anti-ciclo nem com as mutações da F5-08. Como corrigir
-(alterar a F5-07 dentro desta atividade ou abrir manutenção própria) é **Q4**; a F5-08 não
-altera código da F5-07 por decisão própria.
+line) **não** serializa com o trigger anti-ciclo nem com as mutações da F5-08. A implementação
+da F5-08 **corrige as 4 ocorrências** para a chave normativa da F3-04
+(`hashtext('position_reporting_lines:' || organization_id)`), por `create or replace function`
+das RPCs afetadas, **sem mudança de assinatura nem de contrato externo** (§20.1). Depois da
+correção existe **uma única** chave de serialização estrutural por organização.
 
 ### 14.4 Idempotência de retry (D14)
 
@@ -920,7 +930,7 @@ o que hoje é impossível pelo produto (G1–G3).
 | **F5-04** | enfraquecer `usuario_eh_administrador` ou as RPCs administrativas | `02-validar-f5-04.sql` inalterado |
 | **F5-05** | alterar ActorContext/ResourceContext | testes de `resourceContextReal`/`authorizationPolicy` |
 | **F5-06** | alterar schema/RLS de avaliação | `02-validar-f5-06.sql`, `03-validar-f5-06-cutover.sql` |
-| **F5-07** | alterar contrato/projeção/eventos de colaborador | `02-validar-f5-07.sql`, `03-validar-f5-07-cutover.sql`, `colaboradoresContratoRpc.test.ts` |
+| **F5-07** | alterar contrato/projeção/eventos de colaborador — inclui a troca da chave de advisory lock das 4 RPCs estruturais (Q4=A/D24), **sem** mudança de assinatura | `02-validar-f5-07.sql`, `03-validar-f5-07-cutover.sql`, `colaboradoresContratoRpc.test.ts`, reexecutados após o alinhamento da chave |
 
 ## 17. Backend/server-side boundary
 
@@ -966,7 +976,7 @@ Nenhuma mensagem crua do banco chega ao cliente.
 | `ColaboradoresPage.tsx` | `possuiAlocacao:95-105`, fallback "Sem alocação" (`:474`), `AVISO_ESTRUTURA:67-68` | inalterado no essencial; passa a refletir alocação criada pela administração |
 | `ColaboradorDetalhePage.tsx` | "Alocação vigente — derivada da ocupação soberana" (`:604-628`) | passa a exibir também a cadeia (gestor direto) e o colegiado vigente |
 | **Novas telas (obrigatórias)** | não existem | (1) **Unidades**: lista + criar + renomear + encerrar + definir/alterar pai (árvore); (2) **Posições**: lista por unidade + criar + encerrar + ver ocupante + definir reporting line; (3) **Catálogos**: cargos e senioridades (criar, renomear, ativar/desativar); (4) **Colegiado**: por colaborador avaliado (definir membros, encerrar, ver versões) |
-| **Alocação do colaborador** | portas prontas sem UI (`acessoColaboradoresSoberanos.ts:211-332`) | ganha consumidor de UI (fronteira de entrega: Q5) |
+| **Alocação do colaborador** | portas prontas sem UI (`acessoColaboradoresSoberanos.ts:211-332`) | ganha consumidor de UI — **dentro do escopo da F5-08** (Q5=A/D25), pré-requisito do cutover estrutural |
 | `InicioPage.tsx` | roteia por leitura soberana, nunca `funcao` | inalterado |
 
 ### 18.2 Regras de UI inegociáveis
@@ -1039,6 +1049,7 @@ Cada passo mantém o produto funcional: enquanto uma tela não está cortada, el
 | --- | --- |
 | `20260914000000_f5_08_structure_sovereign.sql` | `structure_events` (tabela + índices + trigger append-only + RLS deny-by-default); triggers I1/I2/I3; índice D20; normalização de privilégios de `service_role` (§13.3) |
 | `20260914010000_f5_08_structure_rpc.sql` | 15 RPCs (`SECURITY INVOKER`) + grants de `EXECUTE` a `service_role` |
+| `20260914020000_f5_08_lock_key_alignment.sql` | `create or replace function` das **4 RPCs estruturais da F5-07** trocando a chave de advisory lock para a normativa da F3-04 (`position_reporting_lines:<organization_id>`) — Q4=A/D24, sem mudança de assinatura |
 | `supabase/validacao/01-cenario-f5-08.sql` | cenário fictício multi-tenant (2 organizações), com ator admin, ator sem capability e estrutura de exemplo |
 | `supabase/validacao/02-validar-f5-08.sql` | schema/constraints/triggers/índices/RLS/grants/funções + comportamento + negativos (padrão `[PASS]`/`[FAIL]`) |
 | `supabase/validacao/03-validar-f5-08-cutover.sql` | cross-tenant, capability negada, concorrência, idempotência, ciclo, encerramento com estrutura vigente, histórico preservado |
@@ -1072,7 +1083,7 @@ Convenções: **gate** é sempre administrativo; `motivo` é obrigatório em tod
 | --- | --- | --- | --- | --- | --- | --- |
 | `estrutura.unidade.criar` | `organizational_units` | criar | `nome`, `validFrom` | nome único na org (trim, não vazio); ator com `org.structure.manage` | insere unidade vigente a partir de `validFrom` | `FORBIDDEN`, `INVALID_INPUT`, `CONFLICT` (nome já usado) |
 | `estrutura.unidade.renomear` | idem | editar rótulo | `unidadeId`, `nome`, `expectedVersion` | unidade **vigente** na data; versão confere; D4 | `UPDATE name` + evento | `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `INVALID_INPUT` |
-| `estrutura.unidade.encerrar` | idem | encerrar | `unidadeId`, `validTo`, `expectedVersion` | vigente; `validTo > validFrom`; **sem** posição vigente; **sem** período parent vigente como filha (I2) | `UPDATE valid_to` + evento | `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `INVALID_INPUT` |
+| `estrutura.unidade.encerrar` | idem | encerrar | `unidadeId`, `validTo`, `expectedVersion` | vigente; `validTo > validFrom`; **sem** posição vigente; **sem** período parent vigente com a unidade como **filha** ou como **pai** (I2, três casos) | `UPDATE valid_to` + evento | `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `INVALID_INPUT` |
 | `estrutura.unidade.parent.definir` | `organizational_unit_parent_periods` | criar/alterar relação | `unidadeId`, `parentUnitId` (null = raiz), `validFrom` | ambos vigentes; sem ciclo (I1); sem sobreposição (exclusion) | fecha período vigente + abre novo + evento | `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `INVALID_INPUT` |
 | `estrutura.unidade.parent.encerrar` | idem | encerrar relação | `unidadeId`, `validTo` | existe período vigente | fecha + evento | `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `INVALID_INPUT` |
 | `estrutura.posicao.criar` | `organizational_positions` | criar | `unidadeId`, `jobRoleId`, `seniorityLevelId?`, `validFrom` | unidade vigente; cargo/senioridade **ativos** e da mesma org (I4/I5) | insere posição + evento | `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `INVALID_INPUT` |
@@ -1090,7 +1101,7 @@ Convenções: **gate** é sempre administrativo; `motivo` é obrigatório em tod
 
 | Operação existente | Capability | Papel na F5-08 |
 | --- | --- | --- |
-| `colaborador.ocupacao.definir` / `.encerrar` | `org.structure.manage` | UI de alocação do colaborador (Q5) |
+| `colaborador.ocupacao.definir` / `.encerrar` | `org.structure.manage` | UI de alocação do colaborador — **incluída na F5-08** (Q5=A/D25) |
 | `estrutura.reporting.definir` / `.encerrar` | `org.structure.manage` | UI de reporting line (tela de Posições) |
 | `estrutura.responsabilidade.definir` / `.encerrar` | `org.structure.manage` | UI de responsável temporário |
 | `estrutura.sucessao.registrar` | `org.structure.manage` | UI de sucessão |
@@ -1100,8 +1111,8 @@ Convenções: **gate** é sempre administrativo; `motivo` é obrigatório em tod
 
 | Operação cogitada | Decisão |
 | --- | --- |
-| `estrutura.posicao.reatribuir` (mover posição de unidade/cargo/senioridade) | **não** — D5/Q2 |
-| `estrutura.unidade.reabrir` / `estrutura.posicao.reabrir` | **não** — Q1 |
+| `estrutura.posicao.reatribuir` (mover posição de unidade/cargo/senioridade) | **não** — D5 + Q2=A (D22): mover = encerrar a posição antiga e criar nova, com realocação explícita das relações vigentes |
+| `estrutura.unidade.reabrir` / `estrutura.posicao.reabrir` | **não** — Q1=A (D21): encerrado não é reaberto nesta atividade; nova vigência exige nova entidade/novo UUID |
 | qualquer `*.excluir` (DELETE físico) | **proibido** — D8 |
 | RPC de **leitura** administrativa (listar unidades/posições/catálogos) | **não** — leitura é RLS F4-08 (D16) |
 | operação de snapshot de colegiado por ciclo | F5-09 |
@@ -1154,8 +1165,8 @@ servidor como verdade. Nenhuma capability nova é adicionada ao vocabulário TS/
 | **A. Tenant** | SELECT isolado (org A não vê org B); mutação isolada; ID válido de outro tenant ⇒ `NOT_FOUND`/`FORBIDDEN` (nunca sucesso, nunca revelar existência) |
 | **B. Capability** | ator sem `org.structure.manage` ⇒ `FORBIDDEN` em todas as operações de estrutura; sem `org.catalog.manage` ⇒ `FORBIDDEN` em catálogo; revogação passa a valer na operação seguinte; capability errada (ex.: `org.catalog.manage` em criação de unidade) **não** substitui |
 | **C. RLS/grants** | `authenticated` não insere/atualiza/deleta tabela diretamente; `EXECUTE` das RPCs negado a `anon`/`authenticated`; `service_role` não decide autorização (RPC com ator sem capability ⇒ recusa) |
-| **D. Integridade** | ciclo de unidade (direto e em 3 níveis) recusado; ciclo de reporting line recusado; referência cross-tenant recusada; `valid_to <= valid_from` recusado; sobreposição de período parent/reporting/colegiado recusada; encerrar unidade com posição vigente recusado; encerrar posição com ocupação vigente recusada; posição com catálogo inativo recusada; auto-relação recusada |
-| **E. Concorrência** | duas renomeações concorrentes ⇒ uma `CONFLICT`; criação concorrente de reporting line que formaria ciclo ⇒ uma recusada, nenhum ciclo persistido; encerramento + ocupação concorrentes ⇒ estado final válido; retry com mesmo `operation_id` ⇒ sem duplicação; mesmo `operation_id` com payload diferente ⇒ `CONFLICT` |
+| **D. Integridade** | ciclo de unidade (direto e em 3 níveis) recusado; ciclo de reporting line recusado; referência cross-tenant recusada; `valid_to <= valid_from` recusado; sobreposição de período parent/reporting/colegiado recusada; encerrar unidade com posição vigente recusado; **encerrar unidade com período parent vigente em que ela é a FILHA recusado**; **encerrar unidade com período parent vigente em que ela é o PAI recusado** (caso da unidade filha ativa apontando para pai encerrado); encerrar posição com ocupação vigente recusada; posição com catálogo inativo recusada; auto-relação recusada |
+| **E. Concorrência** | mutações concorrentes por rotas diferentes (RPC F5-08 × RPC estrutural F5-07 × trigger anti-ciclo) serializam pela **mesma** chave de lock (Q4=A/D24); duas renomeações concorrentes ⇒ uma `CONFLICT`; criação concorrente de reporting line que formaria ciclo ⇒ uma recusada, nenhum ciclo persistido; encerramento + ocupação concorrentes ⇒ estado final válido; retry com mesmo `operation_id` ⇒ sem duplicação; mesmo `operation_id` com payload diferente ⇒ `CONFLICT` |
 | **F. Histórico** | encerrar/renomear hoje não altera `collaborator_events` antigos, snapshots de ciclo nem avaliações; posição encerrada continua resolvível por `occupations`/reporting lines antigas; desativar catálogo não invalida posições existentes |
 | **G. Regressão** | F4-08 (RLS + mutações), F4-04 (hierarquia/allowlist), F4-09 (domínios), F5-04, F5-05, F5-06, F5-07 — comandos em §24.3 |
 | **H. Frontend/cutover** | produção não escreve estrutura em `localStorage`; sem fallback silencioso; seleções usam IDs canônicos; erro de autorização/integridade exibido e **não** mascarado pela UI |
@@ -1187,9 +1198,10 @@ servidor como verdade. Nenhuma capability nova é adicionada ao vocabulário TS/
 ### 24.1 Desta atividade (o desenho)
 
 1. Documento com as 29 seções exigidas + rastreabilidade das 28 questões centrais (§30).
-2. Decisões dedutíveis registradas como D1–D20 com evidência (arquivo:linha).
-3. Questões não dedutíveis registradas como Q1–Q5 com contexto, alternativas, recomendação,
-   impacto e seções dependentes.
+2. Decisões registradas como D1–D25 com evidência (arquivo:linha).
+3. Q1–Q5 fechadas na revisão do PR #182 (alternativa A), registradas com contexto, alternativas
+   e impacto (§28) e convertidas em decisões normativas D21–D25 (§29); **nenhuma questão
+   arquitetural aberta**.
 4. Nenhuma reabertura de D19/D20 (declarado em §11.6/D19).
 5. Divergências documentação × código registradas (§4.8); findings fora de escopo isolados
    (§25.4).
@@ -1204,10 +1216,17 @@ servidor como verdade. Nenhuma capability nova é adicionada ao vocabulário TS/
 5. Zero `SECURITY DEFINER` novo; todas as RPCs `SECURITY INVOKER` com `search_path` fixo.
 6. Nenhuma capability nova; allowlist `[]` intacta; `authorizationPolicy`/`mundoFuncional` sem
    autoridade estrutural local.
-7. Telas de administração funcionais para as 4 áreas do §18.1 + alocação do colaborador.
+7. Telas de administração funcionais para as 4 áreas do §18.1 **+ a UI de alocação do
+   colaborador e reporting line** (Q5=A/D25): sem ela o cutover estrutural não é considerado
+   completo.
 8. Nenhuma escrita estrutural em `localStorage` em produção; nenhum fallback silencioso.
 9. Validadores F5-08 verdes **e** executados no CI; regressão F4-08/F5-04/F5-06/F5-07 verde.
 10. `npm test`, `npm run build`, `npm run lint`, `git diff --check` verdes.
+11. Encerrar unidade é recusado nos **três** casos de I2 — posição vigente, parent-period vigente
+    com a unidade como **filha** e parent-period vigente com a unidade como **pai** — no trigger
+    do banco **e** na pré-validação da RPC (D6, revisão PR #182).
+12. As **4 ocorrências** de advisory lock das RPCs estruturais da F5-07 usam a chave normativa da
+    F3-04 (`position_reporting_lines:<organization_id>`), sem mudança de assinatura (Q4=A/D24).
 
 ### 24.3 Comandos de validação
 
@@ -1228,11 +1247,11 @@ npx --yes supabase@2.116.0 db reset --local --yes
 
 | # | Risco | Severidade | Mitigação |
 | --- | --- | --- | --- |
-| R1 | Modelo "linha única com janela" não permitir reabrir unidade/posição | Média | Comportamento explícito na UI; reabrir não é expressável hoje ⇒ Q1; ausência de reescrita de passado |
-| R2 | Reatribuir posição exigir nova posição ⇒ histórico com várias posições | Média | D5/Q2; ocupações/reporting lines históricas preservadas |
+| R1 | Modelo "linha única com janela" não permitir reabrir unidade/posição | Média | **Decidido** (Q1=A/D21): encerrado não é reaberto nesta atividade; nova vigência = nova entidade/novo UUID; reabertura real exigiria contrato temporal próprio. Comportamento explícito na UI; nenhuma reescrita de passado |
+| R2 | Reatribuir posição exigir nova posição ⇒ histórico com várias posições | Média | **Decidido** (Q2=A/D22): mover = encerrar + criar nova posição, com realocação explícita das relações vigentes; ocupações/reporting lines históricas preservadas |
 | R3 | Custo do trigger anti-ciclo de unidades em árvores grandes | Baixa | CTE recursiva com índice novo (D20) + lock por organização; profundidade real pequena |
 | R4 | Serialização por organização reduz throughput de administração | Baixa | Estrutura é operação de baixa frequência; leitura não é serializada |
-| R5 | Chave de advisory lock divergente da F5-07 (G10) | **Alta** (integridade) | F5-08 adota a chave da F3-04 (D14); Q4 resolve a F5-07 |
+| R5 | Chave de advisory lock divergente da F5-07 (G10) | **Alta** (integridade) | F5-08 adota a chave da F3-04 (D14) **e corrige as 4 ocorrências da F5-07 no mesmo escopo** (Q4=A/D24); risco encerrado com a implementação de P1 |
 | R6 | Guarda I3 pode impedir operação legítima (encerrar posição recém-desocupada) | Baixa | Apenas ocupação **vigente** na data bloqueia; encerrar a ocupação primeiro é o fluxo previsto |
 | R7 | Renomear rótulo muda exibição histórica (`area`/`cargo`) | Média | Aceito por contrato (rótulo ≠ identidade; snapshots não copiam nomes); trilha guarda o valor anterior; aviso na UI |
 | R8 | Default privileges de `service_role` reintroduzirem DML amplo | Média | `revoke all` + `grant` explícito na migration + catalogação no guard do CI (§13.7) |
@@ -1252,7 +1271,8 @@ npx --yes supabase@2.116.0 db reset --local --yes
 
 Nenhuma alteração é proposta em `collaborators`, `collaborator_events`, `collaborador_visao_*`,
 nos resolvers ou no contrato de operações existente. A divergência de lock (§4.7 G10) é o único
-ponto que toca código da F5-07 — e está isolado em Q4.
+ponto que toca código da F5-07 — a troca da chave de advisory lock, aprovada como correção de
+integridade dentro do escopo (Q4=A/D24), sem mudança de assinatura nem de contrato externo.
 
 ### 25.4 Findings fora de escopo (registrados; **não** corrigidos nesta atividade)
 
@@ -1261,7 +1281,7 @@ ponto que toca código da F5-07 — e está isolado em Q4.
 | F1 | `supabase/functions/avaliacoes/index.ts:8` importa `catalogoCapacidades.ts` inexistente (risco preexistente citado no enunciado) | Issue/manutenção própria; **não** bloqueia o desenho (a F5-08 não toca a Edge `avaliacoes`) |
 | F2 | Default privileges do Supabase dão DML amplo a `service_role`; `02-validar-f4-08.sql` audita apenas `anon`/`authenticated` | Corrigido **no escopo da F5-08** para as suas tabelas (§13.7); demais tabelas em hardening próprio |
 | F3 | Assimetria de grants da F5-07 (`seniority_levels` com `select, insert`; `job_roles` com `select, insert, update`), mascarada por default privileges | F5-08 normaliza no seu escopo; origem (F5-07) registrada como dívida |
-| F4 | Chave de advisory lock divergente (G10) | Q4 |
+| F4 | ~~Chave de advisory lock divergente (G10)~~ | **Deixou de ser finding**: incorporado ao escopo da F5-08 como correção obrigatória de integridade (Q4=A/D24) — §14.3, §20.1, D24 |
 | F5 | `core.ts:611-619` — `default: return "org.structure.manage"` no mapa capability↔operação | Fail-closed por construção (trocar `default` por exceção) em manutenção própria; hoje inócuo (`contrato.ts:510` rejeita operação desconhecida) |
 | F6 | `docs/F3-02`, `docs/F3-08`, `docs/F3-09` inexistentes em `docs/` embora citados como contratos fechados | Recuperar/arquivar os contratos ou ajustar citações; não bloqueia (migrations são normativas) |
 | F7 | `docs/F4-07-desenho-tecnico.md:263-265` desatualizado (capabilities "só no catálogo SQL") | Atualização documental própria |
@@ -1282,10 +1302,12 @@ ponto que toca código da F5-07 — e está isolado em Q4.
 - Tabelas F3-02/03/04/08 existentes com constraints e exclusion; `btree_gist` habilitada
   (`20260907103000`).
 
-### 26.2 Dependências de decisão (bloqueiam a implementação)
+### 26.2 Dependências de decisão — **nenhuma pendente**
 
-- **Q1** (reabertura de unidade/posição), **Q2** (reatribuição de posição), **Q3**
-  (retificação), **Q4** (chave de lock / F5-07), **Q5** (fronteira da UI de alocação).
+- Q1–Q5 foram fechadas por alternativa **A** na revisão arquitetural do PR #182 e convertidas
+  em D21–D25 (§29).
+- Nenhuma decisão arquitetural bloqueia as fases P1–P6 (§27); resta apenas autorização
+  explícita para iniciar a implementação.
 
 ### 26.3 Dependências de atividades futuras
 
@@ -1299,23 +1321,23 @@ ponto que toca código da F5-07 — e está isolado em Q4.
 
 | Fase | Entrega | Gate |
 | --- | --- | --- |
-| **P1** | Migration DDL: `structure_events`, triggers I1–I3, índice D20, normalização de grants | `db reset` + `02-validar-f5-08.sql` (schema) |
+| **P1** | Migration DDL: `structure_events`, triggers I1–I3 (com os **três** casos de I2), índice, normalização de grants; **alinhamento da chave de advisory lock nas 4 RPCs da F5-07** (Q4=A/D24) | `db reset` + `02-validar-f5-08.sql` (schema) |
 | **P2** | RPCs (15) + grants de `EXECUTE` | validador + testes de comportamento SQL |
 | **P3** | Contrato/Edge: operações novas, dispatch, taxonomia de erro | `npm test`, `npx tsc -b`, testes de contrato |
 | **P4** | Porta/serviço no cliente + telas de Catálogos, Unidades, Posições, Colegiado | testes de tela (sem escrita local) |
-| **P5** | Alocação do colaborador (ocupação/reporting line) nas telas existentes | testes de tela + remoção dos avisos "F5-08" |
+| **P5** | **UI de alocação do colaborador** (ocupação/reporting line) nas telas existentes — obrigatória para o cutover (Q5=A/D25) | testes de tela + remoção dos avisos "F5-08" |
 | **P6** | Remoção da autoridade estrutural local (§19) + CI (validadores) | `03-validar-f5-08-cutover.sql`, regressão F4/F5 completa, `npm run build`/`lint`, `git diff --check` |
 
 Cada fase é um lote coeso; os comandos que exigem elevação são agrupados no gate de cada fase
-(`AGENTS.md` §4). Nenhuma fase começa com Q aberta que a afete.
+(`AGENTS.md` §4). Nenhuma fase começa com decisão aberta: Q1–Q5 estão fechadas (§28/§29).
 
-## 28. Questões para validação
+## 28. Questões para validação (Q1–Q5 — **FECHADAS**)
 
-> Dúvidas arquiteturais **reais**: não são dedutíveis dos contratos fechados nem do estado do
-> código. Cada uma traz recomendação; a implementação das partes afetadas fica bloqueada até a
-> decisão.
+> **Todas FECHADAS** na revisão arquitetural rodada 1 do PR #182 (2026-09-12), por alternativa
+> **A** em cada caso. O contexto e as alternativas são preservados como histórico da decisão; a
+> forma normativa está em D21–D25 (§29). **Nenhuma questão arquitetural permanece aberta.**
 
-### Q1 — Reabertura/segunda janela de vigência de unidade e de posição
+### Q1 — Reabertura/segunda janela de vigência de unidade e de posição — **FECHADA (A) → D21**
 
 - **Contexto:** `organizational_units` e `organizational_positions` são "uma linha, uma janela"
   (`20260907130000:119-138, 288-314`), sem exclusion e sem tabela de versões. Encerrar = gravar
@@ -1328,7 +1350,7 @@ Cada fase é um lote coeso; os comandos que exigem elevação são agrupados no 
   `UPDATE valid_to = null` quando a janela encerrada **nunca** foi usada por ocupação, reporting
   line ou escopo; (C) criar tabela de versões de unidade/posição (mudança de modelo, migração de
   FKs — rejeitada em §8.1).
-- **Recomendação:** **(A)** nesta atividade — zero mudança de modelo, zero risco para FKs e
+- **DECISÃO (PR #182 — alternativa A):** nesta atividade — zero mudança de modelo, zero risco para FKs e
   contratos, comportamento explícito na UI ("unidade encerrada não pode ser reaberta; crie uma
   nova"). Se o produto exigir reabertura, reabrir contrato em atividade própria (é mudança de
   modelo temporal, não detalhe de implementação).
@@ -1336,7 +1358,7 @@ Cada fase é um lote coeso; os comandos que exigem elevação são agrupados no 
   especificada enquanto não decidido.
 - **Seções dependentes:** §8.1, §9.2, §21.3, §24.2, R1.
 
-### Q2 — Reatribuição de posição preservando a identidade
+### Q2 — Reatribuição de posição preservando a identidade — **FECHADA (A) → D22**
 
 - **Contexto:** D5 fixa que `unit_id`/`job_role_id`/`seniority_level_id` são imutáveis (alterá-los
   reescreveria o significado histórico da posição referenciada por `occupations`,
@@ -1346,14 +1368,14 @@ Cada fase é um lote coeso; os comandos que exigem elevação são agrupados no 
   futura seguem por novas ocupações; (B) permitir `UPDATE` de atributos com vigência nova
   (exigiria versionar a posição: tabela nova, Q1-C); (C) permitir `UPDATE` direto (rejeitado:
   reescreve passado).
-- **Recomendação:** **(A)**, com a UI deixando claro que "mover" = encerrar + criar e que a
+- **DECISÃO (PR #182 — alternativa A):** com a UI deixando claro que "mover" = encerrar + criar e que a
   ocupação vigente precisa ser encerrada/recriada (as guardas I3 e o trigger F3-04 já impedem
   encerrar posição com ocupação/reporting vigente).
 - **Impacto:** UX de administração e continuidade da cadeia (reporting lines precisam ser
   redefinidas ao trocar a posição). Nenhum impacto de segurança.
 - **Seções dependentes:** §9.2, §10.2 (I3), §21.3, R2.
 
-### Q3 — Retificação de lançamento equivocado (janela nunca consumida)
+### Q3 — Retificação de lançamento equivocado (janela nunca consumida) — **FECHADA (A) → D23**
 
 - **Contexto:** a F5-07 §11.4 proíbe alterar linha temporal fechada e o enunciado exige preservar
   fatos passados. Mas um erro percebido imediatamente (ex.: `valid_from` equivocado, cargo
@@ -1365,14 +1387,14 @@ Cada fase é um lote coeso; os comandos que exigem elevação são agrupados no 
   sem ocupação/reporting/escopo/snapshot e dentro de tolerância temporal), com evento
   `RETIFICADO` e `before/after`; (C) permitir `UPDATE` livre pelo administrador (rejeitado:
   reescreve história sem controle).
-- **Recomendação:** **(A)** nesta atividade (fail-closed, zero exceção de imutabilidade, sem API
+- **DECISÃO (PR #182 — alternativa A):** nesta atividade (fail-closed, zero exceção de imutabilidade, sem API
   que possa ser usada para reescrever história); se a operação real exigir (B), implementar em
   atividade própria com guardas explícitas e auditoria dedicada.
 - **Impacto:** operacional (qualidade do histórico) e de UX (mensagem clara de como corrigir).
   Nenhum impacto de segurança.
 - **Seções dependentes:** §9.1, §14.2, D8, R7.
 
-### Q4 — Unificação da chave de advisory lock (F3-04 × RPCs estruturais da F5-07)
+### Q4 — Unificação da chave de advisory lock (F3-04 × RPCs estruturais da F5-07) — **FECHADA (A) → D24**
 
 - **Contexto:** o trigger anti-ciclo da F3-04 usa `hashtext('position_reporting_lines:' || org)`
   e documenta que o caminho de escrita futuro deve usar o mesmo lock (`20260907140000:253-268`);
@@ -1385,14 +1407,15 @@ Cada fase é um lote coeso; os comandos que exigem elevação são agrupados no 
   chave da F3-04 e a F5-07 é corrigida em manutenção própria (mantém o risco aberto no
   intervalo); (C) alterar o **trigger** da F3-04 para a chave da F5-07 (rejeitado: contraria a
   documentação normativa da própria F3-04).
-- **Recomendação:** **(A)** — correção pontual (4 literais) que elimina uma janela de
+- **DECISÃO (PR #182 — alternativa A):** correção pontual (4 literais) que elimina uma janela de
   integridade real, sem alterar contrato (nenhuma assinatura; comportamento observável muda
-  apenas para melhor). Exige, porém, aprovação por tocar código da F5-07 (atividade fechada).
-  Se a decisão for preservar a F5-07 intocada, adotar **(B)** e registrar Issue própria.
+  apenas para melhor). Tocar código da F5-07 foi **aprovado** na revisão: a correção das 4
+  ocorrências entra no escopo da F5-08. A alternativa **(B)** (manutenção própria) foi rejeitada,
+  porque manteria aberta uma janela real de corrida/anti-ciclo.
 - **Impacto:** integridade sob concorrência (R5). Não muda autorização nem schema.
 - **Seções dependentes:** §4.7 G10, §14.3, §25.4 F4, D14.
 
-### Q5 — Fronteira de entrega da UI de alocação do colaborador
+### Q5 — Fronteira de entrega da UI de alocação do colaborador — **FECHADA (A) → D25**
 
 - **Contexto:** a F5-07 removeu unidade/cargo/senioridade/gestor dos formulários e deixou-os
   **read-only** com o aviso "Estrutura organizacional (F5-08)"
@@ -1405,14 +1428,14 @@ Cada fase é um lote coeso; os comandos que exigem elevação são agrupados no 
   estrutura/catálogo e a alocação fica para atividade própria (ex.: F5-08b); (C) a alocação é
   absorvida pela F5-09 (ciclos) por causa da elegibilidade — rejeitada: alocação é estrutura,
   não ciclo.
-- **Recomendação:** **(A)**, porque sem UI de alocação a F5-08 entrega estrutura que ninguém
+- **DECISÃO (PR #182 — alternativa A):** porque sem UI de alocação a F5-08 entrega estrutura que ninguém
   consegue aplicar e o §20.1 da F5-07 exige que a F5-08 feche a administração estrutural;
-  alternativamente (B), com Issue explícita e critérios de aceite da F5-08 reduzidos ao §18.1
-  (1)–(3).
+  a alternativa **(B)** (adiar a UI de alocação para atividade própria) foi **rejeitada**: sem ela
+  o cutover estrutural fica incompleto.
 - **Impacto:** escopo/cronograma da atividade; nenhum impacto de segurança.
 - **Seções dependentes:** §18.1, §21.2, §24.2 item 7, §27 P5.
 
-## 29. Decisões arquiteturais
+## 29. Decisões arquiteturais (D1–D25 — todas FECHADAS)
 
 ### D1 — Reuso integral das tabelas F3; nenhuma entidade estrutural nova
 
@@ -1455,9 +1478,13 @@ Unidade/posição/catálogo **encerrado/inativo** não é renomeado.
 
 ### D6 — Encerramento é `valid_to`; encerrar com estrutura vigente é recusado
 
-Nenhum encerramento usa DELETE. Encerrar **unidade** exige ausência de posição vigente e de
-período parent vigente como filha (I2); encerrar **posição** exige ausência de ocupação vigente
-(I3) e de reporting line vigente (trigger F3-04). Análogo a F5-07 D6
+Nenhum encerramento usa DELETE. Encerrar **unidade** exige, na data efetiva do encerramento,
+ausência de **posição vigente** nela e de **período parent vigente** em que ela figure como
+**filha** (`unit_id = unidade`) **ou como pai** (`parent_unit_id = unidade`) — os três casos são
+obrigatórios (I2, revisão PR #182: impedir unidade filha ativa apontando para pai encerrado).
+Encerrar **posição** exige ausência de ocupação vigente (I3) e de reporting line vigente
+(trigger F3-04). A mesma regra é pré-validada na RPC para erro público estável e coberta por
+teste SQL e por critério de aceite (§23.2, §24.2 item 11). Análogo a F5-07 D6
 (`20260907150000:218-236`).
 *Evidência:* `20260907140000:313-350`; F5-07 D6 `:1122-1128`.
 
@@ -1511,7 +1538,8 @@ append-only no banco; `payload` nunca é autoridade.
 
 `expected_version` obrigatório em mutação de linha existente; lock
 `hashtext('position_reporting_lines:' || organization_id)` (chave da F3-04) em toda mutação
-estrutural; idempotência por `operation_id`/`payload_hash`. A divergência da F5-07 é Q4.
+estrutural; idempotência por `operation_id`/`payload_hash`. A divergência de chave da F5-07 foi
+**corrigida dentro do escopo da F5-08** (Q4=A/D24), sem mudança de assinatura.
 *Evidência:* F5-07 §13/D13; `20260907140000:253-268`; `20260913000000:255-258`.
 
 ### D15 — Integridade cross-tenant por construção
@@ -1550,9 +1578,50 @@ estrutural permanece nesta atividade.
 
 ### D20 — Migrations aditivas, índice novo e catalogação no CI
 
-Duas migrations aditivas + três validadores + execução no job `supabase-local` do CI; índice de
-`parent_unit_id`; grants explícitos; nenhuma migration aplicada é reescrita.
+Três migrations aditivas (DDL, RPCs e alinhamento da chave de lock da F5-07), três validadores e
+execução no job `supabase-local` do CI; índice de `parent_unit_id`; grants explícitos; nenhuma
+migration aplicada é reescrita.
 *Evidência:* §20; `.github/workflows/ci.yml`; F5-07 §10.4/§20.1.
+
+### D21 — Entidade encerrada não é reaberta; nova vigência exige nova entidade (Q1=A)
+
+Unidade ou posição encerrada **não** é reaberta nesta atividade: não existe operação de
+reabertura, `valid_to` nunca retrocede e nenhuma janela encerrada é reescrita. Nova vigência
+exige **nova entidade/novo UUID**. Reabertura real (segunda janela para o mesmo `id`) exigiria
+contrato temporal próprio, em atividade futura.
+*Evidência:* §9.2; §21.3; revisão PR #182 (Q1 = A).
+
+### D22 — Atributos estruturais da posição são imutáveis; "mover" = encerrar + criar (Q2=A)
+
+`unit_id`, `job_role_id` e `seniority_level_id` permanecem imutáveis (D5). "Mover" uma posição
+significa **encerrar a posição antiga e criar nova posição**, com **realocação explícita das
+relações vigentes** (ocupação e reporting lines de responsabilidade do administrador), sujeita
+às guardas I3 e ao trigger F3-04.
+*Evidência:* D5; §10.2 (I3); §21.3; revisão PR #182 (Q2 = A).
+
+### D23 — Não há retificação por UPDATE na F5-08 (Q3=A)
+
+Nenhuma operação permite `UPDATE` excepcional de fato estrutural registrado. Correção de erro
+estrutural = **encerrar + abrir novo fato**, preservando motivo e auditoria (`structure_events`
+com `before_value`/`after_value`). Retificação especial, se necessária no futuro, deve ser
+tratada em atividade própria.
+*Evidência:* §9.1; §14.2; D8; revisão PR #182 (Q3 = A).
+
+### D24 — Chave única de advisory lock: F5-08 corrige as 4 ocorrências da F5-07 (Q4=A)
+
+A chave normativa é a da F3-04: `position_reporting_lines:<organization_id>`. A implementação da
+F5-08 **corrige as 4 ocorrências** das RPCs estruturais da F5-07 (`20260913010000:864, 1031,
+1179, 1344`) por `create or replace function`, **sem mudança de assinatura nem de contrato
+externo**. É correção de integridade/concorrência necessária ao escopo (elimina a janela de
+corrida com o anti-ciclo do banco).
+*Evidência:* §14.3; §20.1; §25.1 R5; revisão PR #182 (Q4 = A).
+
+### D25 — A F5-08 inclui a UI de alocação do colaborador e reporting line (Q5=A)
+
+O cutover estrutural **não é considerado completo** sem a UI de alocação (ocupação e reporting
+line), reutilizando as operações soberanas já entregues pela F5-07 — sem novas operações e sem
+nova capability.
+*Evidência:* §18.1; §21.2; §24.2 item 7; §27 P5; revisão PR #182 (Q5 = A).
 
 ## 30. Rastreabilidade das 28 questões centrais
 
@@ -1562,7 +1631,7 @@ Duas migrations aditivas + três validadores + execução no job `supabase-local
 | 2 | Tabelas que existem × precisam ser criadas/alteradas | §4.2, §8.1–§8.4 (reuso; 1 tabela nova; 1 índice) |
 | 3 | Lifecycle temporal e semântica de validade | §9.1, §9.2, D2 |
 | 4 | Alterações históricas sem sobrescrever fatos | §9.4, §9.5, D2, D5, D8 |
-| 5 | Impedir ciclos, estruturas impossíveis, cross-tenant e sobreposições | §10.2 (I1–I7), §10.4, §12.2 |
+| 5 | Impedir ciclos, estruturas impossíveis, cross-tenant e sobreposições | §10.2 (I1–I7, com I2 nos **três** casos), §10.4, §12.2 |
 | 6 | Constraints garantidas pelo PostgreSQL | §10.1, §10.4 |
 | 7 | Regras que exigem função/RPC transacional | §10.3, §13.6 |
 | 8 | Fronteira server-side das operações administrativas | §17.1, D9 |
@@ -1574,7 +1643,7 @@ Duas migrations aditivas + três validadores + execução no job `supabase-local
 | 14 | ResourceContext funcional aplicável? | §11.2 (não; allowlist `[]`) |
 | 15 | Autoria soberana | §15.1–§15.3, D13 |
 | 16 | Eventos/auditoria append-only | §15, §8.3, D13 |
-| 17 | DELETE físico × encerramento/inativação | D8, §9.2, §21.3, Q3 |
+| 17 | DELETE físico × encerramento/inativação | D8, §9.2, §21.3, Q3=A/D23 |
 | 18 | Preservar referências históricas | §9.4, §16.3, §23.2 (F) |
 | 19 | Impacto em DIRECT_REPORTS/DESCENDANTS/UNIT/ASSIGNED | §16.1, §16.2, D12 |
 | 20 | Caminhos que ainda fabricam estrutura local | §4.5, §19.1 |
