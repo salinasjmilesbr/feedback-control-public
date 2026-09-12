@@ -76,12 +76,39 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   gravar pendências) ⇒ resultado = `expected_version + 1`;
   (c) `reference_date` da materialização é o **instante** da ativação (o
   parâmetro da F3-08 é `timestamptz`; o §6/T2 escrevia `data_ativacao::date`).
-- **Limitações reais da rodada:** os validadores SQL não rodaram neste host
-  (Docker Desktop inacessível) — serão comprovados pelo CI; a **contenção real
-  entre DUAS sessões** não é provável no validador de sessão única (provado por
-  lock estrutural + `expected_version` + I5, com a limitação registrada no §U do
-  validador); o cenário é **insert-once** (a trilha é append-only protegida), e o
-  validador exige `db reset` para nova execução limpa.
+- **Correção pós-CI #204 (somente no validador):** o teste **J** falhava com
+  `[FAIL] J: a falha injetada na materializacao nao abortou a ativacao` porque
+  rodava com **C1 ainda ATIVO**: `ciclo_ativar` recusava por I5/D14 (um único
+  `ATIVO` por organização) **antes** da materialização, de modo que o gatilho
+  injetado nunca era atingido — o teste não maquiava o erro (assertava a mensagem
+  `MUT_F5_09_P2`), por isso falhava corretamente em vez de passar em falso.
+  Correção **restrita a `supabase/validacao/04-validar-f5-09-p2.sql`**: as 4 RPCs,
+  a regra de ciclo único ATIVO, a ordem validação→materialização, a migration e
+  D1–D28 **não** foram tocadas. A prova de rollback do **encerramento** (O) passou
+  a rodar sobre **C1** (o ciclo legitimamente ATIVO/version 2 da fixture), M/N
+  encerra C1 e, **só então**, **J** roda sobre **C3** (2030/3), quando a
+  organização já não tem ciclo ATIVO — a única pré-condição legítima para a
+  ativação alcançar a materialização. J ganhou duas fases de falha injetada:
+  **J.1** aborta na **2ª linha** do `INSERT` em `collegiate_cycle_snapshots`
+  (contador por `SEQUENCE` não transacional, lido **depois** do rollback: prova de
+  que havia trabalho parcial realmente executado) e **J.2** aborta no `INSERT` de
+  `cycle_evaluation_responsibilities`, com o F3-08 já materializado; em seguida
+  prova-se o rollback total (`PLANEJADO`, `data_ativacao` nula, version 0, zero
+  snapshot/posição/membro/responsabilidade, zero evento) e a ativação legítima
+  posterior (4 snapshots + responsabilidades + evento `ATIVADO`). Revisão
+  preventiva da **mesma classe de pré-condição**: O e M/N dependiam de C3 estar
+  ATIVO (que J, quebrado, nunca ativava) e agora operam sobre C1 com guarda de
+  pré-condição explícita; R, P/Q, U, S/T e W foram conferidos e são independentes
+  de ordem/estado `ATIVO`.
+- **Limitações reais da rodada:** com o Docker Desktop disponível, a suíte SQL
+  local completa foi executada neste host (`db reset` + os 18 arquivos de
+  `supabase/validacao/` na ordem do CI, incluindo P1 e P2): **0 `[FAIL]`**, todos
+  os arquivos com exit 0, e o validador P2 com 16 `[PASS]` (J.1 abortando na 2ª
+  linha do `INSERT` de snapshots e J.2 no `INSERT` de responsabilidades); a
+  **contenção real entre DUAS sessões** continua não provável no validador de
+  sessão única (provado por lock estrutural + `expected_version` + I5, com a
+  limitação registrada no §U); o cenário é **insert-once** (a trilha é append-only
+  protegida) e o validador exige `db reset` para nova execução limpa.
 - **Permanece para P3+:** admissão durante ciclo ativo (P3), cancelar/reabrir/
   corrigir período (P4), leitura RLS + porta do cliente (P5), Policy Engine
   `cycle.read`/`cycle.manage` (P6), Edge `ciclos` + reconciliação do bundle

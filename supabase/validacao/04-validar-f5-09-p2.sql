@@ -18,12 +18,15 @@
 --   G  edicao de ciclo NAO PLANEJADO => CONFLICT;
 --   H  ativacao valida (ATIVO, data_ativacao, version+1, evento ATIVADO);
 --   I  segunda ativacao conflitante na mesma organizacao => CONFLICT (I5);
---   J  falha durante a materializacao => ROLLBACK TOTAL (prova por falha injetada);
+--   J  falha durante a materializacao (INSERT de snapshot F3-08 e de
+--      responsabilidade F3-09) => ROLLBACK TOTAL (prova por falha injetada);
+--      roda sobre C3 depois de M/N, quando a organizacao nao tem ciclo ATIVO;
 --   K  estrutura materializada pertence ao tenant/ciclo corretos;
 --   L  hierarquia vem das fontes RELACIONAIS (F3-04/F3-07/F3-08), nao de texto;
 --   M  encerramento valido reusando a F5-06 (pendencias permanentes + contadores);
 --   N  encerramento em estado invalido => CONFLICT (sem duplicar fechamento);
---   O  falha no fechamento F5-06 => ROLLBACK TOTAL da transicao;
+--   O  falha no fechamento F5-06 (sobre C1, o ciclo ATIVO da fixture) =>
+--      ROLLBACK TOTAL da transicao;
 --   P  eventos corretos por mutacao (tipos, ordem, um por operacao);
 --   Q  autoria server-side (ator verificado + membership ativa);
 --   R  payload nao forja tenant/autoria/status/versao/estrutura;
@@ -38,6 +41,10 @@
 -- Saida deterministica: um `[PASS]` por verificacao; qualquer falha aborta.
 -- Asserts negativos rodam em subtransacao (a excecao esperada reverte apenas a
 -- tentativa). Falhas injetadas usam triggers TEMPORARIOS removidos ao final.
+-- Ordem das provas de rollback (cada uma verifica a propria pre-condicao):
+-- O (encerramento, exige ciclo ATIVO na versao declarada) -> M/N (encerra C1)
+-- -> J (materializacao, exige AUSENCIA de ciclo ATIVO: I5/D14 precede a
+-- materializacao por contrato, condicao que so existe com C1 ja encerrado).
 -- ============================================================================
 
 \set ON_ERROR_STOP on
@@ -527,111 +534,54 @@ begin
 end $$;
 
 -- ============================================================================
--- 7) J) Falha durante a MATERIALIZACAO => ROLLBACK TOTAL (falha injetada)
+-- 7) O) Falha no fechamento F5-06 => ROLLBACK TOTAL (falha injetada)
+-- ----------------------------------------------------------------------------
+-- Pre-condicao LEGITIMA: C1 (2030/1) e o unico ciclo ATIVO da organizacao
+-- (teste H) e esta na version declarada em `expected_version` (2). A F5-06 so e
+-- alcancada com essas duas condicoes; sem elas a chamada seria recusada ANTES
+-- do fechamento e o teste nao provaria rollback algum.
+-- A prova de rollback da MATERIALIZACAO (teste J, secao 9) roda DEPOIS, porque
+-- `ciclo_ativar` exige que nao exista outro ciclo ATIVO (I5/D14 precede a
+-- materializacao por contrato): essa condicao so existe quando C1 ja foi
+-- encerrado (secao 8).
 -- ============================================================================
 do $$
 declare
   v_org  uuid := 'e9a00000-0000-0000-0000-0000000000a1';
   v_ator uuid := 'e9c00000-0000-0000-0000-000000000001';
+  v_c1   uuid;
 begin
-  -- Terceiro ciclo, PLANEJADO, para a prova de rollback da materializacao.
-  perform public.ciclo_criar(v_org, 2030, 3, date '2030-08-01', date '2030-10-31',
-    v_ator, 'e9a10000-0000-0000-0000-0000000000c1');
-end $$;
+  select c.id into v_c1 from public.evaluation_cycles c
+   where c.organization_id = v_org and c.ano = 2030 and c.numero = 1;
 
--- Falha injetada: qualquer INSERT em `collegiate_cycle_snapshots` aborta
--- (DDL fora de bloco PL/pgSQL — comandos utilitarios exigem o nivel SQL).
-create or replace function public._mut_p2_falhar()
-returns trigger language plpgsql as $mut$
-begin
-  raise exception 'MUT_F5_09_P2: falha injetada na materializacao';
-end;
-$mut$;
-
-create trigger _mut_p2_snapshot before insert on public.collegiate_cycle_snapshots
-  for each row execute function public._mut_p2_falhar();
-
-do $$
-declare
-  v_org  uuid := 'e9a00000-0000-0000-0000-0000000000a1';
-  v_ator uuid := 'e9c00000-0000-0000-0000-000000000001';
-  v_c3   uuid;
-  v_ok   boolean := false;
-begin
-  select c.id into v_c3 from public.evaluation_cycles c
-   where c.organization_id = v_org and c.ano = 2030 and c.numero = 3;
-
-  begin
-    perform public.ciclo_ativar(v_c3, v_org, 0, v_ator,
-      'e9a10000-0000-0000-0000-0000000000c2');
-  exception when others then
-    v_ok := sqlerrm like '%MUT_F5_09_P2%';
-  end;
-
-  if not v_ok then
-    raise exception '[FAIL] J: a falha injetada na materializacao nao abortou a ativacao';
+  if v_c1 is null then
+    raise exception '[FAIL] O: pre-condicao — ciclo C1 (2030/1) ausente';
   end if;
-end $$;
-
-drop trigger _mut_p2_snapshot on public.collegiate_cycle_snapshots;
-drop function public._mut_p2_falhar();
-
-do $$
-declare
-  v_org    uuid := 'e9a00000-0000-0000-0000-0000000000a1';
-  v_ator   uuid := 'e9c00000-0000-0000-0000-000000000001';
-  v_c3     uuid;
-  v_status text;
-  v_snap   int;
-begin
-  select c.id, c.status into v_c3, v_status from public.evaluation_cycles c
-   where c.organization_id = v_org and c.ano = 2030 and c.numero = 3;
-
-  if v_status <> 'PLANEJADO' then
-    raise exception '[FAIL] J: rollback incompleto (status=%) — a ativacao deveria reverter', v_status;
-  end if;
-  if not exists (select 1 from public.evaluation_cycles c where c.id = v_c3 and c.data_ativacao is null) then
-    raise exception '[FAIL] J: rollback incompleto (data_ativacao gravada)';
-  end if;
-  select count(*) into v_snap from public.collegiate_cycle_snapshots s
-   where s.organization_id = v_org and s.ano = 2030 and s.ciclo = 3;
-  if v_snap <> 0 then
-    raise exception '[FAIL] J: rollback incompleto (snapshots=%)', v_snap;
+  if not exists (
+    select 1 from public.evaluation_cycles c
+     where c.id = v_c1 and c.status = 'ATIVO' and c.version = 2
+  ) then
+    raise exception '[FAIL] O: pre-condicao — C1 deveria estar ATIVO/version 2 (a F5-06 nao seria alcancada)';
   end if;
   if exists (
-    select 1 from public.cycle_events e
-     where e.organization_id = v_org
-       and e.operation_id = 'e9a10000-0000-0000-0000-0000000000c2'
+    select 1 from public.evaluation_cycles c
+     where c.organization_id = v_org and c.status = 'ATIVO' and c.id <> v_c1
   ) then
-    raise exception '[FAIL] J: rollback incompleto (evento ATIVADO gravado)';
+    raise exception '[FAIL] O: pre-condicao — ha outro ciclo ATIVO na organizacao';
   end if;
-
-  -- Removida a falha injetada, a ativacao do MESMO ciclo passa a funcionar.
-  perform public.ciclo_ativar(v_c3, v_org, 0, v_ator,
-    'e9a10000-0000-0000-0000-0000000000c3');
-  if (select c.status from public.evaluation_cycles c where c.id = v_c3) <> 'ATIVO' then
-    raise exception '[FAIL] J: ativacao deveria funcionar apos remover a falha injetada';
+  if exists (
+    select 1 from public.evaluations e
+     where e.organization_id = v_org and e.cycle_id = v_c1
+  ) then
+    raise exception '[FAIL] O: pre-condicao — ja existe avaliacao no ciclo C1';
   end if;
-
-  raise notice '[PASS] J: falha na materializacao => ROLLBACK TOTAL (ciclo PLANEJADO, sem snapshot e sem evento) e ativacao posterior bem-sucedida';
-end $$;
-
--- ============================================================================
--- 8) O) Falha no fechamento F5-06 => ROLLBACK TOTAL (falha injetada)
--- ============================================================================
-do $$
-declare
-  v_org  uuid := 'e9a00000-0000-0000-0000-0000000000a1';
-  v_ator uuid := 'e9c00000-0000-0000-0000-000000000001';
-  v_c3   uuid;
-begin
-  select c.id into v_c3 from public.evaluation_cycles c
-   where c.organization_id = v_org and c.ano = 2030 and c.numero = 3;
 
   -- Avaliacao incompleta do avaliado c3 (reuso legitimo da F5-06: exige o
-  -- snapshot F3-08 materializado na ativacao).
-  perform public.evaluation_criar(v_org, v_c3,
+  -- snapshot F3-08 materializado na ativacao). E ela que da pendencia a marcar.
+  perform public.evaluation_criar(v_org, v_c1,
     'e9b00000-0000-0000-0000-000000000003', v_ator);
+
+  raise notice '[PASS] O/pre-condicao: C1 ATIVO/version 2 (unico ATIVO) e avaliacao incompleta do avaliado c3 criada';
 end $$;
 
 -- Falha injetada APENAS na transicao de status para ENCERRADO: o UPDATE interno
@@ -654,14 +604,14 @@ do $$
 declare
   v_org  uuid := 'e9a00000-0000-0000-0000-0000000000a1';
   v_ator uuid := 'e9c00000-0000-0000-0000-000000000001';
-  v_c3   uuid;
+  v_c1   uuid;
   v_ok   boolean := false;
 begin
-  select c.id into v_c3 from public.evaluation_cycles c
-   where c.organization_id = v_org and c.ano = 2030 and c.numero = 3;
+  select c.id into v_c1 from public.evaluation_cycles c
+   where c.organization_id = v_org and c.ano = 2030 and c.numero = 1;
 
   begin
-    perform public.ciclo_encerrar(v_c3, v_org, 'tentativa com falha injetada', 1, v_ator,
+    perform public.ciclo_encerrar(v_c1, v_org, 'tentativa com falha injetada', 2, v_ator,
       'e9a10000-0000-0000-0000-0000000000d1');
   exception when others then
     v_ok := sqlerrm like '%MUT_F5_09_P2%';
@@ -678,25 +628,32 @@ drop function public._mut_p2_falhar_encerrar();
 do $$
 declare
   v_org    uuid := 'e9a00000-0000-0000-0000-0000000000a1';
-  v_c3     uuid;
+  v_c1     uuid;
   v_eval   uuid;
   v_ciclo  record;
   v_pend   int;
 begin
-  select c.id into v_c3 from public.evaluation_cycles c
-   where c.organization_id = v_org and c.ano = 2030 and c.numero = 3;
+  select c.id into v_c1 from public.evaluation_cycles c
+   where c.organization_id = v_org and c.ano = 2030 and c.numero = 1;
   select e.id into v_eval from public.evaluations e
-   where e.organization_id = v_org and e.cycle_id = v_c3
+   where e.organization_id = v_org and e.cycle_id = v_c1
    order by e.created_at limit 1;
+  if v_eval is null then
+    raise exception '[FAIL] O: pre-condicao — avaliacao incompleta do avaliado c3 nao foi criada';
+  end if;
 
-  select c.status, c.version, c.encerrado_com_pendencias, c.quantidade_pendencias
+  select c.status, c.version, c.data_encerramento,
+         c.encerrado_com_pendencias, c.quantidade_pendencias
     into v_ciclo
-    from public.evaluation_cycles c where c.id = v_c3;
+    from public.evaluation_cycles c where c.id = v_c1;
   if v_ciclo.status <> 'ATIVO' then
     raise exception '[FAIL] O: rollback incompleto (status=%)', v_ciclo.status;
   end if;
-  if v_ciclo.version <> 1 then
+  if v_ciclo.version <> 2 then
     raise exception '[FAIL] O: rollback incompleto (version=%; a F5-06 havia incrementado)', v_ciclo.version;
+  end if;
+  if v_ciclo.data_encerramento is not null then
+    raise exception '[FAIL] O: rollback incompleto (data_encerramento gravada)';
   end if;
   if v_ciclo.encerrado_com_pendencias is not false or v_ciclo.quantidade_pendencias <> 0 then
     raise exception '[FAIL] O: rollback incompleto nos contadores de pendencia (%, %)',
@@ -719,39 +676,60 @@ begin
   ) then
     raise exception '[FAIL] O: rollback incompleto (evento ENCERRADO gravado)';
   end if;
+  if exists (
+    select 1 from public.cycle_events e
+     where e.organization_id = v_org and e.cycle_id = v_c1 and e.event_type = 'ENCERRADO'
+  ) then
+    raise exception '[FAIL] O: rollback incompleto (evento ENCERRADO na trilha do ciclo)';
+  end if;
 
   raise notice '[PASS] O: falha no fechamento => ROLLBACK TOTAL (inclusive dos efeitos da F5-06)';
 end $$;
 
 -- ============================================================================
--- 9) M/N) Encerramento valido reusando a F5-06
+-- 8) M/N) Encerramento valido reusando a F5-06
+-- ----------------------------------------------------------------------------
+-- Roda sobre C1 (ATIVO/version 2) com a avaliacao incompleta do avaliado c3
+-- criada na secao 7 — ou seja, com pendencia REAL a marcar. Ao final, a
+-- organizacao fica sem nenhum ciclo ATIVO: e essa a pre-condicao legitima que
+-- permite ao teste J (secao 9) alcancar a materializacao.
 -- ============================================================================
 do $$
 declare
   v_org    uuid := 'e9a00000-0000-0000-0000-0000000000a1';
   v_ator   uuid := 'e9c00000-0000-0000-0000-000000000001';
-  v_c3     uuid;
+  v_c1     uuid;
   v_eval   uuid;
   v_res    jsonb;
   v_ciclo  record;
   v_evt    record;
   v_ok     boolean;
 begin
-  select c.id into v_c3 from public.evaluation_cycles c
-   where c.organization_id = v_org and c.ano = 2030 and c.numero = 3;
+  select c.id into v_c1 from public.evaluation_cycles c
+   where c.organization_id = v_org and c.ano = 2030 and c.numero = 1;
   select e.id into v_eval from public.evaluations e
-   where e.organization_id = v_org and e.cycle_id = v_c3
+   where e.organization_id = v_org and e.cycle_id = v_c1
    order by e.created_at limit 1;
 
-  v_res := public.ciclo_encerrar(v_c3, v_org, 'Encerramento de teste F5-09 P2', 1, v_ator,
+  if v_eval is null then
+    raise exception '[FAIL] M: pre-condicao — avaliacao incompleta do avaliado c3 ausente no ciclo C1';
+  end if;
+  if not exists (
+    select 1 from public.evaluation_cycles c
+     where c.id = v_c1 and c.status = 'ATIVO' and c.version = 2
+  ) then
+    raise exception '[FAIL] M: pre-condicao — C1 deveria estar ATIVO/version 2';
+  end if;
+
+  v_res := public.ciclo_encerrar(v_c1, v_org, 'Encerramento de teste F5-09 P2', 2, v_ator,
     'e9a10000-0000-0000-0000-0000000000d2');
 
-  select c.* into v_ciclo from public.evaluation_cycles c where c.id = v_c3;
+  select c.* into v_ciclo from public.evaluation_cycles c where c.id = v_c1;
   if v_ciclo.status <> 'ENCERRADO' or v_ciclo.data_encerramento is null then
     raise exception '[FAIL] M: encerramento nao aplicou status/data (%)', v_ciclo.status;
   end if;
-  if v_ciclo.version <> 2 then
-    raise exception '[FAIL] M: encerramento deveria resultar em expected_version + 1 = 2 (version=%)', v_ciclo.version;
+  if v_ciclo.version <> 3 then
+    raise exception '[FAIL] M: encerramento deveria resultar em expected_version + 1 = 3 (version=%)', v_ciclo.version;
   end if;
   if v_ciclo.encerrado_com_pendencias is not true or v_ciclo.quantidade_pendencias < 1 then
     raise exception '[FAIL] M/N: pendencias da F5-06 nao registradas (%, %)',
@@ -759,6 +737,9 @@ begin
   end if;
   if (v_res->>'quantidade_pendencias')::int <> v_ciclo.quantidade_pendencias then
     raise exception '[FAIL] M: retorno sem a contagem de pendencias do ciclo';
+  end if;
+  if (v_res->>'version')::int <> v_ciclo.version then
+    raise exception '[FAIL] M: retorno com versao divergente da linha (%)', v_res->>'version';
   end if;
 
   -- Prova do REUSO da F5-06: marcador permanente na avaliacao + pendencias
@@ -792,7 +773,7 @@ begin
   -- (N) Segunda tentativa de encerrar (novo operation_id) => CONFLICT.
   v_ok := false;
   begin
-    perform public.ciclo_encerrar(v_c3, v_org, 'segunda tentativa', 2, v_ator,
+    perform public.ciclo_encerrar(v_c1, v_org, 'segunda tentativa', 3, v_ator,
       'e9a10000-0000-0000-0000-0000000000d3');
   exception when others then
     v_ok := sqlerrm like '%F5_09_CONFLICT%';
@@ -800,8 +781,313 @@ begin
   if not v_ok then
     raise exception '[FAIL] N: encerrar ciclo ja ENCERRADO deveria ser CONFLICT';
   end if;
+  if exists (
+    select 1 from public.cycle_events e
+     where e.organization_id = v_org
+       and e.operation_id = 'e9a10000-0000-0000-0000-0000000000d3'
+  ) then
+    raise exception '[FAIL] N: tentativa recusada gravou evento na trilha';
+  end if;
 
   raise notice '[PASS] M/N: encerramento valido reusando a F5-06 (marcador permanente + contadores + evento) e recusa determinista no estado invalido';
+end $$;
+
+-- ============================================================================
+-- 9) J) Falha durante a MATERIALIZACAO => ROLLBACK TOTAL (falha injetada)
+-- ----------------------------------------------------------------------------
+-- Pre-condicao LEGITIMA (a que faltava): a ativacao so alcanca a materializacao
+-- se (a) NAO houver outro ciclo ATIVO na organizacao — I5/D14 e verificado
+-- ANTES da materializacao, por contrato —, (b) o ciclo estiver PLANEJADO na
+-- versao declarada em `expected_version`, (c) houver periodo valido (I4/I6) e
+-- (d) o ator tiver membership ativa + capability `cycle.manage`.
+-- Por isso J roda DEPOIS de M/N: C1 (2030/1) ja foi encerrado, C2 (2030/2)
+-- esta PLANEJADO e C3 (2030/3) nasce aqui, PLANEJADO/version 0, com periodo
+-- 2030-08-01..2030-10-31 (sem sobreposicao com C1/C2 — I6).
+-- ============================================================================
+do $$
+declare
+  v_org  uuid := 'e9a00000-0000-0000-0000-0000000000a1';
+  v_ator uuid := 'e9c00000-0000-0000-0000-000000000001';
+  v_res  jsonb;
+begin
+  -- Guarda de pre-condicao: com outro ciclo ATIVO a chamada seria recusada por
+  -- I5 ANTES da materializacao e o teste nao provaria rollback algum.
+  if exists (
+    select 1 from public.evaluation_cycles c
+     where c.organization_id = v_org and c.status = 'ATIVO'
+  ) then
+    raise exception '[FAIL] J: pre-condicao invalida — ha ciclo ATIVO na organizacao (I5 precede a materializacao)';
+  end if;
+  if exists (
+    select 1 from public.evaluation_cycles c
+     where c.organization_id = v_org and c.ano = 2030 and c.numero = 3
+  ) then
+    raise exception '[FAIL] J: pre-condicao invalida — ciclo C3 (2030/3) ja existe';
+  end if;
+
+  v_res := public.ciclo_criar(v_org, 2030, 3, date '2030-08-01', date '2030-10-31',
+    v_ator, 'e9a10000-0000-0000-0000-0000000000c1');
+  if v_res->>'status' <> 'PLANEJADO' or (v_res->>'version')::int <> 0 then
+    raise exception '[FAIL] J: pre-condicao — C3 deveria nascer PLANEJADO/version 0 (%)', v_res;
+  end if;
+
+  raise notice '[PASS] J/pre-condicao: C3 PLANEJADO/version 0, ator com cycle.manage, periodo valido e nenhum ciclo ATIVO — a ativacao alcanca a materializacao F3-08/F3-09';
+end $$;
+
+-- ----------------------------------------------------------------------------
+-- J.1) Falha injetada DENTRO do INSERT em `collegiate_cycle_snapshots` (F3-08).
+-- O gatilho aborta a partir da SEGUNDA linha da MESMA instrucao de INSERT: o
+-- rollback e provado sobre trabalho REALMENTE executado (a 1a linha do snapshot
+-- ja havia sido gravada na transacao), nao sobre uma recusa anterior a escrita.
+-- O contador e um SEQUENCE — nao transacional — o que permite ler DEPOIS do
+-- rollback quantas linhas a instrucao chegou a produzir antes de abortar.
+-- DDL no nivel SQL (fora de bloco PL/pgSQL, como exige comando utilitario).
+-- ----------------------------------------------------------------------------
+create sequence public._mut_p2_snapshot_seq;
+
+create or replace function public._mut_p2_falhar()
+returns trigger language plpgsql as $mut$
+declare
+  v_tentativa bigint := nextval('public._mut_p2_snapshot_seq');
+begin
+  if v_tentativa >= 2 then
+    raise notice '_mut_p2_falhar: abortando na %a linha do INSERT de collegiate_cycle_snapshots (ciclo %/%) — a 1a linha ja havia sido gravada nesta transacao', v_tentativa, new.ano, new.ciclo;
+    raise exception 'MUT_F5_09_P2: falha injetada na materializacao (INSERT de snapshot)';
+  end if;
+  return new;
+end;
+$mut$;
+
+create trigger _mut_p2_snapshot before insert on public.collegiate_cycle_snapshots
+  for each row execute function public._mut_p2_falhar();
+
+do $$
+declare
+  v_org  uuid := 'e9a00000-0000-0000-0000-0000000000a1';
+  v_ator uuid := 'e9c00000-0000-0000-0000-000000000001';
+  v_c3   uuid;
+  v_ok   boolean := false;
+  v_tent bigint;
+begin
+  select c.id into v_c3 from public.evaluation_cycles c
+   where c.organization_id = v_org and c.ano = 2030 and c.numero = 3;
+
+  begin
+    perform public.ciclo_ativar(v_c3, v_org, 0, v_ator,
+      'e9a10000-0000-0000-0000-0000000000c2');
+  exception when others then
+    v_ok := sqlerrm like '%MUT_F5_09_P2%';
+  end;
+
+  if not v_ok then
+    raise exception '[FAIL] J: a falha injetada na materializacao nao abortou a ativacao';
+  end if;
+
+  -- Prova de que o gatilho foi REALMENTE atingido durante o INSERT, depois de
+  -- trabalho executado (>= 2 linhas produzidas pela mesma instrucao).
+  v_tent := currval('public._mut_p2_snapshot_seq');
+  if v_tent < 2 then
+    raise exception '[FAIL] J: o gatilho nao foi atingido dentro do INSERT de snapshots (linhas tentadas=%)', v_tent;
+  end if;
+
+  raise notice '[PASS] J.1: falha injetada abortou a ativacao na %a linha do INSERT em collegiate_cycle_snapshots (trabalho parcial ja executado)', v_tent;
+end $$;
+
+drop trigger _mut_p2_snapshot on public.collegiate_cycle_snapshots;
+drop function public._mut_p2_falhar();
+drop sequence public._mut_p2_snapshot_seq;
+
+do $$
+declare
+  v_org    uuid := 'e9a00000-0000-0000-0000-0000000000a1';
+  v_c3     uuid;
+  v_ciclo  record;
+  v_snap   int;
+  v_pos    int;
+  v_memb   int;
+  v_resp   int;
+begin
+  select c.id into v_c3 from public.evaluation_cycles c
+   where c.organization_id = v_org and c.ano = 2030 and c.numero = 3;
+  select c.status, c.version, c.data_ativacao into v_ciclo
+    from public.evaluation_cycles c where c.id = v_c3;
+
+  if v_ciclo.status <> 'PLANEJADO' then
+    raise exception '[FAIL] J: rollback incompleto (status=%) — a ativacao deveria reverter', v_ciclo.status;
+  end if;
+  if v_ciclo.data_ativacao is not null then
+    raise exception '[FAIL] J: rollback incompleto (data_ativacao gravada)';
+  end if;
+  if v_ciclo.version <> 0 then
+    raise exception '[FAIL] J: rollback incompleto (version=%; deveria permanecer 0)', v_ciclo.version;
+  end if;
+
+  select count(*) into v_snap from public.collegiate_cycle_snapshots s
+   where s.organization_id = v_org and s.ano = 2030 and s.ciclo = 3;
+  select count(*) into v_pos
+    from public.collegiate_cycle_snapshot_positions sp
+    join public.collegiate_cycle_snapshots s on s.id = sp.snapshot_id
+   where s.organization_id = v_org and s.ano = 2030 and s.ciclo = 3;
+  select count(*) into v_memb
+    from public.collegiate_cycle_snapshot_members m
+    join public.collegiate_cycle_snapshots s on s.id = m.snapshot_id
+   where s.organization_id = v_org and s.ano = 2030 and s.ciclo = 3;
+  select count(*) into v_resp
+    from public.cycle_evaluation_responsibilities r
+    join public.collegiate_cycle_snapshots s on s.id = r.snapshot_id
+   where s.organization_id = v_org and s.ano = 2030 and s.ciclo = 3;
+  if v_snap <> 0 or v_pos <> 0 or v_memb <> 0 or v_resp <> 0 then
+    raise exception '[FAIL] J: rollback incompleto na materializacao (snapshots=%, posicoes=%, membros=%, responsabilidades=%)',
+      v_snap, v_pos, v_memb, v_resp;
+  end if;
+
+  if exists (
+    select 1 from public.cycle_events e
+     where e.organization_id = v_org
+       and e.operation_id = 'e9a10000-0000-0000-0000-0000000000c2'
+  ) then
+    raise exception '[FAIL] J: rollback incompleto (evento gravado para a operacao que falhou)';
+  end if;
+  if exists (
+    select 1 from public.cycle_events e
+     where e.organization_id = v_org and e.cycle_id = v_c3 and e.event_type = 'ATIVADO'
+  ) then
+    raise exception '[FAIL] J: rollback incompleto (evento ATIVADO na trilha do ciclo)';
+  end if;
+
+  raise notice '[PASS] J.1: apos a falha no INSERT de snapshots o ciclo segue PLANEJADO/version 0, sem data_ativacao, sem snapshot/posicao/membro/responsabilidade e sem evento';
+end $$;
+
+-- ----------------------------------------------------------------------------
+-- J.2) Falha injetada DENTRO do INSERT em `cycle_evaluation_responsibilities`
+-- (F3-09), ou seja, com o F3-08 ja integralmente materializado na MESMA
+-- transacao (4 snapshots + posicoes + membros). O gatilho so pode ser atingido
+-- se houver linha a inserir a partir dos snapshots recem-gravados, de modo que
+-- "o gatilho disparou" prova, por si, que o trabalho anterior existia — e o
+-- rollback abaixo prova que ele foi integralmente revertido.
+-- ----------------------------------------------------------------------------
+create or replace function public._mut_p2_falhar_responsabilidade()
+returns trigger language plpgsql as $mut$
+begin
+  raise notice '_mut_p2_falhar_responsabilidade: abortando no INSERT de cycle_evaluation_responsibilities (snapshot %) — o F3-08 ja estava materializado', new.snapshot_id;
+  raise exception 'MUT_F5_09_P2: falha injetada na materializacao (INSERT de responsabilidade)';
+end;
+$mut$;
+
+create trigger _mut_p2_responsabilidade before insert on public.cycle_evaluation_responsibilities
+  for each row execute function public._mut_p2_falhar_responsabilidade();
+
+do $$
+declare
+  v_org  uuid := 'e9a00000-0000-0000-0000-0000000000a1';
+  v_ator uuid := 'e9c00000-0000-0000-0000-000000000001';
+  v_c3   uuid;
+  v_ok   boolean := false;
+begin
+  select c.id into v_c3 from public.evaluation_cycles c
+   where c.organization_id = v_org and c.ano = 2030 and c.numero = 3;
+
+  begin
+    perform public.ciclo_ativar(v_c3, v_org, 0, v_ator,
+      'e9a10000-0000-0000-0000-0000000000c4');
+  exception when others then
+    v_ok := sqlerrm like '%MUT_F5_09_P2%';
+  end;
+
+  if not v_ok then
+    raise exception '[FAIL] J: a falha injetada no INSERT de responsabilidades nao abortou a ativacao (o gatilho nao chegou a disparar?)';
+  end if;
+end $$;
+
+drop trigger _mut_p2_responsabilidade on public.cycle_evaluation_responsibilities;
+drop function public._mut_p2_falhar_responsabilidade();
+
+do $$
+declare
+  v_org    uuid := 'e9a00000-0000-0000-0000-0000000000a1';
+  v_ator   uuid := 'e9c00000-0000-0000-0000-000000000001';
+  v_c3     uuid;
+  v_ciclo  record;
+  v_snap   int;
+  v_pos    int;
+  v_memb   int;
+  v_resp   int;
+  v_res    jsonb;
+begin
+  select c.id into v_c3 from public.evaluation_cycles c
+   where c.organization_id = v_org and c.ano = 2030 and c.numero = 3;
+
+  -- Rollback do J.2 (falha ocorreu DEPOIS de o F3-08 estar completo).
+  select c.status, c.version, c.data_ativacao into v_ciclo
+    from public.evaluation_cycles c where c.id = v_c3;
+  if v_ciclo.status <> 'PLANEJADO' or v_ciclo.data_ativacao is not null or v_ciclo.version <> 0 then
+    raise exception '[FAIL] J: rollback incompleto apos a falha na F3-09 (status=%, version=%, data_ativacao=%)',
+      v_ciclo.status, v_ciclo.version, v_ciclo.data_ativacao;
+  end if;
+
+  select count(*) into v_snap from public.collegiate_cycle_snapshots s
+   where s.organization_id = v_org and s.ano = 2030 and s.ciclo = 3;
+  select count(*) into v_pos
+    from public.collegiate_cycle_snapshot_positions sp
+    join public.collegiate_cycle_snapshots s on s.id = sp.snapshot_id
+   where s.organization_id = v_org and s.ano = 2030 and s.ciclo = 3;
+  select count(*) into v_memb
+    from public.collegiate_cycle_snapshot_members m
+    join public.collegiate_cycle_snapshots s on s.id = m.snapshot_id
+   where s.organization_id = v_org and s.ano = 2030 and s.ciclo = 3;
+  select count(*) into v_resp
+    from public.cycle_evaluation_responsibilities r
+    join public.collegiate_cycle_snapshots s on s.id = r.snapshot_id
+   where s.organization_id = v_org and s.ano = 2030 and s.ciclo = 3;
+  if v_snap <> 0 or v_pos <> 0 or v_memb <> 0 or v_resp <> 0 then
+    raise exception '[FAIL] J: rollback incompleto na materializacao (snapshots=%, posicoes=%, membros=%, responsabilidades=%)',
+      v_snap, v_pos, v_memb, v_resp;
+  end if;
+  if exists (
+    select 1 from public.cycle_events e
+     where e.organization_id = v_org
+       and e.operation_id = 'e9a10000-0000-0000-0000-0000000000c4'
+  ) then
+    raise exception '[FAIL] J: rollback incompleto (evento gravado para a operacao que falhou)';
+  end if;
+
+  -- Removidas as falhas injetadas, a MESMA ativacao (mesmo ciclo, mesma versao
+  -- declarada) passa a funcionar e materializa a estrutura: o rollback nao
+  -- deixou residuo que bloqueie a operacao legitima.
+  v_res := public.ciclo_ativar(v_c3, v_org, 0, v_ator,
+    'e9a10000-0000-0000-0000-0000000000c3');
+
+  select c.status, c.version, c.data_ativacao into v_ciclo
+    from public.evaluation_cycles c where c.id = v_c3;
+  if v_ciclo.status <> 'ATIVO' or v_ciclo.data_ativacao is null or v_ciclo.version <> 1 then
+    raise exception '[FAIL] J: ativacao deveria funcionar apos remover a falha injetada (status=%, version=%)',
+      v_ciclo.status, v_ciclo.version;
+  end if;
+
+  select count(*) into v_snap from public.collegiate_cycle_snapshots s
+   where s.organization_id = v_org and s.ano = 2030 and s.ciclo = 3;
+  select count(*) into v_resp
+    from public.cycle_evaluation_responsibilities r
+    join public.collegiate_cycle_snapshots s on s.id = r.snapshot_id
+   where s.organization_id = v_org and s.ano = 2030 and s.ciclo = 3;
+  if v_snap <> 4 or v_resp < 1 then
+    raise exception '[FAIL] J: ativacao posterior nao materializou a estrutura (snapshots=%, responsabilidades=%)',
+      v_snap, v_resp;
+  end if;
+  if (v_res->>'snapshot_materializado')::int <> 4 then
+    raise exception '[FAIL] J: retorno da ativacao posterior sem os numeros da materializacao (%)', v_res;
+  end if;
+  if not exists (
+    select 1 from public.cycle_events e
+     where e.organization_id = v_org
+       and e.operation_id = 'e9a10000-0000-0000-0000-0000000000c3'
+       and e.event_type = 'ATIVADO'
+       and (e.after_value->>'snapshot_materializado')::int = 4
+  ) then
+    raise exception '[FAIL] J: evento ATIVADO da ativacao posterior ausente ou sem os numeros da materializacao';
+  end if;
+
+  raise notice '[PASS] J: falha na materializacao (INSERT de snapshot e de responsabilidade) => ROLLBACK TOTAL (PLANEJADO/version 0, sem snapshot/posicao/membro/responsabilidade e sem evento) e ativacao posterior bem-sucedida com materializacao completa';
 end $$;
 
 -- ============================================================================
