@@ -953,19 +953,23 @@ end $$;
 -- ============================================================================
 -- 4.3 PRIVILEGE DRIFT — a protecao nao depende de ACL
 -- ============================================================================
--- Simula o cenario do achado da auditoria: uma migration futura concede DELETE
--- e/ou TRUNCATE a `service_role` por engano. Com o grant aplicado, a ACL deixa
--- de bloquear — e o TRIGGER precisa continuar bloqueando. Ao final os grants sao
--- REVERTIDOS e o estado da ACL e da tabela e reconferido.
-grant delete, truncate on public.cycle_events to service_role;
+-- Simula o cenario do achado da auditoria: uma migration futura concede UPDATE,
+-- DELETE e/ou TRUNCATE a `service_role` por engano. Com os grants aplicados, a
+-- ACL deixa de bloquear — e o TRIGGER precisa continuar bloqueando as TRES
+-- operacoes. `insufficient_privilege` NAO conta como sucesso do probe: se a
+-- negacao vier da ACL (e nao do trigger), o grant temporario nao entrou e o
+-- teste FALHA. Ao final os grants sao REVERTIDOS e o estado da ACL e da tabela e
+-- reconferido.
+grant update, delete, truncate on public.cycle_events to service_role;
 
 do $$
 begin
-  if has_table_privilege('service_role', 'public.cycle_events', 'DELETE') is not true
+  if has_table_privilege('service_role', 'public.cycle_events', 'UPDATE') is not true
+     or has_table_privilege('service_role', 'public.cycle_events', 'DELETE') is not true
      or has_table_privilege('service_role', 'public.cycle_events', 'TRUNCATE') is not true then
-    raise exception '[FAIL] pre-condicao do probe de drift: grant temporario nao aplicado';
+    raise exception '[FAIL] pre-condicao do probe de drift: grants temporarios nao aplicados';
   end if;
-  raise notice '[PASS] privilege drift simulado: service_role recebeu DELETE/TRUNCATE temporariamente';
+  raise notice '[PASS] privilege drift simulado: service_role recebeu UPDATE/DELETE/TRUNCATE temporariamente';
 end $$;
 
 set role service_role;
@@ -977,6 +981,8 @@ begin
      where organization_id = 'f9a00000-0000-0000-0000-0000000000a1';
     raise exception 'F5-09_PROBE_EFEITO';
   exception
+    when insufficient_privilege then
+      raise exception '[FAIL] probe de drift (DELETE): negado pela ACL em vez do TRIGGER — o grant temporario nao entrou em vigor';
     when others then
       if sqlerrm like '%F5-09: cycle_events e append-only (DELETE negado)%' then
         raise notice '[PASS] privilege drift: DELETE negado pelo TRIGGER (nao pela ACL) mesmo com grant a service_role';
@@ -991,6 +997,8 @@ begin
     truncate public.cycle_events;
     raise exception 'F5-09_PROBE_EFEITO';
   exception
+    when insufficient_privilege then
+      raise exception '[FAIL] probe de drift (TRUNCATE): negado pela ACL em vez do TRIGGER — o grant temporario nao entrou em vigor';
     when others then
       if sqlerrm like '%F5-09: cycle_events e append-only (TRUNCATE negado)%' then
         raise notice '[PASS] privilege drift: TRUNCATE negado pelo TRIGGER mesmo com grant a service_role';
@@ -1007,9 +1015,11 @@ begin
      where organization_id = 'f9a00000-0000-0000-0000-0000000000a1';
     raise exception 'F5-09_PROBE_EFEITO';
   exception
+    when insufficient_privilege then
+      raise exception '[FAIL] probe de drift (UPDATE): negado pela ACL em vez do TRIGGER — o grant temporario nao entrou em vigor';
     when others then
       if sqlerrm like '%F5-09: cycle_events e append-only (UPDATE negado)%' then
-        raise notice '[PASS] privilege drift: UPDATE continua negado pelo trigger com grant temporario';
+        raise notice '[PASS] privilege drift: UPDATE negado pelo TRIGGER mesmo com grant a service_role';
       elsif sqlerrm = 'F5-09_PROBE_EFEITO' then
         raise exception '[FAIL] privilege drift: UPDATE aceito com grant temporario';
       else
@@ -1020,8 +1030,9 @@ end $$;
 
 reset role;
 
--- Reversao do drift + estado final (ACL do contrato e trilha intacta).
-revoke delete, truncate on public.cycle_events from service_role;
+-- Reversao do drift (UPDATE/DELETE/TRUNCATE) + estado final: ACL do contrato e
+-- trilha intacta.
+revoke update, delete, truncate on public.cycle_events from service_role;
 
 do $$
 declare
