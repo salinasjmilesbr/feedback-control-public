@@ -208,3 +208,67 @@ describe("F5-08 P5 — avisos obsoletos 'F5-08' removidos das telas de alocaçã
     expect(posicoes).not.toContain("F5-08");
   });
 });
+
+describe("F5-08 P5 — depois da criação, a UI não oferece nova criação de pessoa", () => {
+  const CRIADO = "22222222-2222-4222-8222-222222222222";
+
+  it("'Salvar colaborador' desaparece; restam apenas ações de estado", () => {
+    const html = renderizar(
+      <NovoColaboradorPage
+        estadoInicial={{ fase: "sucesso", collaboratorId: CRIADO }}
+        estruturaInicial={{ fase: "pronto", estrutura: estrutura() }}
+        alocacaoInicial
+      />
+    );
+
+    expect(html).toContain("Colaborador criado no cadastro soberano.");
+    expect(html).not.toContain("Salvar colaborador");
+    expect(html).toContain("Abrir a ficha do colaborador");
+    expect(html).toContain("Ver colaboradores");
+    // Os campos de pessoa ficam encerrados (não há nova submissão).
+    expect(html).toContain('disabled=""');
+  });
+
+  it("estado parcial 'sem-gestor' oferece SOMENTE o retry do gestor", () => {
+    const html = renderizar(
+      <NovoColaboradorPage
+        estadoInicial={{ fase: "sucesso", collaboratorId: CRIADO }}
+        estruturaInicial={{ fase: "pronto", estrutura: estrutura() }}
+        alocacaoInicial
+        alocacaoEstadoInicial={{
+          fase: "erro",
+          codigo: "FORBIDDEN",
+          mensagem: "sem permissão para definir gestor",
+          parcial: "sem-gestor",
+        }}
+      />
+    );
+
+    expect(html).toContain("Ocupação criada, gestor NÃO definido");
+    expect(html).toContain('data-testid="alocacao-retry-gestor"');
+    expect(html).not.toContain('data-testid="alocacao-retry-ocupacao"');
+    expect(html).not.toContain("Salvar colaborador");
+    expect(html).toContain("Abrir a ficha do colaborador");
+  });
+
+  it("estado parcial 'sem-ocupacao' oferece SOMENTE o retry da ocupação", () => {
+    const html = renderizar(
+      <NovoColaboradorPage
+        estadoInicial={{ fase: "sucesso", collaboratorId: CRIADO }}
+        estruturaInicial={{ fase: "pronto", estrutura: estrutura() }}
+        alocacaoInicial
+        alocacaoEstadoInicial={{
+          fase: "erro",
+          codigo: "FORBIDDEN",
+          mensagem: "sem permissão para alocar",
+          parcial: "sem-ocupacao",
+        }}
+      />
+    );
+
+    expect(html).toContain("Colaborador criado SEM ALOCAÇÃO");
+    expect(html).toContain('data-testid="alocacao-retry-ocupacao"');
+    expect(html).not.toContain('data-testid="alocacao-retry-gestor"');
+    expect(html).not.toContain("Salvar colaborador");
+  });
+});

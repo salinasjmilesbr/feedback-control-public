@@ -33,6 +33,7 @@ import RotasFonte from "../routes/AppRoutes.tsx?raw";
 import MenuFonte from "../components/NavegacaoPrincipal.tsx?raw";
 // F5-08 P5 — alocação soberana (ocupação + reporting line)
 import AlocacaoFonte from "../pages/alocacaoSoberana.ts?raw";
+import AlocacaoNovoFonte from "../pages/alocacaoNovoColaborador.ts?raw";
 import UseEstruturaFonte from "../pages/useEstruturaSoberana.ts?raw";
 import SeletorPosicaoFonte from "../components/SeletorPosicao.tsx?raw";
 import NovoColaboradorFonte from "../pages/NovoColaboradorPage.tsx?raw";
@@ -59,6 +60,7 @@ const FONTES_CLIENTE: readonly (readonly [string, string])[] = [
 /** F5-08 P5 — arquivos da ALOCAÇÃO soberana (ocupação + reporting line). */
 const FONTES_ALOCACAO: readonly (readonly [string, string])[] = [
   ["alocacaoSoberana", AlocacaoFonte as string],
+  ["alocacaoNovoColaborador", AlocacaoNovoFonte as string],
   ["useEstruturaSoberana", UseEstruturaFonte as string],
   ["SeletorPosicao", SeletorPosicaoFonte as string],
   ["NovoColaboradorPage", NovoColaboradorFonte as string],
