@@ -54,8 +54,10 @@ não existe contrato sem documento fechado correspondente.
   autenticada), F5-02 (vínculo usuário↔colaborador), F5-03 (organização ativa),
   F5-04 (access roles/capabilities reais), F5-05, F5-06 (avaliações no PostgreSQL),
   F5-07 (colaboradores e histórico organizacional soberanos) e F5-08 (estrutura e
-  catálogos soberanos). F5-09 (ciclos soberanos) tem **desenho técnico fechado**
-  (`docs/F5-09-desenho-tecnico.md`, fases P1–P8) e **implementação não iniciada**.
+  catálogos soberanos). F5-09 (ciclos soberanos) tem **desenho técnico fechado e
+  revisado** (`docs/F5-09-desenho-tecnico.md`, D1–D28, fases P1–P9) com as três
+  dúvidas **ratificadas** (`docs/F5-09-duvidas.md`) e **implementação não
+  iniciada**.
   As atividades seguintes da fase seguem o roadmap do GitHub.
 - **F6+** — hardening geral e trabalhos futuros (fora de escopo das fases
   anteriores).

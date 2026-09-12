@@ -1,126 +1,141 @@
-# F5-09 — Dúvidas bloqueantes (ratificação necessária)
+# F5-09 — Dúvidas: registro de RATIFICAÇÃO (zero dúvida bloqueante)
 
-> **Status:** desenho técnico F5-09 entregue em `docs/F5-09-desenho-tecnico.md`;
-> as três dúvidas abaixo **mudam comportamento** e **não estão cobertas** pelos
-> contratos F4/F5 vigentes. Cada uma indica exatamente o que fica bloqueado.
-> **Nenhuma fase foi iniciada** e nenhuma dessas decisões foi tomada em silêncio:
-> o desenho registra a recomendação, e a implementação da parte afetada aguarda
-> ratificação.
+> **Status desta rodada:** **ZERO dúvida bloqueante conhecida para iniciar P1.**
+> As três dúvidas abertas na primeira rodada de desenho foram **RATIFICADAS** pela
+> auditoria GPT do desenho.
 >
-> **Regra de prosseguimento:** as partes independentes do plano (P1, P4, P5
-> exceto criação, P6 parcial, P8) podem ser executadas antes da ratificação; as
-> partes citadas em "Bloqueia" não.
+> - **Desenho auditado:** commit `ae517ff578026f156a6ddc2e94c7cca2d23c6f17`
+>   (`docs(F5-09): fechar desenho técnico de ciclos soberanos`), branch
+>   `docs/f5-09-ciclos-soberanos`, base `main` =
+>   `6550c81d14a9d3e61b3c1b4f49471948f880bbc8`.
+> - **Data da ratificação:** **2026-09-12** (rodada de revisão exclusivamente
+>   documental, sem implementação).
+> - **Efeito:** decisões finais incorporadas ao contrato
+>   `docs/F5-09-desenho-tecnico.md` (D8/D9, D15, D16/D17, D26, D27, D28, §7, §8,
+>   §10–§16, §18, §19 = P1–P9, §20) e **nenhuma** fase permanece bloqueada.
+> - **Nenhuma dúvida nova** surgiu na revisão transversal (§5).
 
-## Q-F5-09-1 — Ciclo `PLANEJADO`: cancelar ou continuar excluindo fisicamente?
+## 1. Quadro de ratificação
 
-**Contexto.** Hoje o cliente permite **exclusão física** de ciclo `PLANEJADO`
-(`excluirCiclo` em `src/services/cicloAvaliacaoStorage.ts`, que exige
-`status === "PLANEJADO"`) e permite **cancelamento** apenas de ciclo `ATIVO`
-(`persistirCancelamentoCicloAuditadoInterno` exige `ATIVO`). O catálogo F5-04
-descreve a capability `cycle.cancel` como "Cancelar ciclo ATIVO (fluxo
-excepcional auditavel)" e `src/authorization/authorizationPolicy.ts` codifica
-`domainState = status === "ATIVO"`. Não existe RPC de ciclo: o banco nunca
-decidiu esse fluxo. O desenho F5-09 propõe `CANCELADO` terminal e proibição de
-`DELETE`.
+| Dúvida | Alternativa escolhida | Decisão final (resumo) | Decisões do contrato | Desbloqueia |
+| --- | --- | --- | --- | --- |
+| **Q-F5-09-1** — ciclo `PLANEJADO`: cancelar × excluir fisicamente | **A** | `PLANEJADO→CANCELADO` permitido; `CANCELADO` terminal; `DELETE` físico proibido em todos os estados | **D8**, **D9** | P4 (T5) e P6 (`domainState` de `cycle.cancel`) |
+| **Q-F5-09-2** — estrutura do ciclo (congelamento × rematerialização) | **Regra híbrida** (parte A + parte B) | população inicial materializada na ativação; admissões posteriores elegíveis **aditivas**; snapshots existentes imutáveis; movimentações **sem** rematerialização | **D16**, **D17**, **D26**, **D27** | P2 (materialização) e P3 (inclusão aditiva) |
+| **Q-F5-09-3** — quem recebe `cycle.manage` em produção | **A** | `cycle.manage` entra aditivamente no bundle `admin`; `cycle.cancel`/`cycle.reopen`/`cycle.period.correct` permanecem fora do bundle | **D28** | P7 (habilitação de produção) e P8 (cutover) |
 
-**Alternativas.**
+## 2. Q-F5-09-1 — RATIFICADA (alternativa A)
 
-| # | Alternativa | Efeito |
+**Contexto original.** O cliente permite **exclusão física** de ciclo `PLANEJADO`
+(`excluirCiclo`) e cancelamento apenas de ciclo `ATIVO`
+(`persistirCancelamentoCicloAuditadoInterno`); o catálogo F5-04 descreve
+`cycle.cancel` como "Cancelar ciclo ATIVO" e o `authorizationPolicy.ts` codifica
+`domainState = status === "ATIVO"`. Não existia RPC de ciclo.
+
+**Decisão final ratificada.**
+
+1. `PLANEJADO → CANCELADO` é **permitido**, mediante: capability `cycle.cancel`;
+   motivo **obrigatório**; autoria **soberana** (`auth.uid()` + membership, nunca
+   do cliente); trilha **append-only** (`cycle_events`); `expected_version`;
+   idempotência (`operation_id` + `payload_hash`).
+2. `CANCELADO` é **terminal** (reativação proibida).
+3. **Exclusão física** (`DELETE`) de `evaluation_cycles` é **proibida em todos os
+   estados**, para todos os papéis de aplicação.
+
+**Implementação derivada (P4 e P6).** Ampliar, de forma aditiva, o `domainState`
+de `cycle.cancel` para `{PLANEJADO, ATIVO}` em
+`src/authorization/authorizationPolicy.ts` e atualizar **aditivamente** a descrição
+da capability no catálogo (`cycle.cancel`: "Cancelar ciclo ATIVO" → "Cancelar ciclo
+PLANEJADO ou ATIVO (fluxo excepcional auditável)") — sem remoção física de
+capability (F5-04 D14) e **sem capability nova**. O fluxo local `excluirCiclo` é
+substituído pelo cancelamento, com efeito de UX equivalente (ciclos `CANCELADO` já
+são filtrados por padrão).
+
+## 3. Q-F5-09-2 — RATIFICADA com regra híbrida
+
+**Contexto original.** A estrutura por ciclo já existe e é soberana (snapshot
+F3-08, responsabilidades F3-09, congelamento de participantes F5-06), mas não
+estava decidido o comportamento quando a organização muda **depois** da ativação
+(admissão, movimentação de posição, troca de gestor, mudança de colegiado).
+
+**Decisão final ratificada — não é congelamento absoluto puro, nem
+rematerialização genérica.**
+
+- **A) Colaborador já presente no ciclo.** A estrutura aplicável a ele fica
+  **congelada** naquele ciclo. Mudanças posteriores de posição, unidade, gestor,
+  reporting line ou colegiado **não** rematerializam sua estrutura no ciclo
+  corrente: a nova estrutura vale **no próximo ciclo**. Os mecanismos
+  excepcionais **já contratados** de sucessão (F3-09) e realinhamento de
+  participante (F5-06) continuam existindo quando aplicáveis, mas **não**
+  equivalem a recalcular o snapshot inteiro.
+- **B) Nova admissão após a ativação.** O colaborador admitido **depois** da
+  ativação **pode** ser incluído no ciclo corrente, por operação **explícita,
+  soberana, server-side, auditada, exclusivamente ADITIVA**, baseada no
+  **`collaborator_id` UUID** e na estrutura soberana vigente **no momento da
+  inclusão**, incapaz de sobrescrever ou recalcular snapshots existentes.
+- **Proibição de uso genérico.** A operação **não** pode ser usada como mecanismo
+  de "atualizar estrutura do ciclo": serve apenas para incorporar colaborador
+  elegível que não participava do ciclo por ter sido admitido após a ativação.
+- **Prova soberana obrigatória (não confiar em flag do cliente).** A condição é
+  provada server-side com os dados temporais já existentes (§7.2 do desenho):
+  evento append-only `collaborator_events.event_type = 'ADMISSAO'` com
+  `cycle_scope = 'CICLO_ATUAL_E_POSTERIORES'` e
+  `effective_date > evaluation_cycles.data_ativacao`; **ausência** de período de
+  status anterior à ativação em `collaborator_status_periods`; colaborador ainda
+  **não** materializado no ciclo; elegibilidade vigente na data da inclusão. A
+  coluna `collaborators.admission_date` é **dado declarado de cadastro** (F5-07
+  D3/D6) e **não** é prova.
+- **Requisito técnico (não flexibilização).** Se a infraestrutura atual não
+  permitir provar server-side que se trata de nova admissão após a ativação (por
+  exemplo colaborador importado sem evento `ADMISSAO`), a operação **recusa**
+  (fail-closed). A correção pertence ao caminho de importação/legado (gravar o
+  evento soberano), em atividade própria — a prova **não** é afrouxada e a
+  operação **não** é usada para corrigir materialização indevida.
+
+**Implementação derivada (P3).** Operação nomeada pela semântica restrita — Edge
+`cycle.admissao.incluir`, RPC `ciclo_incluir_admissao`, helper read-only
+`ciclo_admissao_pos_ativacao_elegivel` —, com contrato que impede por construção:
+atualização de participante já materializado, mudança de posição, recálculo de
+gestor, recálculo de colegiado existente, sobrescrita de snapshot, inclusão
+cross-tenant e inclusão sem comprovação soberana. Capability **reusada**:
+`cycle.manage` (compatível com o catálogo existente); **nenhuma** capability nova.
+O desenho **não** define nenhuma operação genérica de "rematerializar estrutura".
+
+## 4. Q-F5-09-3 — RATIFICADA (alternativa A)
+
+**Contexto original.** As capabilities de ciclo existem no catálogo
+(F4-01/F5-04), mas nenhuma role de sistema as concedia: o bundle `admin` contém
+apenas `cycle.read`. Sem configuração, o cutover publicaria um produto no qual
+ninguém cria/ativa/encerra ciclo.
+
+**Decisão final ratificada.**
+
+1. `cycle.manage` entra **aditivamente** no bundle `admin`
+   (`access_role_capabilities`), por migration de reconciliação no padrão
+   `20260910000000_f5_04_catalog_reconciliation.sql` — executada na fase **P7**,
+   com validador SQL confirmando o bundle.
+2. `cycle.cancel`, `cycle.reopen` e `cycle.period.correct` permanecem **fora** do
+   bundle `admin`, concedíveis apenas por **configuração explícita de role**
+   (capabilities excepcionais, coerente com a descrição do catálogo F5-04).
+3. **Nenhuma capability nova.**
+
+## 5. Dúvidas novas
+
+**Nenhuma.** A revisão transversal do desenho (máquina de estados, estrutura e
+snapshot, autorização, contrato Edge/RPC, concorrência, auditoria, cutover,
+testes, riscos, D1–D28, P1–P9 e DoD) **não** identificou nova dúvida bloqueante.
+As regras ratificadas são aplicáveis com os objetos temporais **já existentes** da
+F5-07 (`collaborator_events`, `collaborator_status_periods`) e da F3-08
+(`collegiate_cycle_snapshots` + `materializar_colegiado_ciclo`), sem alterar
+contrato fechado de outra atividade e sem criar privilégio novo (verificado:
+`service_role` mantém privilégios completos de tabela pela F4-08 §1 e o `EXECUTE`
+da RPC da F3-08 já é concedido a `service_role`).
+
+## 6. Itens que a ratificação converteu em requisito técnico (não são dúvidas)
+
+| # | Requisito | Onde vive no contrato |
 | --- | --- | --- |
-| A (recomendada) | `PLANEJADO→CANCELADO` permitido (motivo obrigatório, trilha) e **exclusão física proibida** em qualquer estado; ciclo `PLANEJADO` permanece editável (ano, número, período) | Nada se apaga; o ciclo sai da lista padrão porque `CANCELADO` já é filtrado (`getCiclosAdministrativos(incluirCancelados=false)`); exige ampliar o `domainState` de `cycle.cancel` para `{PLANEJADO, ATIVO}` e atualizar a descrição da capability no catálogo |
-| B | Manter `cycle.cancel` só para `ATIVO` e permitir exclusão física de `PLANEJADO` sem avaliações | Mantém o catálogo F5-04 intacto, mas reintroduz `DELETE` em entidade soberana (contra "preserve históricos e trilhas de auditoria" e contra o padrão F5-06/F5-07/F5-08, que não apagam) |
-| C | Manter `cycle.cancel` só para `ATIVO` e **proibir** exclusão física, sem transição para `PLANEJADO` | Ciclo planejado criado por engano só pode ser reaproveitado por edição; se as três vagas de `numero` do ano já estiverem ocupadas e o operador quiser "limpar", não há caminho |
-
-**Impacto.** (i) muda quem pode o quê (`cycle.cancel` passa a valer sobre
-`PLANEJADO`); (ii) remove uma operação existente do produto (`excluirCiclo`);
-(iii) altera uma linha do catálogo de capabilities (`description`, sem remoção
-física — F5-04 D14 permite); (iv) define se um ciclo pode desaparecer sem
-trilha.
-
-**Recomendação.** Alternativa **A**. Coerente com a proibição de exclusão física
-já vigente nos domínios F5-06/F5-07/F5-08, com a exigência de trilha auditável, e
-com efeito de UX equivalente (o ciclo cancelado não aparece na lista padrão).
-
-**Decisão necessária.** Ratificar A, B ou C. Se A: autoriza ampliar
-`domainState` de `cycle.cancel` e atualizar a descrição da capability.
-Se B: a F5-09 mantém `DELETE` restrito a `PLANEJADO` **sem avaliações** e a
-trilha registra a exclusão (contrariando I11/I12 do desenho, que precisariam ser
-revisados).
-
-**Bloqueia.** P3 (transição T5) e a parte de P6 referente a `cycle.cancel`.
-
----
-
-## Q-F5-09-2 — Estrutura do ciclo: congelamento absoluto ou rematerialização autorizada?
-
-**Contexto.** A estrutura por ciclo já existe e é soberana: snapshot de colegiado
-F3-08 (`collegiate_cycle_snapshots` + `materializar_colegiado_ciclo`, idempotente
-e sem sobrescrever linhas existentes), responsabilidades avaliativas F3-09
-(temporais, com sucessão) e congelamento de participantes da avaliação pela
-F5-06 (`evaluation_snapshot_participantes`, que resolve gestor direto e cadeia no
-`reference_date` do ciclo). O que **não** está decidido é o comportamento quando a
-organização muda **depois** da ativação: colaborador admitido no meio do ciclo,
-movimentação de posição, troca de gestor, mudança de colegiado.
-
-**Alternativas.**
-
-| # | Alternativa | Efeito |
-| --- | --- | --- |
-| A (recomendada) | **Congelamento absoluto** na ativação: o snapshot do ciclo é imutável; quem ingressa/muda depois entra no próximo ciclo. Avaliações já criadas permanecem íntegras; o overlay F3-09 (sucessão de responsável) continua valendo para avaliações **ainda não criadas** | História nunca reinterpretada; determinístico; exige comunicar ao negócio que admissões no meio do ciclo não são avaliadas nele |
-| B | **Rematerialização aditiva autorizada**: nova operação explícita (`cycle.estrutura.rematerializar`, capability `cycle.manage`, motivo obrigatório, trilha) que **insere** snapshots de colaboradores ainda ausentes, sem nunca sobrescrever os existentes | Atende admissões no meio do ciclo; aumenta superfície e exige regra de quem pode, quando e com que limite |
-| C | **Estrutura viva**: recalcular o snapshot do ciclo a qualquer momento | Viola "não reinterpretar o passado com a estrutura atual" e reescreveria a base de avaliações já feitas; conflita com o determinismo do `reference_date` da F5-06 |
-
-**Impacto.** Define se a ativação é um marco irreversível de estrutura, se existe
-operação adicional na Edge/RPC, se o snapshot do ciclo pode crescer depois e como
-o negócio lida com admissão/movimentação no meio do ciclo. Também decide se o
-gestor de cadeia (resolvido no `reference_date`) e o responsável avaliativo F3-09
-(por vigência) permanecem camadas distintas ou são unificados.
-
-**Recomendação.** Alternativa **A**, com B disponível como evolução aditiva caso o
-negócio exija avaliar admissões do ciclo corrente. Ambas preservam a imutabilidade
-do passado; C está descartada por contrariar o determinismo já contratado na
-F5-06.
-
-**Decisão necessária.** Ratificar A ou B (e, se B, o gatilho, o autorizador e os
-limites da rematerialização). Se B: a operação entra no contrato da Edge com
-capability `cycle.manage`, motivo obrigatório e evento
-`ESTRUTURA_REMATERIALIZADA` na trilha.
-
-**Bloqueia.** A parte de estrutura de P2 (ativação/materialização) e de P3.
-
----
-
-## Q-F5-09-3 — Quem recebe `cycle.manage` (e as capabilities excepcionais) em produção?
-
-**Contexto.** As capabilities existem no catálogo desde F4-01/F5-04
-(`cycle.read`, `cycle.manage`, `cycle.cancel`, `cycle.reopen`,
-`cycle.period.correct`, todas `grantable_via_role = true`), mas **nenhuma role de
-sistema as concede**: o bundle `admin`
-(`20260908000001_authorization_system_catalog.sql`) contém apenas `cycle.read`, e
-as três capabilities excepcionais foram criadas depois da formação do bundle. Hoje
-a tela de ciclos é acessível a quem tem `cycle.read` (gate de navegação
-`cycle.management.view` → alias de `cycle.read`), e o botão de gestão **não** é
-verificado contra `cycle.manage`. Depois do cutover, a decisão passa a ser
-server-side: sem uma role com `cycle.manage`, **ninguém** cria/ativa/encerra ciclo
-em produção.
-
-**Alternativas.**
-
-| # | Alternativa | Efeito |
-| --- | --- | --- |
-| A (recomendada) | Incluir `cycle.manage` **aditivamente** no bundle `admin` (migration de reconciliação, padrão `20260910000000_f5_04_catalog_reconciliation.sql`); manter `cycle.cancel`, `cycle.reopen` e `cycle.period.correct` fora do bundle, concedíveis apenas por configuração explícita de role | Preserva a intenção do catálogo ("fluxo excepcional auditável") e mantém a operação viável após o cutover |
-| B | Não alterar o catálogo: exigir que cada organização conceda `cycle.manage` por role customizada antes do cutover | Zero mudança de catálogo; risco operacional de o cutover publicar um produto onde ninguém consegue ativar ciclo |
-| C | Incluir as quatro no bundle `admin` | Operação mais simples, mas transforma fluxos declaradamente excepcionais em default |
-
-**Impacto.** Determina se a F5-09 inclui uma migration de catálogo (aditiva, sem
-capability nova) e se o cutover tem pré-requisito de configuração em produção.
-Não altera o mapa de gate nem a doutrina de autorização — apenas quem possui a
-capability.
-
-**Recomendação.** Alternativa **A**.
-
-**Decisão necessária.** Ratificar A, B ou C e, se A, autorizar a migration de
-reconciliação do bundle `admin` no escopo da F5-09.
-
-**Bloqueia.** A viabilidade do cutover (P7) e a publicação da Edge (P5) em
-produção; não bloqueia P1–P4 nem P6.
+| RT1 | Ausência de prova soberana de admissão ⇒ **recusa** (fail-closed), inclusive para colaborador legado/importado sem evento `ADMISSAO` | §7.2 (P7) do desenho |
+| RT2 | O caminho de importação/legado que precise habilitar inclusão aditiva deve gravar o evento soberano — atividade própria, nunca relaxando a prova | §7.2, R15 |
+| RT3 | Nenhuma operação genérica de rematerialização de estrutura existe no contrato | §7.3, §13.1 regra 9, D26 |
+| RT4 | Snapshots existentes são imutáveis; a operação só insere e só para o `collaborator_id` solicitado | §7.3, I18, casos A3/A4/A11 |
+| RT5 | `cycle.manage` no bundle `admin` é pré-requisito de produção do cutover | D28, P7, R9 |

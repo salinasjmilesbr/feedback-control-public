@@ -35,9 +35,9 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 > Atualizar ao final de cada atividade.
 
 - **Atividade (rodada atual):** F5-09 — **Ciclos soberanos** — **DESENHO
-  TÉCNICO** (`docs/F5-09-desenho-tecnico.md`, D1–D25 e fases P1–P8) com as
-  dúvidas que mudam comportamento em `docs/F5-09-duvidas.md`
-  (Q-F5-09-1..3).
+  TÉCNICO revisado** (`docs/F5-09-desenho-tecnico.md`, D1–D28 e fases P1–P9) com o
+  registro de ratificação em `docs/F5-09-duvidas.md`
+  (Q-F5-09-1..3 **RATIFICADAS**; nenhuma dúvida aberta).
 - **Base:** `main`/`origin/main` = `6550c81d14a9d3e61b3c1b4f49471948f880bbc8`
   (F5-08 P6 integrado, PR #188; baseline esperado da F5-09 conferido).
 - **Branch do desenho:** `docs/f5-09-ciclos-soberanos` — **sem PR** nesta rodada;
@@ -77,21 +77,49 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   - **duas lacunas de contrato identificadas e endereçadas de forma aditiva:**
     `cycle.read`/`cycle.manage` caem hoje no `default → null` do
     `authorizationPolicy.ts` (⇒ DENY) e nenhuma role de sistema concede
-    `cycle.manage` (o bundle `admin` tem só `cycle.read`) — a viabilidade em
-    produção é a Q-F5-09-3.
-- **Dúvidas bloqueantes abertas (não decididas em silêncio):** Q-F5-09-1 (ciclo
-  `PLANEJADO`: cancelar ou excluir fisicamente), Q-F5-09-2 (congelamento absoluto
-  da estrutura do ciclo × rematerialização aditiva autorizada), Q-F5-09-3 (quem
-  recebe `cycle.manage` em produção).
-- **Não iniciado:** implementação da F5-09 (fases P1–P8) e F5-10.
-- **Próxima atividade:** auditoria independente do desenho F5-09 e ratificação
-  das três dúvidas; em seguida P1 (schema/trilha/RLS) da F5-09.
+    `cycle.manage` (o bundle `admin` tem só `cycle.read`) — resolvida pela **D28**
+    (reconciliação aditiva do catálogo no P7).
+- **Revisão 2 desta rodada (RATIFICAÇÃO incorporada):** a auditoria GPT do desenho
+  ratificou as três dúvidas e o contrato foi revisado de ponta a ponta — **zero
+  dúvida bloqueante aberta**:
+  - **Q-F5-09-1 (alternativa A)** — `PLANEJADO→CANCELADO` permitido com
+    `cycle.cancel`, motivo obrigatório, autoria soberana, trilha append-only,
+    `expected_version` e idempotência; `CANCELADO` terminal; **exclusão física
+    proibida em todos os estados** (D8/D9; ampliação aditiva do `domainState` e da
+    descrição da capability, sem capability nova);
+  - **Q-F5-09-2 (regra híbrida)** — a estrutura do ciclo **não** é "congelamento
+    absoluto" nem rematerialização genérica: população inicial materializada na
+    ativação, **admissões posteriores elegíveis podem ser acrescentadas** por
+    operação soberana, explícita, auditada e **exclusivamente aditiva** (D26), com
+    snapshots existentes **imutáveis** e movimentações de posição/unidade/gestor/
+    reporting line/colegiado valendo **no próximo ciclo** (D27);
+  - **Q-F5-09-3 (alternativa A)** — `cycle.manage` entra **aditivamente** no bundle
+    `admin`; `cycle.cancel`/`cycle.reopen`/`cycle.period.correct` permanecem fora
+    do bundle, só por configuração explícita (D28, executada no P7).
+- **Inclusão aditiva de nova admissão (D26) — onde ficou:** operação restrita
+  `cycle.admissao.incluir` / RPC `ciclo_incluir_admissao` + helper read-only
+  `ciclo_admissao_pos_ativacao_elegivel`, na fase **P3**. A prova de "nova
+  admissão" é **soberana** (nunca flag do cliente): evento append-only
+  `collaborator_events.event_type = 'ADMISSAO'` com
+  `cycle_scope = 'CICLO_ATUAL_E_POSTERIORES'` e `effective_date > data_ativacao`,
+  mais ausência de período de status anterior à ativação em
+  `collaborator_status_periods`; a coluna declarada
+  `collaborators.admission_date` **não** é prova. Sem prova ⇒ **recusa**
+  (fail-closed), registrada como requisito técnico da implementação (§7.2/R15) —
+  a regra não é flexibilizada. O contrato **não** tem parâmetro estrutural algum e
+  impede por construção sobrescrever snapshot, trocar posição, recalcular gestor
+  ou colegiado, inclusão cross-tenant e uso genérico como "atualizar estrutura".
+- **Plano revisado:** **P1–P9** (a fase nova **P3** existe para a inclusão aditiva
+  e a reconciliação do catálogo ficou no **P7**); D1–D28.
+- **Não iniciado:** implementação da F5-09 (fases P1–P9) e F5-10.
+- **Próxima atividade:** implementação da F5-09 a partir de **P1**
+  (schema/trilha/RLS), sem decisão arquitetural aberta.
 - **Validação desta rodada (documental):** `git diff --check` limpo; referências
   do desenho conferidas contra os arquivos/tabelas/funções reais da base
   `6550c81`; confirmado que **nenhum** arquivo de implementação
   (migration/RPC/Edge/frontend/capability) foi criado ou alterado — o diff da
   rodada contém apenas `docs/` e `.ai/`. Nenhum gate de runtime era aplicável
-  (não há código novo); os validadores SQL da F5-09 pertencem às fases P1–P3.
+  (não há código novo); os validadores SQL da F5-09 pertencem às fases P1–P4.
 - **`.ai/current-task.md`:** não existe neste repositório (nem no histórico). A
   ausência é registrada aqui conforme `AGENTS.md` §1; o estado operacional de
   retomada continua sendo este arquivo.
