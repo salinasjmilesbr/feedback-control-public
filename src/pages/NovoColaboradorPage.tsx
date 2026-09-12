@@ -310,7 +310,8 @@ function NovoColaboradorPage({
   /**
    * RETRY de `sem-gestor`: tenta SOMENTE a reporting line — a ocupação já está
    * gravada (não é recriada nem encerrada) e o colaborador não é recriado. A
-   * posição subordinada vem da ocupação vigente da fotografia CORRENTE.
+   * posição subordinada vem EXCLUSIVAMENTE da ocupação vigente da fotografia
+   * CORRENTE; sem ocupação vigente, nada é enviado (fail-closed + recarga).
    */
   async function repetirReportingLine(collaboratorId: string) {
     if (ocupado || !organizacaoAtivaId || !estruturaPronta) return;
@@ -321,7 +322,6 @@ function NovoColaboradorPage({
         estrutura: estrutura.estado.estrutura,
         organizationId: organizacaoAtivaId,
         collaboratorId,
-        posicaoId,
         gestorPosicaoId: gestorPosicaoId || null,
         vigencia: vigenciaAlocacao,
         motivo: motivoAlocacao.trim(),

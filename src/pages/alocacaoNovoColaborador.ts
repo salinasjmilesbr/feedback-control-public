@@ -181,12 +181,12 @@ export async function tentarOcupacao(
   // Ocupação GRAVADA. Sem gestor escolhido, a alocação está completa.
   if (!entrada.gestorPosicaoId) return { estado: "completa" };
 
-  return tentarReportingLine(
+  return confirmarReportingAposOcupacao(
     {
       estrutura: entrada.estrutura,
       organizationId: entrada.organizationId,
       collaboratorId: entrada.collaboratorId,
-      posicaoId: entrada.posicaoId,
+      posicaoAceitaId: entrada.posicaoId,
       gestorPosicaoId: entrada.gestorPosicaoId,
       vigencia: entrada.vigencia,
       motivo: entrada.motivo,
@@ -197,19 +197,84 @@ export async function tentarOcupacao(
 }
 
 /**
- * Tenta SOMENTE a reporting line (retry de `sem-gestor` ou passo após a ocupação).
+ * Reporting line IMEDIATAMENTE após `definirOcupacao` CONFIRMADA na MESMA
+ * orquestração (caminho INTERNO — não é o retry soberano).
  *
- * A posição subordinada é resolvida pela ocupação VIGENTE da fotografia corrente
- * (o servidor é a fonte); quando a leitura ainda não reflete a ocupação recém
- * gravada, usa-se a posição que o servidor ACEITOU em `posicaoId` — nunca um
- * rótulo/cargo/nome. A posição gerente é sempre `gestorPosicaoId` (UUID).
+ * Aqui a posição subordinada é, explicitamente, a posição que o servidor acabou
+ * de aceitar (`posicaoAceitaId`): a fotografia em memória ainda é a ANTERIOR à
+ * mutação, e derivar a subordinada dela neste instante seria incorreto. O uso é
+ * legítimo porque o próprio `definirOcupacao` retornou sucesso para essa posição
+ * na mesma execução — não é estado antigo do formulário virando autoridade.
+ *
+ * Este caminho NÃO é exportado: o retry (fora desta orquestração) usa
+ * `tentarReportingLine`, que exige a ocupação VIGENTE da fotografia corrente.
+ */
+async function confirmarReportingAposOcupacao(
+  entrada: {
+    readonly estrutura: EstruturaSoberana;
+    readonly organizationId?: string | null;
+    readonly collaboratorId: string;
+    /** Posição que `definirOcupacao` acabou de aceitar (resposta do servidor). */
+    readonly posicaoAceitaId: string;
+    readonly gestorPosicaoId: string;
+    readonly vigencia: string;
+    readonly motivo: string;
+    readonly operationIdReporting: string;
+  },
+  deps: DependenciasAcessoColaboradores = {}
+): Promise<AlocacaoResultante> {
+  const linha = await confirmarReportingLine(
+    {
+      estrutura: entrada.estrutura,
+      subordinatePositionId: entrada.posicaoAceitaId,
+      managerPositionId: entrada.gestorPosicaoId,
+      vigencia: entrada.vigencia,
+      motivo: entrada.motivo,
+      operationId: entrada.operationIdReporting,
+      ...(entrada.organizationId ? { organizationId: entrada.organizationId } : {}),
+    },
+    deps
+  );
+
+  if (linha.tipo !== "concluida") {
+    const erro = recusaParaErro(linha);
+    return { estado: "sem-gestor", codigo: erro.codigo, mensagem: erro.mensagem };
+  }
+  if (!linha.resultado.ok) {
+    return {
+      estado: "sem-gestor",
+      codigo: linha.resultado.codigo,
+      mensagem: linha.resultado.mensagem,
+    };
+  }
+
+  return { estado: "completa" };
+}
+
+/** Mensagem pública do retry quando a fotografia NÃO tem ocupação vigente. */
+export const MENSAGEM_RETRY_SEM_OCUPACAO_VIGENTE =
+  "Não existe ocupação vigente para este colaborador na leitura atual, então a reporting " +
+  "line não foi enviada. A estrutura pode ter mudado desde a alocação: abra a ficha do " +
+  "colaborador e revise a ocupação.";
+
+/**
+ * RETRY SOBERANO da reporting line (estado parcial `sem-gestor`).
+ *
+ * Diferente do passo interno após a ocupação, aqui a fonte da posição subordinada
+ * é a fotografia CORRENTE: exige `ocupacaoVigenteDoColaborador(estrutura,
+ * collaboratorId)` e usa SOMENTE `ocupacao.posicaoId`. Se não houver ocupação
+ * vigente (encerrada, futura, trocada por outro ator ou inexistente), a operação
+ * é FAIL-CLOSED: NENHUMA chamada é feita, o desfecho é `sem-gestor` com código
+ * `CONFLICT` e a tela recarrega para refletir o estado soberano real.
+ *
+ * A assinatura NÃO aceita posição de ocupação: o fallback para uma posição
+ * antiga do formulário é impossível por construção.
  */
 export async function tentarReportingLine(
   entrada: {
     readonly estrutura: EstruturaSoberana;
     readonly organizationId?: string | null;
     readonly collaboratorId: string;
-    readonly posicaoId: string;
     readonly gestorPosicaoId: string | null;
     readonly vigencia: string;
     readonly motivo: string;
@@ -226,12 +291,18 @@ export async function tentarReportingLine(
   }
 
   const ocupacao = ocupacaoVigenteDoColaborador(entrada.estrutura, entrada.collaboratorId);
-  const subordinatePositionId = ocupacao?.posicaoId ?? entrada.posicaoId;
+  if (!ocupacao) {
+    return {
+      estado: "sem-gestor",
+      codigo: "CONFLICT",
+      mensagem: MENSAGEM_RETRY_SEM_OCUPACAO_VIGENTE,
+    };
+  }
 
   const linha = await confirmarReportingLine(
     {
       estrutura: entrada.estrutura,
-      subordinatePositionId,
+      subordinatePositionId: ocupacao.posicaoId,
       managerPositionId: entrada.gestorPosicaoId,
       vigencia: entrada.vigencia,
       motivo: entrada.motivo,

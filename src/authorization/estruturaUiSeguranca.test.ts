@@ -293,6 +293,20 @@ describe("F5-08 P5 — alocação soberana: barreiras estáticas", () => {
     expect(codigo).not.toMatch(/recurs|visited|profundidade/);
   });
 
+  it("o retry de reporting NÃO tem fallback local para a posição antiga", () => {
+    const codigo = apenasCodigo(AlocacaoNovoFonte as string);
+
+    // A fonte da subordinada no retry é a ocupação VIGENTE da fotografia atual.
+    expect(codigo).toContain("ocupacaoVigenteDoColaborador");
+    // Nenhum fallback `?? posicaoId` na derivação da posição subordinada.
+    expect(codigo).not.toMatch(/ocupacao\?\.posicaoId\s*\?\?/);
+    expect(codigo).not.toMatch(/\?\?\s*entrada\.posicaoId/);
+    // O caminho "após ocupação confirmada" é privado (não exportado) e usa a
+    // posição explicitamente aceita pelo servidor.
+    expect(codigo).not.toMatch(/export\s+async\s+function\s+confirmarReportingAposOcupacao/);
+    expect(codigo).toContain("posicaoAceitaId");
+  });
+
   it("a fotografia é lida pela mesma porta soberana do P4 (sem leitura nova)", () => {
     const codigo = apenasCodigo(UseEstruturaFonte as string);
     expect(codigo).toContain("lerEstrutura");

@@ -17,6 +17,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  MENSAGEM_RETRY_SEM_OCUPACAO_VIGENTE,
   criarColaboradorComAlocacao,
   deveRecarregarFotografia,
   tentarOcupacao,
@@ -101,14 +102,23 @@ function estrutura(parcial: Partial<EstruturaSoberana> = {}): EstruturaSoberana 
 
 /** Fotografia APÓS a ocupação gravada (posição em uso = a que foi aceita). */
 function comOcupacaoGravada(posicaoId = POSICAO): EstruturaSoberana {
+  return comOcupacaoGravadaComPeriodo("2026-01-01T00:00:00.000Z", null, posicaoId);
+}
+
+/** Ocupação com período CONTROLADO (para provar vigência encerrada/futura). */
+function comOcupacaoGravadaComPeriodo(
+  validFrom: string,
+  validTo: string | null,
+  posicaoId = POSICAO
+): EstruturaSoberana {
   return estrutura({
     ocupacoes: [
       {
         ocupacaoId: OCUPACAO,
         collaboratorId: COLABORADOR,
         posicaoId,
-        validFrom: "2026-01-01T00:00:00.000Z",
-        validTo: null,
+        validFrom,
+        validTo,
         version: 1,
       },
     ],
@@ -174,6 +184,40 @@ describe("F5-08 P5 — criar + ocupação OK + reporting FORBIDDEN", () => {
     });
   });
 
+  it("FLUXO INICIAL: reporting usa a posição recém-ACEITA mesmo sem ocupação na fotografia", async () => {
+    const servico = servicoFalso();
+    // Fotografia em memória ainda é a ANTERIOR à mutação: sem ocupação.
+    const fotografiaInicial = estrutura();
+    expect(fotografiaInicial.ocupacoes).toEqual([]);
+
+    const desfecho = await criarColaboradorComAlocacao(
+      {
+        estrutura: fotografiaInicial,
+        organizationId: ORG,
+        dados: DADOS,
+        operationIdCadastro: OPERACAO_CADASTRO,
+        alocacao: {
+          posicaoId: POSICAO,
+          vigencia: VIGENCIA,
+          motivo: MOTIVO,
+          gestorPosicaoId: POSICAO_GESTOR,
+          operationIdOcupacao: OPERACAO_OCUPACAO,
+          operationIdReporting: OPERACAO_REPORTING,
+        },
+      },
+      { operacoes: servico }
+    );
+
+    // A subordinada é a posição ACEITA por `definirOcupacao` na MESMA execução.
+    expect(servico.chamadas[2]?.metodo).toBe("definirReportingLine");
+    expect(servico.chamadas[2]?.argumentos.subordinatePositionId).toBe(POSICAO);
+    expect(desfecho).toMatchObject({
+      tipo: "criado",
+      collaboratorId: COLABORADOR,
+      alocacao: { estado: "completa" },
+    });
+  });
+
   it("a fotografia é recarregada MESMO com FORBIDDEN (mutação da ocupação ocorreu)", () => {
     expect(
       deveRecarregarFotografia({
@@ -226,7 +270,6 @@ describe("F5-08 P5 — RETRY em 'sem-gestor' tenta SOMENTE a reporting line", ()
         estrutura: fotografia,
         organizationId: ORG,
         collaboratorId: COLABORADOR,
-        posicaoId: POSICAO,
         gestorPosicaoId: POSICAO_GESTOR,
         vigencia: VIGENCIA,
         motivo: MOTIVO,
@@ -253,6 +296,48 @@ describe("F5-08 P5 — RETRY em 'sem-gestor' tenta SOMENTE a reporting line", ()
     expect(servico.chamadas[0]?.argumentos.operationId).not.toBe(OPERACAO_OCUPACAO);
   });
 
+  it("a posição antiga da intenção (A) NUNCA é enviada: vale a ocupação corrente (B)", async () => {
+    // 1) Orquestração inicial: ocupação gravada na posição A.
+    const inicial = servicoFalso();
+    await criarColaboradorComAlocacao(
+      {
+        estrutura: estrutura(),
+        organizationId: ORG,
+        dados: DADOS,
+        operationIdCadastro: OPERACAO_CADASTRO,
+        alocacao: {
+          posicaoId: POSICAO,
+          vigencia: VIGENCIA,
+          motivo: MOTIVO,
+          gestorPosicaoId: null,
+          operationIdOcupacao: OPERACAO_OCUPACAO,
+          operationIdReporting: OPERACAO_REPORTING,
+        },
+      },
+      { operacoes: inicial }
+    );
+
+    // 2) Antes do retry, a ocupação corrente passou a ser a posição B.
+    const retry = servicoFalso();
+    const desfecho = await tentarReportingLine(
+      {
+        estrutura: comOcupacaoGravada(POSICAO_ANTIGA),
+        organizationId: ORG,
+        collaboratorId: COLABORADOR,
+        gestorPosicaoId: POSICAO_GESTOR,
+        vigencia: VIGENCIA,
+        motivo: MOTIVO,
+        operationIdReporting: OPERACAO_REPORTING,
+      },
+      { operacoes: retry }
+    );
+
+    expect(desfecho).toEqual({ estado: "completa" });
+    expect(retry.chamadas[0]?.argumentos.subordinatePositionId).toBe(POSICAO_ANTIGA);
+    // A (posição antiga da intenção) não aparece em NENHUM payload do retry.
+    expect(JSON.stringify(retry.chamadas)).not.toContain(POSICAO);
+  });
+
   it("usa a posição da OCUPAÇÃO VIGENTE da fotografia corrente como subordinada", async () => {
     const servico = servicoFalso();
 
@@ -261,7 +346,6 @@ describe("F5-08 P5 — RETRY em 'sem-gestor' tenta SOMENTE a reporting line", ()
         estrutura: comOcupacaoGravada(POSICAO_ANTIGA),
         organizationId: ORG,
         collaboratorId: COLABORADOR,
-        posicaoId: POSICAO,
         gestorPosicaoId: POSICAO_GESTOR,
         vigencia: VIGENCIA,
         motivo: MOTIVO,
@@ -283,7 +367,6 @@ describe("F5-08 P5 — RETRY em 'sem-gestor' tenta SOMENTE a reporting line", ()
         estrutura: comOcupacaoGravada(),
         organizationId: ORG,
         collaboratorId: COLABORADOR,
-        posicaoId: POSICAO,
         gestorPosicaoId: null,
         vigencia: VIGENCIA,
         motivo: MOTIVO,
@@ -308,7 +391,6 @@ describe("F5-08 P5 — RETRY em 'sem-gestor' tenta SOMENTE a reporting line", ()
         estrutura: gestorFuturo,
         organizationId: ORG,
         collaboratorId: COLABORADOR,
-        posicaoId: POSICAO,
         gestorPosicaoId: POSICAO_GESTOR,
         vigencia: VIGENCIA,
         motivo: MOTIVO,
@@ -319,6 +401,74 @@ describe("F5-08 P5 — RETRY em 'sem-gestor' tenta SOMENTE a reporting line", ()
 
     expect(desfecho).toMatchObject({ estado: "sem-gestor", codigo: "CONFLICT" });
     expect(servico.chamadas).toEqual([]);
+  });
+
+  it("SEM ocupação vigente na fotografia: fail-closed, nenhuma chamada e NENHUM fallback", async () => {
+    const servico = servicoFalso();
+    // Orquestração inicial gravou a ocupação na posição POSICAO; a fotografia
+    // recarregada (outro ator encerrou/trocou) NÃO tem ocupação vigente.
+    const semOcupacao = estrutura();
+
+    const desfecho = await tentarReportingLine(
+      {
+        estrutura: semOcupacao,
+        organizationId: ORG,
+        collaboratorId: COLABORADOR,
+        gestorPosicaoId: POSICAO_GESTOR,
+        vigencia: VIGENCIA,
+        motivo: MOTIVO,
+        operationIdReporting: OPERACAO_REPORTING,
+      },
+      { operacoes: servico }
+    );
+
+    expect(desfecho).toEqual({
+      estado: "sem-gestor",
+      codigo: "CONFLICT",
+      mensagem: MENSAGEM_RETRY_SEM_OCUPACAO_VIGENTE,
+    });
+    // Nenhuma chamada: a posição antiga do formulário NÃO vira autoridade.
+    expect(servico.chamadas).toEqual([]);
+    expect(JSON.stringify(desfecho)).not.toContain(POSICAO);
+  });
+
+  it("ocupação ENCERRADA ou FUTURA não é vigente: nenhuma chamada à reporting line", async () => {
+    const encerrada = servicoFalso();
+    const futuro = servicoFalso();
+
+    const desfechoEncerrada = await tentarReportingLine(
+      {
+        estrutura: comOcupacaoGravadaComPeriodo(
+          "2026-01-01T00:00:00.000Z",
+          "2026-03-01T00:00:00.000Z"
+        ),
+        organizationId: ORG,
+        collaboratorId: COLABORADOR,
+        gestorPosicaoId: POSICAO_GESTOR,
+        vigencia: VIGENCIA,
+        motivo: MOTIVO,
+        operationIdReporting: OPERACAO_REPORTING,
+      },
+      { operacoes: encerrada }
+    );
+
+    const desfechoFutura = await tentarReportingLine(
+      {
+        estrutura: comOcupacaoGravadaComPeriodo("2099-01-01T00:00:00.000Z", null),
+        organizationId: ORG,
+        collaboratorId: COLABORADOR,
+        gestorPosicaoId: POSICAO_GESTOR,
+        vigencia: VIGENCIA,
+        motivo: MOTIVO,
+        operationIdReporting: OPERACAO_REPORTING,
+      },
+      { operacoes: futuro }
+    );
+
+    expect(desfechoEncerrada).toMatchObject({ estado: "sem-gestor", codigo: "CONFLICT" });
+    expect(desfechoFutura).toMatchObject({ estado: "sem-gestor", codigo: "CONFLICT" });
+    expect(encerrada.chamadas).toEqual([]);
+    expect(futuro.chamadas).toEqual([]);
   });
 });
 
@@ -475,7 +625,6 @@ describe("F5-08 P5 — nenhuma segunda criação de pessoa", () => {
         estrutura: comOcupacaoGravada(),
         organizationId: ORG,
         collaboratorId: COLABORADOR,
-        posicaoId: POSICAO,
         gestorPosicaoId: POSICAO_GESTOR,
         vigencia: VIGENCIA,
         motivo: MOTIVO,
@@ -517,7 +666,6 @@ describe("F5-08 P5 — nenhuma escrita local no fluxo de retry", () => {
         estrutura: comOcupacaoGravada(),
         organizationId: ORG,
         collaboratorId: COLABORADOR,
-        posicaoId: POSICAO,
         gestorPosicaoId: POSICAO_GESTOR,
         vigencia: VIGENCIA,
         motivo: MOTIVO,
