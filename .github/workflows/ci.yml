@@ -195,6 +195,23 @@ jobs:
             < supabase/validacao/06-validar-f5-09-p3.sql
 
       # ----------------------------------------------------------------------
+      # F5-09 (P4): transicoes excepcionais soberanas (cancelar/reabrir/corrigir
+      # periodo). Fixture ISOLADA propria (prefixo eb) e roda ANTES das
+      # regressoes.
+      # ----------------------------------------------------------------------
+      - name: Seed F5-09 P4 scenario
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/07-cenario-f5-09-p4.sql
+
+      - name: Run F5-09 P4 validation (cancelar, reabrir e corrigir periodo)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/08-validar-f5-09-p4.sql
+
+      # ----------------------------------------------------------------------
       # Regressão F5-06/F5-07 (§23.4): cenários independentes, com prefixos de
       # UUID próprios (`d6`/`d7`), reaplicados antes de cada validação.
       # ----------------------------------------------------------------------

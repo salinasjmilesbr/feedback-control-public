@@ -34,7 +34,94 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
-- **Atividade (rodada atual):** F5-09 — **P3 (inclusão aditiva soberana de nova
+- **Atividade (rodada atual):** F5-09 — **P4 (transições excepcionais soberanas:
+  cancelar, reabrir e corrigir período) IMPLEMENTADA** — **aguardando auditoria
+  independente**. Issue **#194**. Contrato: `docs/F5-09-desenho-tecnico.md`
+  (§6 T4/T5/T6/T7, §8 autorização, §10 I7/I8/I11/I12/I19, §11, §12, §13.2/§13.3,
+  §19 P4) e `docs/F5-09-duvidas.md` (D1–D28; **D8/D9**, D10–D15 e D20/D21 em
+  especial).
+- **Base:** `main`/`origin/main` = `c804903d84c5dd6def690137f0ec286bc06ad56e`
+  (F5-09 P3 integrada pelo squash do PR #193).
+- **Branch da P4:** `feat/f5-09-p4-cycle-exceptional-transitions` — **sem
+  merge**; o push do sandbox é bloqueado (`.ai/git-rules.md`), então push/PR ficam
+  para o usuário.
+- **Entregue nesta rodada (P4) — 6 arquivos:**
+  - `supabase/migrations/20260918000000_f5_09_cycle_exceptional_transitions.sql`:
+    `ciclo_cancelar` (T4/T5, `cycle.cancel`), `ciclo_reabrir` (T6,
+    `cycle.reopen`) e `ciclo_corrigir_periodo` (T7, `cycle.period.correct`),
+    todas `SECURITY INVOKER`, `search_path` fixo, `EXECUTE` só `service_role`,
+    ACL revogada de `public`/`anon`/`authenticated`, preflight fail-closed do
+    baseline e guarda final fail-closed;
+  - `supabase/validacao/07-cenario-f5-09-p4.sql` (fixture **ISOLADA**, prefixo
+    `eb`, insert-once) e `08-validar-f5-09-p4.sql` (todos os casos obrigatórios da
+    P4, incluindo **4 probes cross-tenant diretos** por RPC e **rollback real em
+    quatro fases**);
+  - `.github/workflows/ci.yml` (o job `supabase-local` executa 07/08 após 05/06 e
+    antes das regressões F5-06/F5-07);
+  - `supabase/migrations/README.md` (registro da migration) e `.ai/handoff.md`.
+- **Comportamento entregue:**
+  - **cancelar** — `PLANEJADO`|`ATIVO` → `CANCELADO` (terminal; D8). Em `ATIVO`
+    resolve na MESMA transação as avaliações **não concluídas** reusando
+    `evaluation_cancelar` (F5-06) e **preserva** as `CONCLUIDA` (e as já
+    `CANCELADA`, sem reescrever motivo/data). Em `PLANEJADO` exige que as
+    avaliações tenham sido resolvidas antes (fail-closed) e não cria nada.
+    Retorno: `cycle_id`, `status`, `version`, `avaliacoes_canceladas`,
+    `avaliacoes_concluidas_preservadas`; evento `CANCELADO` com before/after e
+    contagens. Nenhum `DELETE` (D9) e snapshots intocados.
+  - **reabrir** — somente `ENCERRADO` → `ATIVO`, com motivo, sem outro `ATIVO`
+    (I5/D14) e sem sobreposição com ciclos não cancelados (I6/D15). **Sem
+    rematerialização**: nenhuma escrita em snapshots/posições/membros/
+    responsabilidades/participantes e nenhuma chamada a F3-08/F3-09; **não cria
+    avaliações**. Altera apenas `status`, `data_encerramento=null` e `version+1`,
+    **preservando** `data_ativacao` e os contadores de pendência (histórico
+    íntegro na trilha); evento `REABERTO`.
+  - **corrigir período** — só `ATIVO`; `data_inicio <= data_fim`, período
+    diferente do atual, `justificativa` obrigatória e sem sobreposição. Não toca
+    estrutura/gestores/colegiado/participantes/responsabilidades. **Impacto
+    calculado server-side** (o cliente não declara impacto): datas anterior/nova,
+    `dias_antes`/`dias_depois`/`dias_delta`, `avaliacoes_no_ciclo`,
+    `avaliacoes_concluidas`, `avaliacoes_nao_concluidas`,
+    `avaliacoes_concluidas_fora_do_novo_periodo` e `participantes_materializados`;
+    evento `PERIODO_CORRIGIDO` com before/after + `impacto` + justificativa.
+- **Auditoria do ponto crítico de `version` (double increment):**
+  `evaluation_cancelar` (F5-06) incrementa apenas `evaluations.version` e **não**
+  toca `evaluation_cycles.version`; `evaluation_fechar_ciclo_pendencias` (que
+  incrementa a versão do ciclo) **não** é usada por nenhuma RPC da P4 (a guarda
+  final da migration reprova se for). Logo cada RPC incrementa a versão do ciclo
+  exatamente uma vez (`expected_version + 1`), como na P2/P3.
+- **Desvios mínimos declarados (documentados no header da migration):**
+  (a) `p_payload_hash` **não** é parâmetro (mesmo desvio aceito na P2/P3: hash
+  canônico derivado server-side); (b) o evento da correção é **`PERIODO_CORRIGIDO`**
+  (e não `CORRECAO_PERIODO`): o §12 fixa esse tipo e o CHECK **fechado** de
+  `cycle_events.event_type` (P1) só aceita esse nome — usar outro reabriria
+  contrato congelado; (c) `ciclo_reabrir` limpa `data_encerramento` (T6) e
+  **preserva** os contadores de pendência, com o histórico do encerramento
+  integral na trilha append-only.
+- **Nota de implementação (fail-closed defensivo):** o ramo "ciclo `PLANEJADO`
+  com avaliações" do cancelamento é **inalcançável pelo caminho soberano** (a
+  F3-08 só materializa na ativação e a F5-06 exige o snapshot do ciclo); ele é
+  exercitado no validador por **estado sintético explícito** (materialização
+  direta da estrutura) para provar que a RPC recusa mesmo assim.
+- **Gates reais desta rodada (Docker Desktop acessível):** `supabase db reset` +
+  cenário 07 + validador 08 (**16 `[PASS]`, 0 `[FAIL]`**) + suíte SQL completa na
+  ordem do CI (22 arquivos, **ZERO `[FAIL]`**) + `npm test`/`npm run build`/
+  `npm run lint`/`npx tsc -b tsconfig.app.json`/`git diff --check`, todos exit 0.
+- **Limitações reais:** a contenção entre DUAS sessões segue não provável no
+  validador de sessão única (coberta por lock estrutural + `expected_version`);
+  o cenário é **insert-once** e exige `db reset` para nova execução limpa; o
+  estado "ENCERRADO sobreposto" é **inalcançável por construção** (a exclusion I6
+  recusa a criação sobreposta, provado no validador), então o ramo de
+  sobreposição da reabertura é defesa em profundidade; a transição para
+  `CONCLUIDA`/`PRONTA_PARA_FEEDBACK` das avaliações de fixture é feita por
+  `UPDATE` direto (a completude de notas da F5-06 não é o objeto da P4).
+- **Permanece para P5+:** leitura RLS + porta do cliente (P5), Policy Engine
+  `cycle.read`/`cycle.manage` + `cycle.cancel`/`cycle.reopen`/
+  `cycle.period.correct` (P6), Edge `ciclos` + reconciliação do bundle `admin`
+  (P7), cutover do frontend (P8) e validação integrada (P9).
+
+### 3.9 F5-09 P3 (integrada pelo squash do PR #193)
+
+- **Atividade:** F5-09 — **P3 (inclusão aditiva soberana de nova
   admissão em ciclo `ATIVO`) IMPLEMENTADA** — **aguardando auditoria
   independente**. Contrato: `docs/F5-09-desenho-tecnico.md` (§6 nota da inclusão
   aditiva, §7.2 provas P1–P7, §7.3 contrato restrito, §10 I17–I19, §11/§12,
