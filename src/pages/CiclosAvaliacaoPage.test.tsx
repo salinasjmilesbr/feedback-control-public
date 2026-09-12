@@ -82,7 +82,7 @@ function renderizar(
 describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
   beforeEach(() => instalarLocalStorageEmMemoria());
 
-  it("mostra somente ativação para ciclo planejado", () => {
+  it("mostra ativação e cancelamento para ciclo planejado (F5-09 P6/D8)", () => {
     const html = renderizar("PLANEJADO");
 
     expect(html).toContain("Ativar ciclo");
@@ -91,7 +91,11 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
     expect(html).toContain("Editar período");
     expect(html).not.toContain("Corrigir período");
     expect(html).toContain("Excluir ciclo");
-    expect(html).not.toContain("Cancelar ciclo");
+    // F5-09 P6 (D8/Q-F5-09-1): `cycle.cancel` passa a valer em {PLANEJADO, ATIVO},
+    // então a autorização libera o cancelamento do ciclo planejado e o botão passa
+    // a ser exibido. O persistidor LOCAL legado ainda exige ATIVO — resíduo do
+    // cutover P8, que passa a usar a RPC soberana `ciclo_cancelar`.
+    expect(html).toContain("Cancelar ciclo");
     expect(html).not.toContain("Reabrir ciclo");
   });
 

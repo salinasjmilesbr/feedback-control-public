@@ -7,6 +7,7 @@ import type { AuthorizationContext } from "./AuthorizationContext";
 import { alvosPermitidos } from "./autorizacaoFuncional";
 import { canonicalizarCapability } from "./canonical";
 import type { Capability } from "./Capability";
+import { estadoDominioCiclo } from "./estadoDominioCiclo";
 import {
   criarProvidersMundoFuncional,
   estaNaCadeiaDeGestao,
@@ -249,23 +250,30 @@ function requisicaoEngine(
     }
 
     case "cycle": {
+      // F5-09 P6 (§8, D20/D21): o alvo autorizável é o UUID CANÔNICO do ciclo
+      // (`evaluation_cycles.id`) — nunca `{type:"cycle", id:"global"}`, nunca
+      // `ano`/`numero` e nunca rótulo textual. A MATRIZ de estado é única e vem
+      // de `estadoDominioCiclo`, a mesma fonte consumida pela fronteira soberana
+      // (`contextoAutorizacao`): o engine decide QUEM age; o domínio decide SE a
+      // ação é possível no estado atual.
       const alvo: TargetRef = { type: "cycle", id: resource.cycle.id };
+      const domainState = estadoDominioCiclo({ status: resource.cycle.status });
+
+      // Sem identidade de ciclo não há recurso: fail-closed (nenhum id é
+      // inventado e nenhuma decisão é tomada sobre alvo vazio).
+      if (!resource.cycle.id) return null;
 
       switch (canonica) {
+        case "cycle.read":
+        case "cycle.manage":
         case "cycle.cancel":
+        case "cycle.reopen":
         case "cycle.period.correct":
           return {
             capability: canonica,
             target: alvo,
             cycleId: resource.cycle.id,
-            domainState: dominioPermite(resource.cycle.status === "ATIVO"),
-          };
-        case "cycle.reopen":
-          return {
-            capability: canonica,
-            target: alvo,
-            cycleId: resource.cycle.id,
-            domainState: dominioPermite(resource.cycle.status === "ENCERRADO"),
+            domainState,
           };
         default:
           return null;
@@ -308,12 +316,16 @@ function requisicaoEngine(
     }
 
     case "global": {
-      // LEGADO/TRANSITÓRIO (F5-05 D19/D22): este caso usa ALVOS SINTÉTICOS
-      // (`{ type: "cycle", id: "global" }` e o próprio ator) e NÃO é autorização
-      // real. O enforcement real da F5-05 (`contextoAutorizacao`) recusa alvos
-      // globais/sintéticos e exige recurso tenant-rooted com fonte soberana.
-      // Mantido apenas como UX/transição até a migração dos domínios — nunca
-      // como prova de autorização.
+      // LEGADO/TRANSITÓRIO (F5-05 D19/D22; F5-09 P6 §6): este caso usa ALVOS
+      // SINTÉTICOS (`{ type: "cycle", id: "global" }` e o próprio ator) e NÃO é
+      // autorização real. O enforcement real (`contextoAutorizacao`) recusa alvos
+      // globais/sintéticos e exige recurso tenant-rooted com fonte soberana
+      // (para CICLO: UUID canônico + estado da linha soberana).
+      //
+      // F5-09 P6: nenhuma capability de CICLO é decidida sobre o alvo sintético
+      // de ciclo — `cycle.read` aqui é apenas o gate de NAVEGAÇÃO/lista ancorado
+      // no colaborador do PRÓPRIO ator (§8 item 3); as cinco capabilities de
+      // ciclo têm decisão real no `case "cycle"` acima e no Edge (P7).
       const alvoSelf: TargetRef = { type: "collaborator", id: String(atorId) };
       const alvoCiclo: TargetRef = { type: "cycle", id: "global" };
 

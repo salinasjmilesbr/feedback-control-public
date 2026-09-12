@@ -7,10 +7,14 @@ import {
 } from "./actorContext";
 import {
   ehAlvoSinteticoGlobal,
+  ehTipoRecursoSoberano,
   montarResourceContextSoberano,
   motivoAlvoNaoAutorizavel,
 } from "./resourceContextReal";
 import { montarRequisicaoAutorizacao } from "./contextoAutorizacao";
+
+/** UUID canônico de ciclo (F5-09 P6): identidade é `evaluation_cycles.id`. */
+const CICLO_UUID = "55555555-5555-4555-8555-555555555555";
 
 function identidadeValida(overrides?: Partial<AuthIdentity>): AuthIdentity {
   return {
@@ -166,9 +170,34 @@ describe("F5-05 — ResourceContext real (D6, D8, D19, D22)", () => {
   it("alvos globais/sintéticos e domínios legados não são autorizáveis (D19/D22)", () => {
     expect(ehAlvoSinteticoGlobal({ type: "cycle", id: "global" })).toBe(true);
     expect(motivoAlvoNaoAutorizavel({ type: "cycle", id: "global" })).toBe("TARGET_NAO_SOBERANO");
-    expect(motivoAlvoNaoAutorizavel({ type: "cycle", id: "c-1" })).toBe("TARGET_NAO_SOBERANO");
     expect(motivoAlvoNaoAutorizavel({ type: "goal", id: "g-1" })).toBe("TARGET_NAO_SOBERANO");
     expect(motivoAlvoNaoAutorizavel({ type: "collaborator", id: "col-1" })).toBeNull();
+  });
+
+  it("F5-09 P6: o CICLO é soberano e exige o UUID canônico (nunca ano/numero)", () => {
+    expect(ehTipoRecursoSoberano("cycle")).toBe(true);
+    expect(motivoAlvoNaoAutorizavel({ type: "cycle", id: CICLO_UUID })).toBeNull();
+    // Rótulos que não são identidade canônica seguem recusados.
+    expect(motivoAlvoNaoAutorizavel({ type: "cycle", id: "c-1" })).toBe("TARGET_NAO_SOBERANO");
+    expect(motivoAlvoNaoAutorizavel({ type: "cycle", id: "2035-1" })).toBe("TARGET_NAO_SOBERANO");
+  });
+
+  it("F5-09 P6: recurso de ciclo sem UUID canônico não monta contexto", () => {
+    const invalido = montarResourceContextSoberano({
+      recurso: { kind: "cycle", id: "2035-1", organizationId: "org-1" },
+      organizationIdEsperada: "org-1",
+    });
+    expect(invalido.ok ? "" : invalido.motivo).toBe("IDENTIFICADOR_INVALIDO");
+
+    const valido = montarResourceContextSoberano({
+      recurso: { kind: "cycle", id: CICLO_UUID, organizationId: "org-1", status: "ATIVO" },
+      organizationIdEsperada: "org-1",
+    });
+    expect(valido.ok).toBe(true);
+    if (!valido.ok) return;
+    expect(valido.resourceContext.target).toEqual({ type: "cycle", id: CICLO_UUID });
+    // O ciclo do contexto é o PRÓPRIO ciclo.
+    expect(valido.resourceContext.cycleId).toBe(CICLO_UUID);
   });
 });
 

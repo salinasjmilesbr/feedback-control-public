@@ -191,14 +191,18 @@ describe("authorizationPolicy", () => {
     ).toBe(false);
   });
 
-  it("autoriza cancelamento de ciclo ativo somente para gerente", () => {
-    expect(
-      can(contexto(gerente), "cycle.cancel.manager", {
-        kind: "cycle",
-        cycle: ciclo,
-        collaborators,
-      })
-    ).toBe(true);
+  it("autoriza cancelamento de ciclo PLANEJADO ou ATIVO somente para gerente", () => {
+    // F5-09 P6 (D8/Q-F5-09-1): `cycle.cancel` passa a valer em PLANEJADO e ATIVO.
+    for (const status of ["PLANEJADO", "ATIVO"] as const) {
+      expect(
+        can(contexto(gerente), "cycle.cancel.manager", {
+          kind: "cycle",
+          cycle: { ...ciclo, status },
+          collaborators,
+        })
+      ).toBe(true);
+    }
+
     expect(
       can(contexto(coordenador), "cycle.cancel.manager", {
         kind: "cycle",
@@ -210,6 +214,13 @@ describe("authorizationPolicy", () => {
       can(contexto(gerente), "cycle.cancel.manager", {
         kind: "cycle",
         cycle: { ...ciclo, status: "CANCELADO" },
+        collaborators,
+      })
+    ).toBe(false);
+    expect(
+      can(contexto(gerente), "cycle.cancel.manager", {
+        kind: "cycle",
+        cycle: { ...ciclo, status: "ENCERRADO" },
         collaborators,
       })
     ).toBe(false);

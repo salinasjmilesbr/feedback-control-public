@@ -94,8 +94,8 @@ describe("cancelarCiclo", () => {
     expect(getCiclosAvaliacao()).toEqual([ativo]);
   });
 
-  it.each(["PLANEJADO", "ENCERRADO", "CANCELADO"] as const)(
-    "rejeita cancelamento de ciclo %s",
+  it.each(["ENCERRADO", "CANCELADO"] as const)(
+    "rejeita cancelamento de ciclo %s (domínio nega na autorização)",
     (status) => {
       localStorage.setItem(
         "feedback-control-ciclos",
@@ -108,6 +108,21 @@ describe("cancelarCiclo", () => {
       expect(getCiclosAvaliacao()[0].status).toBe(status);
     }
   );
+
+  it("F5-09 P6/D8: PLANEJADO deixa de ser negado pela AUTORIZAÇÃO", () => {
+    localStorage.setItem(
+      "feedback-control-ciclos",
+      JSON.stringify([{ ...ativo, status: "PLANEJADO" }])
+    );
+
+    // A recusa não vem mais do Policy Engine (a matriz P6/D8 permite PLANEJADO e
+    // ATIVO), e sim do domínio LOCAL legado, que ainda exige ATIVO. O fluxo local
+    // é substituído pela RPC soberana `ciclo_cancelar` no cutover P8.
+    expect(() => cancelarCiclo(ativo.id, "Motivo", gerente)).toThrow(
+      "Somente ciclos ativos podem ser cancelados."
+    );
+    expect(getCiclosAvaliacao()[0].status).toBe("PLANEJADO");
+  });
 
   it("não permite alcançar CANCELADO por atualização genérica", () => {
     expect(() => atualizarStatusCiclo(ativo.id, "CANCELADO")).toThrow(
