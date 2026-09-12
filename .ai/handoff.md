@@ -34,15 +34,103 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
-- **Atividade (rodada atual):** F5-08 — Estrutura organizacional e catálogos
-  soberanos (**implementação P1–P6**; contrato em
-  `docs/F5-08-desenho-tecnico.md`, D1–D25).
-- **Base:** `main`/`origin/main` = `7a0e6fab607e97656333a67adaaff48fc1d8fd58`
-  (P1–P5 da F5-08 já integrados, um commit por fase).
-- **Branch do P6:** `feat/f5-08-p6-cutover-estrutura` — **sem PR, sem squash e sem
-  merge** nesta rodada; o P6 (cutover) **não está integrado**.
+- **Atividade (rodada atual):** F5-09 — **Ciclos soberanos** — **DESENHO
+  TÉCNICO revisado** (`docs/F5-09-desenho-tecnico.md`, D1–D28 e fases P1–P9) com o
+  registro de ratificação em `docs/F5-09-duvidas.md`
+  (Q-F5-09-1..3 **RATIFICADAS**; nenhuma dúvida aberta).
+- **Base:** `main`/`origin/main` = `6550c81d14a9d3e61b3c1b4f49471948f880bbc8`
+  (F5-08 P6 integrado, PR #188; baseline esperado da F5-09 conferido).
+- **Branch do desenho:** `docs/f5-09-ciclos-soberanos` — **sem PR** nesta rodada;
+  **somente documentação**: nenhuma migration, RPC, Edge Function, capability,
+  policy, teste de runtime ou alteração de frontend entrou nesta rodada.
 - **Último commit:** consultar `git log --oneline -1` na branch.
-- **Entregue (P1–P5, já na base):** migrations `20260914000000`
+- **Entregue nesta rodada (desenho F5-09):**
+  - autoridade soberana do ciclo reusa `public.evaluation_cycles` (F5-06 D15) de
+    forma **aditiva** — nenhuma tabela concorrente de ciclo/estrutura/versão;
+  - identidade canônica = `evaluation_cycles.id` (UUID); `(ano, numero)` é apenas
+    rótulo humano e regra de unicidade (`uq_evaluation_cycles_org_ano_numero`); a
+    ponte `(ano, numero) → UUID` (`evaluation_resolver_ciclo` e o mapa de
+    `assignedSupabase.ts`) permanece só como INTENÇÃO na fronteira confiável, com
+    condição de remoção registrada;
+  - máquina de estados sobre os quatro estados já existentes, com origem,
+    destino, capability, pré-condições, efeitos transacionais e reversibilidade
+    por transição; `CANCELADO` terminal; encerramento **reusa**
+    `evaluation_fechar_ciclo_pendencias`; cancelamento resolve as avaliações não
+    concluídas na mesma transação;
+  - estrutura por ciclo = snapshot F3-08 + responsabilidades F3-09 + congelamento
+    de participantes da F5-06 (congelada na ativação; hierarquia sempre relacional,
+    nunca texto);
+  - integridade nova no banco: índice único parcial de ciclo `ATIVO` por
+    organização, exclusion de sobreposição de períodos (meio-aberto), trilha
+    append-only `cycle_events` com `unique (organization_id, operation_id)` +
+    `payload_hash`, chave normativa de advisory lock por organização;
+  - autorização **sem capability nova** (`cycle.read`, `cycle.manage`,
+    `cycle.cancel`, `cycle.reopen`, `cycle.period.correct`), Edge nova
+    `supabase/functions/ciclos` (namespace `cycle.*`) e RPCs `ciclo_*`
+    (SECURITY INVOKER, EXECUTE só `service_role`);
+  - leitura soberana por RLS own-tenant (`user_has_active_membership`) + grant de
+    SELECT a `authenticated`; escrita do cliente permanece fechada (deny-by-default);
+  - cutover do cliente classificado A/B/C/D para os **21 arquivos** que hoje leem
+    ou escrevem ciclo local;
+  - fecha a pendência declarada da F5-07 (filtro de histórico do colaborador por
+    ciclo) usando `collaborator_events.reference_cycle_id`;
+  - **duas lacunas de contrato identificadas e endereçadas de forma aditiva:**
+    `cycle.read`/`cycle.manage` caem hoje no `default → null` do
+    `authorizationPolicy.ts` (⇒ DENY) e nenhuma role de sistema concede
+    `cycle.manage` (o bundle `admin` tem só `cycle.read`) — resolvida pela **D28**
+    (reconciliação aditiva do catálogo no P7).
+- **Revisão 2 desta rodada (RATIFICAÇÃO incorporada):** a auditoria GPT do desenho
+  ratificou as três dúvidas e o contrato foi revisado de ponta a ponta — **zero
+  dúvida bloqueante aberta**:
+  - **Q-F5-09-1 (alternativa A)** — `PLANEJADO→CANCELADO` permitido com
+    `cycle.cancel`, motivo obrigatório, autoria soberana, trilha append-only,
+    `expected_version` e idempotência; `CANCELADO` terminal; **exclusão física
+    proibida em todos os estados** (D8/D9; ampliação aditiva do `domainState` e da
+    descrição da capability, sem capability nova);
+  - **Q-F5-09-2 (regra híbrida)** — a estrutura do ciclo **não** é "congelamento
+    absoluto" nem rematerialização genérica: população inicial materializada na
+    ativação, **admissões posteriores elegíveis podem ser acrescentadas** por
+    operação soberana, explícita, auditada e **exclusivamente aditiva** (D26), com
+    snapshots existentes **imutáveis** e movimentações de posição/unidade/gestor/
+    reporting line/colegiado valendo **no próximo ciclo** (D27);
+  - **Q-F5-09-3 (alternativa A)** — `cycle.manage` entra **aditivamente** no bundle
+    `admin`; `cycle.cancel`/`cycle.reopen`/`cycle.period.correct` permanecem fora
+    do bundle, só por configuração explícita (D28, executada no P7).
+- **Inclusão aditiva de nova admissão (D26) — onde ficou:** operação restrita
+  `cycle.admissao.incluir` / RPC `ciclo_incluir_admissao` + helper read-only
+  `ciclo_admissao_pos_ativacao_elegivel`, na fase **P3**. A prova de "nova
+  admissão" é **soberana** (nunca flag do cliente): evento append-only
+  `collaborator_events.event_type = 'ADMISSAO'` com
+  `cycle_scope = 'CICLO_ATUAL_E_POSTERIORES'` e `effective_date > data_ativacao`,
+  mais ausência de período de status anterior à ativação em
+  `collaborator_status_periods`; a coluna declarada
+  `collaborators.admission_date` **não** é prova. Sem prova ⇒ **recusa**
+  (fail-closed), registrada como requisito técnico da implementação (§7.2/R15) —
+  a regra não é flexibilizada. O contrato **não** tem parâmetro estrutural algum e
+  impede por construção sobrescrever snapshot, trocar posição, recalcular gestor
+  ou colegiado, inclusão cross-tenant e uso genérico como "atualizar estrutura".
+- **Plano revisado:** **P1–P9** (a fase nova **P3** existe para a inclusão aditiva
+  e a reconciliação do catálogo ficou no **P7**); D1–D28.
+- **Não iniciado:** implementação da F5-09 (fases P1–P9) e F5-10.
+- **Próxima atividade:** implementação da F5-09 a partir de **P1**
+  (schema/trilha/RLS), sem decisão arquitetural aberta.
+- **Validação desta rodada (documental):** `git diff --check` limpo; referências
+  do desenho conferidas contra os arquivos/tabelas/funções reais da base
+  `6550c81`; confirmado que **nenhum** arquivo de implementação
+  (migration/RPC/Edge/frontend/capability) foi criado ou alterado — o diff da
+  rodada contém apenas `docs/` e `.ai/`. Nenhum gate de runtime era aplicável
+  (não há código novo); os validadores SQL da F5-09 pertencem às fases P1–P4.
+- **`.ai/current-task.md`:** não existe neste repositório (nem no histórico). A
+  ausência é registrada aqui conforme `AGENTS.md` §1; o estado operacional de
+  retomada continua sendo este arquivo.
+### 3.5 F5-08 (concluída e integrada)
+
+- **Atividade:** F5-08 — Estrutura organizacional e catálogos soberanos (contrato
+  em `docs/F5-08-desenho-tecnico.md`, D1–D25). P1–P6 integrados em `main`; o
+  squash do P6 (cutover estrutural) é `6550c81` (PR #188) — a antiga branch
+  `feat/f5-08-p6-cutover-estrutura` está encerrada e **nada da F5-08 foi
+  transferido para a F5-09** (a F5-09 só assumiu o domínio de ciclos).
+- **Entregue (P1–P5, na base):** migrations `20260914000000`
   (`structure_events` append-only + triggers I1–I3 + grants), `20260914010000`
   (15 RPCs `estrutura_*`/`catalogo_*`) e `20260914020000` (chave única de advisory
   lock, D24); contrato/Edge `supabase/functions/colaboradores`; porta/serviço do
@@ -137,16 +225,13 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   permanece server-side (Edge + Policy Engine + RLS). Coberto por
   `cutoverEstrutural.test.ts`, `cutoverEstruturalServicos.test.ts`,
   `projecaoEstruturalSoberana.test.ts` e `estruturaSoberanaCliente.test.ts`.
-- **Validação desta rodada:** `npm test` (**108 arquivos / 1677 testes** verdes),
-  `npm run build`, `npm run lint`, `npx tsc -b tsconfig.app.json` e
-  `git diff --check` executados localmente (todos verdes). Os **validadores SQL não
-  foram executados** neste host (Docker/Supabase indisponível) — rodam no job
-  `supabase-local` do CI; a limitação está registrada no relatório da atividade.
-  Nenhuma migration/RPC/Edge/capability nova foi criada nesta correção.
-- **Próxima atividade:** **F5-09** (ciclos) — **não iniciada** aqui.
-- **`.ai/current-task.md`:** não existe neste repositório (nem no histórico). A
-  ausência é registrada aqui conforme `AGENTS.md` §1; o estado operacional de
-  retomada continua sendo este arquivo.
+- **Validação então registrada (branch do P6):** `npm test` (**108 arquivos /
+  1677 testes** verdes), `npm run build`, `npm run lint`,
+  `npx tsc -b tsconfig.app.json` e `git diff --check` executados localmente
+  (todos verdes). Os **validadores SQL não foram executados** naquele host
+  (Docker/Supabase indisponível) — rodam no job `supabase-local` do CI; a
+  limitação está registrada no relatório da atividade. Nenhuma
+  migration/RPC/Edge/capability nova foi criada no P6.
 
 ### 3.1 F5-07 (concluída e integrada)
 

@@ -20,13 +20,17 @@
   local via Docker); `@supabase/supabase-js`.
 - Domínios funcionais legados ainda em `localStorage` (pré-migração F5);
   compatibilidade com dados antigos de `localStorage` é obrigatória **para os
-  domínios ainda não migrados** (ciclos, metas e observações). **Autoridade
+  domínios ainda não migrados** (metas e observações). **Autoridade
   estrutural** (unidades, posições, hierarquia, cargos, senioridades, colegiado,
   ocupação e reporting line), **cadastro de colaboradores** e **avaliações** já são
   soberanos no PostgreSQL (F5-06/F5-07/F5-08): `localStorage` não é fonte de
   verdade, não há dual-write e a leitura do cliente é RLS own-tenant
   (`docs/F5-08-p6-duvida-mundo-funcional.md` registra o residual de elegibilidade
-  dos domínios de ciclo/metas).
+  dos domínios de ciclo/metas). **Ciclos** continuam em `localStorage` **até a
+  implementação da F5-09**: o desenho técnico está fechado
+  (`docs/F5-09-desenho-tecnico.md`, com dúvidas em `docs/F5-09-duvidas.md`) e
+  define `public.evaluation_cycles` (F5-06 D15, já existente) como a entidade
+  soberana — nenhuma autoridade local nova foi criada nesta rodada.
 - CI (`.github/workflows/ci.yml`): `npm test`, `npm run build`, `npm run lint`,
   `git diff --check` e validação Supabase local (RLS/policies) quando aplicável.
 
@@ -50,7 +54,11 @@ não existe contrato sem documento fechado correspondente.
   autenticada), F5-02 (vínculo usuário↔colaborador), F5-03 (organização ativa),
   F5-04 (access roles/capabilities reais), F5-05, F5-06 (avaliações no PostgreSQL),
   F5-07 (colaboradores e histórico organizacional soberanos) e F5-08 (estrutura e
-  catálogos soberanos). As atividades seguintes da fase seguem o roadmap do GitHub.
+  catálogos soberanos). F5-09 (ciclos soberanos) tem **desenho técnico fechado e
+  revisado** (`docs/F5-09-desenho-tecnico.md`, D1–D28, fases P1–P9) com as três
+  dúvidas **ratificadas** (`docs/F5-09-duvidas.md`) e **implementação não
+  iniciada**.
+  As atividades seguintes da fase seguem o roadmap do GitHub.
 - **F6+** — hardening geral e trabalhos futuros (fora de escopo das fases
   anteriores).
 - **DEV-\*** — atividades de **infraestrutura de processo** (ex.: DEV-01, esta
