@@ -23,11 +23,13 @@ import {
   type ResultadoColaboradores,
 } from "../services/colaboradoresSoberanos/acessoColaboradoresSoberanos";
 import type { ServiceColaboradores } from "../services/colaboradoresSoberanos/serviceColaboradores";
+import type { EstruturaSoberana } from "../infrastructure/supabase/estrutura/repositorioEstruturaSoberana";
 import { instalarLocalStorageEmMemoria } from "../test/localStorageMock";
 import { ORGANIZACAO_TESTE, ProvedorAuthTeste } from "../test/authTeste";
 import ColaboradorDetalhePage, {
   type EstadoDetalheColaborador,
 } from "./ColaboradorDetalhePage";
+import type { EstadoEstrutura } from "./apoioEstrutura";
 
 /**
  * Barreira do teste: nenhuma tela migrada pode voltar a ler o cadastro legado
@@ -86,9 +88,72 @@ function operacoes(parcial: Partial<ServiceColaboradores>): ServiceColaboradores
   return parcial as unknown as ServiceColaboradores;
 }
 
+/** Fotografia soberana com ocupação, reporting line e colegiado vigentes. */
+function estruturaComAlocacao(): EstruturaSoberana {
+  const UNIDADE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const CARGO = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+  const POSICAO = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const POSICAO_GESTOR = "bdbdbdbd-bdbd-4dbd-8dbd-bdbdbdbdbdbd";
+  const GESTOR = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  const MEMBRO = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+  const COLEGIADO = "efefefef-efef-4fef-8fef-efefefefefef";
+
+  return {
+    unidades: [
+      { unitId: UNIDADE, nome: "Unidade Fictícia", validFrom: "2026-01-01T00:00:00.000Z", validTo: null, version: 1 },
+    ],
+    periodosParent: [],
+    posicoes: [
+      { posicaoId: POSICAO, unitId: UNIDADE, jobRoleId: CARGO, seniorityLevelId: null, validFrom: "2026-01-01T00:00:00.000Z", validTo: null, version: 1 },
+      { posicaoId: POSICAO_GESTOR, unitId: UNIDADE, jobRoleId: CARGO, seniorityLevelId: null, validFrom: "2026-01-01T00:00:00.000Z", validTo: null, version: 1 },
+    ],
+    reportingLines: [
+      {
+        reportingLineId: "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd",
+        subordinatePositionId: POSICAO,
+        managerPositionId: POSICAO_GESTOR,
+        motivo: "cadeia formal fictícia",
+        validFrom: "2026-01-01T00:00:00.000Z",
+        validTo: null,
+        version: 1,
+      },
+    ],
+    ocupacoes: [
+      { ocupacaoId: "dededede-dede-4ede-8ede-dededededede", collaboratorId: UUID, posicaoId: POSICAO, validFrom: "2026-01-01T00:00:00.000Z", validTo: null, version: 1 },
+      { ocupacaoId: "eaeaeaea-eaea-4aea-8aea-eaeaeaeaeaea", collaboratorId: GESTOR, posicaoId: POSICAO_GESTOR, validFrom: "2026-01-01T00:00:00.000Z", validTo: null, version: 1 },
+    ],
+    cargos: [{ jobRoleId: CARGO, code: "FICT", nome: "Cargo Fictício", status: "active", version: 1 }],
+    senioridades: [],
+    colegiados: [
+      { colegiadoId: COLEGIADO, collaboratorId: UUID, validFrom: "2026-01-01T00:00:00.000Z", validTo: null, version: 1, membroIds: [MEMBRO] },
+    ],
+    colaboradores: [
+      { collaboratorId: UUID, nome: "Pessoa Fictícia" },
+      { collaboratorId: GESTOR, nome: "Gestor Fictício" },
+      { collaboratorId: MEMBRO, nome: "Membro Fictício" },
+    ],
+  };
+}
+
+const ESTRUTURA_VAZIA: EstadoEstrutura = {
+  fase: "pronto",
+  estrutura: {
+    unidades: [],
+    periodosParent: [],
+    posicoes: [],
+    reportingLines: [],
+    ocupacoes: [],
+    cargos: [],
+    senioridades: [],
+    colegiados: [],
+    colaboradores: [],
+  },
+};
+
 function renderizar(
   estadoInicial: EstadoDetalheColaborador,
-  identificador: string = UUID
+  identificador: string = UUID,
+  estruturaInicial: EstadoEstrutura = ESTRUTURA_VAZIA
 ): string {
   return renderToStaticMarkup(
     <ProvedorAuthTeste>
@@ -103,7 +168,12 @@ function renderizar(
           <Routes>
             <Route
               path="/colaborador/:collaboratorId"
-              element={<ColaboradorDetalhePage estadoInicial={estadoInicial} />}
+              element={
+                <ColaboradorDetalhePage
+                  estadoInicial={estadoInicial}
+                  estruturaInicial={estruturaInicial}
+                />
+              }
             />
           </Routes>
         </MemoryRouter>
@@ -130,10 +200,30 @@ describe("detalhe soberano em ColaboradorDetalhePage", () => {
 
     expect(html).toContain("Pessoa Fictícia");
     expect(html).toContain("Sem alocação");
-    expect(html).toContain("F5-08");
+    expect(html).not.toContain("F5-08");
     expect(html).not.toContain("Gestor:");
     expect(getColaboradores).not.toHaveBeenCalled();
     expect(getColaboradorByMatricula).not.toHaveBeenCalled();
+  });
+
+  it("exibe posição, gestor derivado da reporting line e colegiado vigentes", () => {
+    const html = renderizar(
+      {
+        fase: "pronto",
+        colaborador: soberano(),
+        historico: [],
+        erroHistorico: null,
+      },
+      UUID,
+      { fase: "pronto", estrutura: estruturaComAlocacao() }
+    );
+
+    expect(html).toContain("Posição vigente: Unidade Fictícia • FICT — Cargo Fictício");
+    expect(html).toContain("Gestor direto (reporting line): Gestor Fictício");
+    expect(html).toContain("Colegiado vigente: Membro Fictício");
+    // Somente leitura: a tela não administra estrutura, apenas encaminha.
+    expect(html).toContain("Administrar alocação");
+    expect(html).not.toContain("Trocar posição");
   });
 
   it("renderiza o histórico organizacional soberano com autor e vigência", () => {

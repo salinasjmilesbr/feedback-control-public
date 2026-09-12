@@ -1,9 +1,10 @@
 /**
- * F5-07 — testes de tela da edição soberana.
+ * F5-07/F5-08 P5 — testes de tela da edição soberana.
  *
  * Cobre: leitura por UUID, intenção de matrícula resolvida NO SERVIDOR (fail-closed
  * quando ausente/ambígua), `expectedVersion` em toda mutação, conflito de versão
- * explícito, ausência de alocação (F5-08) e ausência de escrita local.
+ * explícito, ALOCAÇÃO soberana (ocupação/reporting line) e ausência de escrita
+ * local.
  */
 
 import { renderToStaticMarkup } from "react-dom/server";
@@ -19,13 +20,21 @@ import {
   type ResultadoColaboradores,
 } from "../services/colaboradoresSoberanos/acessoColaboradoresSoberanos";
 import type { ServiceColaboradores } from "../services/colaboradoresSoberanos/serviceColaboradores";
+import type { EstruturaSoberana } from "../infrastructure/supabase/estrutura/repositorioEstruturaSoberana";
 import { instalarLocalStorageEmMemoria } from "../test/localStorageMock";
 import { ORGANIZACAO_TESTE, ProvedorAuthTeste } from "../test/authTeste";
 import EditarColaboradorPage, {
   type EstadoEdicaoColaborador,
 } from "./EditarColaboradorPage";
+import type { EstadoEstrutura } from "./apoioEstrutura";
 
 const UUID = "55555555-5555-4555-8555-555555555555";
+const POSICAO = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const POSICAO_GESTOR = "bdbdbdbd-bdbd-4dbd-8dbd-bdbdbdbdbdbd";
+const UNIDADE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const CARGO = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const OCUPACAO = "dededede-dede-4ede-8ede-dededededede";
+const REPORTING = "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd";
 
 function soberano(parcial: Partial<ColaboradorSoberano> = {}): ColaboradorSoberano {
   return {
@@ -51,9 +60,80 @@ function operacoes(parcial: Partial<ServiceColaboradores>): ServiceColaboradores
   return parcial as unknown as ServiceColaboradores;
 }
 
+/** Fotografia soberana com posições vigentes e SEM ocupação vigente. */
+function estruturaSemOcupacao(): EstruturaSoberana {
+  return {
+    unidades: [
+      { unitId: UNIDADE, nome: "Unidade Fictícia", validFrom: "2026-01-01T00:00:00.000Z", validTo: null, version: 1 },
+    ],
+    periodosParent: [],
+    posicoes: [
+      {
+        posicaoId: POSICAO,
+        unitId: UNIDADE,
+        jobRoleId: CARGO,
+        seniorityLevelId: null,
+        validFrom: "2026-01-01T00:00:00.000Z",
+        validTo: null,
+        version: 1,
+      },
+      {
+        posicaoId: POSICAO_GESTOR,
+        unitId: UNIDADE,
+        jobRoleId: CARGO,
+        seniorityLevelId: null,
+        validFrom: "2026-01-01T00:00:00.000Z",
+        validTo: null,
+        version: 1,
+      },
+    ],
+    reportingLines: [],
+    ocupacoes: [],
+    cargos: [{ jobRoleId: CARGO, code: "FICT", nome: "Cargo Fictício", status: "active", version: 1 }],
+    senioridades: [],
+    colegiados: [],
+    colaboradores: [],
+  };
+}
+
+const ESTRUTURA_SEM_OCUPACAO: EstadoEstrutura = {
+  fase: "pronto",
+  estrutura: estruturaSemOcupacao(),
+};
+
+/** Fotografia soberana com ocupação vigente + reporting line vigente. */
+const ESTRUTURA_COM_OCUPACAO: EstadoEstrutura = {
+  fase: "pronto",
+  estrutura: {
+    ...estruturaSemOcupacao(),
+    ocupacoes: [
+      {
+        ocupacaoId: OCUPACAO,
+        collaboratorId: UUID,
+        posicaoId: POSICAO,
+        validFrom: "2026-01-01T00:00:00.000Z",
+        validTo: null,
+        version: 1,
+      },
+    ],
+    reportingLines: [
+      {
+        reportingLineId: REPORTING,
+        subordinatePositionId: POSICAO,
+        managerPositionId: POSICAO_GESTOR,
+        motivo: "cadeia formal fictícia",
+        validFrom: "2026-01-01T00:00:00.000Z",
+        validTo: null,
+        version: 1,
+      },
+    ],
+  },
+};
+
 function renderizar(
   estadoInicial: EstadoEdicaoColaborador,
-  identificador: string = UUID
+  identificador: string = UUID,
+  estruturaInicial: EstadoEstrutura = ESTRUTURA_SEM_OCUPACAO
 ): string {
   return renderToStaticMarkup(
     <ProvedorAuthTeste>
@@ -61,7 +141,12 @@ function renderizar(
         <Routes>
           <Route
             path="/colaborador/:collaboratorId/editar"
-            element={<EditarColaboradorPage estadoInicial={estadoInicial} />}
+            element={
+              <EditarColaboradorPage
+                estadoInicial={estadoInicial}
+                estruturaInicial={estruturaInicial}
+              />
+            }
           />
         </Routes>
       </MemoryRouter>
@@ -83,14 +168,36 @@ describe("edição soberana em EditarColaboradorPage", () => {
     expect(html).toContain("Dados de pessoa");
     expect(html).toContain("Nova matrícula *");
     expect(html).toContain("Status, licença e inativação");
-    expect(html).toContain("Estrutura organizacional (F5-08)");
+    // F5-08 P5: a antiga seção somente-leitura virou a UI de alocação.
+    expect(html).toContain("Alocação");
+    expect(html).not.toContain("F5-08");
   });
 
   it("exibe 'sem alocação' quando não há estrutura soberana", () => {
     const html = renderizar({ fase: "pronto", colaborador: soberano() });
 
     expect(html).toContain("Sem alocação");
-    expect(html).toContain("F5-08");
+    expect(html).toContain("Definir ocupação");
+    // Seletor soberano por POSIÇÃO (UUID) com rótulo unidade • cargo.
+    expect(html).toContain("Unidade Fictícia • FICT — Cargo Fictício");
+  });
+
+  it("com ocupação vigente exibe posição, gestor derivado e as ações soberanas", () => {
+    const html = renderizar(
+      { fase: "pronto", colaborador: soberano() },
+      UUID,
+      ESTRUTURA_COM_OCUPACAO
+    );
+
+    expect(html).toContain("Posição vigente");
+    expect(html).toContain("Unidade Fictícia • FICT — Cargo Fictício");
+    expect(html).toContain("Gestor direto (reporting line)");
+    expect(html).toContain("Trocar posição");
+    expect(html).toContain("Encerrar ocupação");
+    expect(html).toContain("Alterar gestor");
+    expect(html).toContain("Encerrar reporting line");
+    // Identidade exibida é o UUID da posição (nunca cargo/nome como identidade).
+    expect(html).toContain(POSICAO);
   });
 
   it("mostra conflito de versão explícito, sem reescrever dado local", () => {

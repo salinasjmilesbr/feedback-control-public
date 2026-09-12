@@ -1,24 +1,38 @@
 /**
- * F5-07 — Novo colaborador: cadastro SOMENTE pela porta única.
+ * F5-08 P5 — Novo colaborador: cadastro soberano + ALOCAÇÃO opcional.
  *
- * Escopo desta tela: dados de PESSOA (nome, e-mail, data de admissão), matrícula
- * como INTENÇÃO e status inicial. Nada de estrutura organizacional aqui — cargo,
- * unidade, gestor, senioridade e colegiado pertencem à F5-08 e saíram do
- * formulário; o colaborador nasce explicitamente SEM ALOCAÇÃO.
+ * Escopo desta tela:
+ * - criação da PESSOA (nome, e-mail, admissão), matrícula como INTENÇÃO e status
+ *   inicial, pela porta única (Edge `colaboradores`);
+ * - ALOCAÇÃO opcional logo após o cadastro, com as operações JÁ EXISTENTES da
+ *   F5-07: `definirOcupacao` (posição escolhida por UUID) e, se o usuário quiser,
+ *   `definirReportingLine` (posição gerente escolhida por UUID);
+ * - criação do colaborador e criação da ocupação são operações DISTINTAS: não há
+ *   transação única no frontend. Se o colaborador for criado e a alocação falhar,
+ *   o colaborador PERMANECE criado, nenhuma estrutura é fabricada e a tela diz
+ *   explicitamente que ele ficou SEM ALOCAÇÃO, permitindo nova tentativa.
  *
- * Não existe escrita local: nenhuma chamada a `localStorage`, nenhum dual-write e
- * nenhum fallback. A autorização é do servidor (`collaborator.create`): a porta
- * devolve `FORBIDDEN`/`INVALID_INPUT`/`CONFLICT` e a tela mostra o estado.
+ * Nada é gravado localmente: nenhuma chamada a `localStorage`, nenhum dual-write
+ * e nenhum fallback. A autorização é do servidor (as mutações devolvem o código
+ * público) e a leitura das posições é a fotografia soberana own-tenant (RLS).
  */
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import SeletorPosicao from "../components/SeletorPosicao";
 import type { CodigoPublico } from "../infrastructure/supabase/colaboradores/contrato";
+import {
+  confirmarDefinicaoOcupacao,
+  confirmarReportingLine,
+} from "./alocacaoSoberana";
 import {
   criarColaborador,
   type DependenciasAcessoColaboradores,
 } from "../services/colaboradoresSoberanos/acessoColaboradoresSoberanos";
+import { posicoesVigentes } from "./alocacaoSoberana";
+import { hojeLocal, type EstadoEstrutura } from "./apoioEstrutura";
+import { useEstruturaSoberana } from "./useEstruturaSoberana";
 import "../styles/colaborador-form.css";
 
 /** Estado explícito do fluxo de criação (nunca inferido de storage local). */
@@ -32,11 +46,31 @@ export type EstadoCriacaoColaborador =
     }
   | { readonly fase: "sucesso"; readonly collaboratorId: string };
 
+/**
+ * Estado da ALOCAÇÃO pedida no mesmo fluxo. `parcial` descreve o que NÃO foi
+ * aplicado, para a tela não fingir atomicidade: `sem-ocupacao` (colaborador
+ * criado sem alocação) ou `sem-gestor` (ocupação gravada, gestor não).
+ */
+export type EstadoAlocacaoColaborador =
+  | { readonly fase: "inativa" }
+  | { readonly fase: "processando" }
+  | {
+      readonly fase: "erro";
+      readonly codigo: CodigoPublico;
+      readonly mensagem: string;
+      readonly parcial: "sem-ocupacao" | "sem-gestor";
+    }
+  | { readonly fase: "concluida" };
+
 type NovoColaboradorPageProps = {
   /** Operações da porta (injeção de teste); produção usa o caminho padrão. */
   readonly deps?: DependenciasAcessoColaboradores;
   /** Semente de estado (SSR/teste determinístico). */
   readonly estadoInicial?: EstadoCriacaoColaborador;
+  /** Semente da fotografia soberana (SSR/teste determinístico). */
+  readonly estruturaInicial?: EstadoEstrutura;
+  /** Semente do formulário de alocação aberto (SSR/teste determinístico). */
+  readonly alocacaoInicial?: boolean;
 };
 
 type StatusInicialSoberano = "active" | "leave";
@@ -46,20 +80,10 @@ const SEM_DEPENDENCIAS: DependenciasAcessoColaboradores = {};
 const SEM_ORGANIZACAO_ATIVA =
   "Selecione uma organização ativa para cadastrar colaboradores.";
 
-const AVISO_ESTRUTURA =
-  "Cargo, unidade, gestor direto, senioridade e colegiado não são definidos neste cadastro: " +
-  "eles pertencem à estrutura organizacional (F5-08). O colaborador é criado SEM ALOCAÇÃO e " +
-  "passa a exibir \"sem alocação\" até que a ocupação seja definida no módulo de estrutura.";
-
-function hojeLocal(): string {
-  const agora = new Date();
-  const offset = agora.getTimezoneOffset();
-  return new Date(agora.getTime() - offset * 60000).toISOString().slice(0, 10);
-}
-
 /**
  * `operation_id` (idempotência da mutação, §13.5) gerado pelo chamador. Não é
  * identidade nem autoridade: serve apenas para a fronteira não duplicar efeitos.
+ * Cada operação distinta (cadastro, ocupação, reporting line) recebe o SEU id.
  */
 function novoOperationId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -75,6 +99,8 @@ function novoOperationId(): string {
 function NovoColaboradorPage({
   deps,
   estadoInicial,
+  estruturaInicial,
+  alocacaoInicial,
 }: NovoColaboradorPageProps = {}) {
   const navigate = useNavigate();
   const { organizacaoAtivaId } = useAuth();
@@ -84,6 +110,9 @@ function NovoColaboradorPage({
   const [estado, setEstado] = useState<EstadoCriacaoColaborador>(
     estadoInicial ?? { fase: "inicial" }
   );
+  const [estadoAlocacao, setEstadoAlocacao] = useState<EstadoAlocacaoColaborador>({
+    fase: "inativa",
+  });
 
   const [matricula, setMatricula] = useState("");
   const [nome, setNome] = useState("");
@@ -93,10 +122,133 @@ function NovoColaboradorPage({
     useState<StatusInicialSoberano>("active");
   const [erroLocal, setErroLocal] = useState("");
 
+  // Alocação opcional (ocupação + gestor), decidida pelo usuário no formulário.
+  const [alocar, setAlocar] = useState(alocacaoInicial ?? false);
+  const [posicaoId, setPosicaoId] = useState("");
+  const [vigenciaAlocacao, setVigenciaAlocacao] = useState(hojeLocal);
+  const [motivoAlocacao, setMotivoAlocacao] = useState("");
+  const [definirGestor, setDefinirGestor] = useState(false);
+  const [gestorPosicaoId, setGestorPosicaoId] = useState("");
+
+  const estrutura = useEstruturaSoberana({
+    organizacaoAtivaId,
+    deps: depsInjetadas,
+    ...(estruturaInicial ? { estadoInicial: estruturaInicial } : {}),
+  });
+
   const processando = estado.fase === "processando";
+  const alocando = estadoAlocacao.fase === "processando";
+  const ocupado = processando || alocando;
+  const estruturaPronta = estrutura.estado.fase === "pronto";
+  const posicoes = estruturaPronta ? posicoesVigentes(estrutura.estado.estrutura) : [];
+  const alocacaoDisponivel = estruturaPronta && posicoes.length > 0;
+
+  /** Executa a alocação pedida, com desfechos parciais EXPLÍCITOS. */
+  async function alocarColaborador(collaboratorId: string) {
+    if (!organizacaoAtivaId || !estruturaPronta) return;
+
+    const fotografia = estrutura.estado.estrutura;
+    const comum = {
+      estrutura: fotografia,
+      collaboratorId,
+      vigencia: vigenciaAlocacao,
+      motivo: motivoAlocacao.trim(),
+      organizationId: organizacaoAtivaId,
+    };
+
+    setEstadoAlocacao({ fase: "processando" });
+
+    const ocupacao = await confirmarDefinicaoOcupacao(
+      { ...comum, posicaoId, operationId: novoOperationId() },
+      depsInjetadas
+    );
+
+    if (ocupacao.tipo === "fotografia-desatualizada") {
+      estrutura.recarregar();
+      setEstadoAlocacao({
+        fase: "erro",
+        codigo: ocupacao.codigo,
+        mensagem: ocupacao.mensagem,
+        parcial: "sem-ocupacao",
+      });
+      return;
+    }
+    if (ocupacao.tipo !== "concluida") {
+      setEstadoAlocacao({
+        fase: "erro",
+        codigo: "INVALID_INPUT",
+        mensagem:
+          ocupacao.tipo === "sem-vigencia"
+            ? "Informe a vigência da alocação."
+            : "Informe o motivo da alocação.",
+        parcial: "sem-ocupacao",
+      });
+      return;
+    }
+    if (!ocupacao.resultado.ok) {
+      if (
+        ocupacao.resultado.codigo === "CONFLICT" ||
+        ocupacao.resultado.codigo === "NOT_FOUND"
+      ) {
+        estrutura.recarregar();
+      }
+      setEstadoAlocacao({
+        fase: "erro",
+        codigo: ocupacao.resultado.codigo,
+        mensagem: ocupacao.resultado.mensagem,
+        parcial: "sem-ocupacao",
+      });
+      return;
+    }
+
+    if (definirGestor && gestorPosicaoId) {
+      const linha = await confirmarReportingLine(
+        {
+          estrutura: fotografia,
+          subordinatePositionId: posicaoId,
+          managerPositionId: gestorPosicaoId,
+          vigencia: vigenciaAlocacao,
+          motivo: motivoAlocacao.trim(),
+          operationId: novoOperationId(),
+          organizationId: organizacaoAtivaId,
+        },
+        depsInjetadas
+      );
+
+      const falhaReporting =
+        linha.tipo === "concluida"
+          ? linha.resultado.ok
+            ? null
+            : linha.resultado
+          : {
+              codigo: linha.tipo === "fotografia-desatualizada" ? linha.codigo : "INVALID_INPUT",
+              mensagem:
+                linha.tipo === "fotografia-desatualizada"
+                  ? linha.mensagem
+                  : "Informe a vigência e o motivo para definir o gestor.",
+            };
+
+      if (falhaReporting) {
+        if (falhaReporting.codigo === "CONFLICT" || falhaReporting.codigo === "NOT_FOUND") {
+          estrutura.recarregar();
+        }
+        // A ocupação FOI gravada; o gestor não. Estado parcial explícito.
+        setEstadoAlocacao({
+          fase: "erro",
+          codigo: falhaReporting.codigo,
+          mensagem: falhaReporting.mensagem,
+          parcial: "sem-gestor",
+        });
+        return;
+      }
+    }
+
+    setEstadoAlocacao({ fase: "concluida" });
+    navigate(`/colaborador/${collaboratorId}`);
+  }
 
   async function handleSalvar() {
-    if (processando) return;
+    if (ocupado) return;
 
     setErroLocal("");
 
@@ -108,6 +260,19 @@ function NovoColaboradorPage({
     if (!/^\d+$/.test(matricula.trim()) || Number(matricula.trim()) <= 0) {
       setErroLocal("Informe uma matrícula válida (somente dígitos).");
       return;
+    }
+
+    if (alocar) {
+      if (!posicaoId || !vigenciaAlocacao || !motivoAlocacao.trim()) {
+        setErroLocal(
+          "Para alocar, informe a posição vigente, a vigência e o motivo da alocação."
+        );
+        return;
+      }
+      if (definirGestor && !gestorPosicaoId) {
+        setErroLocal("Selecione a posição do gestor ou desmarque a opção de gestor.");
+        return;
+      }
     }
 
     if (!organizacaoAtivaId) {
@@ -144,8 +309,17 @@ function NovoColaboradorPage({
     }
 
     setEstado({ fase: "sucesso", collaboratorId: resultado.dados });
-    navigate(`/colaborador/${resultado.dados}`);
+
+    if (!alocar) {
+      navigate(`/colaborador/${resultado.dados}`);
+      return;
+    }
+
+    await alocarColaborador(resultado.dados);
   }
+
+  const colaboradorCriado =
+    estado.fase === "sucesso" ? estado.collaboratorId : null;
 
   return (
     <main className="virtus-page collaborator-form-page">
@@ -246,15 +420,111 @@ function NovoColaboradorPage({
             02
           </span>
           <div>
-            <h2>Estrutura organizacional (F5-08)</h2>
+            <h2>Alocação (opcional)</h2>
             <p>
-              Cargo, unidade, gestor, senioridade e colegiado não fazem parte
-              deste cadastro.
+              A ocupação e a reporting line são operações próprias, gravadas
+              depois do cadastro. Sem alocação o colaborador permanece
+              explicitamente “sem alocação”.
             </p>
           </div>
         </div>
 
-        <div className="collaborator-form-empty">{AVISO_ESTRUTURA}</div>
+        {estrutura.estado.fase === "carregando" && (
+          <div className="collaborator-form-info" role="status">
+            Carregando as posições soberanas…
+          </div>
+        )}
+
+        {estrutura.estado.fase === "erro" && (
+          <div className="collaborator-form-error" role="alert">
+            <strong>Não foi possível carregar as posições</strong>
+            <p>
+              {estrutura.estado.mensagem} ({estrutura.estado.codigo})
+            </p>
+            <p>
+              O cadastro do colaborador continua disponível; a alocação pode ser
+              feita depois na ficha do colaborador.
+            </p>
+          </div>
+        )}
+
+        {estruturaPronta && (
+          <>
+            <label className="collaborator-field collaborator-field--inline">
+              <input
+                type="checkbox"
+                checked={alocar}
+                onChange={(evento) => setAlocar(evento.target.checked)}
+                disabled={!alocacaoDisponivel || ocupado}
+              />
+              <span>Alocar este colaborador agora</span>
+            </label>
+
+            {!alocacaoDisponivel && (
+              <div className="collaborator-form-empty">
+                Nenhuma posição vigente disponível nesta organização: cadastre a
+                posição em Estrutura → Posições. Nada é criado automaticamente.
+              </div>
+            )}
+
+            {alocar && (
+              <div className="collaborator-form-grid">
+                <SeletorPosicao
+                  id="novo-colaborador-posicao"
+                  estrutura={estrutura.estado.estrutura}
+                  valor={posicaoId}
+                  aoMudar={setPosicaoId}
+                  rotulo="Posição (unidade • cargo • senioridade) *"
+                  desabilitado={ocupado}
+                />
+
+                <label className="collaborator-field">
+                  <span>Vigência da ocupação *</span>
+                  <input
+                    type="date"
+                    value={vigenciaAlocacao}
+                    onChange={(evento) => setVigenciaAlocacao(evento.target.value)}
+                    disabled={ocupado}
+                  />
+                </label>
+
+                <label className="collaborator-field collaborator-field--wide">
+                  <span>Motivo da alocação *</span>
+                  <input
+                    type="text"
+                    value={motivoAlocacao}
+                    onChange={(evento) => setMotivoAlocacao(evento.target.value)}
+                    disabled={ocupado}
+                  />
+                </label>
+
+                <label className="collaborator-field collaborator-field--inline">
+                  <input
+                    type="checkbox"
+                    checked={definirGestor}
+                    onChange={(evento) => setDefinirGestor(evento.target.checked)}
+                    disabled={ocupado || !posicaoId}
+                  />
+                  <span>Definir também o gestor (reporting line)</span>
+                </label>
+
+                {definirGestor && posicaoId && (
+                  <SeletorPosicao
+                    id="novo-colaborador-gestor"
+                    estrutura={estrutura.estado.estrutura}
+                    valor={gestorPosicaoId}
+                    aoMudar={setGestorPosicaoId}
+                    rotulo="Posição do gestor (reporting line)"
+                    vazio="Selecione a posição gerente…"
+                    excluirPosicaoId={posicaoId}
+                    mostrarOcupante
+                    desabilitado={ocupado}
+                  />
+                )}
+              </div>
+            )}
+          </>
+        )}
       </section>
 
       {erroLocal && (
@@ -263,9 +533,15 @@ function NovoColaboradorPage({
         </div>
       )}
 
-      {estado.fase === "processando" && (
+      {processando && (
         <div className="collaborator-form-info" role="status" aria-live="polite">
           Gravando o cadastro no servidor…
+        </div>
+      )}
+
+      {alocando && (
+        <div className="collaborator-form-info" role="status" aria-live="polite">
+          Aplicando a alocação soberana…
         </div>
       )}
 
@@ -289,6 +565,45 @@ function NovoColaboradorPage({
         </div>
       )}
 
+      {estadoAlocacao.fase === "erro" && (
+        <div className="collaborator-form-error" role="alert" data-testid="alocacao-erro">
+          <strong>
+            {estadoAlocacao.parcial === "sem-ocupacao"
+              ? "Colaborador criado SEM ALOCAÇÃO"
+              : "Ocupação criada, gestor NÃO definido"}
+          </strong>
+          <p>
+            {estadoAlocacao.mensagem} ({estadoAlocacao.codigo})
+          </p>
+          <p>
+            {estadoAlocacao.parcial === "sem-ocupacao"
+              ? "O colaborador permanece criado e sem alocação: a ocupação é uma operação separada e não houve rollback local."
+              : "A ocupação vigente já está gravada e a reporting line não: o servidor é a fonte do estado real."}
+          </p>
+          {colaboradorCriado && (
+            <div className="collaborator-form-actions">
+              <button
+                type="button"
+                className="collaborator-form-btn collaborator-form-btn--primary"
+                onClick={() => {
+                  void alocarColaborador(colaboradorCriado);
+                }}
+                disabled={ocupado || !alocacaoDisponivel}
+              >
+                Tentar alocar novamente
+              </button>
+              <button
+                type="button"
+                className="collaborator-form-btn collaborator-form-btn--secondary"
+                onClick={() => navigate(`/colaborador/${colaboradorCriado}/editar`)}
+              >
+                Abrir a ficha do colaborador
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="collaborator-form-actions">
         <button
           type="button"
@@ -304,9 +619,13 @@ function NovoColaboradorPage({
           onClick={() => {
             void handleSalvar();
           }}
-          disabled={processando}
+          disabled={ocupado}
         >
-          {processando ? "Salvando…" : "Salvar colaborador"}
+          {processando
+            ? "Salvando…"
+            : alocando
+              ? "Alocando…"
+              : "Salvar colaborador"}
         </button>
       </div>
     </main>

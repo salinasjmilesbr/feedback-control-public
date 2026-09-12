@@ -157,7 +157,9 @@ describe("listagem soberana em ColaboradoresPage", () => {
 
     expect(html).toContain("Sem Alocação Fictícia");
     expect(html).toContain("Sem alocação");
-    expect(html).toContain("F5-08");
+    // A lista continua sendo LISTA: nada de administração estrutural aqui.
+    expect(html).toContain("A alocação é definida na ficha do colaborador.");
+    expect(html).not.toContain("F5-08");
     expect(html).not.toContain("Gestor:");
   });
 

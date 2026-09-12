@@ -61,6 +61,19 @@ import {
   ordenarHistoricoAdministrativo,
 } from "./historicoAvaliacaoAdministrativa";
 import { getStatusAvaliacaoAdministrativa } from "./statusAvaliacaoAdministrativa";
+import {
+  colegiadoVigente,
+  nomeDoColaborador,
+  rotuloDaPosicao,
+  rotuloVigencia,
+  type EstadoEstrutura,
+} from "./apoioEstrutura";
+import {
+  gestorDiretoDaPosicao,
+  ocupacaoVigenteDoColaborador,
+  reportingVigenteDaPosicao,
+} from "./alocacaoSoberana";
+import { useEstruturaSoberana } from "./useEstruturaSoberana";
 
 /** Estado da leitura soberana do colaborador e da sua trilha de eventos. */
 export type EstadoDetalheColaborador =
@@ -82,6 +95,8 @@ type ColaboradorDetalhePageProps = {
   readonly deps?: DependenciasAcessoColaboradores;
   /** Semente de estado (SSR/teste determinístico). */
   readonly estadoInicial?: EstadoDetalheColaborador;
+  /** Semente da fotografia soberana (SSR/teste determinístico). */
+  readonly estruturaInicial?: EstadoEstrutura;
 };
 
 const SEM_DEPENDENCIAS: DependenciasAcessoColaboradores = {};
@@ -89,8 +104,12 @@ const SEM_DEPENDENCIAS: DependenciasAcessoColaboradores = {};
 const SEM_ORGANIZACAO_ATIVA =
   "Selecione uma organização ativa para consultar o colaborador.";
 
+/**
+ * Estado REAL de ausência de estrutura para este colaborador (não é aviso de
+ * pendência): sem ocupação vigente, a tela diz "sem alocação".
+ */
 const AVISO_SEM_ALOCACAO =
-  "Sem alocação: cargo, unidade, senioridade e gestor vêm da estrutura organizacional (F5-08).";
+  "Sem alocação: não existe ocupação vigente para este colaborador.";
 
 const ROTULO_EVENTO: Readonly<Record<string, string>> = {
   ADMISSAO: "Admissão",
@@ -346,6 +365,7 @@ function calcularPreenchimentoFeedback(feedback: Feedback) {
 function ColaboradorDetalhePage({
   deps,
   estadoInicial,
+  estruturaInicial,
 }: ColaboradorDetalhePageProps = {}) {
   const { collaboratorId } = useParams();
   const navigate = useNavigate();
@@ -358,6 +378,17 @@ function ColaboradorDetalhePage({
     readonly estado: EstadoDetalheColaborador;
   } | null>(null);
   const [versao, setVersao] = useState(0);
+
+  /**
+   * Fotografia soberana (posições/ocupações/reporting lines/colegiado) — usada
+   * SOMENTE para exibir a alocação vigente, o gestor derivado da reporting line
+   * e o colegiado vigente. Esta tela não administra estrutura.
+   */
+  const estrutura = useEstruturaSoberana({
+    organizacaoAtivaId,
+    deps: depsInjetadas,
+    ...(estruturaInicial ? { estadoInicial: estruturaInicial } : {}),
+  });
 
   const identificador = (collaboratorId ?? "").trim();
 
@@ -603,8 +634,19 @@ function ColaboradorDetalhePage({
           <div>
             <h2>Alocação vigente</h2>
             <p className="collaborator-section-subtitle">
-              Derivada da ocupação soberana na data de referência (F5-08).
+              Derivada da ocupação soberana na data de referência. O gestor direto
+              vem da reporting line vigente da posição; o colegiado, da
+              configuração vigente do avaliado.
             </p>
+          </div>
+          <div className="collaborator-section-actions">
+            <button
+              type="button"
+              className="virtus-btn virtus-btn--outline"
+              onClick={() => navigate(`/colaborador/${colaborador.collaboratorId}/editar`)}
+            >
+              Administrar alocação
+            </button>
           </div>
         </div>
 
@@ -625,6 +667,79 @@ function ColaboradorDetalhePage({
           </div>
         ) : (
           <div className="collaborator-history-empty">{AVISO_SEM_ALOCACAO}</div>
+        )}
+
+        {estrutura.estado.fase === "pronto" &&
+          (() => {
+            const fotografia = estrutura.estado.estrutura;
+            const ocupacao = ocupacaoVigenteDoColaborador(
+              fotografia,
+              colaborador.collaboratorId
+            );
+            const gestor = ocupacao
+              ? gestorDiretoDaPosicao(fotografia, ocupacao.posicaoId)
+              : null;
+            const reporting = ocupacao
+              ? reportingVigenteDaPosicao(fotografia, ocupacao.posicaoId)
+              : null;
+            const colegiado = colegiadoVigente(fotografia, colaborador.collaboratorId);
+
+            return (
+              <div className="collaborator-identity__details" data-testid="alocacao-soberana">
+                {ocupacao ? (
+                  <>
+                    <span className="collaborator-identity__detail">
+                      <span>
+                        Posição vigente: {rotuloDaPosicao(fotografia, ocupacao.posicaoId)}
+                      </span>
+                    </span>
+                    <span className="collaborator-identity__detail">
+                      <span>
+                        Vigência da ocupação:{" "}
+                        {rotuloVigencia(ocupacao.validFrom, ocupacao.validTo)}
+                      </span>
+                    </span>
+                    <span className="collaborator-identity__detail">
+                      <span>
+                        Gestor direto (reporting line):{" "}
+                        {gestor
+                          ? gestor.collaboratorId
+                            ? nomeDoColaborador(fotografia, gestor.collaboratorId)
+                            : `${rotuloDaPosicao(fotografia, gestor.managerPositionId)} (sem ocupante)`
+                          : reporting
+                            ? "posição sem ocupante"
+                            : "sem gestor formal (posição raiz)"}
+                      </span>
+                    </span>
+                  </>
+                ) : (
+                  <span className="collaborator-identity__detail">
+                    <span>
+                      Nenhuma ocupação vigente na leitura soberana de estrutura.
+                    </span>
+                  </span>
+                )}
+                <span className="collaborator-identity__detail">
+                  <span>
+                    Colegiado vigente:{" "}
+                    {colegiado
+                      ? colegiado.membroIds.length > 0
+                        ? colegiado.membroIds
+                            .map((membroId) => nomeDoColaborador(fotografia, membroId))
+                            .join(", ")
+                        : "sem colegiado (zero membros)"
+                      : "não configurado"}
+                  </span>
+                </span>
+              </div>
+            );
+          })()}
+
+        {estrutura.estado.fase === "erro" && (
+          <div className="collaborator-history-empty" role="alert">
+            Não foi possível carregar a estrutura soberana: {estrutura.estado.mensagem} (
+            {estrutura.estado.codigo})
+          </div>
         )}
       </section>
 
