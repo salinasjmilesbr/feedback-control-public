@@ -665,6 +665,22 @@ describe("F5-08 P6 (correção) — papel/elegibilidade sem estrutura local", ()
     expect(hook).toMatch(/if \(!organizacaoAtivaId\) \{\s*[\s\S]*?invalidarEstruturaSoberana\(\);/);
   });
 
+  it("o hook INVALIDA a estrutura no unmount do shell (logout/sessão expirada)", () => {
+    const hook = apenasCodigo(fonteDeProducao(HOOK_ESTRUTURA));
+
+    // Cleanup de UNMOUNT: dependência VAZIA ⇒ não roda em re-render nem na troca
+    // de organização (que tem o seu próprio caminho no efeito dependente).
+    expect(hook).toMatch(
+      /useEffect\(\(\) => \{\s*return \(\) => \{\s*invalidarEstruturaSoberana\(\);\s*\};\s*\}, \[\]\)/
+    );
+    // Exatamente dois call sites: perda de organização ativa + unmount.
+    expect((hook.match(/invalidarEstruturaSoberana\(\)/g) ?? []).length).toBe(2);
+    // A assinatura continua sendo removida no cleanup (unsubscribe).
+    expect(hook).toMatch(
+      /useEffect\(\(\) => assinarEstruturaSoberana\([\s\S]*?\), \[\]\)/
+    );
+  });
+
   it("o adaptador de fixture só entrega estrutura sob o gate explícito de DEV", () => {
     const codigo = apenasCodigo(fonteDeProducao(ESTRUTURA_DO_CLIENTE));
 

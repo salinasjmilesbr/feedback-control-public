@@ -59,5 +59,21 @@ export function useEstruturaSoberanaDoCliente(
     void carregarEstruturaSoberana({ organizationId: organizacaoAtivaId }, deps ?? {});
   }, [organizacaoAtivaId, deps]);
 
+  /**
+   * UNMOUNT do shell (logout, sessão que deixa de ser autorizada, navegação para
+   * rota pública): o `LayoutAutenticado` pode simplesmente parar de renderizar o
+   * `LayoutFuncional`, SEM passar por `organizacaoAtivaId == null`. Nesse caso a
+   * estrutura publicada seria mantida em memória e um login posterior em outra
+   * organização poderia observá-la antes do novo efeito executar.
+   *
+   * Cleanup de dependência VAZIA: roda apenas no unmount — nunca em re-render nem
+   * na troca A → B (que tem o seu próprio caminho no efeito acima).
+   */
+  useEffect(() => {
+    return () => {
+      invalidarEstruturaSoberana();
+    };
+  }, []);
+
   return estado;
 }

@@ -105,13 +105,22 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
     `invalidarEstruturaSoberana()` (usada pelo hook quando a organização ativa
     vira `null`/`undefined`) incrementa a geração, limpa a carga em curso e
     publica estado inválido/vazio — resposta antiga nunca republica;
+  - **Residual final (unmount/logout) RESOLVIDO:** o hook ganhou um cleanup de
+    **dependência VAZIA** (`useEffect(() => () => invalidarEstruturaSoberana(), [])`)
+    que roda **apenas no unmount** do shell — o `LayoutAutenticado` pode parar de
+    renderizar o `LayoutFuncional` sem passar por `organizacaoAtivaId == null`;
+    sem ele, a estrutura do tenant A permanecia em memória após o logout e um
+    login posterior em B podia observá-la antes do novo efeito executar. Não roda
+    em re-render nem na troca A → B (que tem caminho próprio);
   - provas: `projecaoEstruturalSoberana.test.ts` (8), `estruturaSoberanaCliente.test.ts`
-    (15 — inclui corrida A→B determinística nos dois sentidos, dedupe por org,
-    `null` invalidando contexto e falha real sem vazar outro tenant),
+    (19 — corrida A→B determinística nos dois sentidos, dedupe por org, `null`
+    invalidando contexto, falha real sem vazar outro tenant e lifecycle do shell:
+    unmount invalida + assinatura removida, carga em voo não publica, novo login
+    em B nunca vê A, A→B sem unmount segue funcionando),
     `cutoverEstruturalServicos.test.ts` (4) e o bloco estático
-    `estruturaUiSeguranca.test.ts` (38 no arquivo), que reprova modelo com
-    matrícula, consumidores lendo campos locais, produtor não acionado e produtor
-    sem proteção de troca de tenant;
+    `estruturaUiSeguranca.test.ts` (39 no arquivo), que reprova modelo com
+    matrícula, consumidores lendo campos locais, produtor não acionado, produtor
+    sem proteção de troca de tenant e hook sem cleanup de unmount;
   - `docs/F5-08-p6-duvida-mundo-funcional.md` documenta os blockers resolvidos, a
     identidade UUID, a segurança multi-tenant (§2.3), o fail-closed e o que resta
     à F5-09 (apenas o domínio de ciclos: persistência e estrutura POR CICLO) — sem
@@ -128,7 +137,7 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   permanece server-side (Edge + Policy Engine + RLS). Coberto por
   `cutoverEstrutural.test.ts`, `cutoverEstruturalServicos.test.ts`,
   `projecaoEstruturalSoberana.test.ts` e `estruturaSoberanaCliente.test.ts`.
-- **Validação desta rodada:** `npm test` (**108 arquivos / 1672 testes** verdes),
+- **Validação desta rodada:** `npm test` (**108 arquivos / 1677 testes** verdes),
   `npm run build`, `npm run lint`, `npx tsc -b tsconfig.app.json` e
   `git diff --check` executados localmente (todos verdes). Os **validadores SQL não
   foram executados** neste host (Docker/Supabase indisponível) — rodam no job

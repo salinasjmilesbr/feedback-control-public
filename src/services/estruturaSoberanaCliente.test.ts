@@ -892,3 +892,190 @@ describe("F5-08 P6 — troca de organização no produtor soberano", () => {
     expect(modulo.estruturaSoberanaEfetiva(mundoLocal).projecao.vinculos.size).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Lifecycle do shell: unmount/logout invalida o estado global
+// ---------------------------------------------------------------------------
+
+/**
+ * O repositório não tem ambiente DOM (nem Testing Library): o ciclo de vida do
+ * shell é exercitado dirigindo as MESMAS chamadas que os efeitos do hook fazem —
+ * `assinarEstruturaSoberana` no mount, `carregarEstruturaSoberana` por
+ * organização e `invalidarEstruturaSoberana` na perda de contexto e no UNMOUNT —
+ * e a presença do cleanup de unmount (dependência vazia) no hook é fixada por
+ * guarda estática em `estruturaUiSeguranca.test.ts`.
+ */
+describe("F5-08 P6 — lifecycle do shell (unmount/logout)", () => {
+  it("desmontar o shell invalida a estrutura publicada e remove a assinatura", async () => {
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("PROD", true);
+    vi.stubEnv("VITE_APP_ENV", "production");
+
+    const { modulo } = await carregarProducao(
+      servicoSoberano({
+        estrutura: estruturaSoberanaCoerente(),
+        colaboradores: colaboradoresSoberanos,
+      })
+    );
+
+    // 1. estrutura do tenant A pronta e efetiva.
+    expect(modulo.estadoEstruturaSoberana().fase).toBe("pronta");
+    expect(modulo.estadoEstruturaSoberana().organizacaoId).toBe(ORG);
+    expect(modulo.estruturaSoberanaEfetiva().projecao.vinculos.has(UUID_GERENTE)).toBe(
+      true
+    );
+
+    // 2. mount do hook (assinatura) e unmount do shell (cleanup + remoção da
+    // assinatura, na ordem em que o React executa).
+    const publicacoes: string[] = [];
+    const cancelarAssinatura = modulo.assinarEstruturaSoberana(() => {
+      publicacoes.push(`${modulo.estadoEstruturaSoberana().fase}`);
+    });
+    cancelarAssinatura();
+    modulo.invalidarEstruturaSoberana();
+
+    // 3. estado global vazio/indisponível — nada utilizável sobrou do tenant A.
+    const estado = modulo.estadoEstruturaSoberana();
+    expect(estado.fase).toBe("indisponivel");
+    expect(estado.organizacaoId).toBeNull();
+    expect(estado.estrutura.projecao.vinculos.size).toBe(0);
+    expect(estado.estrutura.ponteMatriculas.size).toBe(0);
+    expect(modulo.estruturaSoberanaEfetiva().projecao.vinculos.size).toBe(0);
+    expect(modulo.estruturaSoberanaEfetiva(mundoLocal).projecao.vinculos.size).toBe(0);
+    // A assinatura foi realmente removida: nada é notificado após o unmount.
+    expect(publicacoes).toEqual([]);
+  });
+
+  it("carga em voo após o unmount não publica e o login seguinte em B não vê A", async () => {
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("PROD", true);
+    vi.stubEnv("VITE_APP_ENV", "production");
+
+    const modulo = await import("./estruturaSoberanaCliente");
+    const { servico, chamadas, liberar } = servicoControlado();
+
+    // Carga de A em voo; o shell desmonta (logout) antes de A resolver.
+    const cargaA = modulo.carregarEstruturaSoberana(
+      { organizationId: ORG },
+      { operacoes: servico }
+    );
+    modulo.invalidarEstruturaSoberana();
+
+    // 4. A resolve DEPOIS do unmount: resposta em voo não publica.
+    liberar(ORG, {
+      estrutura: estruturaSoberanaCoerente(),
+      colaboradores: colaboradoresSoberanos,
+    });
+    const resultadoA = await cargaA;
+    expect(resultadoA.fase).toBe("indisponivel");
+    expect(modulo.estadoEstruturaSoberana().fase).toBe("indisponivel");
+    expect(modulo.estadoEstruturaSoberana().estrutura.projecao.vinculos.size).toBe(0);
+
+    // 5. Novo login em B: em NENHUM momento a estrutura de A é efetiva.
+    const observados: string[][] = [];
+    const cancelarAssinatura = modulo.assinarEstruturaSoberana(() => {
+      observados.push([
+        ...modulo.estadoEstruturaSoberana().estrutura.projecao.vinculos.keys(),
+      ]);
+    });
+
+    const cargaB = modulo.carregarEstruturaSoberana(
+      { organizationId: ORG_B },
+      { operacoes: servico }
+    );
+    liberar(ORG_B, {
+      estrutura: estruturaDaOrgB(),
+      colaboradores: colaboradoresDaOrgB,
+    });
+    await cargaB;
+
+    const estadoB = modulo.estadoEstruturaSoberana();
+    expect(estadoB.fase).toBe("pronta");
+    expect(estadoB.organizacaoId).toBe(ORG_B);
+    expect(estadoB.estrutura.projecao.vinculos.has(UUID_B_SOLO)).toBe(true);
+    expect(estadoB.estrutura.projecao.vinculos.has(UUID_GERENTE)).toBe(false);
+    // Nenhuma publicação durante o mount de B expôs a estrutura de A (UUIDs de A).
+    for (const chaves of observados) {
+      expect(chaves).not.toContain(UUID_GERENTE);
+      expect(chaves).not.toContain(UUID_ANALISTA);
+    }
+    expect(chamadas).toEqual([
+      `lerEstrutura:${ORG}`,
+      `listar:${ORG}`,
+      `lerEstrutura:${ORG_B}`,
+      `listar:${ORG_B}`,
+    ]);
+
+    cancelarAssinatura();
+  });
+
+  it("a troca A → B sem unmount continua funcionando (sem passar por invalidação de unmount)", async () => {
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("PROD", true);
+    vi.stubEnv("VITE_APP_ENV", "production");
+
+    const modulo = await import("./estruturaSoberanaCliente");
+    const { servico, liberar } = servicoControlado();
+
+    // A publicada (mount do shell).
+    const cargaA = modulo.carregarEstruturaSoberana(
+      { organizationId: ORG },
+      { operacoes: servico }
+    );
+    liberar(ORG, {
+      estrutura: estruturaSoberanaCoerente(),
+      colaboradores: colaboradoresSoberanos,
+    });
+    await cargaA;
+    expect(modulo.estadoEstruturaSoberana().organizacaoId).toBe(ORG);
+
+    // Troca para B no MESMO shell: publica B normalmente.
+    const cargaB = modulo.carregarEstruturaSoberana(
+      { organizationId: ORG_B },
+      { operacoes: servico }
+    );
+    liberar(ORG_B, {
+      estrutura: estruturaDaOrgB(),
+      colaboradores: colaboradoresDaOrgB,
+    });
+    await cargaB;
+    expect(modulo.estadoEstruturaSoberana().fase).toBe("pronta");
+    expect(modulo.estadoEstruturaSoberana().organizacaoId).toBe(ORG_B);
+    // B é efetiva; a estrutura de A não sobreviveu à troca.
+    expect(modulo.estruturaSoberanaEfetiva().projecao.vinculos.has(UUID_B_SOLO)).toBe(
+      true
+    );
+    expect(modulo.estruturaSoberanaEfetiva().projecao.vinculos.has(UUID_GERENTE)).toBe(
+      false
+    );
+  });
+
+  it("dedupe por organização segue valendo depois de um ciclo de unmount", async () => {
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("PROD", true);
+    vi.stubEnv("VITE_APP_ENV", "production");
+
+    const modulo = await import("./estruturaSoberanaCliente");
+    const { servico, chamadas } = servicoControlado();
+
+    void modulo.carregarEstruturaSoberana({ organizationId: ORG }, { operacoes: servico });
+    modulo.invalidarEstruturaSoberana(); // unmount do shell durante a carga
+
+    // Nova sessão, MESMA organização: uma única leitura por contexto.
+    const primeira = modulo.carregarEstruturaSoberana(
+      { organizationId: ORG },
+      { operacoes: servico }
+    );
+    const segunda = modulo.carregarEstruturaSoberana(
+      { organizationId: ORG },
+      { operacoes: servico }
+    );
+    expect(segunda).toBe(primeira);
+    expect(chamadas).toEqual([
+      `lerEstrutura:${ORG}`,
+      `listar:${ORG}`,
+      `lerEstrutura:${ORG}`,
+      `listar:${ORG}`,
+    ]);
+  });
+});

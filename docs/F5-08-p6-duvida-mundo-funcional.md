@@ -88,6 +88,7 @@ por UUID — nenhum fato é inventado.
 | Supabase/serviço falhou (`lerEstrutura`/`listarColaboradores` com erro) | estado `indisponivel`; decisões NEGATIVAS (nunca `localStorage`/seed) |
 | Sem sessão/organização ativa (inclusive **perder** a organização no meio do uso) | contexto INVALIDADO: `indisponivel` (`FORBIDDEN`) com estrutura VAZIA — a do tenant anterior deixa de ser acessível |
 | Troca de organização com carga em voo | a estrutura anterior é descartada IMEDIATAMENTE e uma resposta antiga **nunca** publica (§2.3) |
+| Unmount do shell (logout/sessão expirada) sem passar por `org = null` | o cleanup de unmount invalida: estado VAZIO/`indisponivel`, geração avançada e resposta em voo descartada (§2.3) |
 | Colaborador não resolvido (sem ocupação vigente / sem ponte) | vínculo inexistente ⇒ papel/elegibilidade negados |
 | Estrutura inconsistente (2 ocupações, ciclo, posição de gestor vaga) | cadeia não confiável ⇒ papéis falsos e ninguém aprova |
 | Sem evidência estrutural | `progressoAvaliacao` NUNCA declara completo; painel vazio; pendência `Estrutura`; mutação de meta negada |
@@ -115,20 +116,28 @@ por UUID — nenhum fato é inventado.
   geração, limpa a carga em curso e publica o estado inválido com estrutura VAZIA.
   É idempotente (não notifica assinantes duas vezes pelo mesmo estado);
 - o hook `useEstruturaSoberanaDoCliente` chama a invalidação quando perde a
-  organização ativa (antes ele apenas retornava, mantendo a estrutura anterior).
+  organização ativa (antes ele apenas retornava, mantendo a estrutura anterior);
+- **UNMOUNT do shell**: o `LayoutAutenticado` pode parar de renderizar o
+  `LayoutFuncional` (logout, sessão que deixa de ser autorizada) **sem** passar
+  por `organizacaoAtivaId == null`. Por isso o hook tem um cleanup de
+  **dependência VAZIA** (`useEffect(() => () => invalidarEstruturaSoberana(), [])`)
+  que roda **apenas no unmount** — nunca em re-render nem na troca A → B. Sem ele,
+  a estrutura do tenant A permaneceria em memória após o logout e um login
+  posterior em B poderia observá-la antes do novo efeito executar.
 
 Consequência: **a estrutura publicada sempre corresponde à organização ativa
 solicitada**, e nenhuma resposta assíncrona antiga republica estrutura depois que
-o contexto que a originou deixou de ser vigente.
+o contexto que a originou deixou de ser vigente — inclusive quando o shell é
+desmontado.
 
 ## 5. Provas (testes)
 
 | Arquivo | O que prova |
 | --- | --- |
 | `src/services/projecaoEstruturalSoberana.test.ts` (8) | adaptador por UUID; cadeia por posições/reporting lines; raiz/intermediário; colegiado vigente; equivalência de vigência com o P4; posição vaga, ciclo, ambiguidade e ocupação ausente ⇒ fail-closed |
-| `src/services/estruturaSoberanaCliente.test.ts` (15) | carregamento pelas portas existentes (**sem injeção manual**); ciclo/metas/painel/permissões funcionando em produção; soberano vence o cadastro local; falha real ⇒ fail-closed sem `localStorage`; DEV isolado; ponte (matrícula não numérica); **corrida multi-tenant** determinística: A lenta/B rápida e A rápida/B lenta (A nunca publica), dedupe só da mesma organização, A e B nunca deduplicadas, `null` invalida o contexto e carga em voo é descartada |
+| `src/services/estruturaSoberanaCliente.test.ts` (19) | carregamento pelas portas existentes (**sem injeção manual**); ciclo/metas/painel/permissões funcionando em produção; soberano vence o cadastro local; falha real ⇒ fail-closed sem `localStorage`; DEV isolado; ponte (matrícula não numérica); **corrida multi-tenant** determinística (A lenta/B rápida e A rápida/B lenta, dedupe só da mesma organização, A e B nunca deduplicadas, `null` invalida o contexto, carga em voo descartada) e **lifecycle do shell**: unmount invalida o estado e remove a assinatura, carga em voo após o unmount não publica, novo login em B nunca observa A e a troca A → B sem unmount segue funcionando |
 | `src/services/cutoverEstruturalServicos.test.ts` (4) | consumidores com estrutura soberana explícita: decisões funcionam; soberano vence o local; sem estrutura é fail-closed; DEV preservado |
-| `src/authorization/estruturaUiSeguranca.test.ts` (38) | guardas estáticas: modelo sem matrícula; nenhum consumidor lê `funcao`/`gestorDiretoMatricula`/`avaliadoresColegiadoMatriculas`; `funcaoUsaEstruturaAvaliacaoAnalista` sem consumidor produtivo; produtor usa as portas soberanas, é acionado pelo shell e é seguro na troca de tenant (geração + dedupe por org + invalidação); `localWorld` só em DEV; sem RPC/Edge/credencial nova |
+| `src/authorization/estruturaUiSeguranca.test.ts` (39) | guardas estáticas: modelo sem matrícula; nenhum consumidor lê `funcao`/`gestorDiretoMatricula`/`avaliadoresColegiadoMatriculas`; `funcaoUsaEstruturaAvaliacaoAnalista` sem consumidor produtivo; produtor usa as portas soberanas, é acionado pelo shell e é seguro na troca de tenant (geração + dedupe por org + invalidação); hook com cleanup de **unmount** de dependência vazia e assinatura removida no cleanup; `localWorld` só em DEV; sem RPC/Edge/credencial nova |
 | SQL | inalterado: a correção não cria superfície de banco (o validador de cutover do P6 segue no CI) |
 
 ## 6. O que permanece para a F5-09 (apenas domínio de ciclos)
