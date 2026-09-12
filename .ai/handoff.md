@@ -34,7 +34,124 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
-- **Atividade (rodada atual):** F5-09 — **Ciclos soberanos** — **DESENHO
+- **Atividade (rodada atual):** F5-09 — **P1 (integridade de schema e trilha de
+  auditoria) IMPLEMENTADA** — **aguardando auditoria GPT**. Contrato:
+  `docs/F5-09-desenho-tecnico.md` (§19 P1; D1–D28 ratificadas) e
+  `docs/F5-09-duvidas.md`.
+- **Base:** `main`/`origin/main` = `27f4bb0f91f8c34c26417f3df4d40485d775d0f1`
+  (desenho F5-09 integrado pelo PR #189).
+- **Branch da P1:** `feat/f5-09-p1-cycle-schema` — **sem merge**; o push/PR do
+  sandbox é bloqueado (`.ai/git-rules.md`), então o PR fica para o usuário.
+- **Último commit:** consultar `git log --oneline -1` na branch.
+- **Entregue nesta rodada (P1) — 5 arquivos:**
+  - `supabase/migrations/20260915000000_f5_09_cycle_sovereign.sql`: **I5** índice
+    único parcial `uq_evaluation_cycles_org_ativo` (um ciclo `ATIVO` por
+    organização); **I6** exclusion parcial
+    `ex_evaluation_cycles_periodo_no_overlap`
+    (`daterange(data_inicio, data_fim + 1, '[)')` — `data_fim` inclusiva para o
+    produto —, com `CANCELADO` e linhas sem período fora do índice); `DELETE` e
+    `TRUNCATE` de `evaluation_cycles` revogados de
+    `public`/`anon`/`authenticated`/`service_role` (**D8/D9** — exclusão física
+    proibida em todos os estados); trilha append-only **`cycle_events`** (FK
+    composta `(cycle_id, organization_id)`, FK composta de autoria, `unique
+    (organization_id, operation_id)` para idempotência, `payload_hash` SHA-256
+    hex, CHECKs de `entity_type`/`event_type` — já contemplando
+    `ADMISSAO_INCLUIDA` do P3 —, trigger de UPDATE negado, RLS deny-by-default
+    integral com `service_role` recebendo só `SELECT`/`INSERT`); helpers
+    `ciclo_ator_valido` (perfil + membership ativa + allowlist FECHADA das
+    capabilities de ciclo, reusando `evaluation_ator_valido` e
+    `resolver_capabilities_efetivas`) e `ciclo_lock_organizacao` (chave
+    **normativa** única da família: `evaluation_cycles:<organization_id>`);
+    pre-flight de baseline fail-closed (não corrige dados) e guarda final
+    fail-closed. **Sem RPCs `ciclo_*`** (P2+) e **sem policy de leitura** (P5).
+  - `supabase/validacao/01-cenario-f5-09.sql`: fixture determinística e
+    reexecutável (2 orgs; 7 ciclos — adjacência de período, `CANCELADO`
+    sobreposto, ciclo sem período e o mesmo período em outro tenant; atores com e
+    sem capability, membership e perfil desabilitados; 1 evento de trilha).
+  - `supabase/validacao/02-validar-f5-09.sql`: validador do P1 (schema do
+    contrato, I5/I6 por comportamento, `data_fim` inclusiva por adjacência,
+    exclusão física negada por ACL **e** por comportamento, `cycle_events`
+    completo — incluindo idempotência e FKs de tenant —, append-only em duas
+    camadas, helpers, lock e regressão F5-06/F5-07/F5-08).
+  - `.github/workflows/ci.yml`: o job `supabase-local` passou a executar
+    `01-cenario-f5-09.sql` + `02-validar-f5-09.sql` **antes** da regressão
+    F5-06/F5-07.
+  - `supabase/migrations/README.md`: registro da migration da P1.
+- **NÃO entregue (fora do P1, por contrato — nada antecipado):**
+  `ciclo_criar`/`ciclo_editar`/`ciclo_ativar`/`ciclo_encerrar` (P2),
+  `ciclo_incluir_admissao` + helper de elegibilidade da admissão (P3),
+  `ciclo_cancelar`/`ciclo_reabrir`/`ciclo_corrigir_periodo` (P4), leitura RLS +
+  porta/projeção do cliente (P5), Policy Engine (P6), Edge `ciclos` +
+  reconciliação do bundle `admin` (P7), cutover (P8) e validação integrada (P9).
+  Nenhuma capability nova e nenhum arquivo de `src/` alterado.
+- **Gates desta rodada:** `npm test` (**108 arquivos / 1677 testes**, exit 0),
+  `npm run build` (exit 0), `npm run lint` (exit 0),
+  `npx tsc -b tsconfig.app.json` (exit 0) e `git diff --check` (exit 0). Os
+  **validadores SQL NÃO foram executados neste host**: o daemon do Docker Desktop
+  está inacessível (`permission denied ... npipe:////./pipe/dockerDesktopLinuxEngine`,
+  com timeout inclusive sob elevação), então `supabase db reset` + `01/02` rodam
+  no job `supabase-local` do CI — limitação registrada, nunca mascarada como
+  verde.
+- **Próxima atividade:** auditoria GPT do P1; depois **P2** (RPCs de gestão do
+  ciclo), sem decisão arquitetural aberta.
+- **Correção pós-CI (PR #190, mesma branch):** o job `supabase-local` falhava no
+  validador **legado** `supabase/validacao/02-validar-f4-08.sql` **antes** dos
+  validadores da F5-09, com
+  `[FAIL] tabela public nao classificada (D16 — catalogacao explicita
+  obrigatoria): cycle_events` — o schema guard global do F4-08 exige catalogação
+  explícita de toda tabela `public` e ainda não conhecia a tabela nova. Correção
+  **mínima e sem relaxar contrato**: `cycle_events` foi classificada como
+  **tabela fechada** (RLS habilitada, **sem policy**, **sem SELECT/INSERT/UPDATE/
+  DELETE** para `authenticated`/`anon`, `service_role` apenas `SELECT`/`INSERT`,
+  append-only) em todas as listas/contadores do F4-08 — `v_closed` (policy, 22→23),
+  `v_closed` (SELECT, 22→23), anon `v_todos` (44→45), DML `v_todos` (44→45), schema
+  guard (44→45) e a lista comportamental de tabelas fechadas invisíveis (22→23) —
+  e nas **duas cópias** da lista de classificação do
+  `03-validar-f4-08-mutacoes.sql` (mutação B). `collaborator_events` permanece na
+  categoria especial dele (policy SELECT own-tenant sem grant). A migration da P1
+  **não** foi alterada e nenhuma regra da F5-09/P1 foi relaxada (contagem total de
+  policies segue 22: `cycle_events` não tem policy no P1).
+- **Correção pós-CI #2 (PR #190, mesma branch):** o passo
+  `Run F5-08 cutover validation (P6)` falhava com
+  `[FAIL] P6-6: funcao com advisory lock fora da chave normativa: ciclo_lock_organizacao`.
+  O P6-6 fazia uma **varredura global** de funções com `pg_advisory_xact_lock` e
+  pressupunha que toda função com lock pertencia à família estrutural da F5-08.
+  Correção **mínima e sem relaxar D24**: o P6-6 passou a ser uma **classificação
+  explícita por família** — catálogo fechado da **família estrutural** (15 RPCs da
+  F5-08 + as 4 RPCs estruturais da F5-07 alinhadas pela `20260914020000` + os 2
+  triggers anti-ciclo da F3-04/F5-08), cada uma provada **por função** como usuária
+  **exclusiva** de `position_reporting_lines:<org>` (e de nenhuma chave alheia), e
+  catálogo fechado das **demais famílias** com a sua chave normativa própria —
+  hoje `ciclo_lock_organizacao` → `evaluation_cycles:` (F5-09, família de ciclos).
+  Um **fechamento** reprova qualquer função com advisory lock fora dos dois
+  catálogos (família nova exige catalogação explícita), a proibição de
+  `SECURITY DEFINER` com lock continua global e a não vacuidade passou a exigir
+  ≥ 15 funções **estruturais** com a chave D24. `ciclo_lock_organizacao` e a
+  migration da F5-09/P1 **não** foram alteradas (a F5-09 **não** reutiliza
+  `position_reporting_lines:` nem `f5_07_estrutura:`).
+- **Correção pós-auditoria Codex (PR #190, mesma branch):** o bloqueante era
+  `cycle_events` não ser append-only contra **privilege drift** (o trigger cobria
+  só `UPDATE`; `DELETE`/`TRUNCATE` dependiam de revokes). Correção **na P1**:
+  `enforce_cycle_events_append_only()` passou a levantar exceção para as três
+  operações (`TG_OP` no motivo) e a trilha ganhou `trg_cycle_events_no_delete`
+  (`BEFORE DELETE` row-level) e `trg_cycle_events_no_truncate` (`BEFORE TRUNCATE`
+  statement-level) — proteção no banco **inclusive para o owner e para
+  `service_role`**, mantidos os revokes como primeira camada; a guarda final da
+  migration passou a exigir os três triggers. O validador
+  `02-validar-f5-09.sql` ganhou a seção §4.3: probes de `UPDATE`/`DELETE`/
+  `TRUNCATE` negados **para o owner** e sob **privilege drift simulado** (grant
+  temporário de `DELETE`/`TRUNCATE` a `service_role`, revertido ao final, com
+  conferência de ACL e de que a trilha continua com 1 linha). Consequência
+  necessária: o cenário `01-cenario-f5-09.sql` deixou de apagar/recriar a fixture
+  (a trilha é protegida e as FKs são `ON DELETE RESTRICT`) e passou a ser
+  **INSERT-ONCE** (guarda `\gset`/`\if` + reexecução no-op). `evaluation_cycles`
+  **não** foi alterada e nenhuma P2+ foi antecipada.
+
+### 3.6 F5-09 — desenho técnico (rodada anterior, integrada pelo PR #189)
+
+> Histórico do contrato; **não** é o estado atual da atividade (ver §3 acima).
+
+- **Atividade:** F5-09 — **Ciclos soberanos** — **DESENHO
   TÉCNICO revisado** (`docs/F5-09-desenho-tecnico.md`, D1–D28 e fases P1–P9) com o
   registro de ratificação em `docs/F5-09-duvidas.md`
   (Q-F5-09-1..3 **RATIFICADAS**; nenhuma dúvida aberta).
@@ -110,19 +227,12 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   impede por construção sobrescrever snapshot, trocar posição, recalcular gestor
   ou colegiado, inclusão cross-tenant e uso genérico como "atualizar estrutura".
 - **Plano revisado:** **P1–P9** (a fase nova **P3** existe para a inclusão aditiva
-  e a reconciliação do catálogo ficou no **P7**); D1–D28.
-- **Não iniciado:** implementação da F5-09 (fases P1–P9) e F5-10.
-- **Próxima atividade:** implementação da F5-09 a partir de **P1**
-  (schema/trilha/RLS), sem decisão arquitetural aberta.
-- **Validação desta rodada (documental):** `git diff --check` limpo; referências
-  do desenho conferidas contra os arquivos/tabelas/funções reais da base
-  `6550c81`; confirmado que **nenhum** arquivo de implementação
-  (migration/RPC/Edge/frontend/capability) foi criado ou alterado — o diff da
-  rodada contém apenas `docs/` e `.ai/`. Nenhum gate de runtime era aplicável
-  (não há código novo); os validadores SQL da F5-09 pertencem às fases P1–P4.
+  e a reconciliação do catálogo ficou no **P7**); D1–D28. **(Estado atual: P1
+  implementada — ver §3.)**
 - **`.ai/current-task.md`:** não existe neste repositório (nem no histórico). A
   ausência é registrada aqui conforme `AGENTS.md` §1; o estado operacional de
   retomada continua sendo este arquivo.
+
 ### 3.5 F5-08 (concluída e integrada)
 
 - **Atividade:** F5-08 — Estrutura organizacional e catálogos soberanos (contrato

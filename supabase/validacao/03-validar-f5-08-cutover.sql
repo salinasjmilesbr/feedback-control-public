@@ -522,28 +522,113 @@ begin
 end $$;
 
 -- ============================================================================
--- 6) CONCORRÊNCIA — UMA única chave de serialização por organização (D24)
+-- 6) CONCORRÊNCIA — UMA única chave normativa POR FAMÍLIA e por organização (D24)
+--    (família estrutural: `position_reporting_lines:<org>`; demais famílias
+--    catalogadas explicitamente com a sua própria chave)
 -- ============================================================================
 
 do $$
 declare
+  -- CATÁLOGO EXPLÍCITO da família ESTRUTURAL (D24): as 15 RPCs da F5-08 (P2),
+  -- as 4 RPCs estruturais da F5-07 alinhadas a esta chave por
+  -- `20260914020000_f5_08_lock_key_alignment.sql` e as 2 funcoes de trigger
+  -- anti-ciclo (F3-04 e F5-08 P1). TODAS devem serializar com a chave normativa
+  -- estrutural E com nenhuma outra — a prova e POR FUNCAO (fail-closed), nao por
+  -- varredura textual que uma funcao estrutural poderia escapar.
+  v_estruturais text[] := array[
+    'estrutura_unidade_criar','estrutura_unidade_renomear',
+    'estrutura_unidade_encerrar','estrutura_unidade_parent_definir',
+    'estrutura_unidade_parent_encerrar','estrutura_posicao_criar',
+    'estrutura_posicao_encerrar','estrutura_colegiado_definir',
+    'estrutura_colegiado_encerrar','catalogo_cargo_criar',
+    'catalogo_cargo_renomear','catalogo_cargo_status_alterar',
+    'catalogo_senioridade_criar','catalogo_senioridade_renomear',
+    'catalogo_senioridade_status_alterar',
+    'estrutura_ocupacao_definir','estrutura_ocupacao_encerrar',
+    'estrutura_reporting_definir','estrutura_reporting_encerrar',
+    'enforce_position_reporting_lines_no_cycle',
+    'enforce_organizational_unit_parent_periods_no_cycle'];
+  -- CATÁLOGO EXPLÍCITO das famílias NÃO estruturais que tambem serializam:
+  -- função -> SUA chave normativa. F5-09 (família de CICLOS) usa
+  -- `evaluation_cycles:<organization_id>`, deliberadamente DIFERENTE da chave
+  -- estrutural (famílias distintas exigem chaves distintas; contrato F5-09 §11).
+  -- Família nova exige catalogação explícita aqui: o fechamento em (3) reprova
+  -- qualquer função com advisory lock fora dos dois catálogos.
+  v_outras_fn  text[] := array['ciclo_lock_organizacao'];
+  v_outras_key text[] := array['evaluation_cycles:'];
+  v_i int;
   v_n int;
   v_lista text;
 begin
-  -- Toda função que serializa mutação estrutural precisa usar a chave
-  -- normativa da F3-04 (`position_reporting_lines:<org>`); qualquer chave
-  -- divergente permite mutação concorrente fora da serialização.
+  -- (1) Família ESTRUTURAL: cada função catalogada existe, serializa e usa
+  --     SOMENTE a chave normativa D24 (`position_reporting_lines:<org>`).
+  for v_i in 1..array_length(v_estruturais, 1) loop
+    select count(*) into v_n
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public' and p.proname = v_estruturais[v_i]
+       and p.prosrc like '%pg_advisory_xact_lock%'
+       and position('position_reporting_lines:' in p.prosrc) > 0;
+    if v_n <> 1 then
+      raise exception
+        '[FAIL] P6-6: funcao estrutural % nao serializa com a chave normativa D24 (position_reporting_lines:<org>)',
+        v_estruturais[v_i];
+    end if;
+
+    if exists (
+      select 1
+        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = v_estruturais[v_i]
+         and (position('evaluation_cycles:' in p.prosrc) > 0
+              or position('f5_07_estrutura:' in p.prosrc) > 0)
+    ) then
+      raise exception
+        '[FAIL] P6-6: funcao estrutural % usa chave de OUTRA familia', v_estruturais[v_i];
+    end if;
+  end loop;
+
+  -- (2) FAMÍLIAS NÃO ESTRUTURAIS catalogadas: usam a PRÓPRIA chave normativa e
+  --     NUNCA a chave estrutural (reuso cruzado quebraria a serializacao).
+  for v_i in 1..array_length(v_outras_fn, 1) loop
+    select count(*) into v_n
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public' and p.proname = v_outras_fn[v_i]
+       and p.prosrc like '%pg_advisory_xact_lock%'
+       and position(v_outras_key[v_i] in p.prosrc) > 0;
+    if v_n <> 1 then
+      raise exception
+        '[FAIL] P6-6: funcao de outra familia % nao usa a chave normativa declarada (%)',
+        v_outras_fn[v_i], v_outras_key[v_i];
+    end if;
+
+    if exists (
+      select 1
+        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = v_outras_fn[v_i]
+         and position('position_reporting_lines:' in p.prosrc) > 0
+    ) then
+      raise exception
+        '[FAIL] P6-6: funcao de outra familia % reutiliza a chave estrutural (familias distintas exigem chaves distintas)',
+        v_outras_fn[v_i];
+    end if;
+  end loop;
+
+  -- (3) FECHAMENTO: nenhuma função com advisory lock pode ficar fora dos dois
+  --     catálogos. Uma função nova (de qualquer família) só passa se a sua
+  --     família e a sua chave normativa forem catalogadas EXPLICITAMENTE aqui.
   select count(*), string_agg(p.proname, ', ' order by p.proname)
     into v_n, v_lista
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public'
      and p.prosrc like '%pg_advisory_xact_lock%'
-     and position('position_reporting_lines:' in p.prosrc) = 0;
+     and not (p.proname = any(v_estruturais) or p.proname = any(v_outras_fn));
   if v_n <> 0 then
-    raise exception '[FAIL] P6-6: funcao com advisory lock fora da chave normativa: %', v_lista;
+    raise exception
+      '[FAIL] P6-6: funcao com advisory lock sem familia/chave catalogada: % (catalogue a familia e a chave normativa)',
+      v_lista;
   end if;
 
-  -- Serialização não pode viver em função SECURITY DEFINER (bypass de RLS).
+  -- (4) Serialização não pode viver em função SECURITY DEFINER (bypass de RLS)
+  --     — vale para TODAS as funções com lock, de qualquer família.
   select count(*), string_agg(p.proname, ', ' order by p.proname)
     into v_n, v_lista
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -554,15 +639,20 @@ begin
     raise exception '[FAIL] P6-6: serializacao em funcao SECURITY DEFINER: %', v_lista;
   end if;
 
-  -- Não vacuidade: a varredura precisa encontrar as funções que serializam.
+  -- (5) Não vacuidade: a família estrutural realmente serializa com a chave
+  --     normativa (RPCs + triggers) — a prova não pode passar vazia.
   select count(*) into v_n
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-   where n.nspname = 'public' and p.prosrc like '%pg_advisory_xact_lock%';
+   where n.nspname = 'public'
+     and p.proname = any(v_estruturais)
+     and position('position_reporting_lines:' in p.prosrc) > 0;
   if v_n < 15 then
-    raise exception '[FAIL] P6-6: apenas % funcoes serializam mutacao estrutural (esperado >= 15)', v_n;
+    raise exception
+      '[FAIL] P6-6: apenas % funcoes ESTRUTURAIS serializam com a chave D24 (esperado >= 15)', v_n;
   end if;
 
-  raise notice '[PASS] P6-6: % funcoes serializam mutacao estrutural com UMA unica chave por organizacao (D24), todas SECURITY INVOKER', v_n;
+  raise notice '[PASS] P6-6: % funcoes ESTRUTURAIS com a chave unica D24 (position_reporting_lines:<org>) e % funcao(oes) de outra familia com chave normativa propria catalogada, todas SECURITY INVOKER',
+    v_n, array_length(v_outras_fn, 1);
 end $$;
 
 -- ============================================================================
@@ -627,5 +717,5 @@ end $$;
 do $$
 begin
   raise notice '============================================================';
-  raise notice 'F5-08 P6 (cutover): todas as verificacoes passaram — a leitura estrutural do cliente e RLS own-tenant e fail-closed, a superficie de escrita do cliente e fechada, a mutacao e exclusivamente por RPC transacional autorizada server-side, a serializacao usa uma unica chave por organizacao e o historico permanece preservado.';
+  raise notice 'F5-08 P6 (cutover): todas as verificacoes passaram — a leitura estrutural do cliente e RLS own-tenant e fail-closed, a superficie de escrita do cliente e fechada, a mutacao e exclusivamente por RPC transacional autorizada server-side, a serializacao usa uma unica chave normativa por familia e por organizacao (D24) e o historico permanece preservado.';
 end $$;

@@ -27,10 +27,15 @@
   verdade, não há dual-write e a leitura do cliente é RLS own-tenant
   (`docs/F5-08-p6-duvida-mundo-funcional.md` registra o residual de elegibilidade
   dos domínios de ciclo/metas). **Ciclos** continuam em `localStorage` **até a
-  implementação da F5-09**: o desenho técnico está fechado
-  (`docs/F5-09-desenho-tecnico.md`, com dúvidas em `docs/F5-09-duvidas.md`) e
-  define `public.evaluation_cycles` (F5-06 D15, já existente) como a entidade
-  soberana — nenhuma autoridade local nova foi criada nesta rodada.
+  implementação completa da F5-09**: o desenho técnico está fechado e integrado
+  (`docs/F5-09-desenho-tecnico.md`, D1–D28, fases P1–P9; dúvidas ratificadas em
+  `docs/F5-09-duvidas.md`) e a entidade soberana é `public.evaluation_cycles`
+  (F5-06 D15). A **F5-09 P1** (integridade de schema e trilha de auditoria —
+  índice único parcial de `ATIVO`, exclusion de sobreposição de períodos,
+  proibição de exclusão física, tabela append-only `cycle_events`, helpers
+  `ciclo_ator_valido`/`ciclo_lock_organizacao`) está **implementada e aguardando
+  auditoria GPT**; as RPCs `ciclo_*` (P2+), a leitura RLS (P5) e o cutover (P8)
+  **não** foram iniciados.
 - CI (`.github/workflows/ci.yml`): `npm test`, `npm run build`, `npm run lint`,
   `git diff --check` e validação Supabase local (RLS/policies) quando aplicável.
 
@@ -55,9 +60,9 @@ não existe contrato sem documento fechado correspondente.
   F5-04 (access roles/capabilities reais), F5-05, F5-06 (avaliações no PostgreSQL),
   F5-07 (colaboradores e histórico organizacional soberanos) e F5-08 (estrutura e
   catálogos soberanos). F5-09 (ciclos soberanos) tem **desenho técnico fechado e
-  revisado** (`docs/F5-09-desenho-tecnico.md`, D1–D28, fases P1–P9) com as três
-  dúvidas **ratificadas** (`docs/F5-09-duvidas.md`) e **implementação não
-  iniciada**.
+  integrado** (`docs/F5-09-desenho-tecnico.md`, D1–D28, fases P1–P9; ratificações
+  em `docs/F5-09-duvidas.md`) com a **P1 implementada** (integridade de schema e
+  trilha de auditoria) e as fases **P2–P9 não iniciadas**.
   As atividades seguintes da fase seguem o roadmap do GitHub.
 - **F6+** — hardening geral e trabalhos futuros (fora de escopo das fases
   anteriores).
