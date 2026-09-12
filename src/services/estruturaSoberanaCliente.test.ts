@@ -176,6 +176,103 @@ function operacoes(parcial: Partial<ServiceColaboradores>): ServiceColaboradores
   return parcial as unknown as ServiceColaboradores;
 }
 
+// ---------------------------------------------------------------------------
+// Controle determinístico de respostas (testes de corrida/multi-tenant)
+// ---------------------------------------------------------------------------
+
+interface Postergado<T> {
+  readonly promessa: Promise<T>;
+  resolver(valor: T): void;
+}
+
+function postergar<T>(): Postergado<T> {
+  let resolver!: (valor: T) => void;
+  const promessa = new Promise<T>((res) => {
+    resolver = res;
+  });
+  return { promessa, resolver };
+}
+
+type ResultadoEstrutura = Awaited<ReturnType<ServiceColaboradores["lerEstrutura"]>>;
+type ResultadoColaboradoresLista = Awaited<ReturnType<ServiceColaboradores["listar"]>>;
+
+/** Portas controladas por organização: cada chamada fica pendente até o teste liberar. */
+function servicoControlado() {
+  const pendentes = new Map<
+    string,
+    { estrutura: Postergado<ResultadoEstrutura>; colaboradores: Postergado<ResultadoColaboradoresLista> }
+  >();
+  const chamadas: string[] = [];
+
+  function registro(organizationId: string) {
+    const atual = pendentes.get(organizationId) ?? {
+      estrutura: postergar<ResultadoEstrutura>(),
+      colaboradores: postergar<ResultadoColaboradoresLista>(),
+    };
+    pendentes.set(organizationId, atual);
+    return atual;
+  }
+
+  const servico = operacoes({
+    lerEstrutura: async ({ organizationId }) => {
+      chamadas.push(`lerEstrutura:${String(organizationId)}`);
+      return registro(String(organizationId)).estrutura.promessa;
+    },
+    listar: async ({ organizationId }) => {
+      chamadas.push(`listar:${String(organizationId)}`);
+      return registro(String(organizationId)).colaboradores.promessa;
+    },
+  });
+
+  function liberar(organizationId: string, dados: { estrutura: EstruturaSoberana; colaboradores: readonly ColaboradorSoberano[] }) {
+    const alvo = registro(organizationId);
+    alvo.estrutura.resolver({ ok: true, dados: dados.estrutura });
+    alvo.colaboradores.resolver({ ok: true, dados: dados.colaboradores });
+  }
+
+  return { servico, chamadas, liberar };
+}
+
+/** Organização distinta de `ORG`, com estrutura PRÓPRIA (marcador inequívoco). */
+const ORG_B = "22222222-2222-4222-8222-222222222222";
+const UUID_B_SOLO = "bbbbbbbb-9999-4999-8999-bbbbbbbbbbbb";
+const POS_B_SOLO = "bbbbbbbb-8888-4888-8888-bbbbbbbbbbbb";
+
+function estruturaDaOrgB(): EstruturaSoberana {
+  return {
+    unidades: [],
+    periodosParent: [],
+    posicoes: [
+      {
+        posicaoId: POS_B_SOLO,
+        unitId: "99999999-9999-4999-8999-999999999999",
+        jobRoleId: "88888888-8888-4888-8888-888888888888",
+        seniorityLevelId: null,
+        validFrom: INICIO,
+        validTo: null,
+        version: 1,
+      },
+    ],
+    reportingLines: [],
+    ocupacoes: [
+      {
+        ocupacaoId: "o-b1",
+        collaboratorId: UUID_B_SOLO,
+        posicaoId: POS_B_SOLO,
+        validFrom: INICIO,
+        validTo: null,
+        version: 1,
+      },
+    ],
+    cargos: [],
+    senioridades: [],
+    colegiados: [],
+    colaboradores: [],
+  };
+}
+
+const colaboradoresDaOrgB = [colaboradorSoberano(UUID_B_SOLO, "900", null)];
+
 function servicoSoberano(entrada: {
   readonly estrutura: EstruturaSoberana;
   readonly colaboradores: readonly ColaboradorSoberano[];
@@ -509,5 +606,289 @@ describe("F5-08 P6 — fail-closed real e isolamento de DEV", () => {
     expect(estado.estrutura.projecao.vinculos.has(UUID_GERENTE)).toBe(true);
     expect(matriculaLegadaDoCollaborator(estado.estrutura, UUID_GERENTE)).toBeNull();
     expect(collaboratorIdDoLegado(estado.estrutura, 1)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Segurança multi-tenant do produtor (corrida A → B, contexto inválido)
+// ---------------------------------------------------------------------------
+
+describe("F5-08 P6 — troca de organização no produtor soberano", () => {
+  type ModuloEstrutura = typeof import("./estruturaSoberanaCliente");
+
+  async function iniciar(modulo: ModuloEstrutura) {
+    const publicacoes: string[] = [];
+    modulo.redefinirEstruturaSoberana();
+    const cancelar = modulo.assinarEstruturaSoberana(() => {
+      const atual = modulo.estadoEstruturaSoberana();
+      publicacoes.push(`${atual.fase}:${atual.organizacaoId ?? "sem-org"}`);
+    });
+    return { publicacoes, cancelar };
+  }
+
+  it("A lenta / B rápida: a resposta de A NÃO publica depois de B", async () => {
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("PROD", true);
+    vi.stubEnv("VITE_APP_ENV", "production");
+
+    const modulo = await import("./estruturaSoberanaCliente");
+    const { publicacoes } = await iniciar(modulo);
+    const { servico, liberar } = servicoControlado();
+
+    const cargaA = modulo.carregarEstruturaSoberana(
+      { organizationId: ORG },
+      { operacoes: servico }
+    );
+    expect(modulo.estadoEstruturaSoberana().fase).toBe("carregando");
+    expect(modulo.estadoEstruturaSoberana().organizacaoId).toBe(ORG);
+
+    // Troca para B ANTES de A resolver: A deixa de ser estrutura válida JÁ.
+    const cargaB = modulo.carregarEstruturaSoberana(
+      { organizationId: ORG_B },
+      { operacoes: servico }
+    );
+    expect(modulo.estadoEstruturaSoberana().organizacaoId).toBe(ORG_B);
+    expect(modulo.estadoEstruturaSoberana().estrutura.projecao.vinculos.size).toBe(0);
+
+    // B resolve primeiro.
+    liberar(ORG_B, {
+      estrutura: estruturaDaOrgB(),
+      colaboradores: colaboradoresDaOrgB,
+    });
+    const estadoB = await cargaB;
+    expect(estadoB.fase).toBe("pronta");
+    expect(estadoB.organizacaoId).toBe(ORG_B);
+    expect(modulo.estadoEstruturaSoberana().organizacaoId).toBe(ORG_B);
+    expect(modulo.estadoEstruturaSoberana().estrutura.projecao.vinculos.has(UUID_B_SOLO)).toBe(
+      true
+    );
+
+    // A resolve DEPOIS: descartada (nunca sobrescreve B).
+    liberar(ORG, {
+      estrutura: estruturaSoberanaCoerente(),
+      colaboradores: colaboradoresSoberanos,
+    });
+    const resultadoA = await cargaA;
+
+    expect(resultadoA.organizacaoId).toBe(ORG_B); // devolve o estado CORRENTE
+    expect(modulo.estadoEstruturaSoberana().organizacaoId).toBe(ORG_B);
+    expect(modulo.estadoEstruturaSoberana().estrutura.projecao.vinculos.has(UUID_GERENTE)).toBe(
+      false
+    );
+    expect(modulo.estadoEstruturaSoberana().estrutura.projecao.vinculos.has(UUID_B_SOLO)).toBe(
+      true
+    );
+    // A NUNCA ficou publicada como pronta.
+    expect(publicacoes).not.toContain(`pronta:${ORG}`);
+    expect(publicacoes.filter((item) => item === `carregando:${ORG}`)).toHaveLength(1);
+  });
+
+  it("A rápida / B lenta: A NÃO vira estado válido enquanto B é a solicitação vigente", async () => {
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("PROD", true);
+    vi.stubEnv("VITE_APP_ENV", "production");
+
+    const modulo = await import("./estruturaSoberanaCliente");
+    const { publicacoes } = await iniciar(modulo);
+    const { servico, liberar } = servicoControlado();
+
+    const cargaA = modulo.carregarEstruturaSoberana(
+      { organizationId: ORG },
+      { operacoes: servico }
+    );
+    const cargaB = modulo.carregarEstruturaSoberana(
+      { organizationId: ORG_B },
+      { operacoes: servico }
+    );
+
+    // A responde primeiro — e é DESCARTADA (B já é a solicitação vigente).
+    liberar(ORG, {
+      estrutura: estruturaSoberanaCoerente(),
+      colaboradores: colaboradoresSoberanos,
+    });
+    const resultadoA = await cargaA;
+    expect(resultadoA.organizacaoId).toBe(ORG_B);
+    expect(modulo.estadoEstruturaSoberana().fase).toBe("carregando");
+    expect(modulo.estadoEstruturaSoberana().organizacaoId).toBe(ORG_B);
+    expect(modulo.estadoEstruturaSoberana().estrutura.projecao.vinculos.size).toBe(0);
+
+    // B responde depois: publica.
+    liberar(ORG_B, {
+      estrutura: estruturaDaOrgB(),
+      colaboradores: colaboradoresDaOrgB,
+    });
+    await cargaB;
+
+    expect(modulo.estadoEstruturaSoberana().fase).toBe("pronta");
+    expect(modulo.estadoEstruturaSoberana().organizacaoId).toBe(ORG_B);
+    expect(publicacoes).not.toContain(`pronta:${ORG}`);
+    expect(publicacoes).toContain(`pronta:${ORG_B}`);
+  });
+
+  it("duas chamadas simultâneas da MESMA organização deduplicam (uma única leitura)", async () => {
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("PROD", true);
+    vi.stubEnv("VITE_APP_ENV", "production");
+
+    const modulo = await import("./estruturaSoberanaCliente");
+    await iniciar(modulo);
+    const { servico, chamadas, liberar } = servicoControlado();
+
+    const primeira = modulo.carregarEstruturaSoberana(
+      { organizationId: ORG },
+      { operacoes: servico }
+    );
+    const segunda = modulo.carregarEstruturaSoberana(
+      { organizationId: ORG },
+      { operacoes: servico }
+    );
+
+    expect(segunda).toBe(primeira);
+    expect(chamadas).toEqual([`lerEstrutura:${ORG}`, `listar:${ORG}`]);
+
+    liberar(ORG, {
+      estrutura: estruturaSoberanaCoerente(),
+      colaboradores: colaboradoresSoberanos,
+    });
+    await primeira;
+    expect(modulo.estadoEstruturaSoberana().fase).toBe("pronta");
+    expect(modulo.estadoEstruturaSoberana().organizacaoId).toBe(ORG);
+  });
+
+  it("A e B simultâneas NUNCA deduplicam entre si (uma leitura por organização)", async () => {
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("PROD", true);
+    vi.stubEnv("VITE_APP_ENV", "production");
+
+    const modulo = await import("./estruturaSoberanaCliente");
+    await iniciar(modulo);
+    const { servico, chamadas, liberar } = servicoControlado();
+
+    const cargaA = modulo.carregarEstruturaSoberana(
+      { organizationId: ORG },
+      { operacoes: servico }
+    );
+    const cargaB = modulo.carregarEstruturaSoberana(
+      { organizationId: ORG_B },
+      { operacoes: servico }
+    );
+
+    expect(cargaB).not.toBe(cargaA);
+    expect(chamadas).toEqual([
+      `lerEstrutura:${ORG}`,
+      `listar:${ORG}`,
+      `lerEstrutura:${ORG_B}`,
+      `listar:${ORG_B}`,
+    ]);
+
+    liberar(ORG_B, {
+      estrutura: estruturaDaOrgB(),
+      colaboradores: colaboradoresDaOrgB,
+    });
+    liberar(ORG, {
+      estrutura: estruturaSoberanaCoerente(),
+      colaboradores: colaboradoresSoberanos,
+    });
+    await Promise.all([cargaA, cargaB]);
+
+    expect(modulo.estadoEstruturaSoberana().organizacaoId).toBe(ORG_B);
+  });
+
+  it("perder a organização ativa (null) NÃO preserva a estrutura anterior", async () => {
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("PROD", true);
+    vi.stubEnv("VITE_APP_ENV", "production");
+
+    const { modulo } = await carregarProducao(
+      servicoSoberano({
+        estrutura: estruturaSoberanaCoerente(),
+        colaboradores: colaboradoresSoberanos,
+      })
+    );
+    expect(modulo.estadoEstruturaSoberana().fase).toBe("pronta");
+    expect(modulo.estadoEstruturaSoberana().organizacaoId).toBe(ORG);
+
+    const invalido = await modulo.carregarEstruturaSoberana({ organizationId: null });
+    expect(invalido.fase).toBe("indisponivel");
+    expect(invalido.organizacaoId).toBeNull();
+    expect(invalido.estrutura.projecao.vinculos.size).toBe(0);
+
+    const estado = modulo.estadoEstruturaSoberana();
+    expect(estado.fase).toBe("indisponivel");
+    expect(estado.organizacaoId).toBeNull();
+    expect(estado.estrutura.projecao.vinculos.size).toBe(0);
+    // Nada utilizável: consumidores caem no fail-closed (sem DEV).
+    expect(modulo.estruturaSoberanaEfetiva(mundoLocal).projecao.vinculos.size).toBe(0);
+  });
+
+  it("invalidação do contexto descarta carga em voo (nada republica depois)", async () => {
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("PROD", true);
+    vi.stubEnv("VITE_APP_ENV", "production");
+
+    const modulo = await import("./estruturaSoberanaCliente");
+    const { publicacoes } = await iniciar(modulo);
+    const { servico, liberar } = servicoControlado();
+
+    const cargaA = modulo.carregarEstruturaSoberana(
+      { organizationId: ORG },
+      { operacoes: servico }
+    );
+
+    // Logout/perda de organização no meio da carga.
+    modulo.invalidarEstruturaSoberana();
+    expect(modulo.estadoEstruturaSoberana().fase).toBe("indisponivel");
+    expect(modulo.estadoEstruturaSoberana().organizacaoId).toBeNull();
+
+    liberar(ORG, {
+      estrutura: estruturaSoberanaCoerente(),
+      colaboradores: colaboradoresSoberanos,
+    });
+    const resultadoA = await cargaA;
+
+    expect(resultadoA.fase).toBe("indisponivel");
+    expect(modulo.estadoEstruturaSoberana().fase).toBe("indisponivel");
+    expect(modulo.estadoEstruturaSoberana().organizacaoId).toBeNull();
+    expect(publicacoes).not.toContain(`pronta:${ORG}`);
+  });
+
+  it("indisponibilidade real não deixa a estrutura de OUTRO tenant acessível", async () => {
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("PROD", true);
+    vi.stubEnv("VITE_APP_ENV", "production");
+
+    // A publicada normalmente.
+    const { modulo } = await carregarProducao(
+      servicoSoberano({
+        estrutura: estruturaSoberanaCoerente(),
+        colaboradores: colaboradoresSoberanos,
+      })
+    );
+    expect(modulo.estadoEstruturaSoberana().organizacaoId).toBe(ORG);
+    expect(modulo.estadoEstruturaSoberana().estrutura.projecao.vinculos.size).toBeGreaterThan(0);
+
+    // Troca para B, cuja leitura FALHA: fail-closed — nem B nem A utilizáveis.
+    const estadoB = await modulo.carregarEstruturaSoberana(
+      { organizationId: ORG_B },
+      {
+        operacoes: operacoes({
+          lerEstrutura: async () => ({
+            ok: false,
+            codigo: "FORBIDDEN",
+            mensagem: "sem permissão",
+          }),
+          listar: async () => ({ ok: true, dados: colaboradoresDaOrgB }),
+        }),
+      }
+    );
+
+    expect(estadoB.fase).toBe("indisponivel");
+    expect(estadoB.organizacaoId).toBe(ORG_B);
+    expect(estadoB.codigo).toBe("FORBIDDEN");
+    expect(estadoB.estrutura.projecao.vinculos.size).toBe(0);
+
+    // A estrutura de A NÃO permanece acessível como estado atual.
+    expect(modulo.estadoEstruturaSoberana().estrutura.projecao.vinculos.size).toBe(0);
+    expect(modulo.estruturaSoberanaEfetiva(mundoLocal).projecao.vinculos.size).toBe(0);
   });
 });

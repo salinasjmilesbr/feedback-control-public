@@ -96,14 +96,26 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
     autenticado (`LayoutFuncional` em `src/routes/AppRoutes.tsx`) — nenhum
     consumidor injeta projeção manualmente e a ausência de injeção deixou de ser
     "modo DENY";
+  - **Blocker final (corrida/multi-tenant) RESOLVIDO:** o produtor deixou de
+    deduplicar A e B como se fossem a mesma solicitação. Agora há **geração
+    monotônica** (`let geracao = 0`) + organização vigente: uma carga só publica
+    se ainda for a vigente (`publicarSeVigente`); iniciar uma carga publica
+    imediatamente `carregando` com estrutura VAZIA (a estrutura do tenant anterior
+    deixa de ser acessível na troca); a dedupe é **por organização**; e
+    `invalidarEstruturaSoberana()` (usada pelo hook quando a organização ativa
+    vira `null`/`undefined`) incrementa a geração, limpa a carga em curso e
+    publica estado inválido/vazio — resposta antiga nunca republica;
   - provas: `projecaoEstruturalSoberana.test.ts` (8), `estruturaSoberanaCliente.test.ts`
-    (8), `cutoverEstruturalServicos.test.ts` (4) e o bloco estático
-    `estruturaUiSeguranca.test.ts` (37 no arquivo), que reprova modelo com
-    matrícula, consumidores lendo campos locais e produtor não acionado;
-  - `docs/F5-08-p6-duvida-mundo-funcional.md` documenta os dois blockers
-    resolvidos, a identidade UUID, o fail-closed e o que resta à F5-09 (apenas o
-    domínio de ciclos: persistência e estrutura POR CICLO) — sem autoridade
-    estrutural local.
+    (15 — inclui corrida A→B determinística nos dois sentidos, dedupe por org,
+    `null` invalidando contexto e falha real sem vazar outro tenant),
+    `cutoverEstruturalServicos.test.ts` (4) e o bloco estático
+    `estruturaUiSeguranca.test.ts` (38 no arquivo), que reprova modelo com
+    matrícula, consumidores lendo campos locais, produtor não acionado e produtor
+    sem proteção de troca de tenant;
+  - `docs/F5-08-p6-duvida-mundo-funcional.md` documenta os blockers resolvidos, a
+    identidade UUID, a segurança multi-tenant (§2.3), o fail-closed e o que resta
+    à F5-09 (apenas o domínio de ciclos: persistência e estrutura POR CICLO) — sem
+    autoridade estrutural local.
 - **Residual declarado (fora do blocker, não silencioso):** `relatorioService`
   (filtros por `gestorDiretoMatricula`), `exportarAvaliacaoPdf` (identificação de
   avaliadores), `visibilidadeColaboradores` (sem chamador de produção) e
@@ -111,11 +123,12 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   documento acima; exige atividade própria (relatórios/PDF).
 - **Consequência do cutover (verificada):** em produção a estrutura de
   ciclo/metas é obtida da leitura soberana (RLS) pelo produtor publicado no shell
-  autenticado; falha real do Supabase ⇒ fail-closed, e a decisão real de
-  autorização permanece server-side (Edge + Policy Engine + RLS). Coberto por
+  autenticado, sempre correspondendo à **organização ativa** (troca de tenant
+  segura); falha real do Supabase ⇒ fail-closed, e a decisão real de autorização
+  permanece server-side (Edge + Policy Engine + RLS). Coberto por
   `cutoverEstrutural.test.ts`, `cutoverEstruturalServicos.test.ts`,
   `projecaoEstruturalSoberana.test.ts` e `estruturaSoberanaCliente.test.ts`.
-- **Validação desta rodada:** `npm test` (**108 arquivos / 1664 testes** verdes),
+- **Validação desta rodada:** `npm test` (**108 arquivos / 1672 testes** verdes),
   `npm run build`, `npm run lint`, `npx tsc -b tsconfig.app.json` e
   `git diff --check` executados localmente (todos verdes). Os **validadores SQL não
   foram executados** neste host (Docker/Supabase indisponível) — rodam no job

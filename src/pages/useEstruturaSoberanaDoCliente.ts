@@ -17,13 +17,16 @@ import {
   assinarEstruturaSoberana,
   carregarEstruturaSoberana,
   estadoEstruturaSoberana,
+  invalidarEstruturaSoberana,
   type EstadoEstruturaSoberana,
 } from "../services/estruturaSoberanaCliente";
 import type { DependenciasAcessoColaboradores } from "../services/colaboradoresSoberanos/acessoColaboradoresSoberanos";
 
 /**
  * @param organizacaoAtivaId organização ATIVA de UX (intenção; o servidor
- *   revalida a membership). `null`/`undefined` não dispara carregamento.
+ *   revalida a membership). `null`/`undefined` INVALIDA o contexto: a estrutura
+ *   da organização anterior deixa de ser exposta (fail-closed) e nenhuma
+ *   resposta em voo consegue republicá-la.
  * @param deps dependências das portas soberanas (injeção de teste). Deve ser
  *   estável entre renders.
  */
@@ -38,7 +41,12 @@ export function useEstruturaSoberanaDoCliente(
   useEffect(() => assinarEstruturaSoberana(() => setEstado(estadoEstruturaSoberana())), []);
 
   useEffect(() => {
-    if (!organizacaoAtivaId) return;
+    if (!organizacaoAtivaId) {
+      // Perder a organização ativa (seleção removida, logout) NÃO pode manter a
+      // estrutura do tenant anterior utilizável.
+      invalidarEstruturaSoberana();
+      return;
+    }
 
     const atual = estadoEstruturaSoberana();
     const jaResolvidoParaOrg =
@@ -46,6 +54,8 @@ export function useEstruturaSoberanaDoCliente(
       (atual.fase === "pronta" || atual.fase === "carregando");
     if (jaResolvidoParaOrg) return;
 
+    // Troca de organização: o produtor invalida a estrutura anterior e só
+    // publica a resposta da carga ainda vigente.
     void carregarEstruturaSoberana({ organizationId: organizacaoAtivaId }, deps ?? {});
   }, [organizacaoAtivaId, deps]);
 

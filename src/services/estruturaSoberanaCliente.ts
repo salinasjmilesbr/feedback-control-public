@@ -303,13 +303,59 @@ const ESTADO_INICIAL: EstadoEstruturaSoberana = {
   estrutura: ESTRUTURA_SOBERANA_VAZIA,
 };
 
+const SEM_ORGANIZACAO_ATIVA =
+  "Selecione uma organização ativa para consultar a estrutura.";
+
 let estado: EstadoEstruturaSoberana = ESTADO_INICIAL;
 const assinantes = new Set<() => void>();
-let carregamentoEmCurso: Promise<EstadoEstruturaSoberana> | null = null;
+
+/**
+ * GERAÇÃO monotônica das solicitações de estrutura.
+ *
+ * Cada solicitação (carga de uma organização OU invalidação de contexto)
+ * incrementa a geração. Uma resposta assíncrona só pode PUBLICAR se a geração
+ * capturada no início da carga ainda for a vigente — é o que impede que a
+ * estrutura de uma organização antiga sobrescreva a da organização ativa
+ * (troca A → B, perda de organização ativa, logout/unmount).
+ */
+let geracao = 0;
+
+/** Organização do contexto VIGENTE (a última solicitada). */
+let organizacaoVigente: string | null = null;
+
+/**
+ * Carga em curso. A deduplicação é por ORGANIZAÇÃO: duas chamadas simultâneas
+ * da MESMA organização compartilham a promessa; A e B NUNCA são tratadas como a
+ * mesma solicitação.
+ */
+let carregamentoEmCurso: {
+  readonly organizacaoId: string;
+  readonly geracao: number;
+  readonly promessa: Promise<EstadoEstruturaSoberana>;
+} | null = null;
 
 function publicar(novo: EstadoEstruturaSoberana): void {
   estado = novo;
   for (const assinante of assinantes) assinante();
+}
+
+/** A carga desta geração/contexto ainda é a vigente? */
+function cargaVigente(minhaGeracao: number, minhaOrganizacaoId: string): boolean {
+  return minhaGeracao === geracao && organizacaoVigente === minhaOrganizacaoId;
+}
+
+/**
+ * Publica SOMENTE se a carga ainda for a vigente; caso contrário devolve o
+ * estado corrente (a resposta antiga é descartada sem efeito).
+ */
+function publicarSeVigente(
+  novo: EstadoEstruturaSoberana,
+  minhaGeracao: number,
+  minhaOrganizacaoId: string
+): EstadoEstruturaSoberana {
+  if (!cargaVigente(minhaGeracao, minhaOrganizacaoId)) return estado;
+  publicar(novo);
+  return novo;
 }
 
 export function estadoEstruturaSoberana(): EstadoEstruturaSoberana {
@@ -324,22 +370,63 @@ export function assinarEstruturaSoberana(assinante: () => void): () => void {
 /** Somente para testes: descarta o estado publicado e o carregamento em curso. */
 export function redefinirEstruturaSoberana(): void {
   estado = ESTADO_INICIAL;
+  geracao = 0;
+  organizacaoVigente = null;
   carregamentoEmCurso = null;
   assinantes.clear();
 }
 
-/** Publicação explícita (teste/injeção determinística). */
+/** Publicação explícita (teste/injeção determinística) — invalida cargas antigas. */
 export function definirEstruturaSoberana(
   estrutura: EstruturaSoberanaDoCliente,
   organizacaoId: string | null = null
 ): void {
+  geracao += 1;
+  organizacaoVigente = organizacaoId;
+  carregamentoEmCurso = null;
   publicar({ fase: "pronta", organizacaoId, estrutura });
+}
+
+/**
+ * INVALIDA o contexto estrutural: nenhuma carga anterior pode publicar e a
+ * estrutura anterior deixa de ser exposta (fail-closed). Usado quando a
+ * organização ativa deixa de existir (seleção removida, troca para `null`,
+ * logout/unmount do shell).
+ */
+export function invalidarEstruturaSoberana(): EstadoEstruturaSoberana {
+  geracao += 1;
+  organizacaoVigente = null;
+  carregamentoEmCurso = null;
+
+  // Idempotente: não notifica assinantes se o estado já é o inválido.
+  if (estado.fase === "indisponivel" && estado.organizacaoId === null) return estado;
+
+  const indisponivel: EstadoEstruturaSoberana = {
+    fase: "indisponivel",
+    organizacaoId: null,
+    estrutura: ESTRUTURA_SOBERANA_VAZIA,
+    codigo: "FORBIDDEN",
+    mensagem: SEM_ORGANIZACAO_ATIVA,
+  };
+  publicar(indisponivel);
+  return indisponivel;
 }
 
 /**
  * Carrega a estrutura SOBERANA pelo caminho normal: leitura RLS (`lerEstrutura`)
  * + projeção de colaboradores (`listarColaboradores`, que traz a ponte de
  * matrícula). Falha real ⇒ estado `indisponivel` (fail-closed), nunca dado local.
+ *
+ * ## Segurança multi-tenant
+ *
+ * - **Troca de organização**: uma nova carga incrementa a geração e publica
+ *   imediatamente `carregando` com estrutura VAZIA — a estrutura da organização
+ *   anterior deixa de ser acessível como estado atual;
+ * - **Resposta obsoleta**: só publica quem ainda for a carga vigente; a resposta
+ *   de A que chega depois de B é DESCARTADA (nunca sobrescreve B);
+ * - **Deduplicação**: apenas para a MESMA organização e a MESMA geração;
+ * - **Sem organização ativa**: o contexto é invalidado (estrutura VAZIA), nunca
+ *   preservando a do tenant anterior.
  */
 export function carregarEstruturaSoberana(
   entrada: { readonly organizationId?: string | null },
@@ -350,23 +437,31 @@ export function carregarEstruturaSoberana(
       ? entrada.organizationId
       : null;
 
-  if (!organizationId) {
-    const indisponivel: EstadoEstruturaSoberana = {
-      fase: "indisponivel",
-      organizacaoId: null,
-      estrutura: ESTRUTURA_SOBERANA_VAZIA,
-      codigo: "FORBIDDEN",
-      mensagem: "Selecione uma organização ativa para consultar a estrutura.",
-    };
-    publicar(indisponivel);
-    return Promise.resolve(indisponivel);
+  // Sem contexto válido: não preserva a estrutura anterior como utilizável.
+  if (!organizationId) return Promise.resolve(invalidarEstruturaSoberana());
+
+  // Dedupe SOMENTE da MESMA organização na MESMA geração.
+  if (
+    carregamentoEmCurso &&
+    carregamentoEmCurso.organizacaoId === organizationId &&
+    carregamentoEmCurso.geracao === geracao &&
+    organizacaoVigente === organizationId
+  ) {
+    return carregamentoEmCurso.promessa;
   }
 
-  if (carregamentoEmCurso) return carregamentoEmCurso;
+  geracao += 1;
+  const minhaGeracao = geracao;
+  organizacaoVigente = organizationId;
 
-  publicar({ fase: "carregando", organizacaoId: organizationId, estrutura: ESTRUTURA_SOBERANA_VAZIA });
+  // Troca de tenant: a estrutura publicada anterior deixa de ser válida JÁ.
+  publicar({
+    fase: "carregando",
+    organizacaoId: organizationId,
+    estrutura: ESTRUTURA_SOBERANA_VAZIA,
+  });
 
-  carregamentoEmCurso = (async () => {
+  const promessa = (async (): Promise<EstadoEstruturaSoberana> => {
     try {
       const [leituraEstrutura, leituraColaboradores] = await Promise.all([
         lerEstrutura({ organizationId }, deps),
@@ -375,15 +470,19 @@ export function carregarEstruturaSoberana(
 
       if (!leituraEstrutura.ok || !leituraColaboradores.ok) {
         const falha = leituraEstrutura.ok ? leituraColaboradores : leituraEstrutura;
-        const indisponivel: EstadoEstruturaSoberana = {
-          fase: "indisponivel",
-          organizacaoId: organizationId,
-          estrutura: ESTRUTURA_SOBERANA_VAZIA,
-          codigo: falha.ok ? "INTERNAL" : falha.codigo,
-          mensagem: falha.ok ? "Não foi possível carregar a estrutura." : falha.mensagem,
-        };
-        publicar(indisponivel);
-        return indisponivel;
+        return publicarSeVigente(
+          {
+            fase: "indisponivel",
+            organizacaoId: organizationId,
+            estrutura: ESTRUTURA_SOBERANA_VAZIA,
+            codigo: falha.ok ? "INTERNAL" : falha.codigo,
+            mensagem: falha.ok
+              ? "Não foi possível carregar a estrutura."
+              : falha.mensagem,
+          },
+          minhaGeracao,
+          organizationId
+        );
       }
 
       const projecao = montarProjecaoEstrutural({
@@ -398,29 +497,31 @@ export function carregarEstruturaSoberana(
         ...montarPonte(leituraColaboradores.dados),
       });
 
-      const pronta: EstadoEstruturaSoberana = {
-        fase: "pronta",
-        organizacaoId: organizationId,
-        estrutura,
-      };
-      publicar(pronta);
-      return pronta;
+      return publicarSeVigente(
+        { fase: "pronta", organizacaoId: organizationId, estrutura },
+        minhaGeracao,
+        organizationId
+      );
     } catch {
-      const indisponivel: EstadoEstruturaSoberana = {
-        fase: "indisponivel",
-        organizacaoId: organizationId,
-        estrutura: ESTRUTURA_SOBERANA_VAZIA,
-        codigo: "INTERNAL",
-        mensagem: "Não foi possível carregar a estrutura organizacional.",
-      };
-      publicar(indisponivel);
-      return indisponivel;
+      return publicarSeVigente(
+        {
+          fase: "indisponivel",
+          organizacaoId: organizationId,
+          estrutura: ESTRUTURA_SOBERANA_VAZIA,
+          codigo: "INTERNAL",
+          mensagem: "Não foi possível carregar a estrutura organizacional.",
+        },
+        minhaGeracao,
+        organizationId
+      );
     } finally {
-      carregamentoEmCurso = null;
+      // Só limpa a carga em curso se ela ainda for a DESTA requisição.
+      if (carregamentoEmCurso?.geracao === minhaGeracao) carregamentoEmCurso = null;
     }
   })();
 
-  return carregamentoEmCurso;
+  carregamentoEmCurso = { organizacaoId: organizationId, geracao: minhaGeracao, promessa };
+  return promessa;
 }
 
 function montarPonte(colaboradores: readonly ColaboradorSoberano[]): {

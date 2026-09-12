@@ -638,6 +638,33 @@ describe("F5-08 P6 (correção) — papel/elegibilidade sem estrutura local", ()
     expect(hook).toContain("carregarEstruturaSoberana");
   });
 
+  it("o produtor é seguro na TROCA DE TENANT (geração + invalidação de contexto)", () => {
+    const produtor = apenasCodigo(fonteDeProducao(ESTRUTURA_DO_CLIENTE));
+
+    // Geração monotônica: uma resposta antiga só publica se ainda for a vigente.
+    expect(produtor).toContain("let geracao = 0");
+    expect(produtor).toContain("geracao += 1");
+    expect(produtor).toContain("publicarSeVigente(");
+    expect(produtor).toMatch(
+      /minhaGeracao === geracao && organizacaoVigente === minhaOrganizacaoId/
+    );
+    // Troca de organização publica imediatamente `carregando` com estrutura VAZIA.
+    expect(produtor).toMatch(
+      /fase: "carregando",\s*organizacaoId: organizationId,\s*estrutura: ESTRUTURA_SOBERANA_VAZIA/
+    );
+    // Deduplicação SOMENTE por organização (A e B nunca compartilham a carga).
+    expect(produtor).toMatch(
+      /carregamentoEmCurso\.organizacaoId === organizationId/
+    );
+    // Perder a organização ativa invalida o contexto (fail-closed).
+    expect(produtor).toContain("export function invalidarEstruturaSoberana()");
+    expect(produtor).toMatch(/if \(!organizationId\) return Promise\.resolve\(invalidarEstruturaSoberana\(\)\)/);
+
+    // O hook invalida o contexto quando a organização ativa deixa de existir.
+    const hook = apenasCodigo(fonteDeProducao(HOOK_ESTRUTURA));
+    expect(hook).toMatch(/if \(!organizacaoAtivaId\) \{\s*[\s\S]*?invalidarEstruturaSoberana\(\);/);
+  });
+
   it("o adaptador de fixture só entrega estrutura sob o gate explícito de DEV", () => {
     const codigo = apenasCodigo(fonteDeProducao(ESTRUTURA_DO_CLIENTE));
 

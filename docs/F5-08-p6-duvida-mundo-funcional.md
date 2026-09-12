@@ -86,20 +86,49 @@ por UUID — nenhum fato é inventado.
 | Situação | Resultado |
 | --- | --- |
 | Supabase/serviço falhou (`lerEstrutura`/`listarColaboradores` com erro) | estado `indisponivel`; decisões NEGATIVAS (nunca `localStorage`/seed) |
-| Sem sessão/organização ativa | `indisponivel` (`FORBIDDEN`) e nada é carregado |
+| Sem sessão/organização ativa (inclusive **perder** a organização no meio do uso) | contexto INVALIDADO: `indisponivel` (`FORBIDDEN`) com estrutura VAZIA — a do tenant anterior deixa de ser acessível |
+| Troca de organização com carga em voo | a estrutura anterior é descartada IMEDIATAMENTE e uma resposta antiga **nunca** publica (§2.3) |
 | Colaborador não resolvido (sem ocupação vigente / sem ponte) | vínculo inexistente ⇒ papel/elegibilidade negados |
 | Estrutura inconsistente (2 ocupações, ciclo, posição de gestor vaga) | cadeia não confiável ⇒ papéis falsos e ninguém aprova |
 | Sem evidência estrutural | `progressoAvaliacao` NUNCA declara completo; painel vazio; pendência `Estrutura`; mutação de meta negada |
 | Nada carregado ainda (transiente de boot) | mesma negativa — e o carregamento é automático pelo shell, não uma injeção manual |
+
+### 2.3 Segurança multi-tenant do produtor (corrida A → B)
+
+`carregarEstruturaSoberana` mantém uma **geração monotônica** de solicitações
+(`let geracao = 0`) e a **organização vigente** do contexto:
+
+- cada solicitação (ou invalidação) incrementa a geração e registra a organização;
+- uma carga captura `minhaGeracao` + `minhaOrganizacaoId` e **só publica** via
+  `publicarSeVigente` — isto é, apenas se `minhaGeracao === geracao` **e**
+  `organizacaoVigente === minhaOrganizacaoId`. Uma resposta de A que chega depois
+  de B é **descartada** (devolve o estado corrente, sem efeito);
+- iniciar uma carga publica imediatamente `carregando` com a organização nova e
+  estrutura **VAZIA**: a estrutura do tenant anterior deixa de ser acessível no
+  mesmo instante da troca;
+- a **deduplicação é por organização** (`carregamentoEmCurso.organizacaoId ===
+  organizationId` + mesma geração): duas chamadas simultâneas da MESMA
+  organização compartilham a promessa; **A e B nunca** são tratadas como a mesma
+  solicitação;
+- `invalidarEstruturaSoberana()` (usada quando a organização ativa vira
+  `null`/`undefined` — seleção removida, logout, unmount do shell) incrementa a
+  geração, limpa a carga em curso e publica o estado inválido com estrutura VAZIA.
+  É idempotente (não notifica assinantes duas vezes pelo mesmo estado);
+- o hook `useEstruturaSoberanaDoCliente` chama a invalidação quando perde a
+  organização ativa (antes ele apenas retornava, mantendo a estrutura anterior).
+
+Consequência: **a estrutura publicada sempre corresponde à organização ativa
+solicitada**, e nenhuma resposta assíncrona antiga republica estrutura depois que
+o contexto que a originou deixou de ser vigente.
 
 ## 5. Provas (testes)
 
 | Arquivo | O que prova |
 | --- | --- |
 | `src/services/projecaoEstruturalSoberana.test.ts` (8) | adaptador por UUID; cadeia por posições/reporting lines; raiz/intermediário; colegiado vigente; equivalência de vigência com o P4; posição vaga, ciclo, ambiguidade e ocupação ausente ⇒ fail-closed |
-| `src/services/estruturaSoberanaCliente.test.ts` (8) | carregamento pelas portas existentes (**sem injeção manual**); ciclo/metas/painel/permissões funcionando em produção com a estrutura soberana; soberano vence o cadastro local; falha real ⇒ fail-closed sem `localStorage`; DEV isolado e gated; ponte (matrícula não numérica) |
+| `src/services/estruturaSoberanaCliente.test.ts` (15) | carregamento pelas portas existentes (**sem injeção manual**); ciclo/metas/painel/permissões funcionando em produção; soberano vence o cadastro local; falha real ⇒ fail-closed sem `localStorage`; DEV isolado; ponte (matrícula não numérica); **corrida multi-tenant** determinística: A lenta/B rápida e A rápida/B lenta (A nunca publica), dedupe só da mesma organização, A e B nunca deduplicadas, `null` invalida o contexto e carga em voo é descartada |
 | `src/services/cutoverEstruturalServicos.test.ts` (4) | consumidores com estrutura soberana explícita: decisões funcionam; soberano vence o local; sem estrutura é fail-closed; DEV preservado |
-| `src/authorization/estruturaUiSeguranca.test.ts` (37) | guardas estáticas: modelo sem matrícula; nenhum consumidor lê `funcao`/`gestorDiretoMatricula`/`avaliadoresColegiadoMatriculas`; `funcaoUsaEstruturaAvaliacaoAnalista` sem consumidor produtivo; produtor usa as portas soberanas e é acionado pelo shell; `localWorld` só em DEV; sem RPC/Edge/credencial nova |
+| `src/authorization/estruturaUiSeguranca.test.ts` (38) | guardas estáticas: modelo sem matrícula; nenhum consumidor lê `funcao`/`gestorDiretoMatricula`/`avaliadoresColegiadoMatriculas`; `funcaoUsaEstruturaAvaliacaoAnalista` sem consumidor produtivo; produtor usa as portas soberanas, é acionado pelo shell e é seguro na troca de tenant (geração + dedupe por org + invalidação); `localWorld` só em DEV; sem RPC/Edge/credencial nova |
 | SQL | inalterado: a correção não cria superfície de banco (o validador de cutover do P6 segue no CI) |
 
 ## 6. O que permanece para a F5-09 (apenas domínio de ciclos)
