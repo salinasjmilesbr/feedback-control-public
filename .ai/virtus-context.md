@@ -19,7 +19,14 @@
 - Persistência/identidade: Supabase (Supabase Auth, Postgres com RLS; stack
   local via Docker); `@supabase/supabase-js`.
 - Domínios funcionais legados ainda em `localStorage` (pré-migração F5);
-  compatibilidade com dados antigos de `localStorage` é obrigatória.
+  compatibilidade com dados antigos de `localStorage` é obrigatória **para os
+  domínios ainda não migrados** (ciclos, metas e observações). **Autoridade
+  estrutural** (unidades, posições, hierarquia, cargos, senioridades, colegiado,
+  ocupação e reporting line), **cadastro de colaboradores** e **avaliações** já são
+  soberanos no PostgreSQL (F5-06/F5-07/F5-08): `localStorage` não é fonte de
+  verdade, não há dual-write e a leitura do cliente é RLS own-tenant
+  (`docs/F5-08-p6-duvida-mundo-funcional.md` registra o residual de elegibilidade
+  dos domínios de ciclo/metas).
 - CI (`.github/workflows/ci.yml`): `npm test`, `npm run build`, `npm run lint`,
   `git diff --check` e validação Supabase local (RLS/policies) quando aplicável.
 
@@ -41,7 +48,9 @@ não existe contrato sem documento fechado correspondente.
   com matriz de rastreabilidade (`F4-10-matriz-rastreabilidade.md`).
 - **F5** — identidade e multiusuário em runtime real: F5-01 (identidade
   autenticada), F5-02 (vínculo usuário↔colaborador), F5-03 (organização ativa),
-  F5-04 (access roles/capabilities reais) e atividades seguintes da fase.
+  F5-04 (access roles/capabilities reais), F5-05, F5-06 (avaliações no PostgreSQL),
+  F5-07 (colaboradores e histórico organizacional soberanos) e F5-08 (estrutura e
+  catálogos soberanos). As atividades seguintes da fase seguem o roadmap do GitHub.
 - **F6+** — hardening geral e trabalhos futuros (fora de escopo das fases
   anteriores).
 - **DEV-\*** — atividades de **infraestrutura de processo** (ex.: DEV-01, esta

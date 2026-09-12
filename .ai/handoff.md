@@ -34,10 +34,68 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
-- **Atividade (rodada atual):** F5-07 — Colaboradores e histórico organizacional
-  soberanos (**implementação**; contrato em `docs/F5-07-desenho-tecnico.md`, D1–D20).
-- **Branch:** `feat/f5-07-colaboradores-soberanos` (sem PR; sem merge).
+- **Atividade (rodada atual):** F5-08 — Estrutura organizacional e catálogos
+  soberanos (**implementação P1–P6**; contrato em
+  `docs/F5-08-desenho-tecnico.md`, D1–D25).
+- **Base:** `main`/`origin/main` = `7a0e6fab607e97656333a67adaaff48fc1d8fd58`
+  (P1–P5 da F5-08 já integrados, um commit por fase).
+- **Branch do P6:** `feat/f5-08-p6-cutover-estrutura` — **sem PR, sem squash e sem
+  merge** nesta rodada; o P6 (cutover) **não está integrado**.
 - **Último commit:** consultar `git log --oneline -1` na branch.
+- **Entregue (P1–P5, já na base):** migrations `20260914000000`
+  (`structure_events` append-only + triggers I1–I3 + grants), `20260914010000`
+  (15 RPCs `estrutura_*`/`catalogo_*`) e `20260914020000` (chave única de advisory
+  lock, D24); contrato/Edge `supabase/functions/colaboradores`; porta/serviço do
+  cliente (`services/colaboradoresSoberanos/acessoColaboradoresSoberanos.ts`),
+  leitura soberana por RLS
+  (`infrastructure/supabase/estrutura/repositorioEstruturaSoberana.ts`); telas
+  Unidades/Posições/Catálogos/Colegiado e alocação do colaborador (ocupação +
+  reporting line).
+- **Entregue nesta rodada (P6 — cutover estrutural):**
+  - `authorizationPolicy.ts`: fallback do mundo funcional para o cadastro local
+    **removido**; resta apenas sob barreira explícita de DEV
+    (`simulacaoDevPermitida`) ⇒ produção fail-closed;
+  - `mundoFuncional.ts`: `SEM_BINDINGS_DEV` — a derivação local de bindings deixou
+    de ser implícita; sem binding explícito (teste) ou da projeção soberana, a
+    capability é NEGADA (inclusive o fluxo SELF);
+  - `historicoOrganizacionalStorage.ts`: sem promoção de texto `respondePara` a
+    relação de gestão (escrita local é barreira desde a F5-07);
+  - `src/data/evaluationTeam.ts` removido (código morto, sem consumidores);
+  - guardas do cutover: bloco P6 em
+    `src/authorization/estruturaUiSeguranca.test.ts` (sweep global de `src/`) e
+    `src/authorization/cutoverEstrutural.test.ts` (runtime, produção × DEV);
+  - `supabase/validacao/03-validar-f5-08-cutover.sql` (leitura RLS own-tenant
+    positiva/negativa, fail-closed sem membership ativa, superfície de escrita do
+    cliente fechada, capability negada, RPC como única autoridade, chave única de
+    serialização, idempotência e histórico preservado);
+  - `.github/workflows/ci.yml`: o job `supabase-local` passa a executar os **três**
+    validadores da F5-08 e a regressão F5-06/F5-07 (§13.7/§23.4); timeout 40 min.
+- **Dúvida arquitetural REAL registrada (NÃO decidida nesta rodada):**
+  `docs/F5-08-p6-duvida-mundo-funcional.md` — o §19.1 do contrato manda as decisões
+  de elegibilidade/papel de `progressoAvaliacao`/`cicloEquipeService`/`metaStorage`
+  passarem a usar estrutura soberana, mas o P6 não pode criar funcionalidade nova
+  nem iniciar F5-09..F5-12, e o contrato não define a fonte soberana dessas
+  decisões. **Decidir em F5-09** (ou atividade destinada), com `Q#` própria; não
+  reabrir D1–D25 da F5-08.
+- **Consequência do cutover (verificada):** em produção o mundo funcional do
+  cliente fica fail-closed (DENY) até a projeção soberana alimentá-lo; a decisão
+  real permanece server-side (Edge + Policy Engine + RLS). Coberto por
+  `cutoverEstrutural.test.ts`.
+- **Validação desta rodada:** `npm test`, `npm run build`, `npm run lint`,
+  `npx tsc -b tsconfig.app.json` e `git diff --check` executados localmente.
+  Os **validadores SQL não foram executados** neste host (Docker/Supabase
+  indisponível) — rodam no job `supabase-local` do CI; a limitação está registrada
+  no relatório da atividade.
+- **Próxima atividade:** **F5-09** (ciclos) — **não iniciada** aqui.
+- **`.ai/current-task.md`:** não existe neste repositório (nem no histórico). A
+  ausência é registrada aqui conforme `AGENTS.md` §1; o estado operacional de
+  retomada continua sendo este arquivo.
+
+### 3.1 F5-07 (concluída e integrada)
+
+- **Atividade:** F5-07 — Colaboradores e histórico organizacional soberanos
+  (contrato em `docs/F5-07-desenho-tecnico.md`, D1–D20); integrada em `main` como
+  `7137f1f`.
 - **Entregue:** migrations `20260913000000`/`20260913010000` (extensões aditivas em
   `collaborators`, `job_roles.code`, log append-only `collaborator_events`, helper
   de ator e 16 funções/RPCs), Edge `colaboradores` (15 operações, com gate
@@ -45,18 +103,19 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   única `acessoColaboradoresSoberanos`, barreiras fail-closed em
   `colaboradorStorage`/`historicoOrganizacionalStorage`, telas migradas para UUID
   com matrícula resolvida no servidor e remoção do código morto.
-- **Validação:** `npm test` 94 arquivos / 1346 testes; `build`, `lint` e
-  `git diff --check` verdes; validadores SQL após `db reset` — F5-07 (44 PASS +
-  22 PASS de cutover), F4-08 (56 + 8) e F5-06 (25 + 13).
+- **Validação então registrada:** `npm test` 94 arquivos / 1346 testes; `build`,
+  `lint` e `git diff --check` verdes; validadores SQL após `db reset` — F5-07
+  (44 PASS + 22 PASS de cutover), F4-08 (56 + 8) e F5-06 (25 + 13).
 - **Limites assumidos:** alocação/estrutura (cargo, área, função, senioridade,
   gestor, colegiado) é **F5-08** — a F5-07 não fabrica estrutura sintética e as
   telas exibem "sem alocação". Ciclos/metas/observações seguem legados.
-- **Defeito PREEXISTENTE em `main`, não corrigido aqui:** a Edge
+- **Defeito PREEXISTENTE em `main`, não corrigido (fora de escopo):** a Edge
   `supabase/functions/avaliacoes/index.ts:8` importa
   `src/authorization/catalogoCapacidades.ts` (inexistente; o módulo real é
-  `catalogoCapabilities.ts`), o que impede o bundle da função F5-06.
+  `catalogoCapabilities.ts`), o que impede o bundle da função F5-06. Não afeta
+  `npm test`/`build`/`lint`/`tsc` (apenas o bundle Deno da Edge).
 
-### 3.1 BUG #170 (concluída e integrada)
+### 3.2 BUG #170 (concluída e integrada)
 
 - **Atividade:** BUG #170 — item "Ciclos" duplicado no menu para Gerente e
   Coordenador (Issue #170). Correção de **navegação/UX**, integrada em `main`.
@@ -82,7 +141,7 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 - **Validação desta rodada (todo exit 0):** `npm test` (85 arquivos, 1082 testes),
   `npm run build`, `npm run lint`, `git diff --check origin/main...HEAD`.
 
-### 3.1 DEV-02 (concluída e integrada)
+### 3.3 DEV-02 (concluída e integrada)
 
 - **Atividade:** DEV-02 — reduzir interrupções por elevação de acesso dos agentes
   (Issue #177). Somente camada de contexto; sem alteração funcional.
@@ -99,7 +158,7 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   limitação, nunca contornar a proteção (`.ai/git-rules.md` §3;
   `.ai/workflow.md` §6.4).
 
-### 3.2 F5-06 (concluída e integrada)
+### 3.4 F5-06 (concluída e integrada)
 
 - **Atividade:** F5-06 — Avaliações no PostgreSQL (Issue #103).
 - **Branch:** `feat/f5-06-avaliacoes-postgresql` — **squash merge em `main`** como

@@ -1,14 +1,18 @@
 /**
- * F5-08 P4 — GUARDA de segurança/regressão da camada de UI de estrutura.
+ * F5-08 P4/P5/P6 — GUARDA de segurança/regressão da camada de estrutura.
  *
- * Prova, de forma ESTÁTICA e determinística, que a entrega do P4:
+ * Prova, de forma ESTÁTICA e determinística, que a entrega:
  * - não cria regra de autorização local (nenhuma página decide capability,
  *   tenant ou ciclo);
  * - não escreve estrutura em `localStorage` (nenhum `setItem`/dual-write);
  * - não chama RPC do banco diretamente nem usa `service_role`/credencial
  *   privilegiada no bundle;
  * - não cria capability nova nem altera a allowlist funcional (D19/D20);
- * - registra as quatro rotas e os quatro itens de menu, sem item duplicado.
+ * - registra as quatro rotas e os quatro itens de menu, sem item duplicado;
+ * - **P6 (cutover):** nenhum caminho estrutural de produção lê o cadastro ou o
+ *   histórico organizacional local; o mundo funcional só cai no cadastro local
+ *   sob barreira explícita de DEV; as chaves estruturais legadas têm donos
+ *   únicos e conhecidos (sweep global de `src/`).
  */
 
 import { describe, expect, it } from "vitest";
@@ -39,6 +43,11 @@ import SeletorPosicaoFonte from "../components/SeletorPosicao.tsx?raw";
 import NovoColaboradorFonte from "../pages/NovoColaboradorPage.tsx?raw";
 import EditarColaboradorFonte from "../pages/EditarColaboradorPage.tsx?raw";
 import DetalheColaboradorFonte from "../pages/ColaboradorDetalhePage.tsx?raw";
+// F5-08 P6 — cutover estrutural (autoridade estrutural local encerrada)
+import AuthorizationPolicyFonte from "./authorizationPolicy.ts?raw";
+import MundoFuncionalFonte from "./mundoFuncional.ts?raw";
+import HistoricoOrganizacionalFonte from "../services/historicoOrganizacionalStorage.ts?raw";
+import ResetDesenvolvimentoFonte from "../services/resetBaseDesenvolvimento.ts?raw";
 
 const FONTES_UI: readonly (readonly [string, string])[] = [
   ["CatalogosPage", CatalogosFonte as string],
@@ -312,5 +321,219 @@ describe("F5-08 P5 — alocação soberana: barreiras estáticas", () => {
     expect(codigo).toContain("lerEstrutura");
     expect(codigo).not.toContain("functions.invoke");
     expect(codigo).not.toContain("FUNCAO_COLABORADORES");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F5-08 P6 — CUTOVER ESTRUTURAL: a autoridade estrutural local foi ENCERRADA
+// ---------------------------------------------------------------------------
+
+/**
+ * Visão CRUA (`?raw`) de TODO o código de produção de `src/` — sem os testes.
+ * É o que dá poder probatório aos sweeps globais do P6: um arquivo NOVO que
+ * reintroduza leitura estrutural local, RPC direta ou credencial privilegiada
+ * no bundle é reprovado sem depender de lista manual.
+ */
+const MODULOS_DE_PRODUCAO: Readonly<Record<string, string>> = Object.fromEntries(
+  Object.entries(
+    import.meta.glob("../**/*.{ts,tsx}", {
+      query: "?raw",
+      import: "default",
+      eager: true,
+    })
+  ).filter(([caminho]) => !caminho.includes(".test."))
+) as Readonly<Record<string, string>>;
+
+/** Chave do glob (relativa a este teste) → caminho canônico `src/...`. */
+function caminhoDeSrc(chave: string): string {
+  return `src/${chave
+    .split("/")
+    .filter((parte) => parte !== ".." && parte !== ".")
+    .join("/")}`;
+}
+
+/** Fonte de produção por caminho: falha ALTO se o módulo não existir (rename). */
+function fonteDeProducao(chave: string): string {
+  const fonte = MODULOS_DE_PRODUCAO[chave];
+  if (typeof fonte !== "string") {
+    throw new Error(`Módulo de produção não encontrado por import.meta.glob: ${chave}`);
+  }
+  return fonte;
+}
+
+/** Arquivos de produção que mencionam (em CÓDIGO) um trecho qualquer. */
+function produtoresQueCitam(trecho: string): readonly string[] {
+  return Object.entries(MODULOS_DE_PRODUCAO)
+    .filter(([, fonte]) => apenasCodigo(fonte).includes(trecho))
+    .map(([chave]) => caminhoDeSrc(chave))
+    .sort();
+}
+
+/**
+ * Caminho ESTRUTURAL (unidades, posições, cargos, senioridades, hierarquia,
+ * gestor, colegiado, ocupação e reporting line): não pode ler cadastro nem
+ * histórico organizacional local. `authorizationPolicy` fica FORA desta lista
+ * porque é o único módulo com um call site legado, sob barreira de DEV
+ * (verificado em teste próprio).
+ */
+const FONTES_CAMINHO_ESTRUTURAL: readonly (readonly [string, string])[] = [
+  ...FONTES_CLIENTE,
+  ...FONTES_ALOCACAO,
+  ["mundoFuncional", MundoFuncionalFonte as string],
+  ["historicoOrganizacionalStorage", HistoricoOrganizacionalFonte as string],
+];
+
+/**
+ * Consumidores LEGADOS de ciclo/metas/feedback — classificação **B** do §3
+ * (somente leitura autorizada; domínios das atividades F5-09..F5-11, FORA do
+ * escopo do P6). Podem LER o cadastro local; nunca regravá-lo.
+ */
+const CAMINHOS_LEGADO_LEITURA: readonly string[] = [
+  "../pages/AcompanhamentoMetasPage.tsx",
+  "../pages/EditarFeedbackPage.tsx",
+  "../pages/FeedbackDetalhePage.tsx",
+  "../pages/MinhaAvaliacaoDetalhePage.tsx",
+  "../pages/MinhasMetasPage.tsx",
+  "../pages/NovoFeedbackPage.tsx",
+  "../pages/PainelCicloPage.tsx",
+  "../pages/RelatoriosPage.tsx",
+  "../services/cancelamentoCicloService.ts",
+  "../services/cicloEquipeService.ts",
+  "../services/correcaoPeriodoCicloService.ts",
+  "../services/exportarAvaliacaoPdf.ts",
+  "../services/geradorDadosTeste.ts",
+  "../services/historicoOrganizacionalStorage.ts",
+  "../services/metaStorage.ts",
+  "../services/permissaoAvaliacao.ts",
+  "../services/reaberturaCicloService.ts",
+  "../infrastructure/localStorage/localCollaboratorRepository.ts",
+  "../contexts/UsuarioAtualProvider.tsx",
+];
+
+describe("F5-08 P6 — nenhuma autoridade estrutural local", () => {
+  it("o caminho estrutural não lê o cadastro nem o histórico organizacional local", () => {
+    for (const [nome, fonte] of FONTES_CAMINHO_ESTRUTURAL) {
+      const codigo = apenasCodigo(fonte);
+      for (const legado of [
+        "getColaboradores(",
+        "getColaboradorByMatricula(",
+        "colaboradorStorage",
+        "historicoOrganizacionalStorage",
+        "data/colaboradores",
+      ]) {
+        expect(codigo, `${nome}:${legado}`).not.toContain(legado);
+      }
+    }
+  });
+
+  it("authorizationPolicy: o cadastro local só entra sob barreira explícita de DEV", () => {
+    const codigo = apenasCodigo(AuthorizationPolicyFonte as string);
+
+    // A barreira é o gate DEV do Vite (o mesmo do seletor de impersonação).
+    expect(codigo).toContain("simulacaoDevPermitida");
+    // Existe UM único call site do cadastro legado, e ele está DENTRO do gate.
+    expect(codigo.match(/getColaboradores\(\)/g) ?? []).toHaveLength(1);
+    expect(codigo).toMatch(
+      /if \(simulacaoDevPermitida\) \{\s*try \{\s*return getColaboradores\(\);/
+    );
+    // Fora do gate o mundo é VAZIO ⇒ ator não resolvido ⇒ DENY (fail-closed).
+    expect(codigo).toContain("return [];");
+    expect(codigo).not.toMatch(/\?\?\s*getColaboradores\(\)/);
+  });
+
+  it("mundoFuncional: bindings NÃO são derivados do mundo local fora do gate DEV", () => {
+    const codigo = apenasCodigo(MundoFuncionalFonte as string);
+
+    expect(codigo).toContain("SEM_BINDINGS_DEV");
+    expect(codigo).toMatch(
+      /simulacaoDevPermitida\s*\?\s*derivarBindingsDev\(colaboradores\)\s*:\s*SEM_BINDINGS_DEV/
+    );
+    // O fallback implícito removido no P6 não pode voltar.
+    expect(codigo).not.toMatch(/\?\?\s*derivarBindingsDev\s*\(/);
+  });
+
+  it("historicoOrganizacionalStorage: sem promoção de texto local a relação estrutural", () => {
+    const codigo = apenasCodigo(HistoricoOrganizacionalFonte as string);
+
+    // O gestor do snapshot vem de MATRÍCULA; o rótulo textual não o substitui.
+    expect(codigo).toMatch(/gestorDiretoNome:\s*gestor\?\.nome,/);
+    expect(codigo).not.toMatch(/gestorDiretoNome\s*:\s*[^,\n]*\?\?/);
+    expect(codigo).not.toMatch(/respondePara\s*\|\|/);
+    expect(codigo).not.toMatch(/\?\?\s*\(?\s*[\w.]*\.respondePara\b/);
+    // A escrita local continua BARREIRA fail-closed (F5-07).
+    expect(codigo).toMatch(/export function registrarMovimentacaoOrganizacional/);
+    expect(codigo).toMatch(/throw new Error/);
+  });
+
+  it("as chaves estruturais legadas só são tocadas pelos módulos donos", () => {
+    const donos: readonly (readonly [string, readonly string[]])[] = [
+      [
+        "feedback-control-historico-organizacional",
+        ["src/services/historicoOrganizacionalStorage.ts"],
+      ],
+      [
+        "feedback-control-colaboradores",
+        ["src/services/colaboradorStorage.ts", "src/services/resetBaseDesenvolvimento.ts"],
+      ],
+    ];
+    for (const [chave, esperados] of donos) {
+      expect(produtoresQueCitam(chave), chave).toEqual([...esperados].sort());
+    }
+  });
+
+  it("a fixture de DEV não alimenta o caminho soberano (seed com um único dono legado)", () => {
+    expect(produtoresQueCitam("data/colaboradores")).toEqual([
+      "src/services/colaboradorStorage.ts",
+    ]);
+    // O dono é LEITURA legada: a barreira de escrita segue lançando.
+    const codigo = apenasCodigo(fonteDeProducao("../services/colaboradorStorage.ts"));
+    expect(codigo).toContain("colaboradoresIniciais");
+    expect(codigo).toMatch(/export function saveColaborador[\s\S]*?throw new Error/);
+    expect(codigo).toMatch(/export function updateColaborador[\s\S]*?throw new Error/);
+  });
+
+  it("a única escrita local do cadastro é o reset de DEV, sob gate explícito", () => {
+    const codigo = apenasCodigo(ResetDesenvolvimentoFonte as string);
+
+    expect(codigo).toContain("resetDesenvolvimentoPermitido");
+    expect(codigo).toMatch(/if \(!resetBaseDesenvolvimentoHabilitado\) return;/);
+    // Apaga chaves de DEV; NUNCA regrava o cadastro.
+    expect(codigo).not.toMatch(/setItem\(\s*["'`]feedback-control-colaboradores/);
+  });
+
+  it("a autoridade de mundo local não é consumida por estrutura (legado contido)", () => {
+    expect(produtoresQueCitam("providers/localWorld")).toEqual([
+      "src/pages/MinhasMetasPage.tsx",
+      "src/services/metaStorage.ts",
+    ]);
+  });
+
+  it("a fixture local de equipe de avaliação foi removida e não é referenciada", () => {
+    expect(Object.keys(MODULOS_DE_PRODUCAO)).not.toContain("../data/evaluationTeam.ts");
+    expect(produtoresQueCitam("evaluationTeam")).toEqual([]);
+  });
+
+  it("consumidores legados leem, mas NUNCA regravam o cadastro (sem dual-write)", () => {
+    for (const caminho of CAMINHOS_LEGADO_LEITURA) {
+      const codigo = apenasCodigo(fonteDeProducao(caminho));
+      expect(codigo, `${caminho}:saveColaborador`).not.toContain("saveColaborador(");
+      expect(codigo, `${caminho}:updateColaborador`).not.toContain("updateColaborador(");
+      expect(codigo, `${caminho}:chave`).not.toMatch(
+        /setItem\(\s*["'`]feedback-control-colaboradores/
+      );
+    }
+  });
+
+  it("nenhum arquivo de produção chama RPC do banco nem carrega credencial privilegiada", () => {
+    // Sanidade do sweep: o glob precisa enxergar o código REAL de produção —
+    // um glob vazio tornaria esta prova vacuamente verde.
+    expect(Object.keys(MODULOS_DE_PRODUCAO).length).toBeGreaterThan(100);
+    expect(MODULOS_DE_PRODUCAO["../services/colaboradorStorage.ts"]).toBeTypeOf("string");
+
+    for (const [chave, fonte] of Object.entries(MODULOS_DE_PRODUCAO)) {
+      const codigo = apenasCodigo(fonte);
+      expect(codigo, caminhoDeSrc(chave)).not.toMatch(/\.rpc\s*\(/);
+      expect(codigo, caminhoDeSrc(chave)).not.toMatch(/SERVICE_ROLE_KEY|serviceRoleKey/);
+    }
   });
 });
