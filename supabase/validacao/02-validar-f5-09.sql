@@ -14,8 +14,10 @@
 --   §3  D8/D9: exclusao fisica (DELETE/TRUNCATE) negada a TODOS os papeis de
 --       aplicacao, inclusive por comportamento (nao apenas por ACL);
 --   §4  `cycle_events`: schema, constraints, FKs de tenant/ciclo, idempotencia,
---       indices, RLS deny-by-default, grants minimos e append-only (UPDATE
---       negado por ACL e por trigger; DELETE negado);
+--       indices, RLS deny-by-default, grants minimos e APPEND-ONLY COMPLETO —
+--       UPDATE/DELETE/TRUNCATE negados por trigger (inclusive para o OWNER),
+--       provados tambem sob PRIVILEGE DRIFT (grant temporario de DELETE/TRUNCATE
+--       a service_role, revertido ao final), alem da negacao por ACL;
 --   §5  `ciclo_ator_valido`: ator/tenant/capability (reuso da autoridade
 --       existente), allowlist fechada e fail-closed;
 --   §6  `ciclo_lock_organizacao`: chave normativa unica da familia de ciclos;
@@ -797,18 +799,43 @@ end $$;
 
 do $$
 declare
+  v_problemas text[] := array[]::text[];
   v_def text;
 begin
+  -- Append-only no banco em TRES operacoes: UPDATE e DELETE (row-level) e
+  -- TRUNCATE (statement-level — exigencia do PostgreSQL para TRUNCATE).
   select pg_get_triggerdef(t.oid) into v_def
     from pg_trigger t
    where t.tgrelid = 'public.cycle_events'::regclass
      and t.tgname = 'trg_cycle_events_append_only'
      and not t.tgisinternal;
-
-  if v_def is null or v_def not like '%BEFORE UPDATE%' then
-    raise exception '[FAIL] cycle_events: trigger append-only ausente (UPDATE)';
+  if v_def is null or v_def not like '%BEFORE UPDATE%' or v_def not like '%FOR EACH ROW%' then
+    v_problemas := v_problemas || 'UPDATE (row-level) ausente';
   end if;
-  raise notice '[PASS] cycle_events: trigger append-only BEFORE UPDATE presente';
+
+  select pg_get_triggerdef(t.oid) into v_def
+    from pg_trigger t
+   where t.tgrelid = 'public.cycle_events'::regclass
+     and t.tgname = 'trg_cycle_events_no_delete'
+     and not t.tgisinternal;
+  if v_def is null or v_def not like '%BEFORE DELETE%' or v_def not like '%FOR EACH ROW%' then
+    v_problemas := v_problemas || 'DELETE (row-level) ausente';
+  end if;
+
+  select pg_get_triggerdef(t.oid) into v_def
+    from pg_trigger t
+   where t.tgrelid = 'public.cycle_events'::regclass
+     and t.tgname = 'trg_cycle_events_no_truncate'
+     and not t.tgisinternal;
+  if v_def is null or v_def not like '%BEFORE TRUNCATE%' or v_def not like '%FOR EACH STATEMENT%' then
+    v_problemas := v_problemas || 'TRUNCATE (statement-level) ausente';
+  end if;
+
+  if array_length(v_problemas, 1) is not null then
+    raise exception '[FAIL] cycle_events: triggers append-only ausentes/incorretos: %',
+      array_to_string(v_problemas, '; ');
+  end if;
+  raise notice '[PASS] cycle_events: triggers append-only BEFORE UPDATE/DELETE (row-level) e BEFORE TRUNCATE (statement-level) presentes';
 end $$;
 
 set role service_role;
@@ -886,12 +913,150 @@ begin
     raise exception '[FAIL] trigger append-only nao disparou (UPDATE aceito pelo owner)';
   exception
     when others then
-      if sqlerrm like '%F5-09: cycle_events e append-only%' then
-        raise notice '[PASS] trigger append-only bloqueia UPDATE ate para o owner (defesa em profundidade)';
+      if sqlerrm like '%F5-09: cycle_events e append-only (UPDATE negado)%' then
+        raise notice '[PASS] append-only: UPDATE bloqueado pelo trigger ate para o owner';
       else
         raise;
       end if;
   end;
+
+  begin
+    delete from public.cycle_events
+     where organization_id = 'f9a00000-0000-0000-0000-0000000000a1';
+    raise exception 'F5-09_PROBE_EFEITO';
+  exception
+    when others then
+      if sqlerrm like '%F5-09: cycle_events e append-only (DELETE negado)%' then
+        raise notice '[PASS] append-only: DELETE bloqueado pelo trigger ate para o owner';
+      elsif sqlerrm = 'F5-09_PROBE_EFEITO' then
+        raise exception '[FAIL] DELETE de cycle_events aceito pelo owner (trigger de DELETE ausente)';
+      else
+        raise;
+      end if;
+  end;
+
+  begin
+    truncate public.cycle_events;
+    raise exception 'F5-09_PROBE_EFEITO';
+  exception
+    when others then
+      if sqlerrm like '%F5-09: cycle_events e append-only (TRUNCATE negado)%' then
+        raise notice '[PASS] append-only: TRUNCATE bloqueado pelo trigger ate para o owner';
+      elsif sqlerrm = 'F5-09_PROBE_EFEITO' then
+        raise exception '[FAIL] TRUNCATE de cycle_events aceito pelo owner (trigger de TRUNCATE ausente)';
+      else
+        raise;
+      end if;
+  end;
+end $$;
+
+-- ============================================================================
+-- 4.3 PRIVILEGE DRIFT — a protecao nao depende de ACL
+-- ============================================================================
+-- Simula o cenario do achado da auditoria: uma migration futura concede DELETE
+-- e/ou TRUNCATE a `service_role` por engano. Com o grant aplicado, a ACL deixa
+-- de bloquear — e o TRIGGER precisa continuar bloqueando. Ao final os grants sao
+-- REVERTIDOS e o estado da ACL e da tabela e reconferido.
+grant delete, truncate on public.cycle_events to service_role;
+
+do $$
+begin
+  if has_table_privilege('service_role', 'public.cycle_events', 'DELETE') is not true
+     or has_table_privilege('service_role', 'public.cycle_events', 'TRUNCATE') is not true then
+    raise exception '[FAIL] pre-condicao do probe de drift: grant temporario nao aplicado';
+  end if;
+  raise notice '[PASS] privilege drift simulado: service_role recebeu DELETE/TRUNCATE temporariamente';
+end $$;
+
+set role service_role;
+
+do $$
+begin
+  begin
+    delete from public.cycle_events
+     where organization_id = 'f9a00000-0000-0000-0000-0000000000a1';
+    raise exception 'F5-09_PROBE_EFEITO';
+  exception
+    when others then
+      if sqlerrm like '%F5-09: cycle_events e append-only (DELETE negado)%' then
+        raise notice '[PASS] privilege drift: DELETE negado pelo TRIGGER (nao pela ACL) mesmo com grant a service_role';
+      elsif sqlerrm = 'F5-09_PROBE_EFEITO' then
+        raise exception '[FAIL] privilege drift: service_role apagou a trilha com grant temporario';
+      else
+        raise;
+      end if;
+  end;
+
+  begin
+    truncate public.cycle_events;
+    raise exception 'F5-09_PROBE_EFEITO';
+  exception
+    when others then
+      if sqlerrm like '%F5-09: cycle_events e append-only (TRUNCATE negado)%' then
+        raise notice '[PASS] privilege drift: TRUNCATE negado pelo TRIGGER mesmo com grant a service_role';
+      elsif sqlerrm = 'F5-09_PROBE_EFEITO' then
+        raise exception '[FAIL] privilege drift: service_role truncou a trilha com grant temporario';
+      else
+        raise;
+      end if;
+  end;
+
+  begin
+    update public.cycle_events
+       set reason = reason
+     where organization_id = 'f9a00000-0000-0000-0000-0000000000a1';
+    raise exception 'F5-09_PROBE_EFEITO';
+  exception
+    when others then
+      if sqlerrm like '%F5-09: cycle_events e append-only (UPDATE negado)%' then
+        raise notice '[PASS] privilege drift: UPDATE continua negado pelo trigger com grant temporario';
+      elsif sqlerrm = 'F5-09_PROBE_EFEITO' then
+        raise exception '[FAIL] privilege drift: UPDATE aceito com grant temporario';
+      else
+        raise;
+      end if;
+  end;
+end $$;
+
+reset role;
+
+-- Reversao do drift + estado final (ACL do contrato e trilha intacta).
+revoke delete, truncate on public.cycle_events from service_role;
+
+do $$
+declare
+  v_n int;
+  v_problemas text[] := array[]::text[];
+begin
+  if has_table_privilege('service_role', 'public.cycle_events', 'DELETE') then
+    v_problemas := v_problemas || 'service_role ainda com DELETE';
+  end if;
+  if has_table_privilege('service_role', 'public.cycle_events', 'TRUNCATE') then
+    v_problemas := v_problemas || 'service_role ainda com TRUNCATE';
+  end if;
+  if has_table_privilege('service_role', 'public.cycle_events', 'UPDATE') then
+    v_problemas := v_problemas || 'service_role com UPDATE';
+  end if;
+  if has_table_privilege('service_role', 'public.cycle_events', 'SELECT') is not true
+     or has_table_privilege('service_role', 'public.cycle_events', 'INSERT') is not true then
+    v_problemas := v_problemas || 'service_role sem SELECT/INSERT';
+  end if;
+  if has_table_privilege('authenticated', 'public.cycle_events', 'SELECT')
+     or has_table_privilege('anon', 'public.cycle_events', 'SELECT') then
+    v_problemas := v_problemas || 'anon/authenticated com acesso';
+  end if;
+
+  select count(*) into v_n
+    from public.cycle_events
+   where organization_id = 'f9a00000-0000-0000-0000-0000000000a1';
+  if v_n <> 1 then
+    v_problemas := v_problemas || format('trilha com %s linha(s) na organizacao Alfa (esperado 1: nada foi apagado)', v_n);
+  end if;
+
+  if array_length(v_problemas, 1) is not null then
+    raise exception '[FAIL] estado final pos-probe de privilege drift: %', array_to_string(v_problemas, '; ');
+  end if;
+  raise notice '[PASS] drift revertido: service_role volta a SELECT/INSERT only, anon/authenticated sem acesso e a trilha permanece intacta (1 linha)';
 end $$;
 
 -- ============================================================================

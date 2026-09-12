@@ -34,55 +34,28 @@
 \set ON_ERROR_STOP on
 
 -- ----------------------------------------------------------------------------
--- 0) Limpeza do cenario anterior (ordem respeita FKs ON DELETE RESTRICT)
+-- 0) Guarda de reexecucao — fixture INSERT-ONCE
 -- ----------------------------------------------------------------------------
-delete from public.cycle_events
-where organization_id in (
-  'f9a00000-0000-0000-0000-0000000000a1',
-  'f9a00000-0000-0000-0000-0000000000b1'
-);
+-- A trilha `cycle_events` e APPEND-ONLY PROTEGIDA NO BANCO: DELETE e TRUNCATE
+-- levantam excecao por trigger (inclusive para o owner/superuser) e as FKs da
+-- trilha sao ON DELETE RESTRICT (organizacao, ciclo, ator, membership). Logo o
+-- cenario NAO pode ser apagado e recriado: ele e inserido UMA vez e a
+-- reexecucao e NO-OP. Execucao anterior abortada deixa estado parcial, e a
+-- checagem de consistencia do §7 falha alto — nunca passa silenciosamente.
+select exists (
+  select 1
+    from public.cycle_events
+   where organization_id in (
+     'f9a00000-0000-0000-0000-0000000000a1',
+     'f9a00000-0000-0000-0000-0000000000b1')
+) as cenario_f5_09_carregado \gset
 
-delete from public.evaluation_cycles
-where organization_id in (
-  'f9a00000-0000-0000-0000-0000000000a1',
-  'f9a00000-0000-0000-0000-0000000000b1'
-);
-
-delete from public.membership_access_role_assignments
-where organization_id in (
-  'f9a00000-0000-0000-0000-0000000000a1',
-  'f9a00000-0000-0000-0000-0000000000b1'
-);
-
-delete from public.access_role_capabilities
-where access_role_id in (
-  'f9f90000-0000-0000-0000-0000000000a1',
-  'f9f90000-0000-0000-0000-0000000000b1'
-);
-
-delete from public.access_roles
-where id in (
-  'f9f90000-0000-0000-0000-0000000000a1',
-  'f9f90000-0000-0000-0000-0000000000b1'
-);
-
-delete from public.user_organization_memberships
-where organization_id in (
-  'f9a00000-0000-0000-0000-0000000000a1',
-  'f9a00000-0000-0000-0000-0000000000b1'
-);
-
-delete from public.user_profiles
-where id::text like 'f9c00000-0000-0000-0000-0000000000%';
-
-delete from auth.users
-where id::text like 'f9c00000-0000-0000-0000-0000000000%';
-
-delete from public.organizations
-where id in (
-  'f9a00000-0000-0000-0000-0000000000a1',
-  'f9a00000-0000-0000-0000-0000000000b1'
-);
+\if :cenario_f5_09_carregado
+do $$
+begin
+  raise notice '[PASS] cenario F5-09 P1 ja carregado — reexecucao no-op (trilha append-only protegida no banco)';
+end $$;
+\else
 
 -- ----------------------------------------------------------------------------
 -- 1) Organizacoes sinteticas
@@ -221,6 +194,8 @@ values
    'f9e00000-0000-0000-0000-0000000000c1',
    'f9c00000-0000-0000-0000-0000000000a1', 'f9d00000-0000-0000-0000-0000000000a1',
    'f9e40000-0000-0000-0000-0000000000e1');
+
+\endif
 
 -- ----------------------------------------------------------------------------
 -- 7) Consistencia da fixture (falha cedo se o cenario ficou incompleto)

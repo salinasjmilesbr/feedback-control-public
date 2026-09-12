@@ -247,8 +247,10 @@ comment on table public.cycle_events is
   'Registra tenant, ciclo, tipo de operacao, data de efeito, motivo, delta '
   'normalizado, autor soberano (auth.uid + membership), hash do payload da '
   'intencao e idempotencia por (organization_id, operation_id). O estado oficial '
-  'continua em `evaluation_cycles`; a trilha registra, nao decide. UPDATE tem '
-  'trigger de excecao e o caminho server-side recebe somente SELECT/INSERT.';
+  'continua em `evaluation_cycles`; a trilha registra, nao decide. APPEND-ONLY '
+  'COMPLETO: UPDATE/DELETE/TRUNCATE negados por trigger (mesmo para o owner e '
+  'para service_role) e, na primeira camada, por ausencia de grant; o caminho '
+  'server-side recebe somente SELECT/INSERT.';
 comment on column public.cycle_events.effective_date is
   'F5-09 P1 (§12.6): data de EFEITO da mudanca, nunca a data de gravacao '
   '(`created_at` registra quando o fato foi gravado, server-side).';
@@ -276,11 +278,15 @@ create index ix_cycle_events_cycle
 create index ix_cycle_events_effective
   on public.cycle_events (organization_id, effective_date);
 
--- Append-only no BANCO (nao apenas na aplicacao): UPDATE levanta excecao.
--- DELETE e barrado pela ausencia de grant a TODOS os papeis de aplicacao
--- (mesmo padrao de `structure_events`/`collaborator_events`); somente o
--- superuser local das validacoes remove linhas sinteticas para reexecutar o
--- cenario.
+-- Append-only no BANCO em PROFUNDIDADE (nao apenas na aplicacao e nao apenas por
+-- ACL): UPDATE, DELETE e TRUNCATE levantam excecao por trigger, INCLUSIVE para o
+-- OWNER e para `service_role` (que contorna RLS). Os revokes do §9 continuam
+-- valendo como PRIMEIRA camada; o trigger e a SEGUNDA, resistente a privilege
+-- drift — uma migration futura que concedesse DELETE/TRUNCATE por engano a
+-- `service_role` nao conseguiria apagar a trilha.
+--
+-- Uma unica funcao cobre as tres operacoes (TG_OP compoe o motivo da excecao). O
+-- trigger de TRUNCATE e STATEMENT-level, exigencia do PostgreSQL para TRUNCATE.
 create or replace function public.enforce_cycle_events_append_only()
 returns trigger
 language plpgsql
@@ -288,17 +294,27 @@ security invoker
 set search_path = public
 as $$
 begin
-  raise exception 'F5-09: cycle_events e append-only (UPDATE negado)';
+  raise exception 'F5-09: cycle_events e append-only (% negado)', tg_op;
 end;
 $$;
 
 comment on function public.enforce_cycle_events_append_only() is
-  'F5-09 P1 (§12.5): impede UPDATE da trilha de ciclos (append-only); DELETE '
-  'nunca e concedido a anon/authenticated/service_role.';
+  'F5-09 P1 (§12.5): torna a trilha de ciclos APPEND-ONLY NO BANCO — UPDATE, '
+  'DELETE e TRUNCATE levantam excecao mesmo para o owner e para service_role, '
+  'resistindo a privilege drift (grant acidental futuro). Primeira camada: os '
+  'revokes de UPDATE/DELETE/TRUNCATE a anon/authenticated/service_role.';
 
 create trigger trg_cycle_events_append_only
   before update on public.cycle_events
   for each row execute function public.enforce_cycle_events_append_only();
+
+create trigger trg_cycle_events_no_delete
+  before delete on public.cycle_events
+  for each row execute function public.enforce_cycle_events_append_only();
+
+create trigger trg_cycle_events_no_truncate
+  before truncate on public.cycle_events
+  for each statement execute function public.enforce_cycle_events_append_only();
 
 -- RLS/grants da trilha (§9): deny-by-default INTEGRAL — nenhuma policy (nem
 -- SELECT) e nenhum privilegio a `anon`/`authenticated`. A leitura de trilha e
@@ -499,14 +515,34 @@ begin
     v_problemas := v_problemas || 'policy antecipada (P1 e deny-by-default integral; leitura de ciclo e do P5)';
   end if;
 
-  -- Trilha: append-only no banco + grants minimos
+  -- Trilha: append-only COMPLETO no banco (UPDATE + DELETE + TRUNCATE) e grants
+  -- minimos. Um trigger ausente seria privilege drift nao coberto.
   if not exists (
     select 1 from pg_trigger
      where tgrelid = 'public.cycle_events'::regclass
        and tgname = 'trg_cycle_events_append_only'
        and not tgisinternal
+       and pg_get_triggerdef(oid) like '%BEFORE UPDATE%'
   ) then
-    v_problemas := v_problemas || 'trigger append-only ausente em cycle_events';
+    v_problemas := v_problemas || 'trigger append-only de UPDATE ausente em cycle_events';
+  end if;
+  if not exists (
+    select 1 from pg_trigger
+     where tgrelid = 'public.cycle_events'::regclass
+       and tgname = 'trg_cycle_events_no_delete'
+       and not tgisinternal
+       and pg_get_triggerdef(oid) like '%BEFORE DELETE%'
+  ) then
+    v_problemas := v_problemas || 'trigger append-only de DELETE ausente em cycle_events';
+  end if;
+  if not exists (
+    select 1 from pg_trigger
+     where tgrelid = 'public.cycle_events'::regclass
+       and tgname = 'trg_cycle_events_no_truncate'
+       and not tgisinternal
+       and pg_get_triggerdef(oid) like '%BEFORE TRUNCATE%'
+  ) then
+    v_problemas := v_problemas || 'trigger append-only de TRUNCATE ausente em cycle_events';
   end if;
   if has_table_privilege('service_role', 'public.cycle_events', 'UPDATE')
      or has_table_privilege('service_role', 'public.cycle_events', 'DELETE')

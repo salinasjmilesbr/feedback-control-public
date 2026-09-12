@@ -129,6 +129,23 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   ≥ 15 funções **estruturais** com a chave D24. `ciclo_lock_organizacao` e a
   migration da F5-09/P1 **não** foram alteradas (a F5-09 **não** reutiliza
   `position_reporting_lines:` nem `f5_07_estrutura:`).
+- **Correção pós-auditoria Codex (PR #190, mesma branch):** o bloqueante era
+  `cycle_events` não ser append-only contra **privilege drift** (o trigger cobria
+  só `UPDATE`; `DELETE`/`TRUNCATE` dependiam de revokes). Correção **na P1**:
+  `enforce_cycle_events_append_only()` passou a levantar exceção para as três
+  operações (`TG_OP` no motivo) e a trilha ganhou `trg_cycle_events_no_delete`
+  (`BEFORE DELETE` row-level) e `trg_cycle_events_no_truncate` (`BEFORE TRUNCATE`
+  statement-level) — proteção no banco **inclusive para o owner e para
+  `service_role`**, mantidos os revokes como primeira camada; a guarda final da
+  migration passou a exigir os três triggers. O validador
+  `02-validar-f5-09.sql` ganhou a seção §4.3: probes de `UPDATE`/`DELETE`/
+  `TRUNCATE` negados **para o owner** e sob **privilege drift simulado** (grant
+  temporário de `DELETE`/`TRUNCATE` a `service_role`, revertido ao final, com
+  conferência de ACL e de que a trilha continua com 1 linha). Consequência
+  necessária: o cenário `01-cenario-f5-09.sql` deixou de apagar/recriar a fixture
+  (a trilha é protegida e as FKs são `ON DELETE RESTRICT`) e passou a ser
+  **INSERT-ONCE** (guarda `\gset`/`\if` + reexecução no-op). `evaluation_cycles`
+  **não** foi alterada e nenhuma P2+ foi antecipada.
 
 ### 3.6 F5-09 — desenho técnico (rodada anterior, integrada pelo PR #189)
 
