@@ -42,6 +42,18 @@ where organization_id in (
   'f8a00000-0000-0000-0000-0000000000b1'
 );
 
+delete from public.collegiate_configuration_members
+where organization_id in (
+  'f8a00000-0000-0000-0000-0000000000a1',
+  'f8a00000-0000-0000-0000-0000000000b1'
+);
+
+delete from public.collegiate_configurations
+where organization_id in (
+  'f8a00000-0000-0000-0000-0000000000a1',
+  'f8a00000-0000-0000-0000-0000000000b1'
+);
+
 delete from public.occupations
 where organization_id in (
   'f8a00000-0000-0000-0000-0000000000a1',
@@ -73,7 +85,10 @@ where organization_id in (
 );
 
 delete from public.collaborators
-where organization_id = 'f8a00000-0000-0000-0000-0000000000a1';
+where organization_id in (
+  'f8a00000-0000-0000-0000-0000000000a1',
+  'f8a00000-0000-0000-0000-0000000000b1'
+);
 
 delete from public.job_roles
 where organization_id in (
@@ -82,6 +97,18 @@ where organization_id in (
 );
 
 delete from public.seniority_levels
+where organization_id in (
+  'f8a00000-0000-0000-0000-0000000000a1',
+  'f8a00000-0000-0000-0000-0000000000b1'
+);
+
+delete from public.access_role_assignment_scopes
+where organization_id in (
+  'f8a00000-0000-0000-0000-0000000000a1',
+  'f8a00000-0000-0000-0000-0000000000b1'
+);
+
+delete from public.membership_access_role_assignments
 where organization_id in (
   'f8a00000-0000-0000-0000-0000000000a1',
   'f8a00000-0000-0000-0000-0000000000b1'
@@ -96,6 +123,7 @@ where organization_id in (
 delete from public.user_profiles
 where id in (
   'f8c00000-0000-0000-0000-0000000000a1',
+  'f8c00000-0000-0000-0000-0000000000a2',
   'f8c00000-0000-0000-0000-0000000000b1'
 );
 
@@ -122,11 +150,13 @@ insert into auth.users
    raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
 values
   ('f8c00000-0000-0000-0000-0000000000a1','00000000-0000-0000-0000-000000000000','authenticated','authenticated','f5-08.alfa@example.invalid','x',now(),'{}'::jsonb,'{}'::jsonb,now(),now()),
-  ('f8c00000-0000-0000-0000-0000000000b1','00000000-0000-0000-0000-000000000000','authenticated','authenticated','f5-08.beta@example.invalid','x',now(),'{}'::jsonb,'{}'::jsonb,now(),now());
+  ('f8c00000-0000-0000-0000-0000000000b1','00000000-0000-0000-0000-000000000000','authenticated','authenticated','f5-08.beta@example.invalid','x',now(),'{}'::jsonb,'{}'::jsonb,now(),now()),
+  ('f8c00000-0000-0000-0000-0000000000a2','00000000-0000-0000-0000-000000000000','authenticated','authenticated','f5-08.semcap@example.invalid','x',now(),'{}'::jsonb,'{}'::jsonb,now(),now());
 
 insert into public.user_profiles (id, status) values
   ('f8c00000-0000-0000-0000-0000000000a1', 'active'),
-  ('f8c00000-0000-0000-0000-0000000000b1', 'active');
+  ('f8c00000-0000-0000-0000-0000000000b1', 'active'),
+  ('f8c00000-0000-0000-0000-0000000000a2', 'active');
 
 insert into public.user_organization_memberships
   (id, user_profile_id, organization_id, status) values
@@ -135,23 +165,36 @@ insert into public.user_organization_memberships
    'f8a00000-0000-0000-0000-0000000000a1', 'active'),
   ('f8d00000-0000-0000-0000-0000000000b1',
    'f8c00000-0000-0000-0000-0000000000b1',
-   'f8a00000-0000-0000-0000-0000000000b1', 'active');
+   'f8a00000-0000-0000-0000-0000000000b1', 'active'),
+  ('f8d00000-0000-0000-0000-0000000000a2',
+   'f8c00000-0000-0000-0000-0000000000a2',
+   'f8a00000-0000-0000-0000-0000000000a1', 'active');
 
 insert into public.job_roles (id, organization_id, name, code, status) values
   ('f8e00000-0000-0000-0000-0000000000a1',
    'f8a00000-0000-0000-0000-0000000000a1', 'Analista F5-08', 'ANL-F5-08', 'active'),
   ('f8e00000-0000-0000-0000-0000000000b1',
-   'f8a00000-0000-0000-0000-0000000000b1', 'Analista F5-08 Beta', 'ANL-F5-08-B', 'active');
+   'f8a00000-0000-0000-0000-0000000000b1', 'Analista F5-08 Beta', 'ANL-F5-08-B', 'active'),
+  ('f8e00000-0000-0000-0000-0000000000a2',
+   'f8a00000-0000-0000-0000-0000000000a1', 'Cargo F5-08 Desativado', 'CARGO-OFF-F5-08', 'disabled');
 
 insert into public.seniority_levels (id, organization_id, name, status) values
   ('f8f00000-0000-0000-0000-0000000000a1',
    'f8a00000-0000-0000-0000-0000000000a1', 'Senior F5-08', 'active'),
   ('f8f00000-0000-0000-0000-0000000000b1',
-   'f8a00000-0000-0000-0000-0000000000b1', 'Senior F5-08 Beta', 'active');
+   'f8a00000-0000-0000-0000-0000000000b1', 'Senior F5-08 Beta', 'active'),
+  ('f8f00000-0000-0000-0000-0000000000a2',
+   'f8a00000-0000-0000-0000-0000000000a1', 'Senior F5-08 Desativada', 'disabled');
 
 insert into public.collaborators (id, organization_id, full_name) values
   ('f8500000-0000-0000-0000-0000000000a1',
-   'f8a00000-0000-0000-0000-0000000000a1', 'Colaborador Sintetico F5-08');
+   'f8a00000-0000-0000-0000-0000000000a1', 'Colaborador Sintetico F5-08'),
+  ('f8500000-0000-0000-0000-0000000000a2',
+   'f8a00000-0000-0000-0000-0000000000a1', 'Membro Colegiado F5-08 A'),
+  ('f8500000-0000-0000-0000-0000000000a3',
+   'f8a00000-0000-0000-0000-0000000000a1', 'Membro Colegiado F5-08 B'),
+  ('f8500000-0000-0000-0000-0000000000b1',
+   'f8a00000-0000-0000-0000-0000000000b1', 'Colaborador Sintetico F5-08 Beta');
 
 -- ----------------------------------------------------------------------------
 -- 2) Unidades (Alfa) — todas vigentes desde T0 (valid_to null)
@@ -315,15 +358,96 @@ insert into public.structure_events
    'f8900000-0000-0000-0000-000000000001');
 
 -- ----------------------------------------------------------------------------
--- 9) Resumo do cenario
+-- 10) Fixture do P2 — RPCs soberanas (autorizacao + estrutura dedicada)
+-- ----------------------------------------------------------------------------
+-- Autorizacao: role de SISTEMA `admin` (bundle com org.structure.manage e
+-- org.catalog.manage — 20260908000001) atribuida a membership do ator Alfa com
+-- scope ORGANIZATION, exatamente o que `resolver_capabilities_escopos_efetivas`
+-- exige (assignment ativo + scope ativo). O ator `f8c00000-...a2` fica SEM
+-- assignment (fixture de "ator sem capability") e o ator Beta serve ao teste
+-- cross-tenant.
+insert into public.membership_access_role_assignments
+  (id, membership_id, organization_id, access_role_id, status, created_by) values
+  ('f8a10000-0000-0000-0000-000000000001', 'f8d00000-0000-0000-0000-0000000000a1',
+   'f8a00000-0000-0000-0000-0000000000a1', 'c0000000-0000-4000-8000-0000000000f1',
+   'active', 'f8c00000-0000-0000-0000-0000000000a1');
+
+insert into public.access_role_assignment_scopes
+  (id, assignment_id, organization_id, scope_type, status, created_by) values
+  ('f8a20000-0000-0000-0000-000000000001', 'f8a10000-0000-0000-0000-000000000001',
+   'f8a00000-0000-0000-0000-0000000000a1', 'ORGANIZATION', 'active',
+   'f8c00000-0000-0000-0000-0000000000a1');
+
+-- Unidades dedicadas aos testes de RPC (a validacao do P1 NAO as toca; ela roda
+-- antes e consome as unidades 0006/0007/0008 do cenario base):
+--   0017 U-POS          — recebe posicao vigente (I2 caso i e I3 ocupacao)
+--   0018 U-FILHA        — e FILHA em relacao vigente (I2 caso ii)
+--   0019 U-PAI          — e PAI de relacao vigente (I2 caso iii)
+--   001a U-FILHA-DE-PAI — filha de U-PAI
+--   001b U-LIVRE        — sem dependencia (encerramento permitido)
+insert into public.organizational_units (id, organization_id, name, valid_from) values
+  ('f8110000-0000-0000-0000-000000000017', 'f8a00000-0000-0000-0000-0000000000a1', 'F5-08 P2 U-POS',          '2026-01-01T00:00:00Z'),
+  ('f8110000-0000-0000-0000-000000000018', 'f8a00000-0000-0000-0000-0000000000a1', 'F5-08 P2 U-FILHA',        '2026-01-01T00:00:00Z'),
+  ('f8110000-0000-0000-0000-000000000019', 'f8a00000-0000-0000-0000-0000000000a1', 'F5-08 P2 U-PAI',          '2026-01-01T00:00:00Z'),
+  ('f8110000-0000-0000-0000-00000000001a', 'f8a00000-0000-0000-0000-0000000000a1', 'F5-08 P2 U-FILHA-DE-PAI', '2026-01-01T00:00:00Z'),
+  ('f8110000-0000-0000-0000-00000000001b', 'f8a00000-0000-0000-0000-0000000000a1', 'F5-08 P2 U-LIVRE',        '2026-01-01T00:00:00Z');
+
+insert into public.organizational_unit_parent_periods
+  (id, organization_id, unit_id, parent_unit_id, valid_from, valid_to) values
+  ('f8710000-0000-0000-0000-00000000000e', 'f8a00000-0000-0000-0000-0000000000a1',
+   'f8110000-0000-0000-0000-000000000018', 'f8110000-0000-0000-0000-000000000001',
+   '2026-01-01T00:00:00Z', null),
+  ('f8710000-0000-0000-0000-00000000000f', 'f8a00000-0000-0000-0000-0000000000a1',
+   'f8110000-0000-0000-0000-00000000001a', 'f8110000-0000-0000-0000-000000000019',
+   '2026-01-01T00:00:00Z', null);
+
+-- Posicoes dedicadas:
+--   05 P2-P-OCUP    — com ocupacao vigente (I3) e bloqueio de I2 caso (i)
+--   06 P2-P-REP-SUB — com reporting line vigente (guarda F3-04)
+--   07 P2-P-REP-MGR — superior da reporting line acima
+--   08 P2-P-LIVRE   — sem ocupacao/reporting line (encerramento permitido)
+insert into public.organizational_positions
+  (id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from) values
+  ('f8310000-0000-0000-0000-000000000005', 'f8a00000-0000-0000-0000-0000000000a1',
+   'f8110000-0000-0000-0000-000000000017', 'f8e00000-0000-0000-0000-0000000000a1',
+   'f8f00000-0000-0000-0000-0000000000a1', '2026-01-01T00:00:00Z'),
+  ('f8310000-0000-0000-0000-000000000006', 'f8a00000-0000-0000-0000-0000000000a1',
+   'f8110000-0000-0000-0000-00000000001b', 'f8e00000-0000-0000-0000-0000000000a1',
+   'f8f00000-0000-0000-0000-0000000000a1', '2026-01-01T00:00:00Z'),
+  ('f8310000-0000-0000-0000-000000000007', 'f8a00000-0000-0000-0000-0000000000a1',
+   'f8110000-0000-0000-0000-00000000001b', 'f8e00000-0000-0000-0000-0000000000a1',
+   'f8f00000-0000-0000-0000-0000000000a1', '2026-01-01T00:00:00Z'),
+  ('f8310000-0000-0000-0000-000000000008', 'f8a00000-0000-0000-0000-0000000000a1',
+   'f8110000-0000-0000-0000-00000000001b', 'f8e00000-0000-0000-0000-0000000000a1',
+   'f8f00000-0000-0000-0000-0000000000a1', '2026-01-01T00:00:00Z');
+
+insert into public.occupations
+  (id, organization_id, collaborator_id, organizational_position_id, reason, valid_from) values
+  ('f8410000-0000-0000-0000-000000000003', 'f8a00000-0000-0000-0000-0000000000a1',
+   'f8500000-0000-0000-0000-0000000000a1', 'f8310000-0000-0000-0000-000000000005',
+   'ocupacao vigente P2', '2026-01-01T00:00:00Z');
+
+insert into public.position_reporting_lines
+  (id, organization_id, subordinate_position_id, manager_position_id, reason, valid_from) values
+  ('f8610000-0000-0000-0000-000000000002', 'f8a00000-0000-0000-0000-0000000000a1',
+   'f8310000-0000-0000-0000-000000000006', 'f8310000-0000-0000-0000-000000000007',
+   'reporting line vigente P2', '2026-01-01T00:00:00Z');
+
+-- ----------------------------------------------------------------------------
+-- 11) Resumo do cenario
 -- ----------------------------------------------------------------------------
 do $$
 declare
-  v_orgs  int;
-  v_units int;
-  v_per   int;
-  v_pos   int;
-  v_evt   int;
+  v_orgs    int;
+  v_units   int;
+  v_per     int;
+  v_pos     int;
+  v_evt     int;
+  v_colab   int;
+  v_cargos  int;
+  v_senior  int;
+  v_caps    int;
+  v_caps_no int;
 begin
   select count(*) into v_orgs  from public.organizations
    where id in ('f8a00000-0000-0000-0000-0000000000a1', 'f8a00000-0000-0000-0000-0000000000b1');
@@ -336,11 +460,39 @@ begin
   select count(*) into v_evt   from public.structure_events
    where organization_id = 'f8a00000-0000-0000-0000-0000000000a1';
 
-  if v_orgs <> 2 or v_units <> 25 or v_per <> 15 or v_pos <> 4 or v_evt <> 1 then
+  select count(*) into v_colab from public.collaborators
+   where organization_id = 'f8a00000-0000-0000-0000-0000000000a1';
+  select count(*) into v_cargos from public.job_roles
+   where organization_id = 'f8a00000-0000-0000-0000-0000000000a1';
+  select count(*) into v_senior from public.seniority_levels
+   where organization_id = 'f8a00000-0000-0000-0000-0000000000a1';
+
+  -- O ator admin resolve AMBAS as capabilities; o ator sem assignment, nenhuma.
+  select count(*) into v_caps
+    from public.resolver_capabilities_escopos_efetivas(
+      'f8c00000-0000-0000-0000-0000000000a1',
+      'f8a00000-0000-0000-0000-0000000000a1')
+   where capability_code in ('org.structure.manage', 'org.catalog.manage');
+  select count(*) into v_caps_no
+    from public.resolver_capabilities_escopos_efetivas(
+      'f8c00000-0000-0000-0000-0000000000a2',
+      'f8a00000-0000-0000-0000-0000000000a1');
+
+  if v_orgs <> 2 or v_units <> 30 or v_per <> 17 or v_pos <> 8 or v_evt <> 1 then
     raise exception
       '[FAIL] cenario F5-08 incompleto (orgs=%, units=%, periods=%, positions=%, events=%)',
       v_orgs, v_units, v_per, v_pos, v_evt;
   end if;
+  if v_colab <> 3 or v_cargos <> 2 or v_senior <> 2 then
+    raise exception
+      '[FAIL] cenario F5-08 P2 incompleto (colaboradores=%, cargos=%, senioridades=%)',
+      v_colab, v_cargos, v_senior;
+  end if;
+  if v_caps <> 2 or v_caps_no <> 0 then
+    raise exception
+      '[FAIL] fixture de autorizacao incorreta (caps admin=%, caps sem capability=%)',
+      v_caps, v_caps_no;
+  end if;
 
-  raise notice '[PASS] cenario F5-08 P1 aplicado (2 orgs, 25 unidades, 15 periodos, 4 posicoes, 1 evento)';
+  raise notice '[PASS] cenario F5-08 P1+P2 aplicado (2 orgs, 30 unidades, 17 periodos, 8 posicoes, 3 colaboradores, 1 evento, capabilities resolvidas)';
 end $$;
