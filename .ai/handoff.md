@@ -69,7 +69,8 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
     **UUID-first**, resultado discriminado com código público),
     `src/infrastructure/supabase/ciclos/repositorioCiclosSoberanos.ts` (adapter de
     RLS; sessão como **pré-condição** → `NOT_AUTHORIZED`, erro → `FORBIDDEN`/
-    `INTERNAL`, linha fora do contrato descartada),
+    `INTERNAL`, linha fora do contrato — **ou de outro tenant** — descartada:
+    defesa em profundidade na projeção, já que a RLS é quem isola o tenant),
     `src/services/acessoCiclosSoberanos.ts` (porta única + cache de UX por
     **geração monotônica**: troca de organização/unmount/logout descartam resposta
     em voo) e `src/infrastructure/localStorage/localCycleRepository.ts`

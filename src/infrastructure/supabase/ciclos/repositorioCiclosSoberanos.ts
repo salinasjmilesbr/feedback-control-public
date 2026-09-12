@@ -15,7 +15,8 @@
  *   devolve conjunto vazio — uma negação SILENCIOSA que a UI leria como "não há
  *   ciclos". Por isso a sessão é verificada ANTES da consulta e a ausência
  *   recusa com `NOT_AUTHORIZED` (fail-closed, nunca vazio por negação).
- * - `organization_id` é INTENÇÃO de UX (defesa em profundidade no filtro); quem
+ * - `organization_id` é INTENÇÃO de UX (defesa em profundidade no filtro E na
+ *   projeção: linha de outro tenant é descartada/tratada como ausente); quem
  *   isola o tenant é a policy. Nada é inventado, semeado ou normalizado e o
  *   `localStorage` NÃO participa deste caminho.
  * - **UUID-first:** a identidade é `id`; `ano`/`numero` são rótulos do domínio e
@@ -116,6 +117,15 @@ function mapearCicloOuNulo(valor: unknown): CicloSoberano | null {
   return mapearCiclo(valor as LinhaCiclo);
 }
 
+/**
+ * Defesa em profundidade (NÃO é autorização): a linha devolvida precisa pertencer
+ * ao tenant PEDIDO. A RLS é a barreira de segurança; esta checagem apenas garante
+ * que uma resposta anômala/forjada do backend nunca chegue ao chamador.
+ */
+function mesmoTenant(ciclo: CicloSoberano, organizationId: string): boolean {
+  return ciclo.organizationId === organizationId;
+}
+
 export function criarRepositorioCiclosSoberanos(cliente: SupabaseClient): CycleRepository {
   function falha<T>(codigo: CodigoPublico, mensagem: string): ResultadoCiclos<T> {
     return { ok: false, error: { code: codigo, message: mensagem } };
@@ -132,7 +142,10 @@ export function criarRepositorioCiclosSoberanos(cliente: SupabaseClient): CycleR
   }
 
   /** Erro nunca é propagado cru: `FORBIDDEN` para RLS/JWT e `INTERNAL` no resto. */
-  function tratarLista(resposta: RespostaPostgrest): ResultadoCiclos<readonly CicloSoberano[]> {
+  function tratarLista(
+    resposta: RespostaPostgrest,
+    organizationId: string
+  ): ResultadoCiclos<readonly CicloSoberano[]> {
     if (resposta.error) {
       const codigo = codigoDaFalha(resposta.error);
       return falha(codigo, codigo === "FORBIDDEN" ? ERRO_NEGADO : ERRO_LEITURA);
@@ -140,16 +153,23 @@ export function criarRepositorioCiclosSoberanos(cliente: SupabaseClient): CycleR
     const bruto = Array.isArray(resposta.data) ? resposta.data : [];
     const ciclos = bruto
       .map((item) => mapearCicloOuNulo(item))
-      .filter((ciclo): ciclo is CicloSoberano => ciclo !== null);
+      // Defesa em profundidade: a RLS isola o tenant, mas o cliente NÃO confia na
+      // resposta como prova — linha de outra organização é DESCARTADA.
+      .filter((ciclo): ciclo is CicloSoberano => ciclo !== null && mesmoTenant(ciclo, organizationId));
     return { ok: true, data: ciclos };
   }
 
-  function tratarUm(resposta: RespostaPostgrest): ResultadoCiclos<CicloSoberano | null> {
+  function tratarUm(
+    resposta: RespostaPostgrest,
+    organizationId: string
+  ): ResultadoCiclos<CicloSoberano | null> {
     if (resposta.error) {
       const codigo = codigoDaFalha(resposta.error);
       return falha(codigo, codigo === "FORBIDDEN" ? ERRO_NEGADO : ERRO_LEITURA);
     }
-    return { ok: true, data: mapearCicloOuNulo(resposta.data) };
+    const ciclo = mapearCicloOuNulo(resposta.data);
+    // Linha de outro tenant é tratada como AUSENTE (nunca devolvida ao chamador).
+    return { ok: true, data: ciclo && mesmoTenant(ciclo, organizationId) ? ciclo : null };
   }
 
   function organizacaoValida(organizationId: string): boolean {
@@ -170,7 +190,7 @@ export function criarRepositorioCiclosSoberanos(cliente: SupabaseClient): CycleR
         .order("numero", { ascending: false })
         .order("id", { ascending: true }) as unknown as Promise<RespostaPostgrest>);
 
-      return tratarLista(resposta);
+      return tratarLista(resposta, organizationId);
     },
 
     async obterCiclo(organizationId, cycleId) {
@@ -187,7 +207,7 @@ export function criarRepositorioCiclosSoberanos(cliente: SupabaseClient): CycleR
         .eq("id", cycleId)
         .maybeSingle() as unknown as Promise<RespostaPostgrest>);
 
-      return tratarUm(resposta);
+      return tratarUm(resposta, organizationId);
     },
 
     async obterCicloAtivo(organizationId) {
@@ -202,7 +222,7 @@ export function criarRepositorioCiclosSoberanos(cliente: SupabaseClient): CycleR
         .eq("status", "ATIVO")
         .maybeSingle() as unknown as Promise<RespostaPostgrest>);
 
-      return tratarUm(resposta);
+      return tratarUm(resposta, organizationId);
     },
   };
 }

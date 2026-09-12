@@ -124,7 +124,9 @@ describe("F5-09 P5 — repositório soberano de ciclos (RLS own-tenant)", () => 
 
     expect(resultado.ok).toBe(true);
     if (!resultado.ok) return;
-    expect(resultado.data).toHaveLength(2);
+    // A linha de OUTRA organização é DESCARTADA já na projeção (defesa em
+    // profundidade: o cliente não confia na resposta como prova de tenant).
+    expect(resultado.data.map((ciclo) => ciclo.id)).toEqual([CICLO]);
     // Identidade vem de `id`; `ano`/`numero` são apenas rótulos da projeção.
     expect(resultado.data[0]).toMatchObject({
       id: CICLO,
@@ -142,6 +144,29 @@ describe("F5-09 P5 — repositório soberano de ciclos (RLS own-tenant)", () => 
       ["numero", false],
       ["id", true],
     ]);
+  });
+
+  it("linha de OUTRO tenant nunca chega ao chamador (defesa em profundidade)", async () => {
+    const foraDoTenant = linhaCiclo({ id: CICLO_B, organization_id: OUTRA_ORG });
+
+    const lista = clienteLeituraFalso({ evaluation_cycles: { data: [foraDoTenant] } }, SESSAO);
+    expect(await criarRepositorioCiclosSoberanos(lista.cliente).listarCiclos(ORG)).toEqual({
+      ok: true,
+      data: [],
+    });
+
+    const porId = clienteLeituraFalso({ evaluation_cycles: { data: foraDoTenant } }, SESSAO);
+    expect(await criarRepositorioCiclosSoberanos(porId.cliente).obterCiclo(ORG, CICLO_B)).toEqual({
+      ok: true,
+      data: null,
+    });
+
+    // `foraDoTenant` está ATIVO: sem a checagem de tenant ele seria devolvido.
+    const ativo = clienteLeituraFalso({ evaluation_cycles: { data: foraDoTenant } }, SESSAO);
+    expect(await criarRepositorioCiclosSoberanos(ativo.cliente).obterCicloAtivo(ORG)).toEqual({
+      ok: true,
+      data: null,
+    });
   });
 
   it("linha fora do contrato é DESCARTADA (nunca inventa número/identidade)", async () => {
