@@ -63,7 +63,7 @@ jobs:
   supabase-local:
     name: Supabase local — RLS/policy validation
     runs-on: ubuntu-latest
-    # 13 arquivos de validação (F4-08, F5-04, F5-08 P6 e regressão F5-06/F5-07).
+    # Cenarios/validadores SQL: F4-08, F5-04, F5-08 P6, F5-09 P1 e regressao F5-06/F5-07.
     timeout-minutes: 40
     defaults:
       run:
@@ -142,6 +142,23 @@ jobs:
           docker exec -i supabase_db_feedback-control \
             psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
             < supabase/validacao/03-validar-f5-08-cutover.sql
+
+      # ----------------------------------------------------------------------
+      # F5-09 (P1): fundacao soberana de ciclos (schema/trilha/grants). Roda
+      # antes dos validadores de regressao para que uma falha da F5-09 nao seja
+      # mascarada por outra atividade.
+      # ----------------------------------------------------------------------
+      - name: Seed F5-09 P1 scenario
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/01-cenario-f5-09.sql
+
+      - name: Run F5-09 P1 validation (integridade de ciclos + trilha append-only)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/02-validar-f5-09.sql
 
       # ----------------------------------------------------------------------
       # Regressão F5-06/F5-07 (§23.4): cenários independentes, com prefixos de
