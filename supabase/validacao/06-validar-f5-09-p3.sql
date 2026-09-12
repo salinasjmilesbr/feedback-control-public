@@ -38,7 +38,7 @@
 --   25 nenhuma inferencia por cargo/texto (assinatura + fontes relacionais);
 --   26 lock normativo da familia de ciclos preservado;
 --   27 nenhuma capability nova;
---   28 nenhum P4+ antecipado.
+--   28 nenhuma leitura soberana (P5+) antecipada (policy/grant/RPC de leitura).
 -- Probes cross-tenant sao DIRETOS na nova RPC (4 combinacoes) e provam zero
 -- efeito (nenhum snapshot, nenhum evento, nenhuma alteracao de versao).
 --
@@ -1624,13 +1624,16 @@ begin
     v_problemas := v_problemas || 'capability nova de admissao criada'::text;
   end if;
 
-  -- (28) P4+ nao antecipado + deny-by-default intacto (leitura e do P5).
+  -- (28) Nenhuma superficie de LEITURA soberana (P5+) antecipada e
+  -- deny-by-default intacto. A checagem NAO depende da existencia de RPCs de
+  -- fases posteriores (P4 pode coexistir legitimamente): o que a P3 proibe e
+  -- antecipar LEITURA (RPC de leitura de ciclo, policy ou grant a authenticated).
   if exists (
     select 1 from pg_proc p
      where p.pronamespace = 'public'::regnamespace
-       and p.proname in ('ciclo_cancelar', 'ciclo_reabrir', 'ciclo_corrigir_periodo')
+       and p.proname in ('ciclo_painel', 'ciclo_historico', 'ciclo_listar_colaborador_por_ciclo')
   ) then
-    v_problemas := v_problemas || 'P4 antecipado (RPC excepcional presente)'::text;
+    v_problemas := v_problemas || 'RPC de LEITURA soberana (P5+) antecipada'::text;
   end if;
   if exists (
     select 1 from pg_policies
@@ -1660,7 +1663,7 @@ begin
     raise exception '[FAIL] 25/26/27/28: %', array_to_string(v_problemas, '; ');
   end if;
 
-  raise notice '[PASS] 25/26/27/28: contrato restrito (sem parametro estrutural, sem cargo/texto, sem admission_date), lock normativo da familia de ciclos, delega exclusiva a F3-08/F3-09, ACL so service_role, catalogo intacto (31 capabilities) e nenhum P4+/policy antecipado';
+  raise notice '[PASS] 25/26/27/28: contrato restrito (sem parametro estrutural, sem cargo/texto, sem admission_date), lock normativo da familia de ciclos, delega exclusiva a F3-08/F3-09, ACL so service_role, catalogo intacto (31 capabilities) e nenhuma leitura soberana (P5+) antecipada';
 end $$;
 
 -- ----------------------------------------------------------------------------
