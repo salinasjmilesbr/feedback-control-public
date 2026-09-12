@@ -193,9 +193,10 @@ begin
   raise notice '[PASS] A: criacao valida (PLANEJADO/version 0, config soberana, evento CRIADO com autoria server-side)';
 end $$;
 
-select id as ciclo1 from public.evaluation_cycles
- where organization_id = 'e9a00000-0000-0000-0000-0000000000a1' and ano = 2030 and numero = 1
-\gset
+-- O UUID do ciclo criado no teste A NAO e transportado por variavel do psql: a
+-- interpolacao `:'var'` do psql nao e aplicada dentro de corpos dollar-quoted
+-- (blocos `DO`), o que geraria erro de sintaxe no servidor. Cada bloco resolve o
+-- ciclo da fixture por SELECT DETERMINISTICO (organization_id + ano + numero).
 
 -- ============================================================================
 -- 3) V) Idempotencia por (organization_id, operation_id) + hash canonico
@@ -251,15 +252,19 @@ do $$
 declare
   v_org    uuid := 'e9a00000-0000-0000-0000-0000000000a1';
   v_ator   uuid := 'e9c00000-0000-0000-0000-000000000001';
+  v_c1     uuid;
   v_res    jsonb;
   v_ciclo  record;
   v_evt    record;
 begin
-  v_res := public.ciclo_editar(:'ciclo1'::uuid, v_org, 2030, 1,
+  select c.id into v_c1 from public.evaluation_cycles c
+   where c.organization_id = v_org and c.ano = 2030 and c.numero = 1;
+
+  v_res := public.ciclo_editar(v_c1, v_org, 2030, 1,
     date '2030-01-15', date '2030-04-15', 0, v_ator,
     'e9a10000-0000-0000-0000-0000000000e1');
 
-  select c.* into v_ciclo from public.evaluation_cycles c where c.id = :'ciclo1'::uuid;
+  select c.* into v_ciclo from public.evaluation_cycles c where c.id = v_c1;
   if (v_res->>'version')::int <> 1 or v_ciclo.version <> 1 then
     raise exception '[FAIL] E: edicao deveria elevar a versao para 1 (retorno=%, linha=%)',
       v_res->>'version', v_ciclo.version;
@@ -295,11 +300,15 @@ do $$
 declare
   v_org  uuid := 'e9a00000-0000-0000-0000-0000000000a1';
   v_ator uuid := 'e9c00000-0000-0000-0000-000000000001';
+  v_c1   uuid;
   v_ok   boolean := false;
 begin
+  select c.id into v_c1 from public.evaluation_cycles c
+   where c.organization_id = v_org and c.ano = 2030 and c.numero = 1;
+
   -- expected_version OBSOLETO (a versao atual e 1).
   begin
-    perform public.ciclo_editar(:'ciclo1'::uuid, v_org, 2030, 1,
+    perform public.ciclo_editar(v_c1, v_org, 2030, 1,
       date '2030-02-01', date '2030-05-01', 0, v_ator,
       'e9a10000-0000-0000-0000-0000000000e2');
   exception when others then
@@ -309,7 +318,7 @@ begin
     raise exception '[FAIL] F: expected_version obsoleto deveria ser CONFLICT';
   end if;
 
-  if (select c.data_inicio from public.evaluation_cycles c where c.id = :'ciclo1'::uuid)
+  if (select c.data_inicio from public.evaluation_cycles c where c.id = v_c1)
      <> date '2030-01-15' then
     raise exception '[FAIL] F: CONFLICT alterou o periodo';
   end if;
@@ -331,6 +340,7 @@ do $$
 declare
   v_org     uuid := 'e9a00000-0000-0000-0000-0000000000a1';
   v_ator    uuid := 'e9c00000-0000-0000-0000-000000000001';
+  v_c1      uuid;
   v_res     jsonb;
   v_ciclo   record;
   v_evt     record;
@@ -341,10 +351,13 @@ declare
   v_sup     uuid;
   v_membro  uuid;
 begin
-  v_res := public.ciclo_ativar(:'ciclo1'::uuid, v_org, 1, v_ator,
+  select c.id into v_c1 from public.evaluation_cycles c
+   where c.organization_id = v_org and c.ano = 2030 and c.numero = 1;
+
+  v_res := public.ciclo_ativar(v_c1, v_org, 1, v_ator,
     'e9a10000-0000-0000-0000-0000000000a2');
 
-  select c.* into v_ciclo from public.evaluation_cycles c where c.id = :'ciclo1'::uuid;
+  select c.* into v_ciclo from public.evaluation_cycles c where c.id = v_c1;
   if v_ciclo.status <> 'ATIVO' then
     raise exception '[FAIL] H: ativacao nao mudou o status (%)', v_ciclo.status;
   end if;
@@ -443,12 +456,16 @@ do $$
 declare
   v_org  uuid := 'e9a00000-0000-0000-0000-0000000000a1';
   v_ator uuid := 'e9c00000-0000-0000-0000-000000000001';
+  v_c1   uuid;
   v_ok   boolean;
+begin
+  select c.id into v_c1 from public.evaluation_cycles c
+   where c.organization_id = v_org and c.ano = 2030 and c.numero = 1;
 
   -- (G) ciclo ATIVO nao aceita edicao comum.
   v_ok := false;
   begin
-    perform public.ciclo_editar(:'ciclo1'::uuid, v_org, 2030, 1,
+    perform public.ciclo_editar(v_c1, v_org, 2030, 1,
       date '2030-01-20', date '2030-04-20', 2, v_ator,
       'e9a10000-0000-0000-0000-0000000000e3');
   exception when others then
@@ -457,7 +474,7 @@ declare
   if not v_ok then
     raise exception '[FAIL] G: edicao de ciclo ATIVO deveria ser CONFLICT';
   end if;
-  if (select c.version from public.evaluation_cycles c where c.id = :'ciclo1'::uuid) <> 2 then
+  if (select c.version from public.evaluation_cycles c where c.id = v_c1) <> 2 then
     raise exception '[FAIL] G: tentativa de edicao de ATIVO alterou a versao';
   end if;
 
