@@ -38,7 +38,24 @@ export type OperacaoColaborador =
   | "estrutura.responsabilidade.encerrar"
   | "estrutura.sucessao.registrar"
   | "colaborador.historico.listar"
-  | "colaborador.catalogo.bootstrap";
+  | "colaborador.catalogo.bootstrap"
+  // F5-08 P3 — estrutura organizacional (org.structure.manage)
+  | "estrutura.unidade.criar"
+  | "estrutura.unidade.renomear"
+  | "estrutura.unidade.encerrar"
+  | "estrutura.unidade.parent.definir"
+  | "estrutura.unidade.parent.encerrar"
+  | "estrutura.posicao.criar"
+  | "estrutura.posicao.encerrar"
+  | "estrutura.colegiado.definir"
+  | "estrutura.colegiado.encerrar"
+  // F5-08 P3 — catálogos (org.catalog.manage)
+  | "catalogo.cargo.criar"
+  | "catalogo.cargo.renomear"
+  | "catalogo.cargo.status.alterar"
+  | "catalogo.senioridade.criar"
+  | "catalogo.senioridade.renomear"
+  | "catalogo.senioridade.status.alterar";
 
 /** Códigos públicos estáveis (F0-05) — nunca a mensagem crua do banco. */
 export type CodigoPublico =
@@ -112,6 +129,47 @@ export const DEFINICAO_POR_OPERACAO: Readonly<Record<OperacaoColaborador, Defini
       capability: "org.structure.manage",
     },
     "colaborador.catalogo.bootstrap": {
+      gate: "administrativo",
+      capability: "org.catalog.manage",
+    },
+    // F5-08 (D19): estrutura/colegiado no plano administrativo com
+    // `org.structure.manage`; catálogos com `org.catalog.manage`.
+    "estrutura.unidade.criar": { gate: "administrativo", capability: "org.structure.manage" },
+    "estrutura.unidade.renomear": { gate: "administrativo", capability: "org.structure.manage" },
+    "estrutura.unidade.encerrar": { gate: "administrativo", capability: "org.structure.manage" },
+    "estrutura.unidade.parent.definir": {
+      gate: "administrativo",
+      capability: "org.structure.manage",
+    },
+    "estrutura.unidade.parent.encerrar": {
+      gate: "administrativo",
+      capability: "org.structure.manage",
+    },
+    "estrutura.posicao.criar": { gate: "administrativo", capability: "org.structure.manage" },
+    "estrutura.posicao.encerrar": {
+      gate: "administrativo",
+      capability: "org.structure.manage",
+    },
+    "estrutura.colegiado.definir": {
+      gate: "administrativo",
+      capability: "org.structure.manage",
+    },
+    "estrutura.colegiado.encerrar": {
+      gate: "administrativo",
+      capability: "org.structure.manage",
+    },
+    "catalogo.cargo.criar": { gate: "administrativo", capability: "org.catalog.manage" },
+    "catalogo.cargo.renomear": { gate: "administrativo", capability: "org.catalog.manage" },
+    "catalogo.cargo.status.alterar": {
+      gate: "administrativo",
+      capability: "org.catalog.manage",
+    },
+    "catalogo.senioridade.criar": { gate: "administrativo", capability: "org.catalog.manage" },
+    "catalogo.senioridade.renomear": {
+      gate: "administrativo",
+      capability: "org.catalog.manage",
+    },
+    "catalogo.senioridade.status.alterar": {
       gate: "administrativo",
       capability: "org.catalog.manage",
     },
@@ -302,6 +360,141 @@ export interface EntradaBootstrapCatalogo {
   };
 }
 
+/** F5-08 P3 — payload público (camelCase) das operações de ESTRUTURA. */
+export interface EntradaUnidadeCriar {
+  readonly organization_id: string;
+  readonly operationId: string;
+  readonly nome: string;
+  readonly validFrom: string;
+  readonly motivo: string;
+}
+
+export interface EntradaUnidadeRenomear {
+  readonly organization_id: string;
+  readonly operationId: string;
+  readonly unidadeId: string;
+  readonly nome: string;
+  readonly expectedVersion: number;
+  readonly motivo: string;
+}
+
+export interface EntradaUnidadeEncerrar {
+  readonly organization_id: string;
+  readonly operationId: string;
+  readonly unidadeId: string;
+  readonly validTo: string;
+  readonly expectedVersion: number;
+  readonly motivo: string;
+}
+
+export interface EntradaUnidadeParentDefinir {
+  readonly organization_id: string;
+  readonly operationId: string;
+  readonly unidadeId: string;
+  /** `null` representa RAIZ (ausência de relação). */
+  readonly parentUnitId: string | null;
+  readonly validFrom: string;
+  readonly motivo: string;
+}
+
+export interface EntradaUnidadeParentEncerrar {
+  readonly organization_id: string;
+  readonly operationId: string;
+  readonly unidadeId: string;
+  readonly validTo: string;
+  readonly motivo: string;
+}
+
+export interface EntradaPosicaoCriar {
+  readonly organization_id: string;
+  readonly operationId: string;
+  readonly unidadeId: string;
+  readonly jobRoleId: string;
+  /** Senioridade é opcional no contrato da posição. */
+  readonly seniorityLevelId: string | null;
+  readonly validFrom: string;
+  readonly motivo: string;
+}
+
+export interface EntradaPosicaoEncerrar {
+  readonly organization_id: string;
+  readonly operationId: string;
+  readonly posicaoId: string;
+  readonly validTo: string;
+  readonly expectedVersion: number;
+  readonly motivo: string;
+}
+
+export interface EntradaColegiadoDefinir {
+  readonly organization_id: string;
+  readonly operationId: string;
+  /** Colaborador AVALIADO ao qual a configuração se aplica. */
+  readonly collaboratorId: string;
+  /** 0..N membros EXPLÍCITOS; lista vazia = "sem colegiado" explícito. */
+  readonly memberCollaboratorIds: readonly string[];
+  readonly validFrom: string;
+  readonly motivo: string;
+}
+
+export interface EntradaColegiadoEncerrar {
+  readonly organization_id: string;
+  readonly operationId: string;
+  readonly collaboratorId: string;
+  readonly validTo: string;
+  readonly motivo: string;
+}
+
+/** F5-08 P3 — payload público (camelCase) dos CATÁLOGOS. */
+export interface EntradaCargoCriar {
+  readonly organization_id: string;
+  readonly operationId: string;
+  readonly nome: string;
+  /** Rótulo estável opcional (D5); nunca autoridade. */
+  readonly code: string | null;
+  readonly motivo: string;
+}
+
+export interface EntradaCargoRenomear {
+  readonly organization_id: string;
+  readonly operationId: string;
+  readonly jobRoleId: string;
+  readonly nome: string;
+  readonly expectedVersion: number;
+  readonly motivo: string;
+}
+
+export interface EntradaCatalogoStatusAlterar {
+  readonly organization_id: string;
+  readonly operationId: string;
+  readonly expectedVersion: number;
+  readonly status: (typeof STATUS_CATALOGO)[number];
+  readonly motivo: string;
+}
+
+export interface EntradaCargoStatusAlterar extends EntradaCatalogoStatusAlterar {
+  readonly jobRoleId: string;
+}
+
+export interface EntradaSenioridadeCriar {
+  readonly organization_id: string;
+  readonly operationId: string;
+  readonly nome: string;
+  readonly motivo: string;
+}
+
+export interface EntradaSenioridadeRenomear {
+  readonly organization_id: string;
+  readonly operationId: string;
+  readonly seniorityLevelId: string;
+  readonly nome: string;
+  readonly expectedVersion: number;
+  readonly motivo: string;
+}
+
+export interface EntradaSenioridadeStatusAlterar extends EntradaCatalogoStatusAlterar {
+  readonly seniorityLevelId: string;
+}
+
 export interface EntradaHistorico {
   readonly organization_id: string;
   readonly collaborator_id: string;
@@ -326,7 +519,22 @@ export type EntradaColaborador =
   | EntradaEncerrarResponsabilidade
   | EntradaRegistrarSucessao
   | EntradaHistorico
-  | EntradaBootstrapCatalogo;
+  | EntradaBootstrapCatalogo
+  | EntradaUnidadeCriar
+  | EntradaUnidadeRenomear
+  | EntradaUnidadeEncerrar
+  | EntradaUnidadeParentDefinir
+  | EntradaUnidadeParentEncerrar
+  | EntradaPosicaoCriar
+  | EntradaPosicaoEncerrar
+  | EntradaColegiadoDefinir
+  | EntradaColegiadoEncerrar
+  | EntradaCargoCriar
+  | EntradaCargoRenomear
+  | EntradaCargoStatusAlterar
+  | EntradaSenioridadeCriar
+  | EntradaSenioridadeRenomear
+  | EntradaSenioridadeStatusAlterar;
 
 export type ResultadoValidacaoColaborador =
   | { readonly ok: true; readonly entrada: EntradaColaborador }
@@ -350,6 +558,8 @@ const STATUS_INICIAIS = ["active", "leave"] as const;
 const STATUS_COLABORADOR = ["active", "leave", "inactive"] as const;
 const RESPONSABILIDADES = ["operational", "evaluative", "operational_evaluative"] as const;
 const CICLO_ESCOPOS = ["CICLO_ATUAL_E_POSTERIORES", "SOMENTE_CICLOS_POSTERIORES"] as const;
+/** Status dos catálogos (D17): inativação no lugar, nunca DELETE. */
+const STATUS_CATALOGO = ["active", "disabled"] as const;
 
 type StatusColaborador = (typeof STATUS_COLABORADOR)[number];
 type StatusInicial = (typeof STATUS_INICIAIS)[number];
@@ -393,6 +603,48 @@ function dataOuInstante(valor: unknown): string | null {
   const limpo = valor.trim();
   if (FORMATO_DATA.test(limpo) || FORMATO_INSTANTE.test(limpo)) return limpo;
   return null;
+}
+
+/**
+ * UUID OPCIONAL (nullable do contrato): ausente/null ⇒ `null`; presente e
+ * inválido ⇒ `ok: false` (fail-closed). Nunca concede autoridade.
+ */
+function uuidOpcional(
+  valor: unknown
+): { readonly ok: true; readonly valor: string | null } | { readonly ok: false } {
+  if (valor === undefined || valor === null) return { ok: true, valor: null };
+  return ehUuid(valor) ? { ok: true, valor: valor as string } : { ok: false };
+}
+
+/**
+ * Lista de UUIDs que ACEITA VAZIO: o colegiado é 0..N no contrato e lista
+ * vazia é "sem colegiado" EXPLÍCITO (F3-08 D8), distinto de ausência de
+ * configuração. A fronteira valida SOMENTE forma (array + UUIDs):
+ * duplicidade, self-member, tenant e qualquer cardinalidade de domínio
+ * continuam na RPC/banco — nenhum teto arbitrário é imposto aqui.
+ */
+function listaUuidPermitindoVazio(valor: unknown): readonly string[] | null {
+  if (!Array.isArray(valor)) return null;
+  const itens: string[] = [];
+  for (const item of valor) {
+    if (!ehUuid(item)) return null;
+    itens.push(item as string);
+  }
+  return itens;
+}
+
+/**
+ * `code` do cargo (D5 — rótulo estável, NUNCA autoridade): OPCIONAL.
+ * Normalizado para caixa alta e sem espaços nas bordas, exatamente como o
+ * CHECK `ck_job_roles_code` e o bootstrap D16. `ok: false` ⇒ forma inválida.
+ */
+function codeCargo(
+  valor: unknown
+): { readonly ok: true; readonly valor: string | null } | { readonly ok: false } {
+  if (valor === undefined || valor === null) return { ok: true, valor: null };
+  const limpo = texto(valor, 40);
+  if (!limpo) return { ok: false };
+  return { ok: true, valor: limpo.toUpperCase() };
 }
 
 function listaUuid(valor: unknown, max: number): readonly string[] | null {
@@ -579,6 +831,40 @@ export function validarEntradaColaborador(corpo: unknown): ResultadoValidacaoCol
       code: "INVALID_INPUT",
       message: "motivo obrigatório.",
     };
+
+  // F5-08 P3: as operações de estrutura/catálogo têm payload público em
+  // camelCase (`operationId`/`expectedVersion`). A leitura é PARALELA à do
+  // legado — nenhuma operação F5-07 passa a aceitar a outra convenção — e as
+  // mensagens públicas permanecem as canônicas do contrato.
+  let operationIdCamel: string | undefined;
+  if (cru.operationId !== undefined && cru.operationId !== null) {
+    if (!ehUuid(cru.operationId)) {
+      return { ok: false, code: "INVALID_INPUT", message: "operation_id inválido." };
+    }
+    operationIdCamel = cru.operationId;
+  }
+
+  let expectedVersionCamel: number | undefined;
+  if (cru.expectedVersion !== undefined && cru.expectedVersion !== null) {
+    if (
+      typeof cru.expectedVersion !== "number" ||
+      !Number.isInteger(cru.expectedVersion) ||
+      cru.expectedVersion < 0
+    ) {
+      return { ok: false, code: "INVALID_INPUT", message: "expected_version inválido." };
+    }
+    expectedVersionCamel = cru.expectedVersion;
+  }
+
+  const exigirOperacaoNova = (): { ok: false; code: CodigoPublico; message: string } | null =>
+    operationIdCamel
+      ? null
+      : { ok: false, code: "INVALID_INPUT", message: "operation_id obrigatório." };
+
+  const exigirVersaoNova = (): { ok: false; code: CodigoPublico; message: string } | null =>
+    expectedVersionCamel === undefined
+      ? { ok: false, code: "INVALID_INPUT", message: "expected_version obrigatório." }
+      : null;
 
   const exigirVigencia = (): string | { ok: false; code: CodigoPublico; message: string } => {
     const vigencia = cru.vigencia === undefined ? null : dataOuInstante(cru.vigencia);
@@ -1050,6 +1336,386 @@ export function validarEntradaColaborador(corpo: unknown): ResultadoValidacaoCol
       return {
         ok: true,
         entrada: { organization_id, operation_id: operation_id!, catalogo },
+      };
+    }
+
+    // -----------------------------------------------------------------------
+    // F5-08 P3 — estrutura organizacional e catálogos (§21.1)
+    //
+    // A fronteira valida SOMENTE forma/tipo (nunca autoridade): os 15 payloads
+    // são INTENÇÃO. Regras de domínio (ciclo, vigência, I1–I5, unicidade,
+    // cross-tenant, expected_version e idempotência) pertencem à RPC/banco.
+    // -----------------------------------------------------------------------
+    case "estrutura.unidade.criar": {
+      const falta = exigirOperacaoNova();
+      if (falta) return falta;
+      const nome = texto(cru.nome, 200);
+      if (!nome) {
+        return { ok: false, code: "INVALID_INPUT", message: "nome inválido." };
+      }
+      const validFrom = cru.validFrom === undefined ? null : dataOuInstante(cru.validFrom);
+      if (!validFrom) {
+        return { ok: false, code: "INVALID_INPUT", message: "validFrom inválido." };
+      }
+      const motivo = exigirMotivo();
+      if (typeof motivo !== "string") return motivo;
+      return {
+        ok: true,
+        entrada: { organization_id, operationId: operationIdCamel!, nome, validFrom, motivo },
+      };
+    }
+
+    case "estrutura.unidade.renomear": {
+      const falta = exigirOperacaoNova() ?? exigirVersaoNova();
+      if (falta) return falta;
+      if (!ehUuid(cru.unidadeId)) {
+        return { ok: false, code: "INVALID_INPUT", message: "unidadeId inválido." };
+      }
+      const nome = texto(cru.nome, 200);
+      if (!nome) {
+        return { ok: false, code: "INVALID_INPUT", message: "nome inválido." };
+      }
+      const motivo = exigirMotivo();
+      if (typeof motivo !== "string") return motivo;
+      return {
+        ok: true,
+        entrada: {
+          organization_id,
+          operationId: operationIdCamel!,
+          unidadeId: cru.unidadeId,
+          nome,
+          expectedVersion: expectedVersionCamel!,
+          motivo,
+        },
+      };
+    }
+
+    case "estrutura.unidade.encerrar": {
+      const falta = exigirOperacaoNova() ?? exigirVersaoNova();
+      if (falta) return falta;
+      if (!ehUuid(cru.unidadeId)) {
+        return { ok: false, code: "INVALID_INPUT", message: "unidadeId inválido." };
+      }
+      const validTo = cru.validTo === undefined ? null : dataOuInstante(cru.validTo);
+      if (!validTo) {
+        return { ok: false, code: "INVALID_INPUT", message: "validTo inválido." };
+      }
+      const motivo = exigirMotivo();
+      if (typeof motivo !== "string") return motivo;
+      return {
+        ok: true,
+        entrada: {
+          organization_id,
+          operationId: operationIdCamel!,
+          unidadeId: cru.unidadeId,
+          validTo,
+          expectedVersion: expectedVersionCamel!,
+          motivo,
+        },
+      };
+    }
+
+    case "estrutura.unidade.parent.definir": {
+      const falta = exigirOperacaoNova();
+      if (falta) return falta;
+      if (!ehUuid(cru.unidadeId)) {
+        return { ok: false, code: "INVALID_INPUT", message: "unidadeId inválido." };
+      }
+      const parent = uuidOpcional(cru.parentUnitId);
+      if (!parent.ok) {
+        return { ok: false, code: "INVALID_INPUT", message: "parentUnitId inválido." };
+      }
+      const validFrom = cru.validFrom === undefined ? null : dataOuInstante(cru.validFrom);
+      if (!validFrom) {
+        return { ok: false, code: "INVALID_INPUT", message: "validFrom inválido." };
+      }
+      const motivo = exigirMotivo();
+      if (typeof motivo !== "string") return motivo;
+      return {
+        ok: true,
+        entrada: {
+          organization_id,
+          operationId: operationIdCamel!,
+          unidadeId: cru.unidadeId,
+          parentUnitId: parent.valor,
+          validFrom,
+          motivo,
+        },
+      };
+    }
+
+    case "estrutura.unidade.parent.encerrar": {
+      const falta = exigirOperacaoNova();
+      if (falta) return falta;
+      if (!ehUuid(cru.unidadeId)) {
+        return { ok: false, code: "INVALID_INPUT", message: "unidadeId inválido." };
+      }
+      const validTo = cru.validTo === undefined ? null : dataOuInstante(cru.validTo);
+      if (!validTo) {
+        return { ok: false, code: "INVALID_INPUT", message: "validTo inválido." };
+      }
+      const motivo = exigirMotivo();
+      if (typeof motivo !== "string") return motivo;
+      return {
+        ok: true,
+        entrada: {
+          organization_id,
+          operationId: operationIdCamel!,
+          unidadeId: cru.unidadeId,
+          validTo,
+          motivo,
+        },
+      };
+    }
+
+    case "estrutura.posicao.criar": {
+      const falta = exigirOperacaoNova();
+      if (falta) return falta;
+      if (!ehUuid(cru.unidadeId)) {
+        return { ok: false, code: "INVALID_INPUT", message: "unidadeId inválido." };
+      }
+      if (!ehUuid(cru.jobRoleId)) {
+        return { ok: false, code: "INVALID_INPUT", message: "jobRoleId inválido." };
+      }
+      const senioridade = uuidOpcional(cru.seniorityLevelId);
+      if (!senioridade.ok) {
+        return { ok: false, code: "INVALID_INPUT", message: "seniorityLevelId inválido." };
+      }
+      const validFrom = cru.validFrom === undefined ? null : dataOuInstante(cru.validFrom);
+      if (!validFrom) {
+        return { ok: false, code: "INVALID_INPUT", message: "validFrom inválido." };
+      }
+      const motivo = exigirMotivo();
+      if (typeof motivo !== "string") return motivo;
+      return {
+        ok: true,
+        entrada: {
+          organization_id,
+          operationId: operationIdCamel!,
+          unidadeId: cru.unidadeId,
+          jobRoleId: cru.jobRoleId,
+          seniorityLevelId: senioridade.valor,
+          validFrom,
+          motivo,
+        },
+      };
+    }
+
+    case "estrutura.posicao.encerrar": {
+      const falta = exigirOperacaoNova() ?? exigirVersaoNova();
+      if (falta) return falta;
+      if (!ehUuid(cru.posicaoId)) {
+        return { ok: false, code: "INVALID_INPUT", message: "posicaoId inválido." };
+      }
+      const validTo = cru.validTo === undefined ? null : dataOuInstante(cru.validTo);
+      if (!validTo) {
+        return { ok: false, code: "INVALID_INPUT", message: "validTo inválido." };
+      }
+      const motivo = exigirMotivo();
+      if (typeof motivo !== "string") return motivo;
+      return {
+        ok: true,
+        entrada: {
+          organization_id,
+          operationId: operationIdCamel!,
+          posicaoId: cru.posicaoId,
+          validTo,
+          expectedVersion: expectedVersionCamel!,
+          motivo,
+        },
+      };
+    }
+
+    case "estrutura.colegiado.definir": {
+      const falta = exigirOperacaoNova();
+      if (falta) return falta;
+      if (!ehUuid(cru.collaboratorId)) {
+        return { ok: false, code: "INVALID_INPUT", message: "collaboratorId inválido." };
+      }
+      const membros = listaUuidPermitindoVazio(cru.memberCollaboratorIds);
+      if (!membros) {
+        return { ok: false, code: "INVALID_INPUT", message: "memberCollaboratorIds inválido." };
+      }
+      const validFrom = cru.validFrom === undefined ? null : dataOuInstante(cru.validFrom);
+      if (!validFrom) {
+        return { ok: false, code: "INVALID_INPUT", message: "validFrom inválido." };
+      }
+      const motivo = exigirMotivo();
+      if (typeof motivo !== "string") return motivo;
+      return {
+        ok: true,
+        entrada: {
+          organization_id,
+          operationId: operationIdCamel!,
+          collaboratorId: cru.collaboratorId,
+          memberCollaboratorIds: membros,
+          validFrom,
+          motivo,
+        },
+      };
+    }
+
+    case "estrutura.colegiado.encerrar": {
+      const falta = exigirOperacaoNova();
+      if (falta) return falta;
+      if (!ehUuid(cru.collaboratorId)) {
+        return { ok: false, code: "INVALID_INPUT", message: "collaboratorId inválido." };
+      }
+      const validTo = cru.validTo === undefined ? null : dataOuInstante(cru.validTo);
+      if (!validTo) {
+        return { ok: false, code: "INVALID_INPUT", message: "validTo inválido." };
+      }
+      const motivo = exigirMotivo();
+      if (typeof motivo !== "string") return motivo;
+      return {
+        ok: true,
+        entrada: {
+          organization_id,
+          operationId: operationIdCamel!,
+          collaboratorId: cru.collaboratorId,
+          validTo,
+          motivo,
+        },
+      };
+    }
+
+    case "catalogo.cargo.criar": {
+      const falta = exigirOperacaoNova();
+      if (falta) return falta;
+      const nome = texto(cru.nome, 120);
+      if (!nome) {
+        return { ok: false, code: "INVALID_INPUT", message: "nome inválido." };
+      }
+      const code = codeCargo(cru.code);
+      if (!code.ok) {
+        return { ok: false, code: "INVALID_INPUT", message: "code inválido." };
+      }
+      const motivo = exigirMotivo();
+      if (typeof motivo !== "string") return motivo;
+      return {
+        ok: true,
+        entrada: {
+          organization_id,
+          operationId: operationIdCamel!,
+          nome,
+          code: code.valor,
+          motivo,
+        },
+      };
+    }
+
+    case "catalogo.cargo.renomear": {
+      const falta = exigirOperacaoNova() ?? exigirVersaoNova();
+      if (falta) return falta;
+      if (!ehUuid(cru.jobRoleId)) {
+        return { ok: false, code: "INVALID_INPUT", message: "jobRoleId inválido." };
+      }
+      const nome = texto(cru.nome, 120);
+      if (!nome) {
+        return { ok: false, code: "INVALID_INPUT", message: "nome inválido." };
+      }
+      const motivo = exigirMotivo();
+      if (typeof motivo !== "string") return motivo;
+      return {
+        ok: true,
+        entrada: {
+          organization_id,
+          operationId: operationIdCamel!,
+          jobRoleId: cru.jobRoleId,
+          nome,
+          expectedVersion: expectedVersionCamel!,
+          motivo,
+        },
+      };
+    }
+
+    case "catalogo.cargo.status.alterar": {
+      const falta = exigirOperacaoNova() ?? exigirVersaoNova();
+      if (falta) return falta;
+      if (!ehUuid(cru.jobRoleId)) {
+        return { ok: false, code: "INVALID_INPUT", message: "jobRoleId inválido." };
+      }
+      const status = typeof cru.status === "string" ? cru.status.trim() : "";
+      if (!(STATUS_CATALOGO as readonly string[]).includes(status)) {
+        return { ok: false, code: "INVALID_INPUT", message: "status inválido." };
+      }
+      const motivo = exigirMotivo();
+      if (typeof motivo !== "string") return motivo;
+      return {
+        ok: true,
+        entrada: {
+          organization_id,
+          operationId: operationIdCamel!,
+          jobRoleId: cru.jobRoleId,
+          status: status as (typeof STATUS_CATALOGO)[number],
+          expectedVersion: expectedVersionCamel!,
+          motivo,
+        },
+      };
+    }
+
+    case "catalogo.senioridade.criar": {
+      const falta = exigirOperacaoNova();
+      if (falta) return falta;
+      const nome = texto(cru.nome, 120);
+      if (!nome) {
+        return { ok: false, code: "INVALID_INPUT", message: "nome inválido." };
+      }
+      const motivo = exigirMotivo();
+      if (typeof motivo !== "string") return motivo;
+      return {
+        ok: true,
+        entrada: { organization_id, operationId: operationIdCamel!, nome, motivo },
+      };
+    }
+
+    case "catalogo.senioridade.renomear": {
+      const falta = exigirOperacaoNova() ?? exigirVersaoNova();
+      if (falta) return falta;
+      if (!ehUuid(cru.seniorityLevelId)) {
+        return { ok: false, code: "INVALID_INPUT", message: "seniorityLevelId inválido." };
+      }
+      const nome = texto(cru.nome, 120);
+      if (!nome) {
+        return { ok: false, code: "INVALID_INPUT", message: "nome inválido." };
+      }
+      const motivo = exigirMotivo();
+      if (typeof motivo !== "string") return motivo;
+      return {
+        ok: true,
+        entrada: {
+          organization_id,
+          operationId: operationIdCamel!,
+          seniorityLevelId: cru.seniorityLevelId,
+          nome,
+          expectedVersion: expectedVersionCamel!,
+          motivo,
+        },
+      };
+    }
+
+    case "catalogo.senioridade.status.alterar": {
+      const falta = exigirOperacaoNova() ?? exigirVersaoNova();
+      if (falta) return falta;
+      if (!ehUuid(cru.seniorityLevelId)) {
+        return { ok: false, code: "INVALID_INPUT", message: "seniorityLevelId inválido." };
+      }
+      const status = typeof cru.status === "string" ? cru.status.trim() : "";
+      if (!(STATUS_CATALOGO as readonly string[]).includes(status)) {
+        return { ok: false, code: "INVALID_INPUT", message: "status inválido." };
+      }
+      const motivo = exigirMotivo();
+      if (typeof motivo !== "string") return motivo;
+      return {
+        ok: true,
+        entrada: {
+          organization_id,
+          operationId: operationIdCamel!,
+          seniorityLevelId: cru.seniorityLevelId,
+          status: status as (typeof STATUS_CATALOGO)[number],
+          expectedVersion: expectedVersionCamel!,
+          motivo,
+        },
       };
     }
   }

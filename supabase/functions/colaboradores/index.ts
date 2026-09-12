@@ -296,6 +296,176 @@ Deno.serve(async (req) => {
           p_operation_id: execucao.entrada.operation_id,
           p_catalogo: execucao.entrada.catalogo,
         });
+
+      // ---------------------------------------------------------------------
+      // F5-08 P3 — estrutura organizacional e catálogos (§21.1/§27).
+      //
+      // O dispatch apenas TRADUZ o payload público (camelCase) para os
+      // parâmetros nomeados p_* e envia o ator/organização SOBERANOS
+      // resolvidos nesta fronteira. Nenhuma regra de domínio é replicada aqui:
+      // ciclo (I1), encerramento (I2/I3), catálogo ativo (I4), vigência (I5),
+      // unicidade, cross-tenant, expected_version, idempotência e autorização
+      // continuam dentro da RPC/banco.
+      // ---------------------------------------------------------------------
+      case "estrutura.unidade.criar":
+        return admin.rpc("estrutura_unidade_criar", {
+          p_organization_id: org,
+          p_actor_user_profile_id: ator,
+          p_operation_id: execucao.entrada.operationId,
+          p_nome: execucao.entrada.nome,
+          p_valid_from: execucao.entrada.validFrom,
+          p_motivo: execucao.entrada.motivo,
+        });
+
+      case "estrutura.unidade.renomear":
+        return admin.rpc("estrutura_unidade_renomear", {
+          p_organization_id: org,
+          p_actor_user_profile_id: ator,
+          p_operation_id: execucao.entrada.operationId,
+          p_unidade_id: execucao.entrada.unidadeId,
+          p_nome: execucao.entrada.nome,
+          p_expected_version: execucao.entrada.expectedVersion,
+          p_motivo: execucao.entrada.motivo,
+        });
+
+      case "estrutura.unidade.encerrar":
+        return admin.rpc("estrutura_unidade_encerrar", {
+          p_organization_id: org,
+          p_actor_user_profile_id: ator,
+          p_operation_id: execucao.entrada.operationId,
+          p_unidade_id: execucao.entrada.unidadeId,
+          p_valid_to: execucao.entrada.validTo,
+          p_expected_version: execucao.entrada.expectedVersion,
+          p_motivo: execucao.entrada.motivo,
+        });
+
+      case "estrutura.unidade.parent.definir":
+        return admin.rpc("estrutura_unidade_parent_definir", {
+          p_organization_id: org,
+          p_actor_user_profile_id: ator,
+          p_operation_id: execucao.entrada.operationId,
+          p_unidade_id: execucao.entrada.unidadeId,
+          p_parent_unit_id: execucao.entrada.parentUnitId,
+          p_valid_from: execucao.entrada.validFrom,
+          p_motivo: execucao.entrada.motivo,
+        });
+
+      case "estrutura.unidade.parent.encerrar":
+        return admin.rpc("estrutura_unidade_parent_encerrar", {
+          p_organization_id: org,
+          p_actor_user_profile_id: ator,
+          p_operation_id: execucao.entrada.operationId,
+          p_unidade_id: execucao.entrada.unidadeId,
+          p_valid_to: execucao.entrada.validTo,
+          p_motivo: execucao.entrada.motivo,
+        });
+
+      case "estrutura.posicao.criar":
+        return admin.rpc("estrutura_posicao_criar", {
+          p_organization_id: org,
+          p_actor_user_profile_id: ator,
+          p_operation_id: execucao.entrada.operationId,
+          p_unidade_id: execucao.entrada.unidadeId,
+          p_job_role_id: execucao.entrada.jobRoleId,
+          p_seniority_level_id: execucao.entrada.seniorityLevelId,
+          p_valid_from: execucao.entrada.validFrom,
+          p_motivo: execucao.entrada.motivo,
+        });
+
+      case "estrutura.posicao.encerrar":
+        return admin.rpc("estrutura_posicao_encerrar", {
+          p_organization_id: org,
+          p_actor_user_profile_id: ator,
+          p_operation_id: execucao.entrada.operationId,
+          p_posicao_id: execucao.entrada.posicaoId,
+          p_valid_to: execucao.entrada.validTo,
+          p_expected_version: execucao.entrada.expectedVersion,
+          p_motivo: execucao.entrada.motivo,
+        });
+
+      case "estrutura.colegiado.definir":
+        return admin.rpc("estrutura_colegiado_definir", {
+          p_organization_id: org,
+          p_actor_user_profile_id: ator,
+          p_operation_id: execucao.entrada.operationId,
+          p_collaborator_id: execucao.entrada.collaboratorId,
+          p_member_collaborator_ids: execucao.entrada.memberCollaboratorIds,
+          p_valid_from: execucao.entrada.validFrom,
+          p_motivo: execucao.entrada.motivo,
+        });
+
+      case "estrutura.colegiado.encerrar":
+        return admin.rpc("estrutura_colegiado_encerrar", {
+          p_organization_id: org,
+          p_actor_user_profile_id: ator,
+          p_operation_id: execucao.entrada.operationId,
+          p_collaborator_id: execucao.entrada.collaboratorId,
+          p_valid_to: execucao.entrada.validTo,
+          p_motivo: execucao.entrada.motivo,
+        });
+
+      case "catalogo.cargo.criar":
+        return admin.rpc("catalogo_cargo_criar", {
+          p_organization_id: org,
+          p_actor_user_profile_id: ator,
+          p_operation_id: execucao.entrada.operationId,
+          p_nome: execucao.entrada.nome,
+          p_code: execucao.entrada.code,
+          p_motivo: execucao.entrada.motivo,
+        });
+
+      case "catalogo.cargo.renomear":
+        return admin.rpc("catalogo_cargo_renomear", {
+          p_organization_id: org,
+          p_actor_user_profile_id: ator,
+          p_operation_id: execucao.entrada.operationId,
+          p_job_role_id: execucao.entrada.jobRoleId,
+          p_nome: execucao.entrada.nome,
+          p_expected_version: execucao.entrada.expectedVersion,
+          p_motivo: execucao.entrada.motivo,
+        });
+
+      case "catalogo.cargo.status.alterar":
+        return admin.rpc("catalogo_cargo_status_alterar", {
+          p_organization_id: org,
+          p_actor_user_profile_id: ator,
+          p_operation_id: execucao.entrada.operationId,
+          p_job_role_id: execucao.entrada.jobRoleId,
+          p_status: execucao.entrada.status,
+          p_expected_version: execucao.entrada.expectedVersion,
+          p_motivo: execucao.entrada.motivo,
+        });
+
+      case "catalogo.senioridade.criar":
+        return admin.rpc("catalogo_senioridade_criar", {
+          p_organization_id: org,
+          p_actor_user_profile_id: ator,
+          p_operation_id: execucao.entrada.operationId,
+          p_nome: execucao.entrada.nome,
+          p_motivo: execucao.entrada.motivo,
+        });
+
+      case "catalogo.senioridade.renomear":
+        return admin.rpc("catalogo_senioridade_renomear", {
+          p_organization_id: org,
+          p_actor_user_profile_id: ator,
+          p_operation_id: execucao.entrada.operationId,
+          p_seniority_level_id: execucao.entrada.seniorityLevelId,
+          p_nome: execucao.entrada.nome,
+          p_expected_version: execucao.entrada.expectedVersion,
+          p_motivo: execucao.entrada.motivo,
+        });
+
+      case "catalogo.senioridade.status.alterar":
+        return admin.rpc("catalogo_senioridade_status_alterar", {
+          p_organization_id: org,
+          p_actor_user_profile_id: ator,
+          p_operation_id: execucao.entrada.operationId,
+          p_seniority_level_id: execucao.entrada.seniorityLevelId,
+          p_status: execucao.entrada.status,
+          p_expected_version: execucao.entrada.expectedVersion,
+          p_motivo: execucao.entrada.motivo,
+        });
     }
   }
 

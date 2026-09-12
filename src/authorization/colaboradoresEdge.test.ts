@@ -65,6 +65,8 @@ interface Cenario {
   readonly gateCode?: CodigoPublico;
   readonly matriculaResolvida?: string | null;
   readonly rpcData?: unknown;
+  /** Erro devolvido pela RPC (taxonomia F5_08/P2) — para os testes de erro. */
+  readonly rpcError?: { readonly code?: string; readonly message?: string } | null;
   /** Capabilities efetivas do ator (plano administrativo). */
   readonly capabilities?: readonly { readonly capability_code: string }[];
 }
@@ -110,6 +112,7 @@ function montarDeps(cenario: Cenario = {}) {
       void execucao;
       void contexto;
       ordem.push("rpc");
+      if (cenario.rpcError) return { error: cenario.rpcError };
       return { data: cenario.rpcData ?? NOVO_COLLAB, error: null };
     }
   );
@@ -358,5 +361,281 @@ describe("F5-07 — regressões das demais operações", () => {
     expect(avaliarAutorizacao).not.toHaveBeenCalled();
     expect(resolverColaboradorVinculado).not.toHaveBeenCalled();
     expect(executarRpc).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("F5-08 P3 — plano administrativo (D19) das operações de estrutura/catálogo", () => {
+  const UNIDADE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const CARGO = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  const VALID_FROM = "2026-04-01T00:00:00.000Z";
+
+  const corpoUnidadeCriar = {
+    organization_id: ORG,
+    operacao: "estrutura.unidade.criar",
+    operationId: OPERATION_ID,
+    nome: "Unidade Nova",
+    validFrom: VALID_FROM,
+    motivo: "criacao de unidade",
+  };
+
+  const corpoCargoCriar = {
+    organization_id: ORG,
+    operacao: "catalogo.cargo.criar",
+    operationId: OPERATION_ID,
+    nome: "Cargo Novo",
+    code: "CARGO_NOVO",
+    motivo: "criacao de cargo",
+  };
+
+  const corpoPosicaoCriar = {
+    organization_id: ORG,
+    operacao: "estrutura.posicao.criar",
+    operationId: OPERATION_ID,
+    unidadeId: UNIDADE,
+    jobRoleId: CARGO,
+    seniorityLevelId: null,
+    validFrom: VALID_FROM,
+    motivo: "criacao de posicao",
+  };
+
+  it("executa a RPC com a capability org.structure.manage e o contexto SOBERANO", async () => {
+    const { d, executarRpc } = montarDeps({
+      capabilities: [{ capability_code: "org.structure.manage" }],
+    });
+
+    const resposta = await colaboradores(requisicao(corpoUnidadeCriar), d);
+
+    expect(resposta.status).toBe(200);
+    const corpo = (await resposta.json()) as { ok: boolean; operacao: string };
+    expect(corpo.ok).toBe(true);
+    expect(corpo.operacao).toBe("estrutura.unidade.criar");
+    expect(executarRpc).toHaveBeenCalledTimes(1);
+
+    const [execucao, contexto] = executarRpc.mock.calls[0]!;
+    expect(execucao.operacao).toBe("estrutura.unidade.criar");
+    // Ator e organização vêm do CONTEXTO revalidado, nunca do corpo.
+    expect(contexto.actorUserProfileId).toBe(CALLER);
+    expect(contexto.organizationId).toBe(ORG);
+  });
+
+  it("NEGA sem a capability de estrutura e não toca a RPC", async () => {
+    const { d, executarRpc } = montarDeps({
+      capabilities: [{ capability_code: "org.catalog.manage" }],
+    });
+
+    const resposta = await colaboradores(requisicao(corpoUnidadeCriar), d);
+
+    expect(resposta.status).toBe(403);
+    const corpo = (await resposta.json()) as { error: { code: string } };
+    expect(corpo.error.code).toBe("FORBIDDEN");
+    expect(executarRpc).not.toHaveBeenCalled();
+  });
+
+  it("catalog.manage NÃO substitui structure.manage (e vice-versa)", async () => {
+    const soEstrutura = montarDeps({
+      capabilities: [{ capability_code: "org.structure.manage" }],
+    });
+    const respostaCargo = await colaboradores(requisicao(corpoCargoCriar), soEstrutura.d);
+    expect(respostaCargo.status).toBe(403);
+    expect(soEstrutura.executarRpc).not.toHaveBeenCalled();
+
+    const soCatalogo = montarDeps({
+      capabilities: [{ capability_code: "org.catalog.manage" }],
+    });
+    const respostaUnidade = await colaboradores(requisicao(corpoUnidadeCriar), soCatalogo.d);
+    expect(respostaUnidade.status).toBe(403);
+    expect(soCatalogo.executarRpc).not.toHaveBeenCalled();
+  });
+
+  it("permite catálogo com org.catalog.manage", async () => {
+    const { d, executarRpc } = montarDeps({
+      capabilities: [{ capability_code: "org.catalog.manage" }],
+      rpcData: CARGO,
+    });
+
+    const resposta = await colaboradores(requisicao(corpoCargoCriar), d);
+
+    expect(resposta.status).toBe(200);
+    const corpo = (await resposta.json()) as { ok: boolean; resultado: unknown };
+    expect(corpo.ok).toBe(true);
+    expect(corpo.resultado).toBe(CARGO);
+    expect(executarRpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("leva os nullable e o valorVersion validados até a RPC", async () => {
+    const { d, executarRpc } = montarDeps({
+      capabilities: [{ capability_code: "org.structure.manage" }],
+    });
+
+    await colaboradores(requisicao(corpoPosicaoCriar), d);
+
+    const execucao = executarRpc.mock.calls[0]![0];
+    expect(execucao.operacao).toBe("estrutura.posicao.criar");
+    if (execucao.operacao !== "estrutura.posicao.criar") return;
+    expect(execucao.entrada.seniorityLevelId).toBeNull();
+    expect(execucao.entrada.unidadeId).toBe(UNIDADE);
+  });
+
+  it("aceita lista vazia de membros do colegiado", async () => {
+    const { d, executarRpc } = montarDeps({
+      capabilities: [{ capability_code: "org.structure.manage" }],
+    });
+
+    const resposta = await colaboradores(
+      requisicao({
+        organization_id: ORG,
+        operacao: "estrutura.colegiado.definir",
+        operationId: OPERATION_ID,
+        collaboratorId: ATOR_COLLAB,
+        memberCollaboratorIds: [],
+        validFrom: VALID_FROM,
+        motivo: "sem colegiado",
+      }),
+      d
+    );
+
+    expect(resposta.status).toBe(200);
+    const execucao = executarRpc.mock.calls[0]![0];
+    expect(execucao.operacao).toBe("estrutura.colegiado.definir");
+    if (execucao.operacao !== "estrutura.colegiado.definir") return;
+    expect(execucao.entrada.memberCollaboratorIds).toEqual([]);
+  });
+
+  it("aceita colegiado com mais de 200 membros (nenhum teto na Edge)", async () => {
+    const { d, executarRpc } = montarDeps({
+      capabilities: [{ capability_code: "org.structure.manage" }],
+    });
+    const muitos = Array.from(
+      { length: 250 },
+      (_, indice) => "00000000-0000-4000-8000-" + String(indice).padStart(12, "0")
+    );
+
+    const resposta = await colaboradores(
+      requisicao({
+        organization_id: ORG,
+        operacao: "estrutura.colegiado.definir",
+        operationId: OPERATION_ID,
+        collaboratorId: ATOR_COLLAB,
+        memberCollaboratorIds: muitos,
+        validFrom: VALID_FROM,
+        motivo: "colegiado grande",
+      }),
+      d
+    );
+
+    expect(resposta.status).toBe(200);
+    expect(executarRpc).toHaveBeenCalledTimes(1);
+    const execucao = executarRpc.mock.calls[0]![0];
+    expect(execucao.operacao).toBe("estrutura.colegiado.definir");
+    if (execucao.operacao !== "estrutura.colegiado.definir") return;
+    expect(execucao.entrada.memberCollaboratorIds).toHaveLength(250);
+  });
+
+  it("nega operação de OUTRA organização do payload (tenant é revalidado)", async () => {
+    const { d, executarRpc } = montarDeps({
+      capabilities: [{ capability_code: "org.structure.manage" }],
+      organizacoes: [ORG],
+    });
+
+    const resposta = await colaboradores(
+      requisicao({ ...corpoUnidadeCriar, organization_id: ORG_B }),
+      d
+    );
+
+    expect(resposta.status).toBe(403);
+    expect(executarRpc).not.toHaveBeenCalled();
+  });
+
+  it("recusa identidade declarada no corpo (nunca substitui o JWT)", async () => {
+    for (const campo of ["actor_user_profile_id", "actor_id", "ator", "capability"]) {
+      const { d, executarRpc } = montarDeps({
+        capabilities: [{ capability_code: "org.structure.manage" }],
+      });
+      const resposta = await colaboradores(
+        requisicao({ ...corpoUnidadeCriar, [campo]: CALLER }),
+        d
+      );
+      expect(resposta.status, campo).toBe(400);
+      expect(executarRpc, campo).not.toHaveBeenCalled();
+    }
+  });
+
+  it("operação desconhecida é fail-closed: 400 e nenhuma RPC", async () => {
+    const { d, executarRpc } = montarDeps({
+      capabilities: [{ capability_code: "org.structure.manage" }],
+    });
+
+    const resposta = await colaboradores(
+      requisicao({ ...corpoUnidadeCriar, operacao: "estrutura.unidade.apagar" }),
+      d
+    );
+
+    expect(resposta.status).toBe(400);
+    const corpo = (await resposta.json()) as { error: { code: string } };
+    expect(corpo.error.code).toBe("INVALID_INPUT");
+    expect(executarRpc).not.toHaveBeenCalled();
+  });
+});
+
+describe("F5-08 P3 — taxonomia de erro das RPCs (F5_08_*) sem vazamento interno", () => {
+  const corpo = {
+    organization_id: ORG,
+    operacao: "estrutura.unidade.criar",
+    operationId: OPERATION_ID,
+    nome: "Unidade Nova",
+    validFrom: "2026-04-01T00:00:00.000Z",
+    motivo: "criacao de unidade",
+  };
+
+  async function responderCom(rpcError: { code?: string; message?: string }) {
+    const { d } = montarDeps({
+      capabilities: [{ capability_code: "org.structure.manage" }],
+      rpcError,
+    });
+    const resposta = await colaboradores(requisicao(corpo), d);
+    const json = (await resposta.json()) as { error: { code: string; message: string } };
+    return { status: resposta.status, json };
+  }
+
+  it.each([
+    ["F5_08_INVALID_INPUT", 400, "INVALID_INPUT"],
+    ["F5_08_FORBIDDEN", 403, "FORBIDDEN"],
+    ["F5_08_NOT_FOUND", 404, "NOT_FOUND"],
+    ["F5_08_CONFLICT", 409, "CONFLICT"],
+  ])("mapeia %s para %i (%s)", async (prefixo, status, codigo) => {
+    const { status: obtido, json } = await responderCom({
+      code: "P0001",
+      message: `${prefixo}: detalhe interno do banco`,
+    });
+
+    expect(obtido).toBe(status);
+    expect(json.error.code).toBe(codigo);
+    // Nenhum vazamento do detalhe SQL/constraint.
+    expect(json.error.message).not.toContain(prefixo);
+    expect(json.error.message).not.toContain("detalhe interno");
+  });
+
+  it("erro DESCONHECIDO é fail-closed (500 INTERNAL) e não vaza SQL", async () => {
+    const { status, json } = await responderCom({
+      code: "XX000",
+      message:
+        'relation "public.structure_helpers" does not exist at character 42 (SQLSTATE XX000)',
+    });
+
+    expect(status).toBe(500);
+    expect(json.error.code).toBe("INTERNAL");
+    expect(json.error.message).not.toContain("structure_helpers");
+    expect(json.error.message).not.toContain("SQLSTATE");
+  });
+
+  it("violação de integridade do banco (23xxx) continua CONFLICT, sem vazar constraint", async () => {
+    const { status, json } = await responderCom({
+      code: "23P01",
+      message: 'conflicting key value violates exclusion constraint "ex_organizational_unit_parent_periods_no_overlap"',
+    });
+
+    expect(status).toBe(409);
+    expect(json.error.code).toBe("CONFLICT");
+    expect(json.error.message).not.toContain("ex_organizational_unit_parent_periods_no_overlap");
   });
 });

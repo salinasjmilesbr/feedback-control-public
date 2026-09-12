@@ -3,6 +3,7 @@ import edgeFonte from "../../supabase/functions/colaboradores/index.ts?raw";
 import coreFonte from "../../supabase/functions/colaboradores/core.ts?raw";
 import leituraF507 from "../../supabase/migrations/20260913000000_f5_07_collaborators_sovereign.sql?raw";
 import rpcF507 from "../../supabase/migrations/20260913010000_f5_07_collaborators_rpc.sql?raw";
+import rpcF508 from "../../supabase/migrations/20260914010000_f5_08_structure_rpc.sql?raw";
 import f502 from "../../supabase/migrations/20260909000000_f5_02_hardening_resolver_collaborador.sql?raw";
 import f402 from "../../supabase/migrations/20260908010000_authorization_scopes_membership_collaborator.sql?raw";
 import f408 from "../../supabase/migrations/20260908130000_f4_08_hardening.sql?raw";
@@ -219,6 +220,183 @@ const CONTRATO_EDGE_RPC: Readonly<Record<OperacaoColaborador, ContratoDaOperacao
       "p_catalogo",
     ],
   },
+  // F5-08 P3 — estrutura organizacional (§21.1) → RPCs do P2.
+  "estrutura.unidade.criar": {
+    rpc: "estrutura_unidade_criar",
+    argumentos: [
+      "p_organization_id",
+      "p_actor_user_profile_id",
+      "p_operation_id",
+      "p_nome",
+      "p_valid_from",
+      "p_motivo",
+    ],
+  },
+  "estrutura.unidade.renomear": {
+    rpc: "estrutura_unidade_renomear",
+    argumentos: [
+      "p_organization_id",
+      "p_actor_user_profile_id",
+      "p_operation_id",
+      "p_unidade_id",
+      "p_nome",
+      "p_expected_version",
+      "p_motivo",
+    ],
+  },
+  "estrutura.unidade.encerrar": {
+    rpc: "estrutura_unidade_encerrar",
+    argumentos: [
+      "p_organization_id",
+      "p_actor_user_profile_id",
+      "p_operation_id",
+      "p_unidade_id",
+      "p_valid_to",
+      "p_expected_version",
+      "p_motivo",
+    ],
+  },
+  "estrutura.unidade.parent.definir": {
+    rpc: "estrutura_unidade_parent_definir",
+    argumentos: [
+      "p_organization_id",
+      "p_actor_user_profile_id",
+      "p_operation_id",
+      "p_unidade_id",
+      "p_parent_unit_id",
+      "p_valid_from",
+      "p_motivo",
+    ],
+  },
+  "estrutura.unidade.parent.encerrar": {
+    rpc: "estrutura_unidade_parent_encerrar",
+    argumentos: [
+      "p_organization_id",
+      "p_actor_user_profile_id",
+      "p_operation_id",
+      "p_unidade_id",
+      "p_valid_to",
+      "p_motivo",
+    ],
+  },
+  "estrutura.posicao.criar": {
+    rpc: "estrutura_posicao_criar",
+    argumentos: [
+      "p_organization_id",
+      "p_actor_user_profile_id",
+      "p_operation_id",
+      "p_unidade_id",
+      "p_job_role_id",
+      "p_seniority_level_id",
+      "p_valid_from",
+      "p_motivo",
+    ],
+  },
+  "estrutura.posicao.encerrar": {
+    rpc: "estrutura_posicao_encerrar",
+    argumentos: [
+      "p_organization_id",
+      "p_actor_user_profile_id",
+      "p_operation_id",
+      "p_posicao_id",
+      "p_valid_to",
+      "p_expected_version",
+      "p_motivo",
+    ],
+  },
+  "estrutura.colegiado.definir": {
+    rpc: "estrutura_colegiado_definir",
+    argumentos: [
+      "p_organization_id",
+      "p_actor_user_profile_id",
+      "p_operation_id",
+      "p_collaborator_id",
+      "p_member_collaborator_ids",
+      "p_valid_from",
+      "p_motivo",
+    ],
+  },
+  "estrutura.colegiado.encerrar": {
+    rpc: "estrutura_colegiado_encerrar",
+    argumentos: [
+      "p_organization_id",
+      "p_actor_user_profile_id",
+      "p_operation_id",
+      "p_collaborator_id",
+      "p_valid_to",
+      "p_motivo",
+    ],
+  },
+  // F5-08 P3 — catálogos.
+  "catalogo.cargo.criar": {
+    rpc: "catalogo_cargo_criar",
+    argumentos: [
+      "p_organization_id",
+      "p_actor_user_profile_id",
+      "p_operation_id",
+      "p_nome",
+      "p_code",
+      "p_motivo",
+    ],
+  },
+  "catalogo.cargo.renomear": {
+    rpc: "catalogo_cargo_renomear",
+    argumentos: [
+      "p_organization_id",
+      "p_actor_user_profile_id",
+      "p_operation_id",
+      "p_job_role_id",
+      "p_nome",
+      "p_expected_version",
+      "p_motivo",
+    ],
+  },
+  "catalogo.cargo.status.alterar": {
+    rpc: "catalogo_cargo_status_alterar",
+    argumentos: [
+      "p_organization_id",
+      "p_actor_user_profile_id",
+      "p_operation_id",
+      "p_job_role_id",
+      "p_status",
+      "p_expected_version",
+      "p_motivo",
+    ],
+  },
+  "catalogo.senioridade.criar": {
+    rpc: "catalogo_senioridade_criar",
+    argumentos: [
+      "p_organization_id",
+      "p_actor_user_profile_id",
+      "p_operation_id",
+      "p_nome",
+      "p_motivo",
+    ],
+  },
+  "catalogo.senioridade.renomear": {
+    rpc: "catalogo_senioridade_renomear",
+    argumentos: [
+      "p_organization_id",
+      "p_actor_user_profile_id",
+      "p_operation_id",
+      "p_seniority_level_id",
+      "p_nome",
+      "p_expected_version",
+      "p_motivo",
+    ],
+  },
+  "catalogo.senioridade.status.alterar": {
+    rpc: "catalogo_senioridade_status_alterar",
+    argumentos: [
+      "p_organization_id",
+      "p_actor_user_profile_id",
+      "p_operation_id",
+      "p_seniority_level_id",
+      "p_status",
+      "p_expected_version",
+      "p_motivo",
+    ],
+  },
 };
 
 /** RPCs chamadas FORA do dispatch de operação (resolução de contexto). */
@@ -421,7 +599,7 @@ function funcoesCriadasPelasF507(fontes: readonly string[]): readonly string[] {
 }
 
 const chamadas = extrairChamadasRpc(edgeFonte as string);
-const assinaturas = assinaturasDasMigrations([f402, f502, f408, leituraF507, rpcF507]);
+const assinaturas = assinaturasDasMigrations([f402, f502, f408, leituraF507, rpcF507, rpcF508]);
 const rpcsDeclaradas: readonly string[] = [
   ...Object.values(CONTRATO_EDGE_RPC).map((contrato) => contrato.rpc),
   ...Object.keys(CONTRATO_RPCS_DE_CONTEXTO),
@@ -445,9 +623,9 @@ describe("F5-07 — contrato Edge → RPC (nome + argumentos nomeados)", () => {
     expect(chamadas.length).toBeGreaterThan(12);
   });
 
-  it("as 15 operações do contrato estão declaradas e TODAS são chamadas pela Edge", () => {
-    expect(OPERACOES_COLABORADOR).toHaveLength(15);
-    expect(Object.keys(CONTRATO_EDGE_RPC)).toHaveLength(15);
+  it("as 30 operações do contrato estão declaradas e TODAS são chamadas pela Edge", () => {
+    expect(OPERACOES_COLABORADOR).toHaveLength(30);
+    expect(Object.keys(CONTRATO_EDGE_RPC)).toHaveLength(30);
 
     const semChamada = Object.entries(CONTRATO_EDGE_RPC)
       .filter(([, contrato]) => !chamadaDe(contrato.rpc))
@@ -623,6 +801,23 @@ describe("F5-07 — plano administrativo (D19) não usa a allowlist funcional", 
       "estrutura.responsabilidade.encerrar": "org.structure.manage",
       "estrutura.sucessao.registrar": "org.structure.manage",
       "colaborador.catalogo.bootstrap": "org.catalog.manage",
+      // F5-08 P3 — estrutura/colegiado.
+      "estrutura.unidade.criar": "org.structure.manage",
+      "estrutura.unidade.renomear": "org.structure.manage",
+      "estrutura.unidade.encerrar": "org.structure.manage",
+      "estrutura.unidade.parent.definir": "org.structure.manage",
+      "estrutura.unidade.parent.encerrar": "org.structure.manage",
+      "estrutura.posicao.criar": "org.structure.manage",
+      "estrutura.posicao.encerrar": "org.structure.manage",
+      "estrutura.colegiado.definir": "org.structure.manage",
+      "estrutura.colegiado.encerrar": "org.structure.manage",
+      // F5-08 P3 — catálogos.
+      "catalogo.cargo.criar": "org.catalog.manage",
+      "catalogo.cargo.renomear": "org.catalog.manage",
+      "catalogo.cargo.status.alterar": "org.catalog.manage",
+      "catalogo.senioridade.criar": "org.catalog.manage",
+      "catalogo.senioridade.renomear": "org.catalog.manage",
+      "catalogo.senioridade.status.alterar": "org.catalog.manage",
     };
 
     for (const [operacao, capability] of Object.entries(esperado)) {
@@ -691,5 +886,115 @@ describe("F5-07 — a Edge importa apenas módulos REAIS do repositório", () =>
     }
 
     expect(divergencias).toEqual([]);
+  });
+});
+
+describe("F5-08 P3 — plano administrativo, dispatch e fail-closed do mapa", () => {
+  const OPERACOES_P3: readonly OperacaoColaborador[] = [
+    "estrutura.unidade.criar",
+    "estrutura.unidade.renomear",
+    "estrutura.unidade.encerrar",
+    "estrutura.unidade.parent.definir",
+    "estrutura.unidade.parent.encerrar",
+    "estrutura.posicao.criar",
+    "estrutura.posicao.encerrar",
+    "estrutura.colegiado.definir",
+    "estrutura.colegiado.encerrar",
+    "catalogo.cargo.criar",
+    "catalogo.cargo.renomear",
+    "catalogo.cargo.status.alterar",
+    "catalogo.senioridade.criar",
+    "catalogo.senioridade.renomear",
+    "catalogo.senioridade.status.alterar",
+  ];
+
+  it("as 15 operações do P3 usam SOMENTE org.structure.manage ou org.catalog.manage", () => {
+    expect(OPERACOES_P3).toHaveLength(15);
+    const estruturais = OPERACOES_P3.filter(
+      (operacao) => DEFINICAO_POR_OPERACAO[operacao].capability === "org.structure.manage"
+    );
+    const catalogos = OPERACOES_P3.filter(
+      (operacao) => DEFINICAO_POR_OPERACAO[operacao].capability === "org.catalog.manage"
+    );
+
+    expect(estruturais).toHaveLength(9);
+    expect(catalogos).toHaveLength(6);
+    for (const operacao of OPERACOES_P3) {
+      expect(DEFINICAO_POR_OPERACAO[operacao].gate, operacao).toBe("administrativo");
+      // Capability CANÔNICA (nenhum código inventado pelo P3).
+      expect(
+        capabilityCanonica(DEFINICAO_POR_OPERACAO[operacao].capability),
+        operacao
+      ).toBe(DEFINICAO_POR_OPERACAO[operacao].capability);
+    }
+  });
+
+  it("o mapa operação → RPC do P3 aponta para as 15 RPCs REAIS da migration do P2", () => {
+    const divergencias: string[] = [];
+    for (const operacao of OPERACOES_P3) {
+      const rpc = CONTRATO_EDGE_RPC[operacao].rpc;
+      if (!assinaturas.has(rpc)) {
+        divergencias.push(`${operacao} → ${rpc} não existe na migration do P2`);
+      }
+    }
+    expect(divergencias).toEqual([]);
+  });
+
+  it("nenhuma operação do P3 entra na allowlist funcional do engine", () => {
+    for (const operacao of OPERACOES_P3) {
+      expect(OPERACOES_FUNCIONAIS, operacao).not.toContain(operacao);
+      expect(OPERACOES_ADMINISTRATIVAS, operacao).toContain(operacao);
+    }
+  });
+
+  it("o mapa de capability é FAIL-CLOSED: nenhum `default` concede capability", () => {
+    const fonte = coreFonte as string;
+    // O fallback implícito removido no P3 devolvia org.structure.manage.
+    expect(fonte).not.toMatch(/default:\s*\n?\s*return\s+"org\./);
+    expect(fonte).not.toMatch(/default:\s*return\s+"org\./);
+    // A capability vem do mapa explícito e a operação fora do plano é negada.
+    expect(fonte).toContain("DEFINICAO_POR_OPERACAO[operacao]");
+    expect(fonte).toContain('definicao.gate !== "administrativo"');
+    expect(fonte).toContain('{ permitido: false, code: "FORBIDDEN" }');
+  });
+
+  it("a Edge NÃO replica regra de domínio das RPCs do P3 (só traduz o payload)", () => {
+    for (const operacao of OPERACOES_P3) {
+      const chamada = chamadaDe(CONTRATO_EDGE_RPC[operacao].rpc);
+      expect(chamada, operacao).toBeDefined();
+      const corpo = chamada?.corpo ?? "";
+      expect(corpo, operacao).not.toMatch(/\bselect\b/i);
+      expect(corpo, operacao).not.toMatch(/\bif\s*\(/);
+      expect(corpo, operacao).not.toMatch(/exclusion|valid_to\s*[<>]|expected_version\s*[<>]/i);
+      expect(corpo, operacao).not.toMatch(/ciclo|hierarqu/i);
+    }
+  });
+
+  it("o dispatch envia o operationId soberano e o motivo em todas as 15 operações", () => {
+    for (const operacao of OPERACOES_P3) {
+      const chamada = chamadaDe(CONTRATO_EDGE_RPC[operacao].rpc);
+      expect(chamada?.corpo, operacao).toContain("p_operation_id: execucao.entrada.operationId");
+      expect(chamada?.corpo, operacao).toContain("p_motivo: execucao.entrada.motivo");
+    }
+  });
+
+  it("nullable preservado: parentUnitId e seniorityLevelId vão como null quando ausentes", () => {
+    const parent = chamadaDe("estrutura_unidade_parent_definir");
+    expect(parent?.corpo).toContain("p_parent_unit_id: execucao.entrada.parentUnitId");
+    const posicao = chamadaDe("estrutura_posicao_criar");
+    expect(posicao?.corpo).toContain("p_seniority_level_id: execucao.entrada.seniorityLevelId");
+  });
+
+  it("o array de membros do colegiado é enviado como array tipado", () => {
+    const colegiado = chamadaDe("estrutura_colegiado_definir");
+    expect(colegiado?.corpo).toContain(
+      "p_member_collaborator_ids: execucao.entrada.memberCollaboratorIds"
+    );
+  });
+
+  it("nenhuma operação do P3 usa a RPC de outra operação (dispatch 1:1)", () => {
+    const rpcs = OPERACOES_P3.map((operacao) => CONTRATO_EDGE_RPC[operacao].rpc);
+    expect(new Set(rpcs).size).toBe(15);
+    expect(rpcs.some((rpc) => rpc.includes("f5_07"))).toBe(false);
   });
 });
