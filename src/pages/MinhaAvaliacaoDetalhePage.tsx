@@ -21,7 +21,12 @@ import {
   getTextoNotaAvaliacao,
   possuiNotaAvaliacao,
 } from "../services/apresentacaoNota";
-import { funcaoUsaEstruturaAvaliacaoAnalista } from "../types/Colaborador";
+import {
+  gestorSoberano,
+  papelDoGestorDireto,
+  resolverProjecaoEstrutural,
+  usaEstruturaAvaliacaoSoberana,
+} from "../services/projecaoEstruturalSoberana";
 import "../styles/avaliacoes.css";
 
 const criterioIcons = Array.from({ length: 8 }, (_, index) => (
@@ -53,8 +58,16 @@ function MinhaAvaliacaoDetalhePage() {
     );
   }
 
-  const usaEstruturaAvaliacaoAnalista =
-    funcaoUsaEstruturaAvaliacaoAnalista(usuarioAtual.funcao);
+  // F5-08 P6 (correção da auditoria): papel estrutural e cadeia de gestão vêm da
+  // PROJEÇÃO ESTRUTURAL SOBERANA. `funcao` textual e `gestorDiretoMatricula`
+  // local não decidem quem avalia quem; sem evidência soberana a decisão é
+  // fail-closed (nenhuma seção de papel é presumida).
+  const colaboradores = getColaboradores();
+  const projecaoEstrutural = resolverProjecaoEstrutural(undefined, colaboradores);
+  const usaEstruturaAvaliacaoAnalista = usaEstruturaAvaliacaoSoberana(
+    projecaoEstrutural,
+    usuarioAtual.matricula
+  );
 
   const feedback = getFeedbacksByColaborador(
     usuarioAtual.matricula
@@ -119,30 +132,34 @@ function MinhaAvaliacaoDetalhePage() {
       feedback.feedbackFinalCoordenador
   );
 
-  const colaboradores = getColaboradores();
+  const matriculaGestorSoberano = gestorSoberano(
+    projecaoEstrutural,
+    usuarioAtual.matricula
+  );
+  const gestorDireto =
+    matriculaGestorSoberano === null
+      ? undefined
+      : colaboradores.find(
+          (item) => item.matricula === matriculaGestorSoberano
+        );
 
-  const gestorDireto = usuarioAtual.gestorDiretoMatricula
-    ? colaboradores.find(
-        (item) =>
-          item.matricula === usuarioAtual.gestorDiretoMatricula
-      )
-    : undefined;
-
+  const papelDoGestor = papelDoGestorDireto(
+    projecaoEstrutural,
+    usuarioAtual.matricula
+  );
   const coordenadorAvaliador =
-    gestorDireto?.funcao === "COORDENADOR"
-      ? gestorDireto
-      : undefined;
+    papelDoGestor === "COORDENADOR" ? gestorDireto : undefined;
 
+  const matriculaGerente =
+    papelDoGestor === "GERENTE"
+      ? matriculaGestorSoberano
+      : papelDoGestor === "COORDENADOR" && matriculaGestorSoberano !== null
+        ? gestorSoberano(projecaoEstrutural, matriculaGestorSoberano)
+        : null;
   const gerenteAvaliador =
-    gestorDireto?.funcao === "GERENTE"
-      ? gestorDireto
-      : coordenadorAvaliador?.gestorDiretoMatricula
-      ? colaboradores.find(
-          (item) =>
-            item.matricula ===
-            coordenadorAvaliador.gestorDiretoMatricula
-        )
-      : undefined;
+    matriculaGerente === null
+      ? undefined
+      : colaboradores.find((item) => item.matricula === matriculaGerente);
 
   const avaliacoesHistorico = getFeedbacksByColaborador(
     usuarioAtual.matricula

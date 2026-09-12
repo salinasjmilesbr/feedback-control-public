@@ -250,21 +250,31 @@ function CiclosAvaliacaoPage({
 
     if (pendencias.length > 0) {
       const resumo = pendencias
-        .map((pendencia) =>
-          pendencia.papel === "Metas"
-            ? `${pendencia.colaboradorNome} — Metas: ${pendencia.quantidade} meta${
-                pendencia.quantidade === 1 ? "" : "s"
-              } sem fechamento${
-                pendencia.detalhes?.length
-                  ? ` (${pendencia.detalhes.join(", ")})`
-                  : ""
-              }`
-            : `${pendencia.colaboradorNome} — ${pendencia.papel}: ${
-                pendencia.quantidade
-              } nota${pendencia.quantidade === 1 ? "" : "s"} pendente${
-                pendencia.quantidade === 1 ? "" : "s"
-              }`
-        )
+        .map((pendencia) => {
+          // F5-08 P6: pendência de ESTRUTURA = fail-closed do cutover — a
+          // estrutura não pôde ser resolvida no PostgreSQL e NADA é presumido
+          // a partir de dados locais.
+          if (pendencia.papel === "Estrutura") {
+            return `${pendencia.colaboradorNome}: ${
+              pendencia.detalhes?.join(" ") ??
+              "estrutura organizacional indisponível"
+            }`;
+          }
+          if (pendencia.papel === "Metas") {
+            return `${pendencia.colaboradorNome} — Metas: ${pendencia.quantidade} meta${
+              pendencia.quantidade === 1 ? "" : "s"
+            } sem fechamento${
+              pendencia.detalhes?.length
+                ? ` (${pendencia.detalhes.join(", ")})`
+                : ""
+            }`;
+          }
+          return `${pendencia.colaboradorNome} — ${pendencia.papel}: ${
+            pendencia.quantidade
+          } nota${pendencia.quantidade === 1 ? "" : "s"} pendente${
+            pendencia.quantidade === 1 ? "" : "s"
+          }`;
+        })
         .join("\n");
 
       const confirmar = window.confirm(

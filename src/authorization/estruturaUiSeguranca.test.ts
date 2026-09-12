@@ -537,3 +537,79 @@ describe("F5-08 P6 — nenhuma autoridade estrutural local", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// F5-08 P6 (correção da auditoria) — PAPEL/ELEGIBILIDADE sem estrutura local
+// ---------------------------------------------------------------------------
+
+/**
+ * Módulos que decidem QUEM GERENCIA QUEM, QUEM AVALIA QUEM, quem é
+ * GERENTE/COORDENADOR e quem é ELEGÍVEL. Depois da correção eles derivam esses
+ * fatos da PROJEÇÃO ESTRUTURAL SOBERANA (`projecaoEstruturalSoberana`) — nunca
+ * mais dos campos do cadastro local (`funcao`, `gestorDiretoMatricula`,
+ * `avaliadoresColegiadoMatriculas`) nem de `getColaboradoresVisiveis`.
+ */
+const CAMINHOS_PAPEL_ELEGIBILIDADE: readonly string[] = [
+  "../services/progressoAvaliacao.ts",
+  "../services/cicloEquipeService.ts",
+  "../services/metaStorage.ts",
+  "../services/permissaoAvaliacao.ts",
+];
+
+const PROJECAO_ESTRUTURAL = "../services/projecaoEstruturalSoberana.ts";
+
+describe("F5-08 P6 (correção) — papel/elegibilidade sem estrutura local", () => {
+  it("os módulos de papel/elegibilidade não leem campos estruturais locais", () => {
+    for (const caminho of CAMINHOS_PAPEL_ELEGIBILIDADE) {
+      const codigo = apenasCodigo(fonteDeProducao(caminho));
+      for (const proibido of [
+        "funcao",
+        "gestorDiretoMatricula",
+        "avaliadoresColegiadoMatriculas",
+        "funcaoUsaEstruturaAvaliacaoAnalista",
+        "getColaboradoresVisiveis",
+      ]) {
+        expect(codigo, `${caminho}:${proibido}`).not.toContain(proibido);
+      }
+    }
+  });
+
+  it("a derivação por `funcao` existe SOMENTE no adaptador de fixture (DEV)", () => {
+    // Reintroduzir a decisão por `funcao` em qualquer outro arquivo de produção
+    // reprova aqui.
+    expect(
+      [...produtoresQueCitam("funcaoUsaEstruturaAvaliacaoAnalista")].sort()
+    ).toEqual([
+      "src/services/projecaoEstruturalSoberana.ts",
+      "src/types/Colaborador.ts",
+    ]);
+    expect(produtoresQueCitam("projecaoDeFixtureLocal")).toEqual([
+      "src/services/projecaoEstruturalSoberana.ts",
+    ]);
+  });
+
+  it("o adaptador de fixture só entrega projeção sob o gate explícito de DEV", () => {
+    const codigo = apenasCodigo(fonteDeProducao(PROJECAO_ESTRUTURAL));
+
+    expect(codigo).toContain("simulacaoDevPermitida");
+    expect(codigo).toMatch(/if \(simulacaoDevPermitida && mundoLocalDev\)/);
+    expect(codigo).toContain("PROJECAO_ESTRUTURAL_VAZIA");
+
+    // Nenhuma superfície nova (RPC/Edge/credencial) foi criada para isso.
+    for (const proibido of [".rpc(", "functions.invoke", "service_role", "SERVICE_ROLE"]) {
+      expect(codigo, proibido).not.toContain(proibido);
+    }
+  });
+
+  it("o mundo sintético de `localWorld` só é construído atrás do gate de DEV", () => {
+    const codigo = apenasCodigo(fonteDeProducao("./providers/localWorld.ts"));
+
+    expect(codigo).toContain("simulacaoDevPermitida");
+    // Produção ⇒ mundo soberano VAZIO (fail-closed) e o corpo sintético fica
+    // inalcançável fora do gate.
+    expect(codigo).toMatch(
+      /if \(!simulacaoDevPermitida\) \{[\s\S]*?criarProvidersMundoFuncional\(\{ actor, colaboradores: \[\] \}\)[\s\S]*?\}/
+    );
+    expect(codigo).toContain("return mundoLocalSintetico(actor, colaboradores);");
+  });
+});

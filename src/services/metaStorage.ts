@@ -2,8 +2,15 @@ import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
 import type { Meta, TipoMeta } from "../types/Meta";
 import { getCiclosAvaliacao } from "./cicloAvaliacaoStorage";
-import { getColaboradorEfetivoNoCiclo } from "./historicoOrganizacionalStorage";
+import { getColaboradoresEfetivosNoCiclo } from "./historicoOrganizacionalStorage";
 import { getColaboradores } from "./colaboradorStorage";
+import {
+  gestorSoberano,
+  raizDaCadeiaSoberana,
+  resolverProjecaoEstrutural,
+  vinculoEstrutural,
+  type ProjecaoEstruturalSoberana,
+} from "./projecaoEstruturalSoberana";
 import { authorize } from "../authorization/policyEngine/policyEngine";
 import {
   criarProvidersMundoLocal,
@@ -123,85 +130,86 @@ function getCicloDaMeta(meta: Meta): CicloAvaliacao | undefined {
   return getCiclosAvaliacao().find((ciclo) => ciclo.id === meta.cicloId);
 }
 
-function getColaboradorEfetivoParaCiclo(
-  colaborador: Colaborador,
-  colaboradores: Colaborador[],
-  ciclo?: CicloAvaliacao
-): Colaborador {
-  return ciclo
-    ? getColaboradorEfetivoNoCiclo(colaborador, ciclo, colaboradores)
-    : colaborador;
+/**
+ * Projeção estrutural usada pelas decisões de meta.
+ *
+ * F5-08 P6 (correção da auditoria): hierarquia, papel e colegiado NÃO vêm mais
+ * de `gestorDiretoMatricula`/`funcao` do cadastro local. A projeção é a
+ * SOBERANA (injetada) ou, somente sob o gate explícito de DEV, a fixture local;
+ * sem evidência ela é VAZIA e cada decisão devolve o lado fail-closed.
+ */
+function projecaoDeMeta(
+  colaboradores: readonly Colaborador[],
+  ciclo: CicloAvaliacao | undefined,
+  envolvidos: readonly Colaborador[],
+  explicita?: ProjecaoEstruturalSoberana
+): ProjecaoEstruturalSoberana {
+  if (explicita) return explicita;
+
+  const porMatricula = new Map<number, Colaborador>();
+  [...colaboradores, ...envolvidos].forEach((colaborador) =>
+    porMatricula.set(colaborador.matricula, colaborador)
+  );
+  const base = Array.from(porMatricula.values());
+  const mundo = ciclo ? getColaboradoresEfetivosNoCiclo(ciclo, base) : base;
+
+  return resolverProjecaoEstrutural(undefined, mundo);
 }
 
+/**
+ * "Gerente responsável" = RAIZ da cadeia SOBERANA (dado estrutural, nunca
+ * `funcao`). `null` sem evidência estrutural (fail-closed).
+ */
 function getGerenteResponsavelNoCiclo(
   colaborador: Colaborador,
-  colaboradores: Colaborador[],
-  ciclo: CicloAvaliacao
-): Colaborador | undefined {
-  const porMatricula = new Map(
-    colaboradores.map((item) => [item.matricula, item])
-  );
-  const visitados = new Set<number>();
-  let atual = getColaboradorEfetivoNoCiclo(
-    colaborador,
-    ciclo,
-    colaboradores
-  );
-
-  while (atual.gestorDiretoMatricula) {
-    const matriculaGestor = atual.gestorDiretoMatricula;
-    if (visitados.has(matriculaGestor)) return undefined;
-    visitados.add(matriculaGestor);
-
-    const gestorBase = porMatricula.get(matriculaGestor);
-    if (!gestorBase) return undefined;
-
-    const gestor = getColaboradorEfetivoNoCiclo(
-      gestorBase,
-      ciclo,
-      colaboradores
-    );
-    atual = gestor;
-  }
-
-  // F4-09 (D2/D3): responsável = raiz da cadeia (dado), nunca `funcao`.
-  return atual;
+  projecao: ProjecaoEstruturalSoberana
+): number | null {
+  return raizDaCadeiaSoberana(projecao, colaborador.matricula);
 }
 
 export function metaExigeAprovacaoCoordenador(
   colaborador: Colaborador,
   colaboradores: Colaborador[],
-  ciclo?: CicloAvaliacao
+  ciclo?: CicloAvaliacao,
+  projecaoEstrutural?: ProjecaoEstruturalSoberana
 ): boolean {
-  const efetivo = getColaboradorEfetivoParaCiclo(
-    colaborador,
+  const projecao = projecaoDeMeta(
     colaboradores,
-    ciclo
+    ciclo,
+    [colaborador],
+    projecaoEstrutural
   );
-  if (!efetivo.gestorDiretoMatricula) return false;
+  const vinculo = vinculoEstrutural(projecao, colaborador.matricula);
 
-  const gestorBase = colaboradores.find(
-    (item) => item.matricula === efetivo.gestorDiretoMatricula
-  );
-  if (!gestorBase) return false;
+  // FAIL-CLOSED: sem evidência estrutural não é possível provar que a aprovação
+  // do coordenador NÃO é exigida — logo ela é exigida.
+  if (!vinculo) return true;
 
-  const gestor = getColaboradorEfetivoParaCiclo(
-    gestorBase,
-    colaboradores,
-    ciclo
-  );
-  return gestor.funcao === "COORDENADOR";
+  // Evidência explícita de ausência de gestor: não há coordenador a exigir.
+  const matriculaGestor = gestorSoberano(projecao, colaborador.matricula);
+  if (matriculaGestor === null) return false;
+
+  const gestor = vinculoEstrutural(projecao, matriculaGestor);
+  // Matrícula de gestor sem vínculo resolvido ⇒ fail-closed.
+  if (!gestor) return true;
+
+  return gestor.papel === "COORDENADOR";
 }
 
 export function metaEstaAprovada(
   meta: Meta,
   colaborador: Colaborador,
-  colaboradores: Colaborador[]
+  colaboradores: Colaborador[],
+  projecaoEstrutural?: ProjecaoEstruturalSoberana
 ): boolean {
   const ciclo = getCicloDaMeta(meta);
   const coordenadorOk =
-    !metaExigeAprovacaoCoordenador(colaborador, colaboradores, ciclo) ||
-    Boolean(meta.aprovacaoCoordenador);
+    !metaExigeAprovacaoCoordenador(
+      colaborador,
+      colaboradores,
+      ciclo,
+      projecaoEstrutural
+    ) || Boolean(meta.aprovacaoCoordenador);
 
   // Aprovações já realizadas continuam válidas mesmo após transferência.
   return coordenadorOk && Boolean(meta.aprovacaoGerente);
@@ -211,21 +219,26 @@ export function podeAprovarMetaNoCiclo(
   aprovador: Colaborador,
   colaborador: Colaborador,
   colaboradores: Colaborador[],
-  ciclo: CicloAvaliacao
+  ciclo: CicloAvaliacao,
+  projecaoEstrutural?: ProjecaoEstruturalSoberana
 ): boolean {
-  const efetivo = getColaboradorEfetivoNoCiclo(
-    colaborador,
+  const projecao = projecaoDeMeta(
+    colaboradores,
     ciclo,
-    colaboradores
+    [colaborador, aprovador],
+    projecaoEstrutural
   );
+  const vinculo = vinculoEstrutural(projecao, colaborador.matricula);
+
+  // FAIL-CLOSED: sem evidência estrutural soberana, ninguém aprova.
+  if (!vinculo) return false;
 
   // F4-09 (D2/D3): coordenador = gestor direto (dado); gerente = raiz da
   // cadeia (dado). Nunca `funcao`.
   const ehCoordenadorDireto =
-    efetivo.gestorDiretoMatricula === aprovador.matricula;
-  const ehGerenteResponsavel =
-    getGerenteResponsavelNoCiclo(colaborador, colaboradores, ciclo)?.matricula ===
-    aprovador.matricula;
+    gestorSoberano(projecao, colaborador.matricula) === aprovador.matricula;
+  const raiz = getGerenteResponsavelNoCiclo(colaborador, projecao);
+  const ehGerenteResponsavel = raiz !== null && raiz === aprovador.matricula;
 
   return ehCoordenadorDireto || ehGerenteResponsavel;
 }
@@ -377,7 +390,8 @@ export function aprovarMeta(
   id: string,
   aprovador: Colaborador,
   colaborador: Colaborador,
-  ciclo: CicloAvaliacao
+  ciclo: CicloAvaliacao,
+  projecaoEstrutural?: ProjecaoEstruturalSoberana
 ): void {
   validarCicloAtivo(ciclo);
 
@@ -405,14 +419,30 @@ export function aprovarMeta(
     cicloId: ciclo.id,
   });
 
+  // F5-08 P6 (correção da auditoria): a relação de aprovação (coordenador direto
+  // e gerente responsável) vem da projeção estrutural SOBERANA — nunca do
+  // cadastro local.
+  const projecao = projecaoDeMeta(
+    colaboradores,
+    ciclo,
+    [colaborador, aprovador],
+    projecaoEstrutural
+  );
   const ehCoordenadorDireto =
-    colaborador.gestorDiretoMatricula === aprovador.matricula;
-  const ehGerenteResponsavel =
-    getGerenteResponsavelNoCiclo(colaborador, colaboradores, ciclo)?.matricula ===
-    aprovador.matricula;
+    gestorSoberano(projecao, colaborador.matricula) === aprovador.matricula;
+  const raiz = getGerenteResponsavelNoCiclo(colaborador, projecao);
+  const ehGerenteResponsavel = raiz !== null && raiz === aprovador.matricula;
 
   if (ehCoordenadorDireto) {
-    if (!podeAprovarMetaNoCiclo(aprovador, colaborador, colaboradores, ciclo)) {
+    if (
+      !podeAprovarMetaNoCiclo(
+        aprovador,
+        colaborador,
+        colaboradores,
+        ciclo,
+        projecao
+      )
+    ) {
       throw new Error(
         "Somente o coordenador direto responsável neste ciclo pode aprovar esta meta."
       );

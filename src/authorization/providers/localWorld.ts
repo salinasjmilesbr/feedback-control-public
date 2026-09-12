@@ -1,4 +1,6 @@
 import type { Colaborador } from "../../types/Colaborador";
+import { simulacaoDevPermitida } from "../../config/ambiente";
+import { criarProvidersMundoFuncional } from "../mundoFuncional";
 import type { PolicyEngineProviders, TargetRef } from "../policyEngine/types";
 
 /**
@@ -7,13 +9,35 @@ import type { PolicyEngineProviders, TargetRef } from "../policyEngine/types";
  * (metas próprias) usa somente capability `goal.write` + scope SELF + relação
  * "alvo = próprio colaborador", sem consultar `funcao`.
  *
- * Quando os domínios migrarem para Supabase (F5), estes adapters são trocados
- * por adapters Supabase com a MESMA interface (D1).
+ * ## F5-08 P6 (correção da auditoria): o mundo sintético é DEV
+ *
+ * §19.1: `localWorld` fica "mantido **apenas** para DEV/teste, atrás do gate de
+ * modo DEV já existente; **nunca** em produção". Fora do contexto DEV do Vite a
+ * fábrica abaixo devolve o mundo SOBERANO VAZIO (nenhuma capability ⇒ DENY,
+ * fail-closed): o `organization_id` sintético e o `isMembershipActive: () => true`
+ * não são autoridade de produção.
+ *
+ * Quando os domínios migrarem para Supabase (F5), os adapters soberanos passam a
+ * alimentar `criarProvidersMundoFuncional` (D1) e a injeção de bindings explícitos.
  */
 
 export const LOCAL_ORGANIZATION_ID = "organizacao-sintetica-local";
 
 export function criarProvidersMundoLocal(
+  actor: Colaborador,
+  colaboradores: readonly Colaborador[]
+): PolicyEngineProviders {
+  if (!simulacaoDevPermitida) {
+    // Produção: sem projeção soberana o mundo é VAZIO — nenhuma capability é
+    // concedida por fixture/estrutura local (fail-closed).
+    return criarProvidersMundoFuncional({ actor, colaboradores: [] });
+  }
+
+  return mundoLocalSintetico(actor, colaboradores);
+}
+
+/** Mundo sintético de DEV/teste (fixture) — NUNCA autoridade de produção. */
+function mundoLocalSintetico(
   actor: Colaborador,
   colaboradores: readonly Colaborador[]
 ): PolicyEngineProviders {

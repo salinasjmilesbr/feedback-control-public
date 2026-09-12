@@ -1,100 +1,116 @@
-# F5-08 P6 — dúvida arquitetural REAL registrada (mundo funcional do cliente e leituras de elegibilidade)
+# F5-08 P6 — papel/elegibilidade sem estrutura local (blocker da auditoria **resolvido**)
 
-> **Status:** ABERTA — registrada para decisão em atividade própria (F5-09 e/ou atividade de
-> integração do mundo funcional soberano). **Nenhuma decisão nova foi inventada no P6.**
+> **Status:** **RESOLVIDO no P6.** Este arquivo **não** registra mais uma "dúvida para a
+> F5-09": o contrato F5-08 §19.1 é fechado e passou a ser cumprido no cutover. O que
+> permanece para a F5-09 é apenas o **domínio de ciclos/metas** (persistência e o produtor da
+> projeção), **sem** autoridade estrutural local.
 >
-> **Por que existe este arquivo:** o enunciado do P6 determina que, se surgir dúvida
-> arquitetural real não resolvida pelo contrato F5-08, ela deve ser registrada em `.md` em vez
-> de decidida unilateralmente. Este arquivo é essa parada. Ele é citado por
-> `src/authorization/cutoverEstrutural.test.ts:21`.
+> Referenciado por `src/authorization/cutoverEstrutural.test.ts`.
 
-## 1. O que o P6 entregou (fatos verificados)
+## 1. O blocker (auditoria GPT)
 
-| Fato | Evidência |
+A rodada anterior do P6 havia registrado como "decisão futura da F5-09" o uso de estrutura
+local em três caminhos produtivos:
+
+| Caminho | O que decidia por estrutura local |
 | --- | --- |
-| O fallback do Policy Engine funcional para o cadastro legado deixou de existir em produção | `src/authorization/authorizationPolicy.ts:74-83` (único call site de `getColaboradores()`, dentro de `if (simulacaoDevPermitida)`) |
-| O mundo funcional não deriva mais bindings de gestão/coordenação/colegiado fora do gate DEV | `src/authorization/mundoFuncional.ts:183,197-199` (`SEM_BINDINGS_DEV`; o fallback `?? derivarBindingsDev(...)` foi removido) |
-| `historicoOrganizacionalStorage` deixou de promover texto local (`respondePara`) a relação de gestão | `src/services/historicoOrganizacionalStorage.ts:89-92` |
-| A fixture morta de equipe de avaliação foi removida | `src/data/evaluationTeam.ts` (ausente; guarda em `estruturaUiSeguranca.test.ts`) |
-| Guardas estáticas e de runtime do cutover | `src/authorization/estruturaUiSeguranca.test.ts` (bloco P6), `src/authorization/cutoverEstrutural.test.ts` |
-| Validador SQL de cutover no CI | `supabase/validacao/03-validar-f5-08-cutover.sql`, `.github/workflows/ci.yml` (job `supabase-local`) |
+| `progressoAvaliacao.ts` | papéis exigidos da avaliação (gerente/coordenador/colegiado) por `funcao` textual + cadeia `gestorDiretoMatricula` |
+| `cicloEquipeService.ts` | elegibilidade para abrir avaliação, alcance do painel do ciclo e papéis por `funcao` + cadeia local |
+| `metaStorage.ts` | "quem aprova quem" (coordenador direto/gerente responsável) por `funcao` + cadeia local, e autorização com o **mundo local sintético** como provider |
 
-Consequência **intencional e verificada**: fora do contexto DEV do Vite, o mundo/bindings do
-cliente passam a vir apenas da projeção soberana (ainda não ligada no cliente). Logo `can()` e
-`authorize()` do cliente ficam **fail-closed (DENY)** em produção, e a decisão real permanece
-server-side (Policy Engine administrativo/`authorize()` na Edge + RLS). Ver
-`cutoverEstrutural.test.ts` (produção ⇒ DENY inclusive com mundo explícito; ALLOW só com binding
-explícito, que representa o que a projeção soberana deverá fornecer).
+Isso conflita com `docs/F5-08-desenho-tecnico.md` §19.1: `funcao` textual **não** decide
+hierarquia, e `localWorld` existe "apenas para DEV/teste, atrás do gate de modo DEV já
+existente; **nunca** em produção". Decisão da auditoria: **não** é escopo de F5-09; o P6 não
+podia ser considerado concluído com esses caminhos decidindo papel/elegibilidade localmente.
 
-## 2. A dúvida (uma frase)
+## 2. Solução adotada (reuso, sem fonte nova)
 
-**O contrato F5-08 §19.1 (`docs/F5-08-desenho-tecnico.md:1024`) exige que as decisões de
-elegibilidade/papel hoje tomadas por estrutura LOCAL (`progressoAvaliacao.ts`,
-`cicloEquipeService.ts`, `metaStorage.ts`) passem a usar a estrutura soberana — mas o P6 está
-proibido de criar funcionalidade estrutural nova (RPC/Edge/porta/UI) e de iniciar F5-09..F5-12,
-e o contrato NÃO define qual fonte soberana alimenta essas decisões, nem em qual atividade isso
-deve acontecer.**
+Nenhum mecanismo novo foi criado (sem migration, RPC, Edge operation, capability, allowlist ou
+porta). A correção introduz **uma fronteira** entre a estrutura e essas decisões:
 
-## 3. Por que o contrato não resolve (evidência)
+**`src/services/projecaoEstruturalSoberana.ts`** (novo módulo de fronteira):
 
-1. §19.1:1024 manda trocar a **fonte** das decisões de elegibilidade/papel, mas não diz para
-   onde: a única leitura soberana de estrutura definida pela F5-08 é **RLS/PostgREST** (`D16`,
-   §21.3:1125 — "RPC de leitura administrativa: **não** — leitura é RLS F4-08") + as portas do
-   cliente do P4/P5 (`lerEstrutura`, `acessoColaboradoresSoberanos`). Nenhuma delas responde
-   "quem avalia quem neste ciclo" / "quais metas este ator enxerga".
-2. §21.3:1126 atribui o **snapshot de colegiado por ciclo** à **F5-09**, e §26.3:1322 registra
-   que os ciclos são da F5-09 — a composição de equipe/colegiado por ciclo é, portanto, domínio
-   futuro, não da F5-08.
-3. §27:1337 define o P6 como "remoção da autoridade estrutural local (§19) + CI", com gate
-   `03-validar-f5-08-cutover.sql` + regressão F4/F5 — **sem** novo contrato de elegibilidade.
-4. O escopo dado ao P6 proíbe: nova migration, nova RPC/Edge, nova capability, nova UI e o
-   início de F5-09..F5-12. Qualquer implementação aqui seria **invenção de decisão estrutural**.
+- `VinculoEstruturalSoberano` / `ProjecaoEstruturalSoberana`: fatos estruturais **já
+  resolvidos** na origem (papel, gestor direto, cadeia, colegiado, aplicabilidade da estrutura
+  de avaliação). Os fatos soberanos têm nomes PRÓPRIOS (`gestorSoberanoMatricula`,
+  `colegiadoSoberanoMatriculas`), distintos dos campos do cadastro local;
+- `resolverProjecaoEstrutural(explicita, mundoLocalDev)`: a projeção **explícita (soberana)
+  sempre vence**; só o contexto DEV do Vite (`simulacaoDevPermitida`) pode cair na fixture
+  local; fora dele devolve `PROJECAO_ESTRUTURAL_VAZIA` (**fail-closed**);
+- `projecaoDeFixtureLocal`: **único** ponto do caminho de ciclo/metas onde `funcao` textual e
+  `gestorDiretoMatricula` local podem virar papel/cadeia — e só atrás do gate de DEV;
+- consultas soberanas usadas pelos consumidores: `vinculoEstrutural`, `gestorSoberano`,
+  `papelDoGestorDireto`, `temPapelNaCadeia`, `raizDaCadeiaSoberana`,
+  `usaEstruturaAvaliacaoSoberana`, `avaliadoresColegiadoSoberanos`, `alcanceSoberano`;
+- `ERRO_ESTRUTURA_SOBERANA_INDISPONIVEL`: mensagem única da barreira.
 
-## 4. Estado real do legado após o P6 (classificação B do §3 do enunciado)
+**Consumidores convertidos** (nenhum deles lê mais `funcao`, `gestorDiretoMatricula`,
+`avaliadoresColegiadoMatriculas` nem `getColaboradoresVisiveis`):
 
-Nenhum destes caminhos autoriza a **administração de estrutura** (unidades, posições, catálogos,
-colegiado, ocupação, reporting line) — essa superfície é soberana e está fechada
-(`03-validar-f5-08-cutover.sql` §3/§5). Eles permanecem como **leitura legada de domínios de
-ciclo/metas/feedback** (F5-09/F5-10/F5-11) e ainda decidem **elegibilidade/papel** por dados
-locais:
+| Arquivo | Mudança |
+| --- | --- |
+| `src/services/progressoAvaliacao.ts` | papéis vêm da projeção; sem evidência ⇒ `completo: false` + pendência explícita (nunca "completo" por dado local) |
+| `src/services/cicloEquipeService.ts` | elegibilidade, alcance do painel e papéis vêm da projeção; sem evidência ⇒ `criarAvaliacoesDoCicloAtivado` **recusa** e o painel fica vazio; pendências ganham o papel `Estrutura` |
+| `src/services/metaStorage.ts` | "quem aprova quem" e "exige coordenador" vêm da projeção; sem evidência ⇒ ninguém aprova e a aprovação do coordenador é exigida |
+| `src/services/permissaoAvaliacao.ts` | permissões de avaliação (gerente/coordenador/colegiado) vêm da projeção; sem evidência ⇒ `podeAvaliar: false` |
+| `src/pages/MinhaAvaliacaoDetalhePage.tsx` | seções de papel e identificação dos avaliadores vêm da projeção (antes: `funcao` + cadeia local) |
+| `src/authorization/providers/localWorld.ts` | `criarProvidersMundoLocal` passa a ser **DEV-only**: fora do gate devolve o mundo soberano VAZIO (`criarProvidersMundoFuncional({ actor, colaboradores: [] })`) ⇒ nenhuma capability ⇒ DENY |
+| `src/pages/CiclosAvaliacaoPage.tsx` | exibe a pendência de `Estrutura` (fail-closed) no encerramento do ciclo |
 
-| Arquivo | Uso local remanescente | Linhas |
+## 3. Comportamento fail-closed (sem evidência soberana)
+
+| Decisão | Antes (local) | Agora (produção) |
 | --- | --- | --- |
-| `src/services/progressoAvaliacao.ts` | papel por `funcao` textual e `gestorDiretoMatricula` local | 55-61, 82-96 |
-| `src/services/cicloEquipeService.ts` | equipe/elegibilidade por `getColaboradores()` + `funcao` + cadeia local | 6, 119-120, 130, 269-270, 288, 328-338, 454, 500-501 |
-| `src/services/metaStorage.ts` | provedores de mundo local (`providers/localWorld`) para metas | 5-6, 11 |
-| `src/services/permissaoAvaliacao.ts` | efetividade por histórico local | 5 |
-| `src/pages/{PainelCicloPage,MinhasMetasPage,AcompanhamentoMetasPage,NovoFeedbackPage,EditarFeedbackPage,FeedbackDetalhePage,MinhaAvaliacaoDetalhePage,RelatoriosPage}.tsx` | telas que consomem o cadastro local | ver guarda `CAMINHOS_LEGADO_LEITURA` em `estruturaUiSeguranca.test.ts` |
-| `src/contexts/UsuarioAtualProvider.tsx` | resolve o usuário atual pelo cadastro local | 3 |
-| `src/infrastructure/localStorage/localCollaboratorRepository.ts` | adapter DEV/teste (escrita é barreira) | 2-7 |
+| Papéis exigidos da avaliação | derivados de `funcao`/cadeia | `necessario: false` **e** `completo: false` com pendência de estrutura |
+| Abrir avaliações na ativação do ciclo | lista derivada do cadastro local | **recusa** (`ERRO_ESTRUTURA_SOBERANA_INDISPONIVEL`), nada é criado |
+| Alcance do painel do ciclo | `getColaboradoresVisiveis` local | **vazio** (nenhuma linha exibida) |
+| Pendências do encerramento | lista local | pendência `Estrutura` (nunca "tudo completo") |
+| Aprovar meta | relação local | `podeAprovarMetaNoCiclo` = `false`; `metaExigeAprovacaoCoordenador` = `true`; `metaEstaAprovada` = `false` |
+| Mutação de meta própria | provider do mundo local sintético | `authorize()` nega (mundo vazio), nada é gravado |
+| Permissões de avaliação | papéis por `funcao`/cadeia local | `podeAvaliar: false`, `papeisPermitidos: []` |
 
-Achado adicional (mesmo problema de fronteira, ainda **não** DEV-gated):
-`src/services/colaboradorStorage.ts:31-39` devolve a fixture `src/data/colaboradores` quando a
-chave local **não existe**, em qualquer ambiente. Hoje isso não alcança autorização estrutural
-(o único consumidor no caminho de autorização é DEV-gated, §1), mas alcança os consumidores
-legados acima — ou seja, uma fixture de DEV pode virar "dado" de tela em produção.
+Sentido do fail-closed: **não conceder**. Sempre que a estrutura não puder ser provada, a
+resposta é a negativa (não aplicável/sem alcance/negado/exige aprovação) — nunca um fallback
+local.
 
-`src/authorization/providers/localWorld.ts` (`organization_id` sintético,
-`isMembershipActive: () => true`) segue atrás do gate de modo DEV conforme §19.1:1022, com
-consumidores de produção pinados pela guarda estática: `src/services/metaStorage.ts` e
-`src/pages/MinhasMetasPage.tsx`.
+## 4. Provas
 
-## 5. Alternativas (NÃO decididas aqui)
+- `src/services/cutoverEstruturalServicos.test.ts` (novo, 8 testes): produção × DEV; inclui
+  projeções **contraditórias** ao cadastro local (prova que a decisão segue o soberano, não o
+  `funcao`), recusa de criação de avaliações sem evidência, ausência de escrita local e DEV
+  preservado atrás do gate.
+- `src/authorization/estruturaUiSeguranca.test.ts` (bloco novo, 4 testes): guarda estática que
+  **detecta a reintrodução** dos caminhos (campos estruturais locais proibidos nos quatro
+  módulos; `funcaoUsaEstruturaAvaliacaoAnalista` só no adaptador de fixture; `localWorld` só
+  sob o gate DEV; sem `.rpc(`/`functions.invoke`/`service_role`).
+- `src/authorization/cutoverEstrutural.test.ts`: política/mundo funcional fail-closed (P6).
+- SQL: `supabase/validacao/03-validar-f5-08-cutover.sql` (inalterado nesta correção — não há
+  superfície de banco nova).
 
-| Alternativa | Descrição | Risco/impacto |
+## 5. O que permanece para a F5-09 (sem autoridade estrutural local)
+
+1. **Persistência do domínio de ciclos/metas** continua em `localStorage` (legado) — o P6 não
+   migra persistência (§19.2/§21.3).
+2. **Produtor da projeção soberana**: ligar a leitura RLS/portas do P4/P5 (posições, ocupações,
+   reporting lines, colegiado) ao `resolverProjecaoEstrutural(projecao, …)` das telas, de modo
+   que a decisão deixe de ser fail-closed. A regra "qual cargo/posição ⇒ qual papel" pertence
+   ao domínio (não é inventada aqui e não existe no contrato da F5-08).
+3. **Aptidão por status** (`getAplicabilidadeNoCiclo`, snapshot F3-08 local) permanece como
+   leitura de **estreitamento**: ela só pode EXCLUIR alguém de um conjunto já derivado da
+   projeção soberana; nunca concede papel, alcance ou hierarquia. Migrá-la para
+   `collaborator_status_periods` soberano é evolução do mesmo domínio.
+
+## 6. Residual declarado (fora deste blocker, não silencioso)
+
+Estes caminhos ainda leem campos estruturais locais e **não** estão entre os três módulos do
+blocker; ficam registrados para não serem esquecidos:
+
+| Arquivo | Uso local | Observação |
 | --- | --- | --- |
-| **A. Elegibilidade 100% server-side (F5-09/F5-10)** | O cliente deixa de decidir equipe/elegibilidade: recebe do servidor a lista de alvos (participantes/responsáveis já resolvidos) e apenas exibe | Elimina a classe de risco; exige novas operações server-side (fora do contrato F5-08) |
-| **B. Projeção soberana no cliente** | O cliente passa a alimentar `mundoFuncional`/`progressoAvaliacao`/`cicloEquipeService` a partir de leitura RLS (posições/ocupações/reporting lines/colegiado) + portas do P4/P5 | Depende de um novo contrato de projeção (mapeamento estrutura → mundo funcional) e de invalidação correta |
-| **C. Manter leitura legada com barreira explícita de DEV (como no P6)** | Os domínios de ciclo/metas/feedback continuam em modo legado, mas com gate DEV + fail-closed em produção (telas sem mundo ⇒ sem dados, nunca dado local antigo) | Mantém dívida aberta; exige decidir o que a UI mostra em produção até F5-09 |
+| `src/services/relatorioService.ts:84,154-157,195` | filtros/alcance de relatório por `gestorDiretoMatricula` | domínio de relatórios; não concede papel de avaliação/aprovação |
+| `src/services/exportarAvaliacaoPdf.ts:49-73` | identificação de gestor/colegiado no PDF | exibição documental |
+| `src/services/visibilidadeColaboradores.ts` | alcance por cadeia/colegiado | único consumidor de produção restante é `authorizationPolicy.scopeCollaborators` (sem chamador de produção; usado por testes) |
+| `src/services/historicoOrganizacionalStorage.ts` | snapshots/efetivos do ciclo | leitura legada de exibição + aptidão (item 5.3), sem autoridade de papel |
 
-## 6. Onde decidir e o que NÃO fazer
-
-- **Decidir em:** desenho da **F5-09** (ciclos/equipe/colegiado por ciclo) ou em atividade de
-  integração explicitamente destinada a isso; se a decisão tocar o contrato F5-08, abrir a `Q#`
-  correspondente no desenho daquela atividade (não reabrir D1–D25 deste documento).
-- **Não fazer no P6 (feito):** não criar RPC/Edge/porta/UI/migration nova, não alterar allowlist
-  nem capabilities, não introduzir estrutura sintética, não promover texto local a hierarquia.
-- **Se nenhuma decisão for tomada:** os domínios de ciclo/metas/feedback permanecem com leitura
-  local e o cliente permanece fail-closed para o mundo funcional em produção — estado
-  **consistente com o cutover** (nenhuma autoridade estrutural local), porém com funcionalidade
-  reduzida até a projeção soberana existir.
+Tratar esses pontos exige atividade própria (relatórios/PDF) e não foi feito aqui para não
+ampliar o escopo do blocker.

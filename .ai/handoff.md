@@ -70,22 +70,47 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
     serialização, idempotência e histórico preservado);
   - `.github/workflows/ci.yml`: o job `supabase-local` passa a executar os **três**
     validadores da F5-08 e a regressão F5-06/F5-07 (§13.7/§23.4); timeout 40 min.
-- **Dúvida arquitetural REAL registrada (NÃO decidida nesta rodada):**
-  `docs/F5-08-p6-duvida-mundo-funcional.md` — o §19.1 do contrato manda as decisões
-  de elegibilidade/papel de `progressoAvaliacao`/`cicloEquipeService`/`metaStorage`
-  passarem a usar estrutura soberana, mas o P6 não pode criar funcionalidade nova
-  nem iniciar F5-09..F5-12, e o contrato não define a fonte soberana dessas
-  decisões. **Decidir em F5-09** (ou atividade destinada), com `Q#` própria; não
-  reabrir D1–D25 da F5-08.
+- **Blocker da auditoria RESOLVIDO (correção nesta branch):** o §19.1 do contrato
+  exige que as decisões de elegibilidade/papel de `progressoAvaliacao`,
+  `cicloEquipeService` e `metaStorage` usem estrutura SOBERANA — não era decisão
+  futura da F5-09. Correção aplicada sem criar fonte nova (sem migration/RPC/Edge/
+  capability):
+  - `src/services/projecaoEstruturalSoberana.ts` (novo): fronteira única — a
+    projeção SOBERANA explícita vence; fixture local só sob `simulacaoDevPermitida`;
+    fora dela `PROJECAO_ESTRUTURAL_VAZIA` (fail-closed);
+  - os três módulos + `permissaoAvaliacao.ts` + `MinhaAvaliacaoDetalhePage.tsx`
+    deixaram de ler `funcao`, `gestorDiretoMatricula`,
+    `avaliadoresColegiadoMatriculas` e `getColaboradoresVisiveis`; papel, cadeia,
+    colegiado e alcance vêm da projeção;
+  - `authorization/providers/localWorld.ts`: `criarProvidersMundoLocal` virou
+    DEV-only (fora do gate ⇒ mundo vazio ⇒ DENY) — fecha a autorização de metas
+    próprias por mundo sintético;
+  - fail-closed: `progressoAvaliacao` nunca declara `completo`; abrir avaliações na
+    ativação **recusa**; painel fica vazio; pendências trazem o papel `Estrutura`;
+    ninguém aprova meta e a aprovação do coordenador é exigida;
+  - provas: `src/services/cutoverEstruturalServicos.test.ts` (8 testes, produção ×
+    DEV, com projeções que CONTRADIZEM o cadastro local) e bloco novo em
+    `src/authorization/estruturaUiSeguranca.test.ts` (guarda estática que reprova a
+    reintrodução dos caminhos);
+  - `docs/F5-08-p6-duvida-mundo-funcional.md` deixou de registrar "dúvida para
+    F5-09": agora documenta o blocker resolvido, a solução e o que resta à F5-09
+    (persistência de ciclos/metas, o PRODUTOR da projeção e a aptidão por status
+    como estreitamento) — sem autoridade estrutural local.
+- **Residual declarado (fora do blocker, não silencioso):** `relatorioService`
+  (filtros por `gestorDiretoMatricula`), `exportarAvaliacaoPdf` (identificação de
+  avaliadores), `visibilidadeColaboradores` (sem chamador de produção) e
+  `historicoOrganizacionalStorage` (snapshots/efetivos). Registrado na §6 do
+  documento acima; exige atividade própria (relatórios/PDF).
 - **Consequência do cutover (verificada):** em produção o mundo funcional do
   cliente fica fail-closed (DENY) até a projeção soberana alimentá-lo; a decisão
   real permanece server-side (Edge + Policy Engine + RLS). Coberto por
-  `cutoverEstrutural.test.ts`.
-- **Validação desta rodada:** `npm test`, `npm run build`, `npm run lint`,
-  `npx tsc -b tsconfig.app.json` e `git diff --check` executados localmente.
-  Os **validadores SQL não foram executados** neste host (Docker/Supabase
-  indisponível) — rodam no job `supabase-local` do CI; a limitação está registrada
-  no relatório da atividade.
+  `cutoverEstrutural.test.ts` e `cutoverEstruturalServicos.test.ts`.
+- **Validação desta rodada:** `npm test` (**106 arquivos / 1650 testes** verdes),
+  `npm run build`, `npm run lint`, `npx tsc -b tsconfig.app.json` e
+  `git diff --check` executados localmente (todos verdes). Os **validadores SQL não
+  foram executados** neste host (Docker/Supabase indisponível) — rodam no job
+  `supabase-local` do CI; a limitação está registrada no relatório da atividade.
+  Nenhuma migration/RPC/Edge/capability nova foi criada nesta correção.
 - **Próxima atividade:** **F5-09** (ciclos) — **não iniciada** aqui.
 - **`.ai/current-task.md`:** não existe neste repositório (nem no histórico). A
   ausência é registrada aqui conforme `AGENTS.md` §1; o estado operacional de
