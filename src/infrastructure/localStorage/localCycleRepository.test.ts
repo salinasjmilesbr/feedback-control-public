@@ -1,15 +1,24 @@
+/**
+ * F5-09 P5 — `localCycleRepository` é **LEGACY/transitório**: cumpre a porta
+ * assíncrona projetando o storage local, com sentinelas explícitas de legado
+ * (`version: 0`, organização = intenção) e fail-closed quando o storage falha.
+ *
+ * Ele NÃO é o caminho soberano e NÃO é fallback do adapter de RLS (a prova
+ * estática está em `src/services/ciclosSoberanosSemFallback.test.ts`).
+ */
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CycleRepository } from "../../application/ports/CycleRepository";
-import { ativarCiclo, encerrarCiclo } from "../../services/cicloAvaliacaoStorage";
 import { instalarLocalStorageEmMemoria } from "../../test/localStorageMock";
 import type { CicloAvaliacao } from "../../types/CicloAvaliacao";
 import { localCycleRepository } from "./localCycleRepository";
 
 const STORAGE_KEY = "feedback-control-ciclos";
-const repository: CycleRepository = localCycleRepository;
-const agora = "2026-02-01T12:00:00.000Z";
+const ORG = "11111111-1111-4111-8111-111111111111";
 
-function cicloLegado(): CicloAvaliacao {
+const repository: CycleRepository = localCycleRepository;
+
+function cicloLegado(extra: Partial<CicloAvaliacao> = {}): CicloAvaliacao {
   return {
     id: "ciclo-legado",
     ano: 2025,
@@ -20,79 +29,98 @@ function cicloLegado(): CicloAvaliacao {
     dataEncerramento: "2025-12-31T12:00:00.000Z",
     quantidadePendencias: 2,
     encerradoComPendencias: true,
+    ...extra,
   };
 }
 
-describe("CycleRepository com storage local", () => {
+function persistir(...ciclos: CicloAvaliacao[]): void {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(ciclos));
+}
+
+describe("F5-09 P5 — CycleRepository local (LEGACY, porta assíncrona)", () => {
   beforeEach(() => {
     instalarLocalStorageEmMemoria();
     localStorage.setItem(STORAGE_KEY, "[]");
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(agora));
   });
 
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => vi.restoreAllMocks());
 
-  it("lê e ordena dados legados sem regravar ou remover campos históricos", () => {
-    const legado = cicloLegado();
-    const ativo: CicloAvaliacao = { ...legado, id: "ativo", ano: 2026, ciclo: 1, status: "ATIVO" };
-    const raw = JSON.stringify([legado, ativo]);
-    localStorage.setItem(STORAGE_KEY, raw);
+  it("projeta o ciclo local com identidade UUID e sentinelas explícitas de LEGADO", async () => {
+    persistir(cicloLegado());
 
-    expect(repository.getCiclosAvaliacao()).toEqual([ativo, legado]);
-    expect(repository.getCicloAtivo()).toEqual(ativo);
-    expect(localStorage.getItem(STORAGE_KEY)).toBe(raw);
-  });
+    const resultado = await repository.listarCiclos(ORG);
 
-  it.each([null, "json inválido"])("mantém inicialização do storage quando a base é %s", (raw) => {
-    if (raw === null) localStorage.removeItem(STORAGE_KEY);
-    else localStorage.setItem(STORAGE_KEY, raw);
-    localStorage.setItem("feedback-control-feedbacks", "[]");
-
-    const ciclos = repository.getCiclosAvaliacao();
-
-    expect(ciclos).toHaveLength(1);
-    expect(ciclos[0]).toMatchObject({ ano: 2026, ciclo: 1, status: "ATIVO", dataCriacao: agora });
-    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toEqual(ciclos);
-  });
-
-  it("persiste o cadastro e acompanha lifecycle e auditoria realizados pelo serviço vigente", () => {
-    const legado = cicloLegado();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([legado]));
-    const novo = repository.criarCiclo(2026, 1, "2026-01-01", "2026-04-30", 2, 1);
-
-    expect(novo).toMatchObject({ status: "PLANEJADO", quantidadeMetasNegocio: 2, quantidadeMetasIndividuais: 1 });
-    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toContainEqual(novo);
-    expect(repository.getCicloAtivo()).toBeUndefined();
-    ativarCiclo(novo.id);
-    expect(repository.getCicloAtivo()?.id).toBe(novo.id);
-    encerrarCiclo(novo.id, 2);
-
-    expect(repository.getCiclosAvaliacao()).toContainEqual(legado);
-    expect(repository.getCiclosAvaliacao()[0]).toMatchObject({
+    expect(resultado.ok).toBe(true);
+    if (!resultado.ok) return;
+    expect(resultado.data).toHaveLength(1);
+    expect(resultado.data[0]).toEqual({
+      id: "ciclo-legado",
+      organizationId: ORG,
+      ano: 2025,
+      numero: 3,
       status: "ENCERRADO",
-      encerramentos: [{ data: agora, encerradoComPendencias: true, quantidadePendencias: 2 }],
+      dataInicio: null,
+      dataFim: null,
+      dataAtivacao: null,
+      dataEncerramento: "2025-12-31T12:00:00.000Z",
+      encerradoComPendencias: true,
+      quantidadePendencias: 2,
+      // Sentinela de LEGADO: o storage local não possui versão otimista.
+      version: 0,
+      criadoEm: "2025-09-01T12:00:00.000Z",
+      atualizadoEm: "2025-12-31T12:00:00.000Z",
     });
-    expect(repository.getCicloAtivo()).toBeUndefined();
   });
 
-  it("preserva ativação no cadastro e rejeita outro ativo ou cadastro duplicado sem gravar", () => {
-    const ativo = repository.criarCiclo(2026, 1, "2026-01-01", "2026-04-30", 0, 0, true);
-    const antes = localStorage.getItem(STORAGE_KEY);
+  it("descarta registro legado fora do contrato (número fora de 1..3)", async () => {
+    persistir(cicloLegado(), cicloLegado({ id: "invalido", ciclo: 4 as unknown as 1 }));
 
-    expect(repository.getCicloAtivo()).toEqual(ativo);
-    expect(() => repository.criarCiclo(2026, 2, "2026-05-01", "2026-08-31", 0, 0, true))
-      .toThrow("Já existe um ciclo ativo.");
-    expect(() => repository.criarCiclo(2026, 1, "2026-01-01", "2026-04-30", 0, 0))
-      .toThrow("O ciclo 2026 - Ciclo 1 já está cadastrado.");
-    expect(localStorage.getItem(STORAGE_KEY)).toBe(antes);
+    const resultado = await repository.listarCiclos(ORG);
+
+    expect(resultado.ok).toBe(true);
+    if (!resultado.ok) return;
+    expect(resultado.data.map((ciclo) => ciclo.id)).toEqual(["ciclo-legado"]);
   });
 
-  it.each([
-    ["", "2026-04-30", "Informe as datas de início e fim do ciclo."],
-    ["2026-05-01", "2026-04-30", "A data de início não pode ser posterior à data de fim."],
-  ])("propaga a validação do período %s / %s", (inicio, fim, erro) => {
-    expect(() => repository.criarCiclo(2026, 1, inicio, fim, 0, 0)).toThrow(erro);
-    expect(localStorage.getItem(STORAGE_KEY)).toBe("[]");
+  it("obterCiclo resolve por UUID e devolve ausência explícita quando não há registro", async () => {
+    persistir(cicloLegado({ status: "PLANEJADO" }));
+
+    const encontrado = await repository.obterCiclo(ORG, "ciclo-legado");
+    expect(encontrado.ok).toBe(true);
+    if (!encontrado.ok) return;
+    expect(encontrado.data?.id).toBe("ciclo-legado");
+
+    expect(await repository.obterCiclo(ORG, "inexistente")).toEqual({ ok: true, data: null });
+    expect(await repository.obterCicloAtivo(ORG)).toEqual({ ok: true, data: null });
+  });
+
+  it("obterCicloAtivo devolve o ciclo ativo do storage legado", async () => {
+    persistir(cicloLegado({ status: "ATIVO" }), cicloLegado({ id: "outro", status: "PLANEJADO" }));
+
+    const ativo = await repository.obterCicloAtivo(ORG);
+
+    expect(ativo.ok).toBe(true);
+    if (!ativo.ok) return;
+    expect(ativo.data?.id).toBe("ciclo-legado");
+    expect(ativo.data?.status).toBe("ATIVO");
+  });
+
+  it("falha do storage vira INTERNAL (fail-closed, nunca lança nem inventa ciclo)", async () => {
+    vi.spyOn(localStorage, "getItem").mockImplementation(() => {
+      throw new Error("storage indisponível");
+    });
+
+    expect(await repository.listarCiclos(ORG)).toEqual({
+      ok: false,
+      error: { code: "INTERNAL", message: "Leitura local (LEGACY) indisponível." },
+    });
+    expect(await repository.obterCiclo(ORG, "ciclo-legado")).toEqual({
+      ok: false,
+      error: { code: "INTERNAL", message: "Leitura local (LEGACY) indisponível." },
+    });
+    expect(await repository.obterCicloAtivo(ORG)).toEqual({
+      ok: false,
+      error: { code: "INTERNAL", message: "Leitura local (LEGACY) indisponível." },
+    });
   });
 });

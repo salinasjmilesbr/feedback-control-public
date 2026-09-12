@@ -212,6 +212,24 @@ jobs:
             < supabase/validacao/08-validar-f5-09-p4.sql
 
       # ----------------------------------------------------------------------
+      # F5-09 (P5): leitura SOBERANA de ciclos por RLS own-tenant (SELECT para
+      # `authenticated` + grant minimo). Fixture ISOLADA propria (prefixo ec);
+      # a fase e somente de leitura — nenhuma RPC/capability nova entra aqui.
+      # Roda ANTES das regressoes F5-06/F5-07.
+      # ----------------------------------------------------------------------
+      - name: Seed F5-09 P5 scenario
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/09-cenario-f5-09-p5.sql
+
+      - name: Run F5-09 P5 validation (RLS own-tenant de leitura de ciclos)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/10-validar-f5-09-p5.sql
+
+      # ----------------------------------------------------------------------
       # Regressão F5-06/F5-07 (§23.4): cenários independentes, com prefixos de
       # UUID próprios (`d6`/`d7`), reaplicados antes de cada validação.
       # ----------------------------------------------------------------------

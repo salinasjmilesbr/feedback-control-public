@@ -9,7 +9,8 @@
 \set ON_ERROR_STOP on
 
 -- ============================================================================
--- 1) Schema: 13 tabelas, RLS habilitado, zero policies (deny-by-default)
+-- 1) Schema: 13 tabelas, RLS habilitado, deny-by-default (unica excecao: a
+--    policy de SELECT own-tenant de `evaluation_cycles`, criada no F5-09 P5)
 -- ============================================================================
 do $$
 declare
@@ -49,15 +50,34 @@ begin
   raise notice '[PASS] RLS habilitado nas 13 tabelas F5-06';
 end $$;
 
+-- ----------------------------------------------------------------------------
+-- A partir do F5-09 P5 (migration 20260919000000) `evaluation_cycles` deixa de ser
+-- deny-by-default para LEITURA: passa a ter UMA policy de SELECT own-tenant para
+-- `authenticated` (predicado `user_has_active_membership(organization_id)`).
+-- Essa e a UNICA excecao admitida aqui; qualquer outra policy nas tabelas F5-06
+-- (inclusive de escrita) continua sendo falha.
+-- ----------------------------------------------------------------------------
 do $$
+declare
+  v_indevidas integer;
 begin
-  if exists (
-    select 1 from pg_policies p
-     where p.schemaname='public' and p.tablename like 'evaluation%'
-  ) then
-    raise exception '[FAIL] existe policy nas tabelas F5-06 (deny-by-default violado)';
+  select count(*) into v_indevidas
+    from pg_policies p
+   where p.schemaname = 'public'
+     and p.tablename like 'evaluation%'
+     and not (
+       p.tablename = 'evaluation_cycles'
+       and p.policyname = 'evaluation_cycles_select_same_tenant'
+       and p.cmd = 'SELECT'
+       and p.roles = array['authenticated']::name[]
+       and p.qual like '%user_has_active_membership%'
+     );
+
+  if v_indevidas > 0 then
+    raise exception '[FAIL] policy indevida nas tabelas F5-06 (deny-by-default violado): %', v_indevidas;
   end if;
-  raise notice '[PASS] zero policies nas tabelas F5-06 (deny-by-default estrutural)';
+
+  raise notice '[PASS] nenhuma policy indevida nas tabelas F5-06 (excecao unica e conforme: SELECT own-tenant de evaluation_cycles — F5-09 P5)';
 end $$;
 
 -- ============================================================================
@@ -242,6 +262,9 @@ end $$;
 
 -- ============================================================================
 -- 4) RLS em execução: authenticated sem leitura/DML no domínio
+--    EXCEÇÃO (F5-09 P5): `evaluation_cycles` tem policy de SELECT own-tenant, logo
+--    a leitura é PERMITIDA — mas a RLS filtra por `user_has_active_membership` e,
+--    sem identidade soberana (`auth.uid()` nulo), o conjunto é VAZIO.
 -- ============================================================================
 set role authenticated;
 do $$
@@ -249,7 +272,7 @@ declare
   v_ok boolean;
   v_tabela text;
   v_tabelas text[] := array[
-    'evaluation_config_versions','evaluation_cycles','evaluations','evaluation_participants',
+    'evaluation_config_versions','evaluations','evaluation_participants',
     'evaluation_scores','evaluation_comments','evaluation_events','evaluation_pendencies',
     'evaluation_aggregates'];
 begin
@@ -264,6 +287,19 @@ begin
     end if;
   end loop;
   raise notice '[PASS] authenticated sem leitura direta nas tabelas F5-06 (projecao somente via RPC)';
+end $$;
+
+do $$
+declare
+  v_total bigint;
+begin
+  -- F5-09 P5: a leitura de `evaluation_cycles` existe, mas a policy own-tenant nao
+  -- entrega NADA sem identidade soberana (auth.uid() nulo => helper falso).
+  execute 'select count(*) from public.evaluation_cycles' into v_total;
+  if v_total <> 0 then
+    raise exception '[FAIL] authenticated leu % ciclo(s) sem identidade soberana (RLS own-tenant violada)', v_total;
+  end if;
+  raise notice '[PASS] evaluation_cycles legivel por authenticated SOMENTE pelo filtro own-tenant (sem identidade soberana: 0 linhas — F5-09 P5)';
 end $$;
 reset role;
 
