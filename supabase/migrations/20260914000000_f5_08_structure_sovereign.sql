@@ -181,14 +181,22 @@ revoke update, delete on public.structure_events from service_role;
 --
 --   - a recursao sobe por `parent_unit_id` a partir do PAI da linha gravada e
 --     rejeita quando alcanca a propria `unit_id`;
---   - considera SOMENTE relacoes cuja vigencia se sobrepoe a janela da linha
---     (`tstzrange(valid_from, coalesce(valid_to,'infinity'), '[)')` && a mesma
---     janela da linha), ou seja, a estrutura aplicavel ao periodo da linha;
---   - a sobreposicao e deliberadamente conservadora (fail-closed): como todo
---     ciclo real tem todas as arestas vigentes em um MESMO instante contido na
---     janela da linha, toda aresta do ciclo se sobrepoe a janela — nao existe
---     falso negativo; o caso patologico de sobreposicoes par-a-par sem instante
---     comum e recusado (fail-closed, nunca aceito por engano);
+--   - cada passo carrega a INTERSECAO TEMPORAL ACUMULADA do caminho: comeca na
+--     janela da linha (`tstzrange(new.valid_from, coalesce(new.valid_to,
+--     'infinity'), '[)')`) e, a cada aresta percorrida, intersecta a janela
+--     acumulada com a janela `[valid_from, valid_to)` daquela aresta
+--     (operador `*` de `tstzrange`, sempre com semantica `[)`);
+--   - a recursao so continua enquanto a interseccao acumulada for NAO VAZIA
+--     (guarda `&&`), e o ciclo so e recusado quando `new.unit_id` e alcancado
+--     com interseccao NAO VAZIA — isto e, quando existe um INSTANTE em que
+--     todas as arestas do caminho estao simultaneamente vigentes (definicao do
+--     contrato: ciclo temporal "na data da linha");
+--   - consequencia: arestas que se sobrepoem individualmente a janela da linha,
+--     mas sem instante comum, NAO sao recusadas (sem falso positivo), e nenhum
+--     ciclo REAL escapa (fail-closed);
+--   - `union` (e nao `union all`) deduplica por `(unit_id, janela)`: a busca a
+--     partir desse par nao depende do caminho percorrido, o que tambem impede
+--     recursao infinita em bases legadas com ciclo pre-existente;
 --   - a linha em gravacao e excluida da recursao (`pp.id is distinct from
 --     new.id`) para nao bloquear atualizacoes que nao mudam a hierarquia;
 --   - `new.parent_unit_id is null` (raiz) retorna cedo — raiz e ausencia de
@@ -221,19 +229,29 @@ begin
   );
 
   if exists (
-    with recursive ancestors(unit_id) as (
-      select new.parent_unit_id
+    with recursive caminho(unit_id, janela) as (
+      -- Passo inicial: a janela da propria linha em gravacao.
+      select new.parent_unit_id,
+             tstzrange(new.valid_from,
+                       coalesce(new.valid_to, 'infinity'::timestamptz), '[)')
       union
-      select pp.parent_unit_id
+      -- Cada aresta percorrida intersecta a janela acumulada com a sua;
+      -- a guarda `&&` interrompe o ramo quando a interseccao esvazia.
+      select pp.parent_unit_id,
+             c.janela * tstzrange(pp.valid_from,
+                                  coalesce(pp.valid_to, 'infinity'::timestamptz), '[)')
       from public.organizational_unit_parent_periods pp
-      join ancestors a on pp.unit_id = a.unit_id
+      join caminho c on pp.unit_id = c.unit_id
       where pp.id is distinct from new.id
         and pp.organization_id = new.organization_id
         and pp.parent_unit_id is not null
-        and tstzrange(pp.valid_from, coalesce(pp.valid_to, 'infinity'::timestamptz), '[)')
-            && tstzrange(new.valid_from, coalesce(new.valid_to, 'infinity'::timestamptz), '[)')
+        and c.janela && tstzrange(pp.valid_from,
+                                  coalesce(pp.valid_to, 'infinity'::timestamptz), '[)')
     )
-    select 1 from ancestors where unit_id = new.unit_id
+    select 1
+    from caminho
+    where unit_id = new.unit_id
+      and not isempty(janela)
   ) then
     raise exception
       'organizational_unit_parent_periods: ciclo hierarquico de unidades detectado';
@@ -244,10 +262,13 @@ end;
 $$;
 
 comment on function public.enforce_organizational_unit_parent_periods_no_cycle() is
-  'F5-08 D7/§10.2 I1: impede ciclos multi-nivel entre unidades, considerando as '
-  'relacoes cuja vigencia se sobrepoe a janela da linha criada/alterada '
-  '(fail-closed, sem correcao automatica). Usa o advisory xact lock normativo '
-  'por organizacao (mesma chave da F3-04 — D14/D24).';
+  'F5-08 D7/§10.2 I1 (corrigido na auditoria do PR #183): impede ciclos '
+  'multi-nivel entre unidades recusando apenas quando existe INTERSECAO '
+  'TEMPORAL NAO VAZIA ao longo de todo o caminho — isto e, um instante em que '
+  'todas as arestas do ciclo estejam simultaneamente vigentes (semantica `[)`; '
+  'sem falso positivo e sem falso negativo). Fail-closed, sem correcao '
+  'automatica, com o advisory xact lock normativo por organizacao (mesma chave '
+  'da F3-04 — D14/D24).';
 
 create trigger trg_organizational_unit_parent_periods_no_cycle
   before insert or update on public.organizational_unit_parent_periods

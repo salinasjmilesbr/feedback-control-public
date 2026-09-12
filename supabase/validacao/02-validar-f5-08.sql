@@ -479,6 +479,49 @@ begin
 end $$;
 
 do $$
+begin
+  -- FALSO POSITIVO (corrigido na auditoria do PR #183): a linha nova tem
+  -- janela AMPLA [2026-01-01, 2026-12-31) e as arestas do caminho existem em
+  -- SUBPERIODOS DISJUNTOS — A->B em [01-10,01-20) e B->C em [02-10,02-20).
+  -- Cada aresta se sobrepoe individualmente a janela de NEW, mas NAO existe
+  -- instante com todas as arestas vigentes ao mesmo tempo ⇒ NAO ha ciclo
+  -- temporal real ⇒ a operacao deve ser ACEITA (intersecao acumulada vazia).
+  begin
+    insert into public.organizational_unit_parent_periods
+      (organization_id, unit_id, parent_unit_id, valid_from, valid_to)
+    values
+      ('f8a00000-0000-0000-0000-0000000000a1',
+       'f8110000-0000-0000-0000-000000000011',
+       'f8110000-0000-0000-0000-000000000012',
+       '2026-01-01T00:00:00Z', '2026-12-31T00:00:00Z');
+  exception
+    when others then
+      raise exception '[FAIL] I1: FALSO POSITIVO — estrutura temporal VALIDA recusada (%)', sqlerrm;
+  end;
+  raise notice '[PASS] I1: sem falso positivo — arestas em subperiodos disjuntos NAO formam ciclo temporal';
+
+  -- CONTROLE POSITIVO do mesmo formato: agora as arestas tem INTERSECCAO NAO
+  -- VAZIA ([01-20,01-25)) ⇒ existe ciclo temporal REAL ⇒ recusa obrigatoria.
+  begin
+    insert into public.organizational_unit_parent_periods
+      (organization_id, unit_id, parent_unit_id, valid_from, valid_to)
+    values
+      ('f8a00000-0000-0000-0000-0000000000a1',
+       'f8110000-0000-0000-0000-000000000014',
+       'f8110000-0000-0000-0000-000000000015',
+       '2026-01-01T00:00:00Z', '2026-12-31T00:00:00Z');
+    raise exception '[FAIL] I1: ciclo temporal REAL com intersecao estreita foi aceito';
+  exception
+    when others then
+      if sqlerrm like '%ciclo hierarquico de unidades%' then
+        raise notice '[PASS] I1: ciclo temporal REAL (intersecao nao vazia) continua recusado';
+      else
+        raise;
+      end if;
+  end;
+end $$;
+
+do $$
 declare
   v_n int;
 begin
