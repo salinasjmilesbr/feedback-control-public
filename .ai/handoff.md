@@ -34,7 +34,76 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
-- **Atividade (rodada atual):** F5-09 — **P2 (RPCs soberanas de gestão de ciclo)
+- **Atividade (rodada atual):** F5-09 — **P3 (inclusão aditiva soberana de nova
+  admissão em ciclo `ATIVO`) IMPLEMENTADA** — **aguardando auditoria
+  independente**. Contrato: `docs/F5-09-desenho-tecnico.md` (§6 nota da inclusão
+  aditiva, §7.2 provas P1–P7, §7.3 contrato restrito, §10 I17–I19, §11/§12,
+  §13.2/§13.3, §15.1 A1–A12, §19 P3) e `docs/F5-09-duvidas.md` (D1–D28
+  ratificadas; **D26/D27** em especial).
+- **Base:** `main`/`origin/main` = `c0b9375bc54d58a815e78ed6f332735e3f530d83`
+  (F5-09 P2 integrada pelo squash do PR #191).
+- **Branch da P3:** `feat/f5-09-p3-cycle-admission` — **sem merge**; o push do
+  sandbox é bloqueado (`.ai/git-rules.md`), então push/PR ficam para o usuário.
+- **Entregue nesta rodada (P3) — 6 arquivos:**
+  - `supabase/migrations/20260917000000_f5_09_cycle_admission.sql`: helper
+    **read-only** `ciclo_admissao_pos_ativacao_elegivel` (provas **P1–P7**
+    fail-closed, com **motivo de recusa por prova** e evidências da estrutura
+    resolvida) + RPC `ciclo_incluir_admissao` (contrato restrito, **sem** nenhum
+    parâmetro estrutural), ACL `EXECUTE` só `service_role`, preflight de baseline
+    e guarda final fail-closed;
+  - `supabase/validacao/05-cenario-f5-09-p3.sql` (fixture **ISOLADA**, prefixo
+    `ea`, insert-once, com atores/organizações/estrutura próprios) e
+    `06-validar-f5-09-p3.sql` (28 casos obrigatórios + A1–A12, incluindo **4
+    probes cross-tenant DIRETOS** na nova RPC e **rollback real em 3 fases**);
+  - `.github/workflows/ci.yml` (job `supabase-local` executa 05/06 **após** 03/04
+    e **antes** das regressões F5-06/F5-07);
+  - `supabase/migrations/README.md` (registro da migration) e `.ai/handoff.md`.
+- **Invariantes centrais da P3 (D26/D27):** a operação é a **única** ampliação de
+  população depois da ativação e é **exclusivamente aditiva** — nenhum
+  snapshot/posição/membro/responsabilidade existente é alterado ou removido (a
+  RPC delega a F3-08/F3-09, que só inserem, e não aceita parâmetro estrutural);
+  prova soberana de admissão revalidada server-side e **fail-closed**
+  (`collaborators.admission_date` **não** é prova; legado/importado sem evento
+  `ADMISSAO` é **recusado** — a correção é no caminho de importação); autorização
+  e tenant sempre do ator verificado (`cycle.manage` **reusada**, nenhuma
+  capability nova; `service_role` executa e não decide); lock normativo
+  `evaluation_cycles:<organization_id>` (`ciclo_lock_organizacao`) +
+  `expected_version` + idempotência por `(organization_id, operation_id)` com
+  hash **derivado server-side**; **um** evento append-only `ADMISSAO_INCLUIDA`
+  por mutação, com o **id do evento `ADMISSAO`** que autorizou; movimentação
+  posterior **não** rematerializa o ciclo (D27).
+- **Desvios mínimos declarados (vs §13.2, documentados no header da migration):**
+  (a) `p_payload_hash` **não** é parâmetro (mesmo desvio já aceito na P2: o hash
+  é derivado server-side dos parâmetros validados; aceitá-lo permitiria replay
+  com hash forjado); (b) a inclusão incrementa `evaluation_cycles.version` **uma
+  vez** — o §6 registra que a inclusão **não** é transição de estado, e é o que se
+  cumpre (status, datas e contadores de pendência inalterados), mas a população
+  materializada muda: sem o incremento o `expected_version` do §13.2 e o campo
+  `version` do `after_value` (§12) ficariam degenerados; (c) **nenhum** helper
+  novo de materialização — a F3-08 já aceita a menor granularidade segura
+  (`array[collaborator_id]`, `on conflict do nothing`) e a F3-09 é idempotente por
+  `(snapshot, posição)`; (d) **P6 aplicado de forma estrita**: a presença de
+  qualquer evento `ADMISSAO` com `SOMENTE_CICLOS_POSTERIORES` recusa a inclusão
+  no ciclo corrente (a operação não escolhe entre evidências conflitantes).
+- **Gates reais desta rodada (Docker Desktop acessível):** `supabase db reset` +
+  cenário 05 + validador 06 (**19 `[PASS]`, 0 `[FAIL]`**) + suíte SQL completa na
+  ordem do CI + `npm test`/`npm run build`/`npm run lint`/`npx tsc -b
+  tsconfig.app.json`/`git diff --check`, todos exit 0 (detalhes no PR).
+- **Limitações reais:** a contenção entre DUAS sessões segue não provável no
+  validador de sessão única (coberta por lock estrutural + `expected_version` +
+  P3 de aditividade); o cenário é **insert-once** (trilha append-only) e exige
+  `db reset` para nova execução limpa; o colegiado do colaborador admitido é
+  **autorado como fixture** no validador, porque o caminho soberano da F5-08 para
+  colegiado exige a capability `org.structure.manage` **com scope ativo** — fora
+  do escopo da P3.
+- **Permanece para P4+:** cancelar (T4/T5), reabrir (T6), corrigir período (T7),
+  leitura RLS + porta do cliente (P5), Policy Engine `cycle.read`/`cycle.manage`
+  (P6), Edge `ciclos` + reconciliação do bundle `admin` (P7), cutover (P8) e
+  validação integrada (P9).
+
+### 3.8 F5-09 P2 (integrada pelo squash do PR #191)
+
+- **Atividade:** F5-09 — **P2 (RPCs soberanas de gestão de ciclo)
   IMPLEMENTADA** — **aguardando auditoria independente**. Contrato:
   `docs/F5-09-desenho-tecnico.md` (§6 T0–T3, §8, §10–§13, §19 P2; D1–D28
   ratificadas) e `docs/F5-09-duvidas.md`.

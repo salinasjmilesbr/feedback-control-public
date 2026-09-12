@@ -178,6 +178,23 @@ jobs:
             < supabase/validacao/04-validar-f5-09-p2.sql
 
       # ----------------------------------------------------------------------
+      # F5-09 (P3): inclusao aditiva soberana de nova admissao em ciclo ATIVO
+      # (D26 §7.2/§7.3). Fixture ISOLADA propria (prefixo ea) — nao depende do
+      # estado mutado pelos validadores da P2 — e roda ANTES das regressoes.
+      # ----------------------------------------------------------------------
+      - name: Seed F5-09 P3 scenario
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/05-cenario-f5-09-p3.sql
+
+      - name: Run F5-09 P3 validation (inclusao aditiva de nova admissao)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/06-validar-f5-09-p3.sql
+
+      # ----------------------------------------------------------------------
       # Regressão F5-06/F5-07 (§23.4): cenários independentes, com prefixos de
       # UUID próprios (`d6`/`d7`), reaplicados antes de cada validação.
       # ----------------------------------------------------------------------
