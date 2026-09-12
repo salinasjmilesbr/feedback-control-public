@@ -51,7 +51,7 @@
 - **Status:** **FECHADO**. Q1–Q5 foram decididas por alternativa **A** na revisão arquitetural
   rodada 1 do PR #182 e convertidas nas decisões normativas D21–D25 (§28/§29). **Nenhuma questão
   arquitetural permanece aberta.**
-- **O que este documento é:** contrato da futura implementação (fase Pro), com inventário
+- **O que este documento é:** contrato da futura implementação (fase de implementação), com inventário
   verificado, modelo de dados, plano administrativo, matrizes de operação/autorização,
   estratégia de testes e critérios de aceite.
 - **O que este documento não é:** implementação. Nenhuma migration, RPC, tela ou teste é
@@ -1064,9 +1064,17 @@ Cada passo mantém o produto funcional: enquanto uma tela não está cortada, el
 3. **Idempotência de DDL**: `create table if not exists`/`drop trigger if exists` seguindo o
    estilo das migrations do repositório; `db reset` reproduz o estado do zero.
 4. **Ordem**: DDL antes de RPC (as RPCs referenciam `structure_events` e as funções de trigger).
-5. **Rollback**: como o desenho é aditivo, reverter = remover as duas migrations e restaurar os
-   grants anteriores (documentado no PR); não há perda de dados históricos porque nenhuma
-   tabela existente é alterada.
+5. **Rollback**: reverter as **três** migrations (`20260914000000_f5_08_structure_sovereign.sql`,
+   `20260914010000_f5_08_structure_rpc.sql` e `20260914020000_f5_08_lock_key_alignment.sql`) e
+   seus efeitos, na ordem inversa: (i) **restaurar as definições anteriores das quatro RPCs
+   estruturais da F5-07** e a **chave de advisory lock anterior** (`f5_07_estrutura:<org>`),
+   reintroduzidas por `create or replace function`; (ii) remover as 15 RPCs da F5-08 e os
+   respectivos grants de `EXECUTE`; (iii) remover `structure_events`, os triggers I1–I3 e o índice
+   novo; e (iv) **restaurar os grants anteriores** de `service_role` nas tabelas administradas
+   (estado anterior aos `revoke`/`grant` explícitos desta atividade), quando aplicável. Não há
+   perda de dados históricos das tabelas F3/F5-07, mas **as quatro funções da F5-07 são
+   deliberadamente substituídas** pela migration de alinhamento e precisam ser restauradas no
+   rollback. Procedimento documentado no PR.
 6. **Sem dados reais**: cenários e seeds apenas fictícios.
 7. **Ciclos preexistentes**: o trigger anti-ciclo é criado depois de verificar que os dados
    existentes (DEV/local) não contêm ciclos; se houver, a validação falha explicitamente (não
