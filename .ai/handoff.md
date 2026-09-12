@@ -94,6 +94,23 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   verde.
 - **Próxima atividade:** auditoria GPT do P1; depois **P2** (RPCs de gestão do
   ciclo), sem decisão arquitetural aberta.
+- **Correção pós-CI (PR #190, mesma branch):** o job `supabase-local` falhava no
+  validador **legado** `supabase/validacao/02-validar-f4-08.sql` **antes** dos
+  validadores da F5-09, com
+  `[FAIL] tabela public nao classificada (D16 — catalogacao explicita
+  obrigatoria): cycle_events` — o schema guard global do F4-08 exige catalogação
+  explícita de toda tabela `public` e ainda não conhecia a tabela nova. Correção
+  **mínima e sem relaxar contrato**: `cycle_events` foi classificada como
+  **tabela fechada** (RLS habilitada, **sem policy**, **sem SELECT/INSERT/UPDATE/
+  DELETE** para `authenticated`/`anon`, `service_role` apenas `SELECT`/`INSERT`,
+  append-only) em todas as listas/contadores do F4-08 — `v_closed` (policy, 22→23),
+  `v_closed` (SELECT, 22→23), anon `v_todos` (44→45), DML `v_todos` (44→45), schema
+  guard (44→45) e a lista comportamental de tabelas fechadas invisíveis (22→23) —
+  e nas **duas cópias** da lista de classificação do
+  `03-validar-f4-08-mutacoes.sql` (mutação B). `collaborator_events` permanece na
+  categoria especial dele (policy SELECT own-tenant sem grant). A migration da P1
+  **não** foi alterada e nenhuma regra da F5-09/P1 foi relaxada (contagem total de
+  policies segue 22: `cycle_events` não tem policy no P1).
 
 ### 3.6 F5-09 — desenho técnico (rodada anterior, integrada pelo PR #189)
 

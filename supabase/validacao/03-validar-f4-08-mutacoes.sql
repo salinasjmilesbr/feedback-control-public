@@ -74,7 +74,7 @@ begin
       'evaluation_config_scale_bands','evaluation_config_participant_roles','evaluation_cycles',
       'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
       'evaluation_events','evaluation_pendencies','evaluation_aggregates','collaborator_events',
-      'structure_events');
+      'structure_events','cycle_events');
   if v_t is null or v_t not like '%_mut_nao_class%' then
     raise exception '[MUT FAIL] guard nao detectou tabela nao classificada (v_t=%)', v_t;
   end if;
@@ -105,7 +105,7 @@ begin
       'evaluation_config_scale_bands','evaluation_config_participant_roles','evaluation_cycles',
       'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
       'evaluation_events','evaluation_pendencies','evaluation_aggregates','collaborator_events',
-      'structure_events');
+      'structure_events','cycle_events');
   if v_t is not null then raise exception '[MUT FAIL] catalogo nao voltou ao estado limpo (%)', v_t; end if;
   raise notice '[PASS] mutacao B: tabela nao classificada detectada e revertida';
 end $$;
