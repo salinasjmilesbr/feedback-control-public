@@ -161,6 +161,23 @@ jobs:
             < supabase/validacao/02-validar-f5-09.sql
 
       # ----------------------------------------------------------------------
+      # F5-09 (P2): RPCs soberanas de gestao de ciclo (criar/editar/ativar/
+      # encerrar). Mesma organizacao sintetica propria (prefixo e9); exige a P1
+      # aplicada e a fixture insert-once do cenario 03.
+      # ----------------------------------------------------------------------
+      - name: Seed F5-09 P2 scenario
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/03-cenario-f5-09-p2.sql
+
+      - name: Run F5-09 P2 validation (RPCs de gestao de ciclo soberanas)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/04-validar-f5-09-p2.sql
+
+      # ----------------------------------------------------------------------
       # Regressão F5-06/F5-07 (§23.4): cenários independentes, com prefixos de
       # UUID próprios (`d6`/`d7`), reaplicados antes de cada validação.
       # ----------------------------------------------------------------------

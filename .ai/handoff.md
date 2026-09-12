@@ -34,16 +34,89 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
-- **Atividade (rodada atual):** F5-09 — **P1 (integridade de schema e trilha de
-  auditoria) IMPLEMENTADA** — **aguardando auditoria GPT**. Contrato:
-  `docs/F5-09-desenho-tecnico.md` (§19 P1; D1–D28 ratificadas) e
-  `docs/F5-09-duvidas.md`.
-- **Base:** `main`/`origin/main` = `27f4bb0f91f8c34c26417f3df4d40485d775d0f1`
-  (desenho F5-09 integrado pelo PR #189).
-- **Branch da P1:** `feat/f5-09-p1-cycle-schema` — **sem merge**; o push/PR do
-  sandbox é bloqueado (`.ai/git-rules.md`), então o PR fica para o usuário.
+- **Atividade (rodada atual):** F5-09 — **P2 (RPCs soberanas de gestão de ciclo)
+  IMPLEMENTADA** — **aguardando auditoria independente**. Contrato:
+  `docs/F5-09-desenho-tecnico.md` (§6 T0–T3, §8, §10–§13, §19 P2; D1–D28
+  ratificadas) e `docs/F5-09-duvidas.md`.
+- **Base:** `main`/`origin/main` = `ccc10b8a468ae2ceee8121634bdca38141df81b6`
+  (F5-09 P1 integrada pelo squash do PR #190).
+- **Branch da P2:** `feat/f5-09-p2-cycle-management-rpcs` — **sem merge**; o
+  push/PR do sandbox é bloqueado (`.ai/git-rules.md`), então o push/PR fica para
+  o usuário.
 - **Último commit:** consultar `git log --oneline -1` na branch.
-- **Entregue nesta rodada (P1) — 5 arquivos:**
+- **Entregue nesta rodada (P2) — 6 arquivos:**
+  - `supabase/migrations/20260916000000_f5_09_cycle_rpc.sql`: RPCs
+    `ciclo_criar` (T0), `ciclo_editar` (T1), `ciclo_ativar` (T2) e
+    `ciclo_encerrar` (T3), todas `SECURITY INVOKER`, `search_path = public`,
+    `EXECUTE` só `service_role`; preflight fail-closed das primitivas da P1 e dos
+    contratos F3-08/F3-09/F5-06; guarda final fail-closed;
+  - `supabase/validacao/03-cenario-f5-09-p2.sql` (fixture insert-once, prefixo
+    `e9`: 2 orgs, 4 atores, estrutura relacional, colegiado do avaliado) e
+    `04-validar-f5-09-p2.sql` (testes A–W do §11 da rodada);
+  - `.github/workflows/ci.yml` (job `supabase-local` executa 03/04 após 01/02);
+  - `supabase/migrations/README.md` (registro da migration; **heading
+    `## Plataforma e ferramentas` restaurado** — havia sido perdido no commit da
+    P1) e `.ai/handoff.md` (este registro).
+- **Invariantes da P2:** autorização sempre server-side
+  (`ciclo_ator_valido` = ator + membership ativa + `cycle.manage` efetiva);
+  idempotência por `(organization_id, operation_id)` + hash canônico **derivado
+  server-side** (`cycle_events.payload_hash`); serialização pela chave normativa
+  `evaluation_cycles:<organization_id>` (`ciclo_lock_organizacao`, P1);
+  `expected_version` com CONFLICT; um único `ATIVO` por organização (I5) e
+  não sobreposição (I6) da P1 como barreira final; materialização inicial
+  **F3-08 + F3-09** na ativação (população elegível = colaboradores com status
+  `active` vigente no instante; hierarquia sempre relacional); encerramento
+  **reusa** `evaluation_fechar_ciclo_pendencias` (F5-06) sem duplicar lógica;
+  **um evento append-only por mutação** (`CRIADO`/`EDITADO`/`ATIVADO`/
+  `ENCERRADO`) com autoria soberana; atomicidade total (falha ⇒ rollback).
+- **Desvios mínimos declarados (vs §13.2/§6/T2, documentados na migration):**
+  (a) `p_payload_hash` **não** é parâmetro — o padrão soberano do projeto deriva
+  o hash dos parâmetros validados (aceitá-lo permitiria replay com hash forjado);
+  (b) `ciclo_encerrar` incrementa `version` **uma vez** (a F5-06 já incrementa ao
+  gravar pendências) ⇒ resultado = `expected_version + 1`;
+  (c) `reference_date` da materialização é o **instante** da ativação (o
+  parâmetro da F3-08 é `timestamptz`; o §6/T2 escrevia `data_ativacao::date`).
+- **Correção pós-CI #204 (somente no validador):** o teste **J** falhava com
+  `[FAIL] J: a falha injetada na materializacao nao abortou a ativacao` porque
+  rodava com **C1 ainda ATIVO**: `ciclo_ativar` recusava por I5/D14 (um único
+  `ATIVO` por organização) **antes** da materialização, de modo que o gatilho
+  injetado nunca era atingido — o teste não maquiava o erro (assertava a mensagem
+  `MUT_F5_09_P2`), por isso falhava corretamente em vez de passar em falso.
+  Correção **restrita a `supabase/validacao/04-validar-f5-09-p2.sql`**: as 4 RPCs,
+  a regra de ciclo único ATIVO, a ordem validação→materialização, a migration e
+  D1–D28 **não** foram tocadas. A prova de rollback do **encerramento** (O) passou
+  a rodar sobre **C1** (o ciclo legitimamente ATIVO/version 2 da fixture), M/N
+  encerra C1 e, **só então**, **J** roda sobre **C3** (2030/3), quando a
+  organização já não tem ciclo ATIVO — a única pré-condição legítima para a
+  ativação alcançar a materialização. J ganhou duas fases de falha injetada:
+  **J.1** aborta na **2ª linha** do `INSERT` em `collegiate_cycle_snapshots`
+  (contador por `SEQUENCE` não transacional, lido **depois** do rollback: prova de
+  que havia trabalho parcial realmente executado) e **J.2** aborta no `INSERT` de
+  `cycle_evaluation_responsibilities`, com o F3-08 já materializado; em seguida
+  prova-se o rollback total (`PLANEJADO`, `data_ativacao` nula, version 0, zero
+  snapshot/posição/membro/responsabilidade, zero evento) e a ativação legítima
+  posterior (4 snapshots + responsabilidades + evento `ATIVADO`). Revisão
+  preventiva da **mesma classe de pré-condição**: O e M/N dependiam de C3 estar
+  ATIVO (que J, quebrado, nunca ativava) e agora operam sobre C1 com guarda de
+  pré-condição explícita; R, P/Q, U, S/T e W foram conferidos e são independentes
+  de ordem/estado `ATIVO`.
+- **Limitações reais da rodada:** com o Docker Desktop disponível, a suíte SQL
+  local completa foi executada neste host (`db reset` + os 18 arquivos de
+  `supabase/validacao/` na ordem do CI, incluindo P1 e P2): **0 `[FAIL]`**, todos
+  os arquivos com exit 0, e o validador P2 com 16 `[PASS]` (J.1 abortando na 2ª
+  linha do `INSERT` de snapshots e J.2 no `INSERT` de responsabilidades); a
+  **contenção real entre DUAS sessões** continua não provável no validador de
+  sessão única (provado por lock estrutural + `expected_version` + I5, com a
+  limitação registrada no §U); o cenário é **insert-once** (a trilha é append-only
+  protegida) e o validador exige `db reset` para nova execução limpa.
+- **Permanece para P3+:** admissão durante ciclo ativo (P3), cancelar/reabrir/
+  corrigir período (P4), leitura RLS + porta do cliente (P5), Policy Engine
+  `cycle.read`/`cycle.manage` (P6), Edge `ciclos` + reconciliação do bundle
+  `admin` (P7), cutover do frontend/localStorage (P8) e validação integrada (P9).
+
+### 3.7 F5-09 P1 (integrada pelo squash do PR #190)
+
+- **Entregue na P1 — 5 arquivos:**
   - `supabase/migrations/20260915000000_f5_09_cycle_sovereign.sql`: **I5** índice
     único parcial `uq_evaluation_cycles_org_ativo` (um ciclo `ATIVO` por
     organização); **I6** exclusion parcial
