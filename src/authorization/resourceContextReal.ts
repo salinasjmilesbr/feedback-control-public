@@ -1,7 +1,7 @@
 import type { DomainStateProbe, TargetRef } from "./policyEngine/types.ts";
 
 /**
- * F5-05 (D6, D8, D19, D22) — ResourceContext real.
+ * F5-05 (D6, D8, D19, D22) — ResourceContext real (+ F5-09 P6 para CICLO).
  *
  * Representa o RECURSO CARREGADO de fonte soberana server-side, com tenant
  * derivado do próprio recurso (nunca do caller) e os atributos necessários à
@@ -9,30 +9,28 @@ import type { DomainStateProbe, TargetRef } from "./policyEngine/types.ts";
  *
  * Limite do mundo híbrido (D19): só existem tipos de recurso SOBERANOS — os que
  * possuem persistência server-side com `organization_id`. Depois da F5-06 a
- * AVALIAÇÃO passa a ser recurso soberano (`evaluations` no PostgreSQL — D10/
- * §8.1): o tenant é derivado da LINHA REAL carregada na fronteira confiável e o
- * `domainState` reflete o status real da avaliação. Domínios ainda mantidos
- * apenas em `localStorage` (ciclo/meta/observação) NÃO produzem ResourceContext
- * soberano e são recusados aqui (fail-closed), assim como alvos sintéticos
- * globais (D22).
+ * AVALIAÇÃO passou a ser recurso soberano (`evaluations` no PostgreSQL — D10/
+ * §8.1) e depois da **F5-09 P5 o CICLO passou a ser recurso soberano**
+ * (`evaluation_cycles`: schema P1, RLS own-tenant/leitura em P5): o tenant é
+ * derivado da LINHA REAL carregada na fronteira confiável e o `domainState`
+ * reflete o estado real do recurso. Domínios ainda mantidos apenas em
+ * `localStorage` (meta/observação) NÃO produzem ResourceContext soberano e são
+ * recusados aqui (fail-closed), assim como alvos sintéticos globais (D22).
  */
 
-/** Tipos de recurso com fonte soberana server-side (estrutura F3 + F5-06). */
+/** Tipos de recurso com fonte soberana server-side (F3 + F5-06 + F5-09 P5). */
 export const TIPOS_RECURSO_SOBERANOS = [
   "collaborator",
   "position",
   "organizational_unit",
   "evaluation",
+  "cycle",
 ] as const;
 
 export type TipoRecursoSoberano = (typeof TIPOS_RECURSO_SOBERANOS)[number];
 
 /** Alvos NÃO autorizáveis pelo Policy Engine (legado/transitório ou global). */
-export const TIPOS_RECURSO_NAO_SOBERANOS = [
-  "cycle",
-  "goal",
-  "observation",
-] as const;
+export const TIPOS_RECURSO_NAO_SOBERANOS = ["goal", "observation"] as const;
 
 export interface ResourceStructure {
   readonly collaboratorId: string | null;
@@ -61,7 +59,7 @@ export interface RecursoSoberanoCarregado {
   readonly positionId?: string | null;
   readonly unitId?: string | null;
   readonly cycleId?: string;
-  /** F5-06: estado real do recurso (usado pelo probe de domínio). */
+  /** F5-06/F5-09 P6: estado real do recurso (usado pelo probe de domínio). */
   readonly status?: string;
   /** F5-06: colaborador AVALIADO (dono do recurso de avaliação). */
   readonly evaluatedCollaboratorId?: string | null;
@@ -70,6 +68,7 @@ export interface RecursoSoberanoCarregado {
 export type MotivoRecursoInvalido =
   | "TARGET_NAO_SOBERANO"
   | "IDENTIFICADOR_AUSENTE"
+  | "IDENTIFICADOR_INVALIDO"
   | "TENANT_AUSENTE"
   | "TENANT_DIVERGENTE";
 
@@ -90,9 +89,33 @@ export function ehAlvoSinteticoGlobal(target: TargetRef): boolean {
 }
 
 /**
+ * F5-09 P6 — formato do identificador CANÔNICO de ciclo (`evaluation_cycles.id`).
+ *
+ * Mesmo formato aceito pela coluna `uuid` do PostgreSQL e pelo contrato de
+ * colaboradores (`ehUuid`): a identidade do ciclo é o UUID, nunca `ano`/`numero`
+ * nem rótulo textual (`"global"`, `"ciclo-1"`). A checagem é defesa em
+ * profundidade da fronteira — o id real vem da linha soberana carregada.
+ */
+const FORMATO_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function ehIdentificadorCanonico(valor: unknown): valor is string {
+  return typeof valor === "string" && FORMATO_UUID.test(valor.trim());
+}
+
+/**
+ * F5-09 P6 — o alvo é um CICLO com identificador canônico válido? Um alvo de
+ * ciclo malformado/sintético nunca é autorizável (D22 + §8).
+ */
+export function ehAlvoCicloCanonico(target: TargetRef): boolean {
+  return target.type === "cycle" && ehIdentificadorCanonico(target.id);
+}
+
+/**
  * Probe de domínio dos recursos ESTRUTURAIS: a estrutura F3 não define
  * predicado de lifecycle para leitura/edição de colaborador (matriz F4-09).
- * Recursos de domínio com estado (ciclo etc.) não são soberanos aqui (D19).
+ * Recursos de domínio com estado declaram o PRÓPRIO probe: avaliação (F5-06) e
+ * ciclo (F5-09 P6, `estadoDominioCiclo`); meta/observação seguem fora do limite
+ * soberano (D19) e não chegam a montar contexto aqui.
  */
 export const domainStateEstrutural: DomainStateProbe = { allows: () => true };
 
@@ -107,11 +130,12 @@ function normalizarOpcional(valor: unknown): string | null {
 }
 
 /**
- * Monta o `ResourceContext` de um recurso estrutural carregado server-side.
+ * Monta o `ResourceContext` de um recurso soberano carregado server-side.
  *
  * Fail-closed:
  * - alvo de tipo não soberano (legado/global) ⇒ `TARGET_NAO_SOBERANO`;
  * - id ausente ⇒ `IDENTIFICADOR_AUSENTE`;
+ * - id de CICLO fora do formato canônico ⇒ `IDENTIFICADOR_INVALIDO` (P6);
  * - tenant ausente ⇒ `TENANT_AUSENTE`;
  * - tenant divergente da organização validada do ator ⇒ `TENANT_DIVERGENTE`.
  */
@@ -129,6 +153,12 @@ export function montarResourceContextSoberano(entrada: {
   const id = normalizarObrigatorio(recurso.id);
   if (!id) {
     return { ok: false, motivo: "IDENTIFICADOR_AUSENTE" };
+  }
+
+  // F5-09 P6: o ciclo tem identidade UUID canônica; qualquer outro rótulo
+  // (ano/numero, "global", id sintético) é recusado ANTES da decisão.
+  if (recurso.kind === "cycle" && !ehIdentificadorCanonico(id)) {
+    return { ok: false, motivo: "IDENTIFICADOR_INVALIDO" };
   }
 
   const organizationId = normalizarObrigatorio(recurso.organizationId);
@@ -153,6 +183,10 @@ export function montarResourceContextSoberano(entrada: {
       ? normalizarOpcional(recurso.evaluatedCollaboratorId)
       : null);
 
+  // F5-09 P6: para o recurso CICLO, o ciclo do contexto é o PRÓPRIO ciclo.
+  const cycleId =
+    normalizarOpcional(recurso.cycleId) ?? (recurso.kind === "cycle" ? id : null);
+
   return {
     ok: true,
     resourceContext: {
@@ -166,17 +200,21 @@ export function montarResourceContextSoberano(entrada: {
         unitId: normalizarOpcional(recurso.unitId),
       },
       domainState: entrada.domainState ?? domainStateEstrutural,
-      ...(recurso.cycleId ? { cycleId: recurso.cycleId } : {}),
+      ...(cycleId ? { cycleId } : {}),
     },
   };
 }
 
 /**
- * Recusa alvos não autorizáveis pelo engine (global/legado). Usado pelo
- * enforcement antes de qualquer montagem (D19/D22).
+ * Recusa alvos não autorizáveis pelo engine (global/legado/inválido). Usado pelo
+ * enforcement antes de qualquer montagem (D19/D22 + F5-09 P6 §8).
  */
 export function motivoAlvoNaoAutorizavel(target: TargetRef): MotivoRecursoInvalido | null {
   if (ehAlvoSinteticoGlobal(target)) return "TARGET_NAO_SOBERANO";
   if (!ehTipoRecursoSoberano(target.type)) return "TARGET_NAO_SOBERANO";
+  // P6: ciclo só é autorizável com o UUID canônico (nunca ano/numero/rótulo).
+  if (target.type === "cycle" && !ehIdentificadorCanonico(target.id)) {
+    return "TARGET_NAO_SOBERANO";
+  }
   return null;
 }

@@ -11,6 +11,7 @@ import {
   estadoDominioAvaliacao,
   estadoDominioCriacaoAvaliacao,
 } from "./estadoDominioAvaliacao.ts";
+import { estadoDominioCiclo } from "./estadoDominioCiclo.ts";
 import type {
   AuthorizationDecision,
   AuthorizationRequest,
@@ -52,6 +53,12 @@ import {
  * validada (D6/D8).
  *
  * Sem cache de ALLOW entre requisições (D10): os dados valem para a operação.
+ *
+ * F5-09 P6 (§8): o recurso CICLO passa a ser SOBERANO (`evaluation_cycles`, P5).
+ * O `domainState` do alvo `cycle` é derivado do status da LINHA carregada
+ * (`recurso.status`), nunca de estado declarado pelo chamador, e o alvo exige o
+ * UUID canônico — alvo sintético (`{type:"cycle", id:"global"}`) ou rótulo
+ * inválido é recusado antes de qualquer decisão (D19/D22).
  */
 
 function negar(reason: DenialReason): AuthorizationDecision {
@@ -328,30 +335,38 @@ export async function avaliarOperacaoAutorizacao(
   });
   if (!recurso) return negar("TARGET_INVALID");
 
-  // 7.1) ESTADO DE DOMÍNIO derivado server-side (F5-06 §8.1): o cliente pode
-  // declarar estado (uso interno/testes), mas quando a fronteira confiável
-  // carrega o contexto soberano ele PREVALECE — o browser nunca declara o
-  // estado do recurso. Sem contexto para um alvo de avaliação ⇒ DENY.
-  const contextoAvaliacao = deps.carregarContextoAvaliacao
-    ? await deps.carregarContextoAvaliacao({
-        target: entrada.alvo,
-        organizationId: atorComVinculo.actorContext.organizationId,
-      })
-    : null;
+  // 7.1) ESTADO DE DOMÍNIO derivado server-side: avaliação/criação (F5-06 §8.1)
+  // e CICLO (F5-09 P6 §8).
+  //
+  // P6: para o alvo `cycle` o probe vem SEMPRE da LINHA SOBERANA carregada em
+  // (7) — `evaluation_cycles.status`. Um estado declarado pelo chamador
+  // (`entrada.domainState`) é IGNORADO nesse alvo: o browser nunca declara o
+  // estado do ciclo e o ciclo legado não pode suplantar o caminho soberano.
+  // Ausência de status na linha ⇒ probe nega tudo (fail-closed).
+  const contextoAvaliacao =
+    deps.carregarContextoAvaliacao && entrada.alvo.type !== "cycle"
+      ? await deps.carregarContextoAvaliacao({
+          target: entrada.alvo,
+          organizationId: atorComVinculo.actorContext.organizationId,
+        })
+      : null;
 
-  const domainState = contextoAvaliacao
-    ? entrada.alvo.type === "evaluation"
-      ? estadoDominioAvaliacao({
-          status: contextoAvaliacao.status,
-          ...(contextoAvaliacao.encerradaComPendencias === undefined
-            ? {}
-            : { encerradaComPendencias: contextoAvaliacao.encerradaComPendencias }),
-        })
-      : estadoDominioCriacaoAvaliacao({
-          cicloPermiteNovaAvaliacao: contextoAvaliacao.cicloPermiteNovaAvaliacao === true,
-          avaliadoApto: contextoAvaliacao.avaliadoApto === true,
-        })
-    : entrada.domainState;
+  const domainState =
+    entrada.alvo.type === "cycle"
+      ? estadoDominioCiclo({ status: recurso.status ?? "" })
+      : contextoAvaliacao
+        ? entrada.alvo.type === "evaluation"
+          ? estadoDominioAvaliacao({
+              status: contextoAvaliacao.status,
+              ...(contextoAvaliacao.encerradaComPendencias === undefined
+                ? {}
+                : { encerradaComPendencias: contextoAvaliacao.encerradaComPendencias }),
+            })
+          : estadoDominioCriacaoAvaliacao({
+              cicloPermiteNovaAvaliacao: contextoAvaliacao.cicloPermiteNovaAvaliacao === true,
+              avaliadoApto: contextoAvaliacao.avaliadoApto === true,
+            })
+        : entrada.domainState;
 
   const recursoContexto = montarResourceContextSoberano({
     recurso,

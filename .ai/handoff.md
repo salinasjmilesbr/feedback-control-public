@@ -34,7 +34,87 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
-- **Atividade (rodada atual):** F5-09 — **P5 (leitura soberana de ciclos por RLS
+- **Atividade (rodada atual):** F5-09 — **P6 (fechamento do Policy Engine para
+  ciclos soberanos) IMPLEMENTADA** — **aguardando auditoria independente**.
+  Issue **#200**. Contrato: `docs/F5-09-desenho-tecnico.md` (§8 tabela
+  operação→capability + fechamentos aditivos, §16 R13/R17, §19 P6) e
+  `docs/F5-09-duvidas.md` (**D8/Q-F5-09-1**, D20, D21, D22 — D28 permanece **P7**).
+- **Base:** `main`/`origin/main` = `79203c7fb4e45c9f9cf002e23633f2e4d4abdb5a`
+  (F5-09 P5 integrada em `main`).
+- **Branch da P6:** `feat/f5-09-p6-cycle-policy-engine` — **sem merge**; push/PR
+  ficam com o usuário.
+- **Entregue nesta rodada (P6):**
+  - `src/authorization/estadoDominioCiclo.ts` (novo): fonte **ÚNICA** da matriz de
+    estado do ciclo — `cycle.read` = ciclo real carregado (qualquer status);
+    `cycle.manage`/`cycle.cancel` = `PLANEJADO` ou `ATIVO`; `cycle.reopen` =
+    `ENCERRADO`; `cycle.period.correct` = `ATIVO`; `CANCELADO` nega as mutações e
+    mantém a leitura; status ausente/fora do domínio nega tudo; capability fora
+    da matriz é negada (fail-closed);
+  - `src/authorization/authorizationPolicy.ts`: o `case "cycle"` passa a decidir
+    as **cinco** capabilities (antes `cycle.read`/`cycle.manage` caíam em
+    `default → null ⇒ DENY`) sobre o alvo real `{type:"cycle", id: UUID}` com a
+    matriz compartilhada; `cycle.cancel` ampliado para `{PLANEJADO, ATIVO}` (D8);
+    recurso sem identidade de ciclo é fail-closed; o caso `global` permanece
+    apenas como compatibilidade de UX/navegação — **nenhuma** capability de ciclo
+    é decidida sobre `{type:"cycle", id:"global"}`;
+  - `src/authorization/ResourceContext.ts`: `CycleResource.cycle` passa a ser a
+    projeção **mínima** `CicloParaAutorizacao` (`id` = UUID canônico + `status`),
+    satisfeita estruturalmente por `CicloSoberano` (P5) **e** por
+    `CicloAvaliacao` (legado) — sem entidade nova e sem campo de tenant/identidade
+    inventado (o tenant, no enforcement, vem da linha soberana);
+  - `src/authorization/resourceContextReal.ts`: `cycle` entra em
+    `TIPOS_RECURSO_SOBERANOS` (a P5 deu persistência server-side + RLS),
+    passa a exigir identificador **UUID canônico** (`IDENTIFICADOR_INVALIDO` /
+    `TARGET_NAO_SOBERANO`) e o `cycleId` do contexto passa a ser o próprio ciclo;
+    meta/observação permanecem fora do limite soberano;
+  - `src/authorization/contextoAutorizacao.ts`: no alvo `cycle` o `domainState`
+    vem **sempre** do status da LINHA SOBERANA carregada (`recurso.status`) —
+    estado declarado pelo chamador é ignorado (o legado não suplanta o caminho
+    soberano);
+  - `supabase/migrations/20260920000000_f5_09_p6_cycle_cancel_description.sql`:
+    atualização aditiva da descrição de `cycle.cancel` (D8), com preflight e
+    guarda final fail-closed (sem capability nova, sem bundle/role, sem
+    schema/RLS/RPC);
+  - testes: `src/authorization/ciclosPolicyEngine.test.ts` (matriz
+    capability × status × aliases, alvo real, guardas estáticos de fonte única e
+    de alvo sintético) e `src/authorization/ciclosFronteiraSoberana.test.ts`
+    (fronteira real: UUID canônico, tenant divergente, membership
+    revogada/ausente, perfil inativo, ator inexistente, capability
+    ausente/revogada, scope insuficiente, alvo sintético/inválido, estado
+    soberano prevalecendo e cargo/função textual sem efeito);
+  - adaptações explícitas de contrato antigo: `src/authorization/actorContext.test.ts`
+    (ciclo agora soberano + UUID obrigatório), `src/authorization/authorizationPolicy.test.ts`
+    (`cycle.cancel` em `PLANEJADO` **e** `ATIVO`; `ENCERRADO` negado),
+    `src/pages/CiclosAvaliacaoPage.test.tsx` (o botão de cancelamento passa a
+    aparecer para ciclo `PLANEJADO` — efeito direto de D8) e
+    `src/services/cancelamentoCicloService.test.ts` (a recusa de `PLANEJADO`
+    deixou de ser da autorização e passou a ser do domínio LOCAL legado);
+  - `supabase/migrations/README.md` e este arquivo.
+- **Matriz final das 5 capabilities (P6):** `cycle.read` — ciclo real do tenant,
+  qualquer status (inclusive `CANCELADO`); `cycle.manage` — `PLANEJADO`/`ATIVO`
+  (o recorte por operação — editar/ativar/encerrar/admitir — segue revalidado nas
+  RPCs, §8); `cycle.cancel` — `PLANEJADO`/`ATIVO` (D8); `cycle.reopen` —
+  `ENCERRADO`; `cycle.period.correct` — `ATIVO`; `CANCELADO` nega as quatro
+  mutações.
+- **Gates reais desta rodada:** `supabase db reset --local --yes` (migration P6
+  aplicada) + **suíte SQL completa na ordem do CI (24 arquivos, ZERO `[FAIL]`**;
+  F4-08 57+9, F5-04 26, F5-08 58+13, F5-09 P1 62, P2 22, P3 18, P4 22, P5 11,
+  F5-06 27+14, F5-07 45+23) + `npm test`, `npm run build`, `npm run lint`,
+  `npx tsc -b tsconfig.app.json`, `git diff --check` (todos exit 0).
+- **Resíduo declarado (P8):** o persistidor **local** legado
+  (`cicloAvaliacaoStorage`) ainda exige `ATIVO` para cancelar, então o botão de
+  cancelamento exibido para ciclo `PLANEJADO` (autorização já conforme D8) só se
+  torna efetivo no cutover P8, quando o fluxo passa a usar a RPC soberana
+  `ciclo_cancelar`. O `excluirCiclo` físico local também permanece (D9 proíbe
+  exclusão; a auditoria já o classifica como resíduo CRITICAL do P8).
+- **Permanece para P7+:** Edge Function `ciclos` + contratos Edge +
+  reconciliação aditiva do catálogo (D28: `cycle.manage` no bundle `admin`),
+  cutover de páginas/remoção da autoridade local (P8), validação integrada (P9) e
+  F5-10/F5-11.
+
+### 3.11 F5-09 P5 (implementada; aguardando auditoria independente)
+
+- **Atividade:** F5-09 — **P5 (leitura soberana de ciclos por RLS
   own-tenant + porta do cliente) IMPLEMENTADA** — **aguardando auditoria
   independente**. Issue **#198**. Contrato: `docs/F5-09-desenho-tecnico.md`
   (§9 policy de leitura, §13.5 superfícies do cliente, §19 P5) e
