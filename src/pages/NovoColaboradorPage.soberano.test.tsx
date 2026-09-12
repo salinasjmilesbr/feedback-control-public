@@ -1,8 +1,8 @@
 /**
- * F5-07 — testes de tela do cadastro soberano de colaborador.
+ * F5-07/F5-08 P5 — testes de tela do cadastro soberano de colaborador.
  *
- * Cobre: formulário restrito a dados de pessoa + matrícula + status (estrutura
- * saiu — F5-08), criação pela PORTA com `operationId` e sem qualquer escrita em
+ * Cobre: formulário de pessoa + matrícula + status, ALOCAÇÃO opcional por posição
+ * soberana (UUID), criação pela PORTA com `operationId` e sem qualquer escrita em
  * `localStorage`, e estados explícitos de processamento/erro/sucesso.
  */
 
@@ -15,21 +15,62 @@ import {
   type ResultadoColaboradores,
 } from "../services/colaboradoresSoberanos/acessoColaboradoresSoberanos";
 import type { ServiceColaboradores } from "../services/colaboradoresSoberanos/serviceColaboradores";
+import type { EstruturaSoberana } from "../infrastructure/supabase/estrutura/repositorioEstruturaSoberana";
 import { instalarLocalStorageEmMemoria } from "../test/localStorageMock";
 import { ORGANIZACAO_TESTE, ProvedorAuthTeste } from "../test/authTeste";
 import NovoColaboradorPage, {
   type EstadoCriacaoColaborador,
 } from "./NovoColaboradorPage";
+import type { EstadoEstrutura } from "./apoioEstrutura";
 
 function operacoes(parcial: Partial<ServiceColaboradores>): ServiceColaboradores {
   return parcial as unknown as ServiceColaboradores;
 }
 
-function renderizar(estadoInicial?: EstadoCriacaoColaborador): string {
+const POSICAO = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const UNIDADE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const CARGO = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+
+/** Fotografia soberana mínima com UMA posição vigente. */
+function estruturaComPosicao(): EstruturaSoberana {
+  return {
+    unidades: [
+      { unitId: UNIDADE, nome: "Unidade Fictícia", validFrom: "2026-01-01T00:00:00.000Z", validTo: null, version: 1 },
+    ],
+    periodosParent: [],
+    posicoes: [
+      {
+        posicaoId: POSICAO,
+        unitId: UNIDADE,
+        jobRoleId: CARGO,
+        seniorityLevelId: null,
+        validFrom: "2026-01-01T00:00:00.000Z",
+        validTo: null,
+        version: 1,
+      },
+    ],
+    reportingLines: [],
+    ocupacoes: [],
+    cargos: [{ jobRoleId: CARGO, code: "FICT", nome: "Cargo Fictício", status: "active", version: 1 }],
+    senioridades: [],
+    colegiados: [],
+    colaboradores: [],
+  };
+}
+
+const ESTRUTURA_PRONTA: EstadoEstrutura = { fase: "pronto", estrutura: estruturaComPosicao() };
+
+function renderizar(
+  estadoInicial?: EstadoCriacaoColaborador,
+  estruturaInicial: EstadoEstrutura = ESTRUTURA_PRONTA
+): string {
   return renderToStaticMarkup(
     <ProvedorAuthTeste>
       <MemoryRouter>
-        <NovoColaboradorPage estadoInicial={estadoInicial} />
+        <NovoColaboradorPage
+          estadoInicial={estadoInicial}
+          estruturaInicial={estruturaInicial}
+        />
       </MemoryRouter>
     </ProvedorAuthTeste>
   );
@@ -41,22 +82,24 @@ describe("cadastro soberano em NovoColaboradorPage", () => {
     redefinirAcessoColaboradoresSoberanos();
   });
 
-  it("mantém no formulário apenas pessoa, matrícula e status (estrutura é F5-08)", () => {
+  it("mantém no formulário pessoa/matrícula/status + ALOCAÇÃO soberana (sem texto livre de estrutura)", () => {
     const html = renderizar();
 
     expect(html).toContain("Matrícula *");
     expect(html).toContain("Nome *");
     expect(html).toContain("E-mail *");
     expect(html).toContain("Status inicial *");
-    expect(html).toContain("Estrutura organizacional (F5-08)");
-    expect(html).toContain("SEM ALOCAÇÃO");
+    // F5-08 P5: a alocação deixou de ser aviso pendente e virou função da tela.
+    expect(html).toContain("Alocação (opcional)");
+    expect(html).toContain("Alocar este colaborador agora");
+    expect(html).not.toContain("F5-08");
 
-    // Campos de estrutura que só existiam no localStorage saíram do formulário.
+    // Campos de estrutura que só existiam no localStorage continuam fora do
+    // formulário: a seleção é por POSIÇÃO soberana (UUID), nunca texto livre.
     expect(html).not.toContain("Cargo *");
     expect(html).not.toContain("Área *");
     expect(html).not.toContain("Função *");
     expect(html).not.toContain("Senioridade *");
-    expect(html).not.toContain("Gestor direto");
     expect(html).not.toContain("Avaliadores do colegiado");
   });
 

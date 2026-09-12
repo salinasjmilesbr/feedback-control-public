@@ -31,6 +31,14 @@ import LeituraFonte from "../infrastructure/supabase/estrutura/repositorioEstrut
 import RepositorioFonte from "../infrastructure/supabase/colaboradores/repositorioColaboradores.ts?raw";
 import RotasFonte from "../routes/AppRoutes.tsx?raw";
 import MenuFonte from "../components/NavegacaoPrincipal.tsx?raw";
+// F5-08 P5 — alocação soberana (ocupação + reporting line)
+import AlocacaoFonte from "../pages/alocacaoSoberana.ts?raw";
+import AlocacaoNovoFonte from "../pages/alocacaoNovoColaborador.ts?raw";
+import UseEstruturaFonte from "../pages/useEstruturaSoberana.ts?raw";
+import SeletorPosicaoFonte from "../components/SeletorPosicao.tsx?raw";
+import NovoColaboradorFonte from "../pages/NovoColaboradorPage.tsx?raw";
+import EditarColaboradorFonte from "../pages/EditarColaboradorPage.tsx?raw";
+import DetalheColaboradorFonte from "../pages/ColaboradorDetalhePage.tsx?raw";
 
 const FONTES_UI: readonly (readonly [string, string])[] = [
   ["CatalogosPage", CatalogosFonte as string],
@@ -47,6 +55,17 @@ const FONTES_CLIENTE: readonly (readonly [string, string])[] = [
   ["serviceColaboradores", ServiceFonte as string],
   ["repositorioEstruturaSoberana", LeituraFonte as string],
   ["repositorioColaboradores", RepositorioFonte as string],
+];
+
+/** F5-08 P5 — arquivos da ALOCAÇÃO soberana (ocupação + reporting line). */
+const FONTES_ALOCACAO: readonly (readonly [string, string])[] = [
+  ["alocacaoSoberana", AlocacaoFonte as string],
+  ["alocacaoNovoColaborador", AlocacaoNovoFonte as string],
+  ["useEstruturaSoberana", UseEstruturaFonte as string],
+  ["SeletorPosicao", SeletorPosicaoFonte as string],
+  ["NovoColaboradorPage", NovoColaboradorFonte as string],
+  ["EditarColaboradorPage", EditarColaboradorFonte as string],
+  ["ColaboradorDetalhePage", DetalheColaboradorFonte as string],
 ];
 
 /** Remove comentários: as barreiras valem para o CÓDIGO, não para a prosa. */
@@ -209,5 +228,89 @@ describe("F5-08 P4 — porta expõe as operações exigidas", () => {
     expect(typeof lerEstrutura).toBe("function");
     expect(typeof definirParentUnidade).toBe("function");
     expect(typeof definirColegiado).toBe("function");
+  });
+});
+
+describe("F5-08 P5 — alocação soberana: barreiras estáticas", () => {
+  it("as telas de alocação não decidem autorização (sem authorize/can/capability)", () => {
+    for (const [nome, fonte] of FONTES_ALOCACAO) {
+      const codigo = apenasCodigo(fonte);
+      expect(codigo, nome).not.toMatch(/\bauthorize\s*\(/);
+      expect(codigo, nome).not.toMatch(/\bcan\s*\(/);
+      expect(codigo, nome).not.toContain("org.structure.manage");
+      expect(codigo, nome).not.toContain("Policy Engine");
+    }
+  });
+
+  it("nenhum arquivo de alocação escreve em localStorage/sessionStorage", () => {
+    for (const [nome, fonte] of FONTES_ALOCACAO) {
+      const codigo = apenasCodigo(fonte);
+      expect(codigo, nome).not.toContain("localStorage");
+      expect(codigo, nome).not.toContain("sessionStorage");
+    }
+  });
+
+  it("nenhum arquivo de alocação usa service_role nem chama RPC do banco", () => {
+    for (const [nome, fonte] of FONTES_ALOCACAO) {
+      const codigo = apenasCodigo(fonte);
+      expect(codigo, nome).not.toContain("service_role");
+      expect(codigo, nome).not.toMatch(/\.rpc\s*\(/);
+      for (const rpc of [
+        "estrutura_ocupacao_definir",
+        "estrutura_ocupacao_encerrar",
+        "estrutura_reporting_definir",
+        "estrutura_reporting_encerrar",
+      ]) {
+        expect(codigo, `${nome}:${rpc}`).not.toContain(rpc);
+      }
+    }
+  });
+
+  it("a alocação reusa as portas existentes e NÃO inventa expectedVersion", () => {
+    const codigo = apenasCodigo(AlocacaoFonte as string);
+
+    // As mutações passam pelas portas soberanas da F5-07.
+    for (const porta of [
+      "definirOcupacao",
+      "encerrarOcupacao",
+      "definirReportingLine",
+      "encerrarReportingLine",
+    ]) {
+      expect(codigo).toContain(porta);
+    }
+    // O contrato F5-07 dessas operações não tem versão otimista: nada é fabricado.
+    expect(codigo).not.toContain("expectedVersion");
+  });
+
+  it("o gestor é POSIÇÃO (nunca colaborador/cargo/nome/matrícula)", () => {
+    const codigo = apenasCodigo(AlocacaoFonte as string);
+
+    expect(codigo).toContain("subordinatePositionId");
+    expect(codigo).toContain("managerPositionId");
+    expect(codigo).not.toContain("managerCollaboratorId");
+    expect(codigo).not.toContain("managerFullName");
+    // Nenhum algoritmo local de ciclo: sem travessia de grafo no cliente.
+    expect(codigo).not.toMatch(/recurs|visited|profundidade/);
+  });
+
+  it("o retry de reporting NÃO tem fallback local para a posição antiga", () => {
+    const codigo = apenasCodigo(AlocacaoNovoFonte as string);
+
+    // A fonte da subordinada no retry é a ocupação VIGENTE da fotografia atual.
+    expect(codigo).toContain("ocupacaoVigenteDoColaborador");
+    // Nenhum fallback `?? posicaoId` na derivação da posição subordinada.
+    expect(codigo).not.toMatch(/ocupacao\?\.posicaoId\s*\?\?/);
+    expect(codigo).not.toMatch(/\?\?\s*entrada\.posicaoId/);
+    // O caminho "após ocupação confirmada" é privado (não exportado) e usa a
+    // posição explicitamente aceita pelo servidor.
+    expect(codigo).not.toMatch(/export\s+async\s+function\s+confirmarReportingAposOcupacao/);
+    expect(codigo).toContain("posicaoAceitaId");
+  });
+
+  it("a fotografia é lida pela mesma porta soberana do P4 (sem leitura nova)", () => {
+    const codigo = apenasCodigo(UseEstruturaFonte as string);
+    expect(codigo).toContain("lerEstrutura");
+    expect(codigo).not.toContain("functions.invoke");
+    expect(codigo).not.toContain("FUNCAO_COLABORADORES");
   });
 });

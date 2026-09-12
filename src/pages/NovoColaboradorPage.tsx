@@ -1,24 +1,44 @@
 /**
- * F5-07 — Novo colaborador: cadastro SOMENTE pela porta única.
+ * F5-08 P5 — Novo colaborador: cadastro soberano + ALOCAÇÃO opcional.
  *
- * Escopo desta tela: dados de PESSOA (nome, e-mail, data de admissão), matrícula
- * como INTENÇÃO e status inicial. Nada de estrutura organizacional aqui — cargo,
- * unidade, gestor, senioridade e colegiado pertencem à F5-08 e saíram do
- * formulário; o colaborador nasce explicitamente SEM ALOCAÇÃO.
+ * Escopo desta tela:
+ * - criação da PESSOA (nome, e-mail, admissão), matrícula como INTENÇÃO e status
+ *   inicial, pela porta única (Edge `colaboradores`);
+ * - ALOCAÇÃO opcional logo após o cadastro, com as operações JÁ EXISTENTES da
+ *   F5-07: `definirOcupacao` (posição escolhida por UUID) e, se o usuário quiser,
+ *   `definirReportingLine` (posição gerente escolhida por UUID);
+ * - criação do colaborador e criação da ocupação são operações DISTINTAS: não há
+ *   transação única no frontend. Se o colaborador for criado e a alocação falhar,
+ *   o colaborador PERMANECE criado, nenhuma estrutura é fabricada e a tela diz
+ *   explicitamente o que ficou pendente (`sem-ocupacao` ou `sem-gestor`),
+ *   permitindo o RETRY CORRETO de cada etapa;
+ * - depois que existe `collaboratorId`, o fluxo de criação da PESSOA está
+ *   ENCERRADO: a ação principal deixa de ser "Salvar colaborador" (nenhuma
+ *   segunda criação é disparada pelo frontend).
  *
- * Não existe escrita local: nenhuma chamada a `localStorage`, nenhum dual-write e
- * nenhum fallback. A autorização é do servidor (`collaborator.create`): a porta
- * devolve `FORBIDDEN`/`INVALID_INPUT`/`CONFLICT` e a tela mostra o estado.
+ * Nada é gravado localmente: nenhuma chamada a `localStorage`, nenhum dual-write
+ * e nenhum fallback. A autorização é do servidor (as mutações devolvem o código
+ * público) e a leitura das posições é a fotografia soberana own-tenant (RLS).
  */
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import SeletorPosicao from "../components/SeletorPosicao";
 import type { CodigoPublico } from "../infrastructure/supabase/colaboradores/contrato";
+import type { EstruturaSoberana } from "../infrastructure/supabase/estrutura/repositorioEstruturaSoberana";
 import {
-  criarColaborador,
-  type DependenciasAcessoColaboradores,
-} from "../services/colaboradoresSoberanos/acessoColaboradoresSoberanos";
+  criarColaboradorComAlocacao,
+  deveRecarregarFotografia,
+  tentarOcupacao,
+  tentarReportingLine,
+  type AlocacaoResultante,
+  type ParcialAlocacao,
+} from "./alocacaoNovoColaborador";
+import { posicoesVigentes } from "./alocacaoSoberana";
+import type { DependenciasAcessoColaboradores } from "../services/colaboradoresSoberanos/acessoColaboradoresSoberanos";
+import { hojeLocal, type EstadoEstrutura } from "./apoioEstrutura";
+import { useEstruturaSoberana } from "./useEstruturaSoberana";
 import "../styles/colaborador-form.css";
 
 /** Estado explícito do fluxo de criação (nunca inferido de storage local). */
@@ -32,11 +52,35 @@ export type EstadoCriacaoColaborador =
     }
   | { readonly fase: "sucesso"; readonly collaboratorId: string };
 
+/**
+ * Estado da ALOCAÇÃO. `parcial` descreve o que NÃO foi aplicado, para a tela não
+ * fingir atomicidade e oferecer o retry CORRETO:
+ * - `sem-ocupacao` (colaborador criado sem alocação) ⇒ o retry tenta a OCUPAÇÃO;
+ * - `sem-gestor` (ocupação GRAVADA, gestor não) ⇒ o retry tenta SOMENTE a
+ *   reporting line.
+ */
+export type EstadoAlocacaoColaborador =
+  | { readonly fase: "inativa" }
+  | { readonly fase: "processando" }
+  | {
+      readonly fase: "erro";
+      readonly codigo: CodigoPublico;
+      readonly mensagem: string;
+      readonly parcial: ParcialAlocacao;
+    }
+  | { readonly fase: "concluida" };
+
 type NovoColaboradorPageProps = {
   /** Operações da porta (injeção de teste); produção usa o caminho padrão. */
   readonly deps?: DependenciasAcessoColaboradores;
   /** Semente de estado (SSR/teste determinístico). */
   readonly estadoInicial?: EstadoCriacaoColaborador;
+  /** Semente da fotografia soberana (SSR/teste determinístico). */
+  readonly estruturaInicial?: EstadoEstrutura;
+  /** Semente do formulário de alocação aberto (SSR/teste determinístico). */
+  readonly alocacaoInicial?: boolean;
+  /** Semente do estado da alocação (SSR/teste determinístico). */
+  readonly alocacaoEstadoInicial?: EstadoAlocacaoColaborador;
 };
 
 type StatusInicialSoberano = "active" | "leave";
@@ -46,20 +90,11 @@ const SEM_DEPENDENCIAS: DependenciasAcessoColaboradores = {};
 const SEM_ORGANIZACAO_ATIVA =
   "Selecione uma organização ativa para cadastrar colaboradores.";
 
-const AVISO_ESTRUTURA =
-  "Cargo, unidade, gestor direto, senioridade e colegiado não são definidos neste cadastro: " +
-  "eles pertencem à estrutura organizacional (F5-08). O colaborador é criado SEM ALOCAÇÃO e " +
-  "passa a exibir \"sem alocação\" até que a ocupação seja definida no módulo de estrutura.";
-
-function hojeLocal(): string {
-  const agora = new Date();
-  const offset = agora.getTimezoneOffset();
-  return new Date(agora.getTime() - offset * 60000).toISOString().slice(0, 10);
-}
-
 /**
  * `operation_id` (idempotência da mutação, §13.5) gerado pelo chamador. Não é
  * identidade nem autoridade: serve apenas para a fronteira não duplicar efeitos.
+ * Cada operação distinta (cadastro, ocupação, reporting line) — e cada NOVA
+ * tentativa de uma etapa — recebe o SEU id.
  */
 function novoOperationId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -72,9 +107,27 @@ function novoOperationId(): string {
   });
 }
 
+/** Fotografia VAZIA (nada é inventado): usada só quando não há alocação pedida. */
+function estruturaVazia(): EstruturaSoberana {
+  return {
+    unidades: [],
+    periodosParent: [],
+    posicoes: [],
+    reportingLines: [],
+    ocupacoes: [],
+    cargos: [],
+    senioridades: [],
+    colegiados: [],
+    colaboradores: [],
+  };
+}
+
 function NovoColaboradorPage({
   deps,
   estadoInicial,
+  estruturaInicial,
+  alocacaoInicial,
+  alocacaoEstadoInicial,
 }: NovoColaboradorPageProps = {}) {
   const navigate = useNavigate();
   const { organizacaoAtivaId } = useAuth();
@@ -83,6 +136,9 @@ function NovoColaboradorPage({
   );
   const [estado, setEstado] = useState<EstadoCriacaoColaborador>(
     estadoInicial ?? { fase: "inicial" }
+  );
+  const [estadoAlocacao, setEstadoAlocacao] = useState<EstadoAlocacaoColaborador>(
+    alocacaoEstadoInicial ?? { fase: "inativa" }
   );
 
   const [matricula, setMatricula] = useState("");
@@ -93,10 +149,63 @@ function NovoColaboradorPage({
     useState<StatusInicialSoberano>("active");
   const [erroLocal, setErroLocal] = useState("");
 
+  // Alocação opcional (ocupação + gestor), decidida pelo usuário no formulário.
+  const [alocar, setAlocar] = useState(alocacaoInicial ?? false);
+  const [posicaoId, setPosicaoId] = useState("");
+  const [vigenciaAlocacao, setVigenciaAlocacao] = useState(hojeLocal);
+  const [motivoAlocacao, setMotivoAlocacao] = useState("");
+  const [definirGestor, setDefinirGestor] = useState(false);
+  const [gestorPosicaoId, setGestorPosicaoId] = useState("");
+
+  const estrutura = useEstruturaSoberana({
+    organizacaoAtivaId,
+    deps: depsInjetadas,
+    ...(estruturaInicial ? { estadoInicial: estruturaInicial } : {}),
+  });
+
   const processando = estado.fase === "processando";
+  const alocando = estadoAlocacao.fase === "processando";
+  const ocupado = processando || alocando;
+  const estruturaPronta = estrutura.estado.fase === "pronto";
+  const posicoes = estruturaPronta ? posicoesVigentes(estrutura.estado.estrutura) : [];
+  const alocacaoDisponivel = estruturaPronta && posicoes.length > 0;
+
+  /** Colaborador JÁ persistido: o fluxo de criação da pessoa está encerrado. */
+  const colaboradorCriado = estado.fase === "sucesso" ? estado.collaboratorId : null;
+  const pessoaEncerrada = Boolean(colaboradorCriado);
+
+  /**
+   * Aplica o resultado da etapa de alocação ao estado da tela.
+   *
+   * REGRA DE RECARGA (correção da auditoria):
+   * - `sem-gestor` ⇒ houve mutação soberana BEM-SUCEDIDA (a ocupação): a
+   *   fotografia é recarregada SEMPRE, qualquer que seja o código da falha da
+   *   reporting line (FORBIDDEN, INVALID_INPUT, INTERNAL, CONFLICT, …);
+   * - `sem-ocupacao` ⇒ não houve mutação: recarrega apenas em CONFLICT/NOT_FOUND
+   *   (fotografia desatualizada), como nas demais telas do P4/P5.
+   */
+  function aplicarAlocacao(alocacao: AlocacaoResultante, collaboratorId: string) {
+    if (alocacao.estado === "sem-gestor" || alocacao.estado === "sem-ocupacao") {
+      // A decisão da recarga é do módulo (regra explícita e testada): em
+      // `sem-gestor` houve mutação soberana bem-sucedida, então recarrega SEMPRE.
+      if (deveRecarregarFotografia(alocacao)) estrutura.recarregar();
+      setEstadoAlocacao({
+        fase: "erro",
+        codigo: alocacao.codigo,
+        mensagem: alocacao.mensagem,
+        parcial: alocacao.estado,
+      });
+      return;
+    }
+
+    setEstadoAlocacao({ fase: "concluida" });
+    navigate(`/colaborador/${collaboratorId}`);
+  }
 
   async function handleSalvar() {
-    if (processando) return;
+    if (ocupado) return;
+    // Depois de criado, NÃO existe segunda criação: a pessoa já está persistida.
+    if (pessoaEncerrada) return;
 
     setErroLocal("");
 
@@ -110,6 +219,19 @@ function NovoColaboradorPage({
       return;
     }
 
+    if (alocar) {
+      if (!posicaoId || !vigenciaAlocacao || !motivoAlocacao.trim()) {
+        setErroLocal(
+          "Para alocar, informe a posição vigente, a vigência e o motivo da alocação."
+        );
+        return;
+      }
+      if (definirGestor && !gestorPosicaoId) {
+        setErroLocal("Selecione a posição do gestor ou desmarque a opção de gestor.");
+        return;
+      }
+    }
+
     if (!organizacaoAtivaId) {
       setEstado({
         fase: "erro",
@@ -121,30 +243,93 @@ function NovoColaboradorPage({
 
     setEstado({ fase: "processando" });
 
-    const resultado = await criarColaborador(
+    const desfecho = await criarColaboradorComAlocacao(
       {
-        fullName: nome.trim(),
-        email: email.trim(),
-        matricula: matricula.trim(),
-        ...(dataAdmissao ? { admissionDate: dataAdmissao } : {}),
-        statusInicial,
-        operationId: novoOperationId(),
+        estrutura: estruturaPronta ? estrutura.estado.estrutura : estruturaVazia(),
         organizationId: organizacaoAtivaId,
+        dados: {
+          fullName: nome.trim(),
+          email: email.trim(),
+          matricula: matricula.trim(),
+          ...(dataAdmissao ? { admissionDate: dataAdmissao } : {}),
+          statusInicial,
+        },
+        operationIdCadastro: novoOperationId(),
+        alocacao: alocar
+          ? {
+              posicaoId,
+              vigencia: vigenciaAlocacao,
+              motivo: motivoAlocacao.trim(),
+              gestorPosicaoId: definirGestor && gestorPosicaoId ? gestorPosicaoId : null,
+              operationIdOcupacao: novoOperationId(),
+              operationIdReporting: novoOperationId(),
+            }
+          : null,
       },
       depsInjetadas
     );
 
-    if (!resultado.ok) {
+    if (desfecho.tipo === "erro-cadastro") {
       setEstado({
         fase: "erro",
-        codigo: resultado.codigo,
-        mensagem: resultado.mensagem,
+        codigo: desfecho.codigo,
+        mensagem: desfecho.mensagem,
       });
       return;
     }
 
-    setEstado({ fase: "sucesso", collaboratorId: resultado.dados });
-    navigate(`/colaborador/${resultado.dados}`);
+    setEstado({ fase: "sucesso", collaboratorId: desfecho.collaboratorId });
+    aplicarAlocacao(desfecho.alocacao, desfecho.collaboratorId);
+  }
+
+  /**
+   * RETRY de `sem-ocupacao`: tenta a OCUPAÇÃO (e, havendo gestor escolhido, a
+   * reporting line depois dela). Nunca recria o colaborador.
+   */
+  async function repetirOcupacao(collaboratorId: string) {
+    if (ocupado || !organizacaoAtivaId || !estruturaPronta) return;
+
+    setEstadoAlocacao({ fase: "processando" });
+    const alocacao = await tentarOcupacao(
+      {
+        estrutura: estrutura.estado.estrutura,
+        organizationId: organizacaoAtivaId,
+        collaboratorId,
+        posicaoId,
+        vigencia: vigenciaAlocacao,
+        motivo: motivoAlocacao.trim(),
+        gestorPosicaoId: definirGestor && gestorPosicaoId ? gestorPosicaoId : null,
+        operationIdOcupacao: novoOperationId(),
+        operationIdReporting: novoOperationId(),
+      },
+      depsInjetadas
+    );
+    aplicarAlocacao(alocacao, collaboratorId);
+  }
+
+  /**
+   * RETRY de `sem-gestor`: tenta SOMENTE a reporting line — a ocupação já está
+   * gravada (não é recriada nem encerrada) e o colaborador não é recriado. A
+   * posição subordinada vem EXCLUSIVAMENTE da ocupação vigente da fotografia
+   * CORRENTE; sem ocupação vigente, nada é enviado (fail-closed + recarga).
+   */
+  async function repetirReportingLine(collaboratorId: string) {
+    if (ocupado || !organizacaoAtivaId || !estruturaPronta) return;
+
+    setEstadoAlocacao({ fase: "processando" });
+    const alocacao = await tentarReportingLine(
+      {
+        estrutura: estrutura.estado.estrutura,
+        organizationId: organizacaoAtivaId,
+        collaboratorId,
+        gestorPosicaoId: gestorPosicaoId || null,
+        vigencia: vigenciaAlocacao,
+        motivo: motivoAlocacao.trim(),
+        operationIdReporting: novoOperationId(),
+      },
+      depsInjetadas
+    );
+    aplicarAlocacao(alocacao, collaboratorId);
   }
 
   return (
@@ -190,6 +375,7 @@ function NovoColaboradorPage({
               value={matricula}
               onChange={(event) => setMatricula(event.target.value)}
               placeholder="Ex.: 123456"
+              disabled={pessoaEncerrada}
             />
             <small>
               A matrícula é uma intenção: o servidor resolve o identificador.
@@ -202,6 +388,7 @@ function NovoColaboradorPage({
               type="date"
               value={dataAdmissao}
               onChange={(event) => setDataAdmissao(event.target.value)}
+              disabled={pessoaEncerrada}
             />
           </label>
 
@@ -212,6 +399,7 @@ function NovoColaboradorPage({
               value={nome}
               onChange={(event) => setNome(event.target.value)}
               placeholder="Nome completo"
+              disabled={pessoaEncerrada}
             />
           </label>
 
@@ -222,6 +410,7 @@ function NovoColaboradorPage({
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="nome@empresa.com.br"
+              disabled={pessoaEncerrada}
             />
           </label>
 
@@ -232,6 +421,7 @@ function NovoColaboradorPage({
               onChange={(event) =>
                 setStatusInicial(event.target.value as StatusInicialSoberano)
               }
+              disabled={pessoaEncerrada}
             >
               <option value="active">Ativo</option>
               <option value="leave">Em licença</option>
@@ -246,15 +436,111 @@ function NovoColaboradorPage({
             02
           </span>
           <div>
-            <h2>Estrutura organizacional (F5-08)</h2>
+            <h2>Alocação (opcional)</h2>
             <p>
-              Cargo, unidade, gestor, senioridade e colegiado não fazem parte
-              deste cadastro.
+              A ocupação e a reporting line são operações próprias, gravadas
+              depois do cadastro. Sem alocação o colaborador permanece
+              explicitamente “sem alocação”.
             </p>
           </div>
         </div>
 
-        <div className="collaborator-form-empty">{AVISO_ESTRUTURA}</div>
+        {estrutura.estado.fase === "carregando" && (
+          <div className="collaborator-form-info" role="status">
+            Carregando as posições soberanas…
+          </div>
+        )}
+
+        {estrutura.estado.fase === "erro" && (
+          <div className="collaborator-form-error" role="alert">
+            <strong>Não foi possível carregar as posições</strong>
+            <p>
+              {estrutura.estado.mensagem} ({estrutura.estado.codigo})
+            </p>
+            <p>
+              O cadastro do colaborador continua disponível; a alocação pode ser
+              feita depois na ficha do colaborador.
+            </p>
+          </div>
+        )}
+
+        {estruturaPronta && (
+          <>
+            <label className="collaborator-field collaborator-field--inline">
+              <input
+                type="checkbox"
+                checked={alocar}
+                onChange={(evento) => setAlocar(evento.target.checked)}
+                disabled={!alocacaoDisponivel || ocupado || pessoaEncerrada}
+              />
+              <span>Alocar este colaborador agora</span>
+            </label>
+
+            {!alocacaoDisponivel && (
+              <div className="collaborator-form-empty">
+                Nenhuma posição vigente disponível nesta organização: cadastre a
+                posição em Estrutura → Posições. Nada é criado automaticamente.
+              </div>
+            )}
+
+            {alocar && (
+              <div className="collaborator-form-grid">
+                <SeletorPosicao
+                  id="novo-colaborador-posicao"
+                  estrutura={estrutura.estado.estrutura}
+                  valor={posicaoId}
+                  aoMudar={setPosicaoId}
+                  rotulo="Posição (unidade • cargo • senioridade) *"
+                  desabilitado={ocupado || pessoaEncerrada}
+                />
+
+                <label className="collaborator-field">
+                  <span>Vigência da ocupação *</span>
+                  <input
+                    type="date"
+                    value={vigenciaAlocacao}
+                    onChange={(evento) => setVigenciaAlocacao(evento.target.value)}
+                    disabled={ocupado}
+                  />
+                </label>
+
+                <label className="collaborator-field collaborator-field--wide">
+                  <span>Motivo da alocação *</span>
+                  <input
+                    type="text"
+                    value={motivoAlocacao}
+                    onChange={(evento) => setMotivoAlocacao(evento.target.value)}
+                    disabled={ocupado}
+                  />
+                </label>
+
+                <label className="collaborator-field collaborator-field--inline">
+                  <input
+                    type="checkbox"
+                    checked={definirGestor}
+                    onChange={(evento) => setDefinirGestor(evento.target.checked)}
+                    disabled={ocupado || !posicaoId}
+                  />
+                  <span>Definir também o gestor (reporting line)</span>
+                </label>
+
+                {definirGestor && posicaoId && (
+                  <SeletorPosicao
+                    id="novo-colaborador-gestor"
+                    estrutura={estrutura.estado.estrutura}
+                    valor={gestorPosicaoId}
+                    aoMudar={setGestorPosicaoId}
+                    rotulo="Posição do gestor (reporting line)"
+                    vazio="Selecione a posição gerente…"
+                    excluirPosicaoId={posicaoId}
+                    mostrarOcupante
+                    desabilitado={ocupado}
+                  />
+                )}
+              </div>
+            )}
+          </>
+        )}
       </section>
 
       {erroLocal && (
@@ -263,9 +549,15 @@ function NovoColaboradorPage({
         </div>
       )}
 
-      {estado.fase === "processando" && (
+      {processando && (
         <div className="collaborator-form-info" role="status" aria-live="polite">
           Gravando o cadastro no servidor…
+        </div>
+      )}
+
+      {alocando && (
+        <div className="collaborator-form-info" role="status" aria-live="polite">
+          Aplicando a alocação soberana…
         </div>
       )}
 
@@ -289,25 +581,104 @@ function NovoColaboradorPage({
         </div>
       )}
 
-      <div className="collaborator-form-actions">
-        <button
-          type="button"
-          className="collaborator-form-btn collaborator-form-btn--secondary"
-          onClick={() => navigate("/")}
-        >
-          Cancelar
-        </button>
+      {estadoAlocacao.fase === "erro" && colaboradorCriado && (
+        <div className="collaborator-form-error" role="alert" data-testid="alocacao-erro">
+          <strong>
+            {estadoAlocacao.parcial === "sem-ocupacao"
+              ? "Colaborador criado SEM ALOCAÇÃO"
+              : "Ocupação criada, gestor NÃO definido"}
+          </strong>
+          <p>
+            {estadoAlocacao.mensagem} ({estadoAlocacao.codigo})
+          </p>
+          <p>
+            {estadoAlocacao.parcial === "sem-ocupacao"
+              ? "O colaborador permanece criado e sem alocação: a ocupação é uma operação separada e não houve rollback local."
+              : "A ocupação vigente já está gravada e a reporting line não: o estado exibido é o do servidor (nada é recriado nem encerrado)."}
+          </p>
+          <div className="collaborator-form-actions">
+            {estadoAlocacao.parcial === "sem-ocupacao" && (
+              <button
+                type="button"
+                className="collaborator-form-btn collaborator-form-btn--primary"
+                onClick={() => {
+                  void repetirOcupacao(colaboradorCriado);
+                }}
+                disabled={ocupado || !alocacaoDisponivel}
+                data-testid="alocacao-retry-ocupacao"
+              >
+                Tentar alocar novamente
+              </button>
+            )}
+            {estadoAlocacao.parcial === "sem-gestor" && (
+              <button
+                type="button"
+                className="collaborator-form-btn collaborator-form-btn--primary"
+                onClick={() => {
+                  void repetirReportingLine(colaboradorCriado);
+                }}
+                disabled={ocupado || !estruturaPronta || !gestorPosicaoId}
+                data-testid="alocacao-retry-gestor"
+              >
+                Tentar definir o gestor novamente
+              </button>
+            )}
+            <button
+              type="button"
+              className="collaborator-form-btn collaborator-form-btn--secondary"
+              onClick={() => navigate(`/colaborador/${colaboradorCriado}/editar`)}
+            >
+              Abrir a ficha do colaborador
+            </button>
+          </div>
+        </div>
+      )}
 
-        <button
-          type="button"
-          className="collaborator-form-btn collaborator-form-btn--primary"
-          onClick={() => {
-            void handleSalvar();
-          }}
-          disabled={processando}
-        >
-          {processando ? "Salvando…" : "Salvar colaborador"}
-        </button>
+      <div className="collaborator-form-actions">
+        {pessoaEncerrada && colaboradorCriado ? (
+          <>
+            {/* A pessoa já está persistida: a criação está ENCERRADA. */}
+            <button
+              type="button"
+              className="collaborator-form-btn collaborator-form-btn--secondary"
+              onClick={() => navigate("/")}
+            >
+              Ver colaboradores
+            </button>
+            <button
+              type="button"
+              className="collaborator-form-btn collaborator-form-btn--primary"
+              onClick={() => navigate(`/colaborador/${colaboradorCriado}`)}
+            >
+              Abrir a ficha do colaborador
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="collaborator-form-btn collaborator-form-btn--secondary"
+              onClick={() => navigate("/")}
+            >
+              Cancelar
+            </button>
+
+            <button
+              type="button"
+              className="collaborator-form-btn collaborator-form-btn--primary"
+              onClick={() => {
+                void handleSalvar();
+              }}
+              disabled={ocupado}
+            >
+              {processando
+                ? "Salvando…"
+                : alocando
+                  ? "Alocando…"
+                  : "Salvar colaborador"}
+            </button>
+          </>
+        )}
       </div>
     </main>
   );

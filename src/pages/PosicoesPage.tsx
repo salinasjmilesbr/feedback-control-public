@@ -13,6 +13,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import SeletorPosicao from "../components/SeletorPosicao";
 import type { CodigoPublico } from "../infrastructure/supabase/colaboradores/contrato";
 import {
   criarPosicao,
@@ -21,6 +22,10 @@ import {
   type DependenciasAcessoColaboradores,
   type ResultadoColaboradores,
 } from "../services/colaboradoresSoberanos/acessoColaboradoresSoberanos";
+import {
+  confirmarEncerramentoReportingLine,
+  confirmarReportingLine,
+} from "./alocacaoSoberana";
 import {
   SEM_ORGANIZACAO_ATIVA,
   TEXTO_ERRO_ESTRUTURA,
@@ -71,6 +76,14 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
   } | null>(null);
   const [vigencia, setVigencia] = useState(hojeLocal);
   const [motivo, setMotivo] = useState("");
+
+  // Reporting line (F5-08 P5): a relação é POSIÇÃO → POSIÇÃO (nunca pessoa).
+  const [gestorDe, setGestorDe] = useState<{
+    readonly posicaoId: string;
+    readonly rotulo: string;
+    readonly gestorAtual: string | null;
+  } | null>(null);
+  const [gestorPosicaoId, setGestorPosicaoId] = useState("");
 
   /** Versão de recarga: incrementar descarta a leitura anterior (sem cache). */
   const [versao, setVersao] = useState(0);
@@ -166,6 +179,113 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
     setSucesso("Alteração registrada nas posições.");
     aoConcluir?.();
     setVersao((atual) => atual + 1);
+  }
+
+  /**
+   * Reporting line: define/altera ou encerra a relação POSIÇÃO SUBORDINADA →
+   * POSIÇÃO GERENTE. Os guards de vigência vêm da fotografia corrente
+   * (`confirmarReportingLine`/`confirmarEncerramentoReportingLine`); nenhuma
+   * regra de ciclo é decidida aqui — o banco recusa ciclos e auto-relação.
+   */
+  async function tratarReportingLine(
+    desfecho:
+      | { readonly tipo: "sem-motivo" }
+      | { readonly tipo: "sem-vigencia" }
+      | {
+          readonly tipo: "fotografia-desatualizada";
+          readonly codigo: CodigoPublico;
+          readonly mensagem: string;
+        }
+      | { readonly tipo: "concluida"; readonly resultado: ResultadoColaboradores<unknown> },
+    aoConcluir?: () => void
+  ) {
+    setErro(null);
+    setSucesso("");
+
+    if (desfecho.tipo === "sem-motivo") {
+      setErro({ codigo: "INVALID_INPUT", mensagem: "Informe o motivo da alteração." });
+      return;
+    }
+    if (desfecho.tipo === "sem-vigencia") {
+      setErro({ codigo: "INVALID_INPUT", mensagem: "Informe a vigência da reporting line." });
+      return;
+    }
+    if (desfecho.tipo === "fotografia-desatualizada") {
+      setErro({ codigo: desfecho.codigo, mensagem: desfecho.mensagem });
+      setGestorDe(null);
+      setVersao((atual) => atual + 1);
+      return;
+    }
+    if (!desfecho.resultado.ok) {
+      setErro({
+        codigo: desfecho.resultado.codigo,
+        mensagem: desfecho.resultado.mensagem,
+      });
+      if (
+        desfecho.resultado.codigo === "CONFLICT" ||
+        desfecho.resultado.codigo === "NOT_FOUND"
+      ) {
+        setVersao((atual) => atual + 1);
+      }
+      return;
+    }
+
+    setSucesso("Reporting line atualizada na estrutura soberana.");
+    aoConcluir?.();
+    setVersao((atual) => atual + 1);
+  }
+
+  async function salvarGestor() {
+    if (processando || !gestorDe || estado.fase !== "pronto") return;
+    if (!gestorPosicaoId || !vigencia || !motivo.trim()) {
+      setErro({
+        codigo: "INVALID_INPUT",
+        mensagem: "Informe a posição gerente, a vigência e o motivo.",
+      });
+      return;
+    }
+
+    setProcessando(true);
+    const desfecho = await confirmarReportingLine(
+      {
+        estrutura: estado.estrutura,
+        subordinatePositionId: gestorDe.posicaoId,
+        managerPositionId: gestorPosicaoId,
+        vigencia,
+        motivo,
+        operationId: novoOperationId(),
+        ...(organizacaoAtivaId ? { organizationId: organizacaoAtivaId } : {}),
+      },
+      depsInjetadas
+    );
+    setProcessando(false);
+    await tratarReportingLine(desfecho, () => setGestorDe(null));
+  }
+
+  async function encerrarGestor() {
+    if (processando || !gestorDe || estado.fase !== "pronto") return;
+    if (!vigencia || !motivo.trim()) {
+      setErro({
+        codigo: "INVALID_INPUT",
+        mensagem: "Informe a vigência e o motivo do encerramento da reporting line.",
+      });
+      return;
+    }
+
+    setProcessando(true);
+    const desfecho = await confirmarEncerramentoReportingLine(
+      {
+        estrutura: estado.estrutura,
+        subordinatePositionId: gestorDe.posicaoId,
+        vigencia,
+        motivo,
+        operationId: novoOperationId(),
+        ...(organizacaoAtivaId ? { organizationId: organizacaoAtivaId } : {}),
+      },
+      depsInjetadas
+    );
+    setProcessando(false);
+    await tratarReportingLine(desfecho, () => setGestorDe(null));
   }
 
   const cabecalho = (
@@ -415,6 +535,25 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
                     <button
                       type="button"
                       className="virtus-btn virtus-btn--outline"
+                      data-testid="posicao-gestor-abrir"
+                      onClick={() => {
+                        setGestorDe({
+                          posicaoId: posicao.posicaoId,
+                          rotulo: rotuloDaPosicao(estado.estrutura, posicao.posicaoId),
+                          gestorAtual: linha ? superiorId : null,
+                        });
+                        setGestorPosicaoId("");
+                        setVigencia(hojeLocal());
+                        setMotivo("");
+                      }}
+                    >
+                      {linha ? "Alterar gestor" : "Definir gestor"}
+                    </button>
+                  )}
+                  {vigente && (
+                    <button
+                      type="button"
+                      className="virtus-btn virtus-btn--outline"
                       onClick={() => {
                         setEncerrando({
                           posicaoId: posicao.posicaoId,
@@ -510,6 +649,87 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
               type="button"
               className="virtus-btn virtus-btn--outline"
               onClick={() => setEncerrando(null)}
+            >
+              Cancelar
+            </button>
+          </form>
+        </section>
+      )}
+
+      {gestorDe && (
+        <section className="estrutura-card" data-testid="posicao-gestor">
+          <header className="estrutura-card__header">
+            <h2>Reporting line: {gestorDe.rotulo}</h2>
+            <span>posição subordinada {gestorDe.posicaoId}</span>
+          </header>
+
+          <p className="estrutura-nota">
+            Gestor formal é uma POSIÇÃO (UUID), nunca pessoa, cargo ou matrícula.
+            Ciclos e auto-relação são recusados pelo servidor; a tela não decide
+            isso.
+          </p>
+
+          <form
+            className="estrutura-form"
+            onSubmit={(evento) => {
+              evento.preventDefault();
+              void salvarGestor();
+            }}
+          >
+            <SeletorPosicao
+              id="posicao-gestor-selecao"
+              estrutura={estado.estrutura}
+              valor={gestorPosicaoId}
+              aoMudar={setGestorPosicaoId}
+              rotulo="Posição gerente (unidade • cargo • senioridade) *"
+              vazio="Selecione a posição gerente…"
+              excluirPosicaoId={gestorDe.posicaoId}
+              mostrarOcupante
+              desabilitado={processando}
+            />
+
+            <label className="virtus-field">
+              <span>Início da vigência *</span>
+              <input
+                type="date"
+                value={vigencia}
+                onChange={(evento) => setVigencia(evento.target.value)}
+                required
+              />
+            </label>
+            <label className="virtus-field">
+              <span>Motivo *</span>
+              <input
+                value={motivo}
+                onChange={(evento) => setMotivo(evento.target.value)}
+                required
+              />
+            </label>
+            <button
+              type="submit"
+              className="virtus-btn virtus-btn--primary"
+              disabled={processando || !gestorPosicaoId}
+              data-testid="posicao-gestor-confirmar"
+            >
+              {gestorDe.gestorAtual ? "Alterar gestor" : "Definir gestor"}
+            </button>
+            {gestorDe.gestorAtual && (
+              <button
+                type="button"
+                className="virtus-btn virtus-btn--outline"
+                disabled={processando}
+                onClick={() => {
+                  void encerrarGestor();
+                }}
+                data-testid="posicao-gestor-encerrar"
+              >
+                Encerrar reporting line
+              </button>
+            )}
+            <button
+              type="button"
+              className="virtus-btn virtus-btn--outline"
+              onClick={() => setGestorDe(null)}
             >
               Cancelar
             </button>

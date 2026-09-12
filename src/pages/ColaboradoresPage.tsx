@@ -65,7 +65,8 @@ const SEM_ORGANIZACAO_ATIVA =
   "Selecione uma organização ativa para consultar os colaboradores.";
 
 const AVISO_ESTRUTURA =
-  "Sem alocação: cargo, unidade e gestor vêm da estrutura organizacional (F5-08).";
+  "Sem alocação: não existe ocupação vigente para este colaborador. " +
+  "A alocação é definida na ficha do colaborador.";
 
 function rotuloStatus(status: string): string {
   if (status === "active") return "Ativo";
@@ -294,8 +295,8 @@ function ColaboradoresPage({
           <h1>Colaboradores</h1>
           <p>
             Cadastro soberano de pessoas, matrícula e status vigentes no
-            PostgreSQL. A estrutura organizacional é definida no módulo de
-            estrutura (F5-08).
+            PostgreSQL. A alocação (unidade, cargo, senioridade e gestor) vem da
+            ocupação vigente definida na ficha do colaborador.
           </p>
         </div>
 
