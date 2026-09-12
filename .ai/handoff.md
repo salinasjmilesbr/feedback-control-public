@@ -34,7 +34,73 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
-- **Atividade (rodada atual):** F5-09 — **P4 (transições excepcionais soberanas:
+- **Atividade (rodada atual):** F5-09 — **P5 (leitura soberana de ciclos por RLS
+  own-tenant + porta do cliente) IMPLEMENTADA** — **aguardando auditoria
+  independente**. Issue **#198**. Contrato: `docs/F5-09-desenho-tecnico.md`
+  (§9 policy de leitura, §13.5 superfícies do cliente, §19 P5) e
+  `docs/F5-09-duvidas.md` (**D22**).
+- **Base:** `main`/`origin/main` = `2e9c2012da8e24995a7ad1dc5e006dcb19475469`
+  (F5-09 P4 integrada em `main`).
+- **Branch da P5:** `feat/f5-09-p5-cycle-sovereign-read` — **sem merge**; o push do
+  sandbox é bloqueado (`.ai/git-rules.md`), então push/PR ficam para o usuário.
+- **Entregue nesta rodada (P5):**
+  - `supabase/migrations/20260919000000_f5_09_cycle_read_rls.sql`: **RLS de
+    leitura** — `enable row level security` em `evaluation_cycles`, policy
+    `evaluation_cycles_select_same_tenant` (SELECT para `authenticated` com
+    `public.user_has_active_membership(organization_id)`) e `grant select`
+    **mínimo** (policy antes do grant). Escrita do cliente **fechada**, `anon` sem
+    privilégio, `cycle_events` deny-by-default, nenhuma RPC/capability nova
+    (catálogo segue em 31), preflight e guarda final fail-closed.
+  - `supabase/validacao/09-cenario-f5-09-p5.sql` (fixture **ISOLADA**, prefixo
+    `ec`) e `10-validar-f5-09-p5.sql` (seções **A–K**: own-tenant, cross-tenant e
+    IDOR por UUID, sem membership, membership/perfil revogados, JWT fantasma,
+    DML negado com `insufficient_privilege`, conformidade de policy/grant,
+    `cycle_events` fechado e regressões P1–P4).
+  - adaptações de regressão: `02-validar-f4-08.sql` (`evaluation_cycles` passa de
+    tabela **fechada** a **legível own-tenant**: listas, contagens e mensagens
+    atualizadas), `04-validar-f5-09-p2.sql`, `06-validar-f5-09-p3.sql` e
+    `08-validar-f5-09-p4.sql` (admitem a policy do P5 quando **conforme**; seguem
+    proibindo RPC de leitura, policy de escrita e leitura por `anon`) e
+    `02-validar-f5-06.sql` (a checagem "zero policies nas tabelas F5-06" passa a
+    admitir **apenas** a policy de SELECT own-tenant de `evaluation_cycles`; a
+    deny-by-default das demais tabelas F5-06 e qualquer policy de escrita
+    continuam falha).
+  - cliente: `src/application/ports/CycleRepository.ts` (porta **assíncrona** e
+    **UUID-first**, resultado discriminado com código público),
+    `src/infrastructure/supabase/ciclos/repositorioCiclosSoberanos.ts` (adapter de
+    RLS; sessão como **pré-condição** → `NOT_AUTHORIZED`, erro → `FORBIDDEN`/
+    `INTERNAL`, linha fora do contrato descartada),
+    `src/services/acessoCiclosSoberanos.ts` (porta única + cache de UX por
+    **geração monotônica**: troca de organização/unmount/logout descartam resposta
+    em voo) e `src/infrastructure/localStorage/localCycleRepository.ts`
+    (**LEGACY/transitório**, `version: 0`, explicitamente **não** é fallback).
+  - testes do cliente: adapter, porta/serviço (fail-closed, resposta atrasada,
+    organização errada) e **guarda estática** anti-fallback/anti-dual-read, com o
+    teste legado reescrito para o contrato assíncrono.
+  - `.github/workflows/ci.yml` (o job `supabase-local` executa 09/10 após 07/08 e
+    antes das regressões F5-06/F5-07), `supabase/migrations/README.md` e este
+    arquivo.
+- **Comportamento entregue:** `evaluation_cycles` passa a ser a **fonte de verdade
+  de leitura** para o tenant do usuário autenticado: a RLS devolve somente ciclos
+  da organização com membership ativa e perfil ativo; o filtro por
+  `organization_id` no cliente é apenas **defesa em profundidade** (intenção de
+  UX); ausência é **explícita** (`null`/lista vazia) e falha tem **código
+  público** — nunca fallback local, dual-read ou dado inventado; `(ano, numero)`
+  seguem apenas como **rótulos** (bridge transitória documentada para o cutover do
+  P8). **Nenhuma página/componente foi alterado** nesta fase.
+- **Gates reais desta rodada:** `supabase db reset` + trio F4-08 + cenário 09 +
+  validador 10 (**todas as seções A–K `[PASS]`, zero `[FAIL]`**) + suíte SQL
+  completa na ordem do CI (24 arquivos, **ZERO `[FAIL]`**) + `npm test`/
+  `npm run build`/`npm run lint`/`npx tsc -b tsconfig.app.json`/
+  `git diff --check`, todos exit 0.
+- **Permanece para P6+:** Policy Engine `cycle.read`/`cycle.manage` (P6), Edge
+  `ciclos` + reconciliação de catálogo/bundle (P7), cutover do frontend e remoção
+  do storage local (P8), validação integrada (P9) e soberania de metas/observações
+  (F5-10/F5-11).
+
+### 3.10 F5-09 P4 (implementada; aguardando auditoria independente)
+
+- **Atividade:** F5-09 — **P4 (transições excepcionais soberanas:
   cancelar, reabrir e corrigir período) IMPLEMENTADA** — **aguardando auditoria
   independente**. Issue **#194**. Contrato: `docs/F5-09-desenho-tecnico.md`
   (§6 T4/T5/T6/T7, §8 autorização, §10 I7/I8/I11/I12/I19, §11, §12, §13.2/§13.3,

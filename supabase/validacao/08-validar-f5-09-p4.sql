@@ -1882,23 +1882,37 @@ begin
   end if;
   if exists (
     select 1 from pg_policies
-     where schemaname = 'public' and tablename in ('evaluation_cycles', 'cycle_events')
+     where schemaname = 'public' and tablename = 'cycle_events'
   ) then
-    v_problemas := v_problemas || 'policy antecipada (leitura de ciclo e do P5)'::text;
+    v_problemas := v_problemas || 'policy em cycle_events (trilha deve ser deny-by-default)'::text;
   end if;
-  if has_table_privilege('authenticated', 'public.evaluation_cycles', 'SELECT')
-     or has_table_privilege('authenticated', 'public.evaluation_cycles', 'INSERT')
+  -- A leitura own-tenant de `evaluation_cycles` e contrato do P5: quando
+  -- presente, e conferida contra o contrato (SELECT + authenticated + predicado
+  -- de tenant); a ESCRITA de cliente segue proibida em qualquer fase.
+  if exists (
+    select 1 from pg_policies
+     where schemaname = 'public' and tablename = 'evaluation_cycles'
+       and (cmd <> 'SELECT'
+            or not ('authenticated'::name = any(roles))
+            or coalesce(qual, '') not like '%user_has_active_membership%')
+  ) then
+    v_problemas := v_problemas || 'policy de evaluation_cycles fora do contrato own-tenant (P5)'::text;
+  end if;
+  if has_table_privilege('authenticated', 'public.evaluation_cycles', 'INSERT')
      or has_table_privilege('authenticated', 'public.evaluation_cycles', 'UPDATE')
+     or has_table_privilege('authenticated', 'public.evaluation_cycles', 'DELETE')
      or has_table_privilege('authenticated', 'public.cycle_events', 'SELECT')
-     or has_table_privilege('anon', 'public.evaluation_cycles', 'SELECT') then
-    v_problemas := v_problemas || 'anon/authenticated com acesso antecipado a ciclo/trilha'::text;
+     or has_table_privilege('authenticated', 'public.cycle_events', 'INSERT')
+     or has_table_privilege('anon', 'public.evaluation_cycles', 'SELECT')
+     or has_table_privilege('anon', 'public.cycle_events', 'SELECT') then
+    v_problemas := v_problemas || 'anon/authenticated com ESCRITA ou acesso indevido a ciclo/trilha'::text;
   end if;
 
   if array_length(v_problemas, 1) is not null then
     raise exception '[FAIL] 7/25/26/27/28: %', array_to_string(v_problemas, '; ');
   end if;
 
-  raise notice '[PASS] guardas estruturais: 3 RPCs INVOKER com search_path e EXECUTE so service_role, chave normativa de ciclos, zero DELETE, zero toque em estrutura materializada/avaliacao direta, zero rematerializacao, cancelamento reusando evaluation_cancelar (sem fechar_ciclo_pendencias), catalogo intacto (31) e nenhum P5+ antecipado';
+  raise notice '[PASS] guardas estruturais: 3 RPCs INVOKER com search_path e EXECUTE so service_role, chave normativa de ciclos, zero DELETE, zero toque em estrutura materializada/avaliacao direta, zero rematerializacao, cancelamento reusando evaluation_cancelar (sem fechar_ciclo_pendencias), catalogo intacto (31), escrita de cliente proibida e trilha fechada (leitura own-tenant do P5 admitida e conferida quando presente)';
 end $$;
 
 -- ----------------------------------------------------------------------------

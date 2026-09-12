@@ -1626,8 +1626,10 @@ begin
 
   -- (28) Nenhuma superficie de LEITURA soberana (P5+) antecipada e
   -- deny-by-default intacto. A checagem NAO depende da existencia de RPCs de
-  -- fases posteriores (P4 pode coexistir legitimamente): o que a P3 proibe e
-  -- antecipar LEITURA (RPC de leitura de ciclo, policy ou grant a authenticated).
+  -- fases posteriores (P4 pode coexistir legitimamente) e ADMITE a leitura
+  -- own-tenant de `evaluation_cycles` quando o P5 a abrir (policy SELECT +
+  -- grant minimo), conferindo-a contra o contrato: o que a P3 proibe e
+  -- antecipar RPC de leitura de ciclo, abrir a TRILHA ou permitir ESCRITA.
   if exists (
     select 1 from pg_proc p
      where p.pronamespace = 'public'::regnamespace
@@ -1637,17 +1639,21 @@ begin
   end if;
   if exists (
     select 1 from pg_policies
-     where schemaname = 'public' and tablename in ('evaluation_cycles', 'cycle_events')
+     where schemaname = 'public' and tablename = 'evaluation_cycles'
+       and (cmd <> 'SELECT'
+            or not ('authenticated'::name = any(roles))
+            or coalesce(qual, '') not like '%user_has_active_membership%')
   ) then
-    v_problemas := v_problemas || 'policy antecipada (leitura de ciclo e do P5)'::text;
+    v_problemas := v_problemas || 'policy de evaluation_cycles fora do contrato own-tenant (P5)'::text;
   end if;
-  if has_table_privilege('authenticated', 'public.evaluation_cycles', 'SELECT')
-     or has_table_privilege('authenticated', 'public.evaluation_cycles', 'INSERT')
+  if has_table_privilege('authenticated', 'public.evaluation_cycles', 'INSERT')
      or has_table_privilege('authenticated', 'public.evaluation_cycles', 'UPDATE')
+     or has_table_privilege('authenticated', 'public.evaluation_cycles', 'DELETE')
      or has_table_privilege('authenticated', 'public.cycle_events', 'SELECT')
      or has_table_privilege('authenticated', 'public.cycle_events', 'INSERT')
-     or has_table_privilege('anon', 'public.evaluation_cycles', 'SELECT') then
-    v_problemas := v_problemas || 'anon/authenticated com acesso antecipado a ciclo/trilha'::text;
+     or has_table_privilege('anon', 'public.evaluation_cycles', 'SELECT')
+     or has_table_privilege('anon', 'public.cycle_events', 'SELECT') then
+    v_problemas := v_problemas || 'anon/authenticated com ESCRITA ou acesso indevido a ciclo/trilha'::text;
   end if;
   -- Nenhuma tabela nova foi criada pela P3 (a operacao usa as tabelas da P1/P2,
   -- F3-08/F3-09 e F5-07).

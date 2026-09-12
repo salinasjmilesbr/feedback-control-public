@@ -117,7 +117,10 @@ declare v_tab text;
     'collegiate_configurations','collegiate_configuration_members',
     'cycle_evaluation_responsibilities','collaborator_status_periods',
     'collegiate_cycle_snapshots','collegiate_cycle_snapshot_positions',
-    'collegiate_cycle_snapshot_members','capabilities'];
+    'collegiate_cycle_snapshot_members','capabilities',
+    -- F5-09 P5: `evaluation_cycles` passa a ser LEGIVEL (policy own-tenant +
+    -- grant minimo de SELECT), deixando a categoria "tabela fechada".
+    'evaluation_cycles'];
   -- F5-07: `collaborator_events` e APPEND-ONLY. Recebe policy SELECT
   -- own-tenant (contrato F5-07 §10.2) mas NAO recebe grant a `authenticated`
   -- (espinha F5-07 §1.2): leitura somente pela RPC server-side. Categoria
@@ -143,7 +146,7 @@ begin
       raise exception '[FAIL] authenticated com SELECT no log append-only public.%', v_tab;
     end if;
   end loop;
-  raise notice '[PASS] 18 tabelas legiveis com policy SELECT e 1 log append-only com policy own-tenant sem grant';
+  raise notice '[PASS] 19 tabelas legiveis com policy SELECT (18 F4-08 + evaluation_cycles do P5) e 1 log append-only com policy own-tenant sem grant';
 end $$;
 
 do $$
@@ -154,7 +157,7 @@ declare v_tab text;
     'access_role_assignment_unit_targets','evaluation_succession_events',
     'privilege_mutation_audit',
     'evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria',
-    'evaluation_config_scale_bands','evaluation_config_participant_roles','evaluation_cycles',
+    'evaluation_config_scale_bands','evaluation_config_participant_roles',
     'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
     'evaluation_events','evaluation_pendencies','evaluation_aggregates',
     'structure_events','cycle_events'];
@@ -164,15 +167,15 @@ begin
       raise exception '[FAIL] tabela fechada com policy indevida: %', v_tab;
     end if;
   end loop;
-  raise notice '[PASS] 23 tabelas fechadas permanecem sem policy';
+  raise notice '[PASS] 22 tabelas fechadas permanecem sem policy';
 end $$;
 
 do $$
 declare v_n int;
 begin
   select count(*) into v_n from pg_policies p where p.schemaname='public';
-  if v_n <> 22 then raise exception '[FAIL] policies esperadas=22, encontradas=%', v_n; end if;
-  raise notice '[PASS] 22 policies (3 identidade + 18 F4-08 + 1 F5-07 append-only)';
+  if v_n <> 23 then raise exception '[FAIL] policies esperadas=23, encontradas=%', v_n; end if;
+  raise notice '[PASS] 23 policies (3 identidade + 19 de leitura own-tenant [18 F4-08 + evaluation_cycles do P5] + 1 F5-07 append-only)';
 end $$;
 
 -- ----------------------------------------------------------------------------
@@ -258,14 +261,14 @@ declare v_tab text;
     'cycle_evaluation_responsibilities','collaborator_status_periods',
     'organizations','user_profiles','user_organization_memberships',
     'collegiate_cycle_snapshots','collegiate_cycle_snapshot_positions',
-    'collegiate_cycle_snapshot_members','capabilities'];
+    'collegiate_cycle_snapshot_members','capabilities','evaluation_cycles'];
   v_closed text[] := array[
     'access_roles','access_role_capabilities','membership_access_role_assignments',
     'membership_collaborator_links','access_role_assignment_scopes',
     'access_role_assignment_unit_targets','evaluation_succession_events',
     'privilege_mutation_audit',
     'evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria',
-    'evaluation_config_scale_bands','evaluation_config_participant_roles','evaluation_cycles',
+    'evaluation_config_scale_bands','evaluation_config_participant_roles',
     'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
     'evaluation_events','evaluation_pendencies','evaluation_aggregates',
     'structure_events','cycle_events'];
@@ -288,7 +291,7 @@ begin
       raise exception '[FAIL] authenticated com SELECT no log append-only public.%', v_tab;
     end if;
   end loop;
-  raise notice '[PASS] authenticated com SELECT somente nas 21 tabelas legiveis (23 fechadas + 1 log append-only sem SELECT)';
+  raise notice '[PASS] authenticated com SELECT somente nas 22 tabelas legiveis (22 fechadas + 1 log append-only sem SELECT)';
 end $$;
 
 -- ----------------------------------------------------------------------------
@@ -728,14 +731,14 @@ end $$;
 
 do $$
 declare v_t text; v_ok boolean;
-  v_closed text[] := array['access_roles','access_role_capabilities','membership_access_role_assignments','membership_collaborator_links','access_role_assignment_scopes','access_role_assignment_unit_targets','evaluation_succession_events','privilege_mutation_audit','evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria','evaluation_config_scale_bands','evaluation_config_participant_roles','evaluation_cycles','evaluations','evaluation_participants','evaluation_scores','evaluation_comments','evaluation_events','evaluation_pendencies','evaluation_aggregates','collaborator_events','cycle_events'];
+  v_closed text[] := array['access_roles','access_role_capabilities','membership_access_role_assignments','membership_collaborator_links','access_role_assignment_scopes','access_role_assignment_unit_targets','evaluation_succession_events','privilege_mutation_audit','evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria','evaluation_config_scale_bands','evaluation_config_participant_roles','evaluations','evaluation_participants','evaluation_scores','evaluation_comments','evaluation_events','evaluation_pendencies','evaluation_aggregates','collaborator_events','cycle_events'];
 begin
   foreach v_t in array v_closed loop
     v_ok := false;
     begin execute format('select count(*) from public.%I', v_t); exception when insufficient_privilege then v_ok := true; end;
     if not v_ok then raise exception '[FAIL] authenticated leu tabela fechada %', v_t; end if;
   end loop;
-  raise notice '[PASS] 23 tabelas fechadas invisiveis (permission denied) apesar de dados de fixture';
+  raise notice '[PASS] 22 tabelas fechadas invisiveis (permission denied) apesar de dados de fixture';
 end $$;
 
 do $$

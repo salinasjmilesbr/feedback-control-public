@@ -1301,30 +1301,41 @@ begin
     end if;
   end loop;
 
-  -- (T) P5 nao antecipado: nenhuma policy nova e nenhum acesso de cliente.
+  -- (T) Leitura/escrita de cliente: a ESCRITA direta permanece proibida e a
+  -- trilha permanece fechada em TODAS as fases. A leitura own-tenant de
+  -- `evaluation_cycles` (policy SELECT + grant minimo) e contrato do P5: quando
+  -- presente, a policy e conferida contra o contrato; quando ausente (P2 puro),
+  -- nada e exigido — nenhuma das duas situacoes relaxa a proibicao de escrita.
   if exists (
     select 1 from pg_policies
-     where schemaname = 'public'
-       and tablename in ('evaluation_cycles', 'cycle_events')
+     where schemaname = 'public' and tablename = 'cycle_events'
   ) then
-    v_problemas := v_problemas || 'policy antecipada em evaluation_cycles/cycle_events';
+    v_problemas := v_problemas || 'policy em cycle_events (trilha deve ser deny-by-default)';
   end if;
-  if has_table_privilege('authenticated', 'public.evaluation_cycles', 'SELECT')
-     or has_table_privilege('authenticated', 'public.evaluation_cycles', 'INSERT')
+  if exists (
+    select 1 from pg_policies
+     where schemaname = 'public' and tablename = 'evaluation_cycles'
+       and (cmd <> 'SELECT'
+            or not ('authenticated'::name = any(roles))
+            or coalesce(qual, '') not like '%user_has_active_membership%')
+  ) then
+    v_problemas := v_problemas || 'policy de evaluation_cycles fora do contrato own-tenant (P5)';
+  end if;
+  if has_table_privilege('authenticated', 'public.evaluation_cycles', 'INSERT')
      or has_table_privilege('authenticated', 'public.evaluation_cycles', 'UPDATE')
      or has_table_privilege('authenticated', 'public.evaluation_cycles', 'DELETE')
      or has_table_privilege('authenticated', 'public.cycle_events', 'SELECT')
      or has_table_privilege('authenticated', 'public.cycle_events', 'INSERT')
      or has_table_privilege('anon', 'public.evaluation_cycles', 'SELECT')
      or has_table_privilege('anon', 'public.cycle_events', 'SELECT') then
-    v_problemas := v_problemas || 'anon/authenticated com acesso a ciclo/trilha';
+    v_problemas := v_problemas || 'anon/authenticated com ESCRITA ou acesso indevido a ciclo/trilha';
   end if;
 
   if array_length(v_problemas, 1) is not null then
     raise exception '[FAIL] S/T: %', array_to_string(v_problemas, '; ');
   end if;
 
-  raise notice '[PASS] S/T: 4 RPCs INVOKER com search_path fixo e EXECUTE so service_role; leitura de cliente (P5) nao antecipada';
+  raise notice '[PASS] S/T: 4 RPCs INVOKER com search_path fixo e EXECUTE so service_role; escrita de cliente proibida e trilha fechada (leitura own-tenant do P5 admitida e conferida quando presente, nunca exigida na P2)';
 end $$;
 
 -- ============================================================================
