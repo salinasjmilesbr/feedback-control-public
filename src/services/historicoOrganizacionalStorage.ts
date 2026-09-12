@@ -86,7 +86,10 @@ export function criarSnapshotOrganizacional(
     funcao: colaborador.funcao,
     senioridade: colaborador.senioridade,
     gestorDiretoMatricula: colaborador.gestorDiretoMatricula,
-    gestorDiretoNome: gestor?.nome ?? (colaborador.respondePara || undefined),
+    // F5-08 P6 (§19.3): o TEXTO `respondePara` NUNCA é promovido a relação
+    // estrutural. O nome do gestor só existe quando há gestor por MATRÍCULA na
+    // cadeia; sem isso, permanece ausente (nada é inventado pelo rótulo).
+    gestorDiretoNome: gestor?.nome,
     avaliadoresColegiadoMatriculas: [
       ...(colaborador.avaliadoresColegiadoMatriculas ?? []),
     ],

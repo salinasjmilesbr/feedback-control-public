@@ -1,5 +1,10 @@
 import type { Colaborador } from "../types/Colaborador";
-import { funcaoUsaEstruturaAvaliacaoAnalista } from "../types/Colaborador";
+import { ERRO_ESTRUTURA_SOBERANA_INDISPONIVEL } from "./projecaoEstruturalSoberana";
+import {
+  estruturaSoberanaEfetiva,
+  visaoEstruturalLegada,
+  type EstruturaSoberanaDoCliente,
+} from "./estruturaSoberanaCliente";
 
 type CriterioBase = {
   id: string;
@@ -41,30 +46,13 @@ function percentual(preenchidos: number, total: number) {
   return total === 0 ? 100 : Math.round((preenchidos / total) * 100);
 }
 
-function temGerenteResponsavel(
-  colaborador: Colaborador,
-  colaboradores: Colaborador[]
-) {
-  const porMatricula = new Map(
-    colaboradores.map((item) => [item.matricula, item])
-  );
-
-  let atual: Colaborador | undefined = colaborador;
-  const visitados = new Set<number>();
-
-  while (atual?.gestorDiretoMatricula) {
-    if (visitados.has(atual.gestorDiretoMatricula)) return false;
-    visitados.add(atual.gestorDiretoMatricula);
-
-    const gestor = porMatricula.get(atual.gestorDiretoMatricula);
-    if (!gestor) return false;
-    if (gestor.funcao === "GERENTE") return true;
-    atual = gestor;
-  }
-
-  return false;
-}
-
+/**
+ * Papéis exigidos pela estrutura de avaliação — FATOS RELACIONAIS da estrutura
+ * soberana (nunca `funcao` textual, nunca cadeia local):
+ * - gerente: existe cadeia de gestão resolvida acima do avaliado;
+ * - coordenador: o gestor direto é nível INTERMEDIÁRIO (tem superior);
+ * - colegiado: existe configuração de colegiado vigente com membros.
+ */
 export function calcularProgressoAvaliacao(
   criterios: CriterioBase[],
   avaliacoes: AvaliacoesBase,
@@ -72,34 +60,28 @@ export function calcularProgressoAvaliacao(
   colaborador: Colaborador,
   colaboradores: Colaborador[],
   feedbackFinalGerente: string,
-  feedbackFinalCoordenador: string
+  feedbackFinalCoordenador: string,
+  estruturaSoberana?: EstruturaSoberanaDoCliente
 ): ProgressoAvaliacao {
   const totalSubcriterios = criterios.reduce(
     (total, criterio) => total + criterio.subcriterios.length,
     0
   );
 
-  const gestorDireto = colaborador.gestorDiretoMatricula
-    ? colaboradores.find(
-        (item) => item.matricula === colaborador.gestorDiretoMatricula
-      )
-    : undefined;
+  // F5-08 P6: a estrutura vem do PRODUTOR soberano (leitura RLS publicada pelo
+  // shell autenticado). A fixture local só existe sob o gate explícito de DEV.
+  const estrutura =
+    estruturaSoberana ??
+    estruturaSoberanaEfetiva([...colaboradores, colaborador]);
+  const visao = visaoEstruturalLegada(estrutura, colaborador.matricula);
 
-  const gerenteNecessario = temGerenteResponsavel(
-    colaborador,
-    colaboradores
-  );
-  const usaEstruturaAnalista =
-    funcaoUsaEstruturaAvaliacaoAnalista(colaborador.funcao);
-  const coordenadorNecessario =
-    usaEstruturaAnalista &&
-    gestorDireto?.funcao === "COORDENADOR";
-  const avaliadoresColegiado = usaEstruturaAnalista
-    ? colaborador.avaliadoresColegiadoMatriculas ?? []
-    : [];
-  const colegiadoNecessario =
-    usaEstruturaAnalista &&
-    avaliadoresColegiado.length > 0;
+  // FAIL-CLOSED: sem evidência estrutural nenhuma exigência é presumida e a
+  // avaliação NUNCA é declarada completa por dado local.
+  const semEvidenciaEstrutural = visao === null;
+  const gerenteNecessario = visao?.temCadeiaDeGestao ?? false;
+  const coordenadorNecessario = visao?.gestorTemSuperior ?? false;
+  const avaliadoresColegiado = visao?.colegiadoMatriculasLegadas ?? [];
+  const colegiadoNecessario = avaliadoresColegiado.length > 0;
 
   let gerentePreenchidos = 0;
   let coordenadorPreenchidos = 0;
@@ -152,6 +134,13 @@ export function calcularProgressoAvaliacao(
   };
 
   const pendencias: string[] = [];
+
+  // FAIL-CLOSED (F5-08 P6): sem evidência estrutural soberana não é possível
+  // provar quais papéis são exigidos. A avaliação NÃO pode ser declarada
+  // completa — e nunca é completada por estrutura local.
+  if (semEvidenciaEstrutural) {
+    pendencias.push(ERRO_ESTRUTURA_SOBERANA_INDISPONIVEL);
+  }
 
   if (gerente.necessario && gerente.preenchidos < gerente.total) {
     pendencias.push(

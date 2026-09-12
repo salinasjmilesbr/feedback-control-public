@@ -1,3 +1,4 @@
+import { simulacaoDevPermitida } from "../config/ambiente";
 import { getColaboradores } from "../services/colaboradorStorage";
 import { aplicarEscopoRelatorio } from "../services/relatorioService";
 import { getColaboradoresVisiveis } from "../services/visibilidadeColaboradores";
@@ -49,7 +50,19 @@ function resolverAtor(
   };
 }
 
-/** Mundo funcional: recurso carregado quando presente; senão, tenant do storage. */
+/**
+ * Mundo funcional do recurso — F5-08 P6 (cutover estrutural).
+ *
+ * Regra de produção: o mundo (colaboradores + cadeia de gestão) só existe quando
+ * é PASSADO explicitamente pelo recurso — e o recurso o obtém da projeção
+ * SOBERANA. **Não há fallback para o cadastro legado em `localStorage`**: sem
+ * mundo explícito o conjunto é VAZIO, o ator não resolve e a decisão é DENY
+ * (fail-closed). Dado local antigo não é autoridade estrutural.
+ *
+ * Exceção ÚNICA e explícita: o contexto DEV do Vite (`simulacaoDevPermitida`),
+ * onde o mundo vem das fixtures fictícias — como já ocorre com o seletor de
+ * impersonação (F2-09). Em HOMOLOG/PROD o gate é sempre falso.
+ */
 function colaboradoresDoRecurso(
   resource: AuthorizationResource
 ): readonly Colaborador[] {
@@ -57,12 +70,17 @@ function colaboradoresDoRecurso(
     resource as { collaborators?: readonly Colaborador[] }
   ).collaborators;
   if (colaboradores && colaboradores.length > 0) return colaboradores;
-  try {
-    return getColaboradores();
-  } catch {
-    // Storage indisponível ⇒ mundo vazio ⇒ ator não resolvido ⇒ DENY (fail-closed).
-    return [];
+
+  if (simulacaoDevPermitida) {
+    try {
+      return getColaboradores();
+    } catch {
+      // Fixture ilegível em DEV ⇒ mundo vazio ⇒ DENY (fail-closed).
+      return [];
+    }
   }
+
+  return [];
 }
 
 interface RequisicaoEngine {

@@ -11,6 +11,8 @@ import UsuarioAtualBar from "../components/UsuarioAtualBar";
 import NavegacaoPrincipal from "../components/NavegacaoPrincipal";
 import AppFooter from "../components/AppFooter";
 import LayoutAutenticado from "../auth/LayoutAutenticado";
+import { useAuth } from "../auth/AuthContext";
+import { useEstruturaSoberanaDoCliente } from "../pages/useEstruturaSoberanaDoCliente";
 import LoginPage from "../auth/LoginPage";
 import RecuperarSenhaPage from "../auth/RecuperarSenhaPage";
 import RedefinirSenhaPage from "../auth/RedefinirSenhaPage";
@@ -63,8 +65,16 @@ function LayoutPublico() {
 /**
  * Shell das rotas funcionais: cabeçalho, navegação, conteúdo e rodapé. Só é
  * renderizado quando o `LayoutAutenticado` (guard) permitir o acesso.
+ *
+ * F5-08 P6: aqui a ESTRUTURA SOBERANA é carregada pelo caminho normal já
+ * existente (RLS P4 + porta de colaboradores F5-07) e publicada para os
+ * consumidores legados de ciclo/metas. Sem injeção manual e sem fonte local em
+ * produção; falha real ⇒ fail-closed nos consumidores.
  */
 function LayoutFuncional() {
+  const { organizacaoAtivaId } = useAuth();
+  useEstruturaSoberanaDoCliente(organizacaoAtivaId);
+
   return (
     <>
       <UsuarioAtualBar />

@@ -21,7 +21,10 @@ import {
   getTextoNotaAvaliacao,
   possuiNotaAvaliacao,
 } from "../services/apresentacaoNota";
-import { funcaoUsaEstruturaAvaliacaoAnalista } from "../types/Colaborador";
+import {
+  estruturaSoberanaEfetiva,
+  visaoEstruturalLegada,
+} from "../services/estruturaSoberanaCliente";
 import "../styles/avaliacoes.css";
 
 const criterioIcons = Array.from({ length: 8 }, (_, index) => (
@@ -53,8 +56,17 @@ function MinhaAvaliacaoDetalhePage() {
     );
   }
 
-  const usaEstruturaAvaliacaoAnalista =
-    funcaoUsaEstruturaAvaliacaoAnalista(usuarioAtual.funcao);
+  // F5-08 P6 (correção da auditoria): a estrutura vem do PRODUTOR soberano
+  // (projeção publicada pelo shell autenticado). `funcao` textual e
+  // `gestorDiretoMatricula` local não decidem quem avalia quem; sem evidência
+  // soberana a decisão é fail-closed (nenhuma seção de papel é presumida).
+  const colaboradores = getColaboradores();
+  const estruturaSoberana = estruturaSoberanaEfetiva(colaboradores);
+  const visaoEstrutural = visaoEstruturalLegada(
+    estruturaSoberana,
+    usuarioAtual.matricula
+  );
+  const usaEstruturaAvaliacaoAnalista = visaoEstrutural?.temCadeiaDeGestao ?? false;
 
   const feedback = getFeedbacksByColaborador(
     usuarioAtual.matricula
@@ -119,30 +131,29 @@ function MinhaAvaliacaoDetalhePage() {
       feedback.feedbackFinalCoordenador
   );
 
-  const colaboradores = getColaboradores();
+  const gestorDireto =
+    visaoEstrutural?.gestorMatriculaLegada == null
+      ? undefined
+      : colaboradores.find(
+          (item) => item.matricula === visaoEstrutural.gestorMatriculaLegada
+        );
 
-  const gestorDireto = usuarioAtual.gestorDiretoMatricula
-    ? colaboradores.find(
-        (item) =>
-          item.matricula === usuarioAtual.gestorDiretoMatricula
-      )
+  // "Coordenador" = gestor direto de nível INTERMEDIÁRIO (fato relacional da
+  // estrutura soberana). Gestor direto na raiz é o gerente responsável.
+  const coordenadorAvaliador = visaoEstrutural?.gestorTemSuperior
+    ? gestorDireto
     : undefined;
 
-  const coordenadorAvaliador =
-    gestorDireto?.funcao === "COORDENADOR"
-      ? gestorDireto
-      : undefined;
-
+  const matriculaGerente =
+    visaoEstrutural === null
+      ? null
+      : visaoEstrutural.gestorTemSuperior
+        ? visaoEstrutural.superiorDoGestorMatriculaLegada
+        : visaoEstrutural.gestorMatriculaLegada;
   const gerenteAvaliador =
-    gestorDireto?.funcao === "GERENTE"
-      ? gestorDireto
-      : coordenadorAvaliador?.gestorDiretoMatricula
-      ? colaboradores.find(
-          (item) =>
-            item.matricula ===
-            coordenadorAvaliador.gestorDiretoMatricula
-        )
-      : undefined;
+    matriculaGerente === null
+      ? undefined
+      : colaboradores.find((item) => item.matricula === matriculaGerente);
 
   const avaliacoesHistorico = getFeedbacksByColaborador(
     usuarioAtual.matricula

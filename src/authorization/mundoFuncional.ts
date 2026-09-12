@@ -1,4 +1,5 @@
 import type { Colaborador } from "../types/Colaborador";
+import { simulacaoDevPermitida } from "../config/ambiente";
 import type { Capability } from "./Capability";
 import { canonicalizarCapability } from "./canonical";
 import type {
@@ -161,8 +162,25 @@ export function derivarBindingsDev(
 export interface MundoFuncionalInput {
   actor: Colaborador;
   colaboradores: readonly Colaborador[];
+  /**
+   * Bindings de capability EXPLÍCITOS. F5-08 P6: não há mais derivação implícita
+   * a partir do mundo local — sem bindings injetados, apenas os fluxos PRÓPRIOS
+   * (SELF) permanecem disponíveis e toda capability de gestão/coordenação/
+   * colegiado é NEGADA (fail-closed). Ver `SEM_BINDINGS_DEV`.
+   */
   bindingsDev?: DevCapabilityBindings;
 }
+
+/**
+ * Bindings VAZIOS — barreira explícita de DEV do cutover estrutural (F5-08 P6).
+ *
+ * O binding derivado da estrutura local (`derivarBindingsDev`) é artefato
+ * DEV/TESTE: ele só pode entrar no engine quando for injetado EXPLICITAMENTE
+ * (teste) ou quando vier da projeção SOBERANA. Fora do gate DEV, capacidades de
+ * gestão/coordenação/colegiado são NEGADAS — nunca inferidas de `localStorage`,
+ * de `funcao` textual ou de arrays locais.
+ */
+export const SEM_BINDINGS_DEV: DevCapabilityBindings = new Map();
 
 export function criarProvidersMundoFuncional(
   input: MundoFuncionalInput
@@ -170,7 +188,15 @@ export function criarProvidersMundoFuncional(
   const { actor, colaboradores } = input;
   const actorId = String(actor.matricula);
   const porMatricula = new Map(colaboradores.map((c) => [c.matricula, c]));
-  const bindings = input.bindingsDev ?? derivarBindingsDev(colaboradores);
+  /**
+   * F5-08 P6: a derivação implícita da estrutura local só existe no contexto DEV
+   * do Vite (fixtures fictícias). Fora dele, o ator fica apenas com os fluxos
+   * PRÓPRIOS (SELF) e o mundo funcional de gestão/coordenação/colegiado é
+   * fail-closed até a projeção soberana alimentá-lo.
+   */
+  const bindings =
+    input.bindingsDev ??
+    (simulacaoDevPermitida ? derivarBindingsDev(colaboradores) : SEM_BINDINGS_DEV);
 
   const meusSubordinados = subordinadosDiretos(actor, colaboradores);
   const meusDescendentes = descendentes(actor, colaboradores);

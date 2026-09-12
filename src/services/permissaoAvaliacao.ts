@@ -1,8 +1,12 @@
 import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
-import { funcaoUsaEstruturaAvaliacaoAnalista } from "../types/Colaborador";
 import { getCicloAtivo } from "./cicloAvaliacaoStorage";
-import { getColaboradorEfetivoNoCiclo } from "./historicoOrganizacionalStorage";
+import { getColaboradoresEfetivosNoCiclo } from "./historicoOrganizacionalStorage";
+import {
+  estruturaSoberanaEfetiva,
+  visaoEstruturalLegada,
+  type EstruturaSoberanaDoCliente,
+} from "./estruturaSoberanaCliente";
 
 export type PermissoesAvaliacao = {
   podeAvaliarComoGerente: boolean;
@@ -12,89 +16,78 @@ export type PermissoesAvaliacao = {
   papeisPermitidos: string[];
 };
 
-function efetivo(
-  colaborador: Colaborador,
-  colaboradores: Colaborador[],
-  ciclo?: CicloAvaliacao
-): Colaborador {
-  return ciclo
-    ? getColaboradorEfetivoNoCiclo(colaborador, ciclo, colaboradores)
-    : colaborador;
+function semPermissoes(): PermissoesAvaliacao {
+  return {
+    podeAvaliarComoGerente: false,
+    podeAvaliarComoCoordenador: false,
+    podeAvaliarComoColegiado: false,
+    podeAvaliar: false,
+    papeisPermitidos: [],
+  };
 }
 
-function encontrarGerenteResponsavel(
-  colaborador: Colaborador,
-  colaboradores: Colaborador[],
-  ciclo?: CicloAvaliacao
-): Colaborador | undefined {
-  const porMatricula = new Map(
-    colaboradores.map((item) => [item.matricula, item])
+/**
+ * Mundo de apoio: os colaboradores EFETIVOS do ciclo (snapshot F3-08), apenas
+ * para o adaptador de fixture em DEV. Em produção a estrutura é a SOBERANA
+ * publicada pelo shell autenticado — este mundo nunca decide papel.
+ */
+function mundoEfetivo(
+  colaboradorAvaliado: Colaborador,
+  colaboradores: readonly Colaborador[],
+  ciclo: CicloAvaliacao | undefined
+): readonly Colaborador[] {
+  const porMatricula = new Map<number, Colaborador>();
+  [...colaboradores, colaboradorAvaliado].forEach((colaborador) =>
+    porMatricula.set(colaborador.matricula, colaborador)
   );
-
-  let atual: Colaborador | undefined = efetivo(
-    colaborador,
-    colaboradores,
-    ciclo
-  );
-  const visitados = new Set<number>();
-
-  while (atual?.gestorDiretoMatricula) {
-    if (visitados.has(atual.gestorDiretoMatricula)) {
-      return undefined;
-    }
-
-    visitados.add(atual.gestorDiretoMatricula);
-    const gestorBase = porMatricula.get(atual.gestorDiretoMatricula);
-
-    if (!gestorBase) return undefined;
-    const gestor = efetivo(gestorBase, colaboradores, ciclo);
-    atual = gestor;
-  }
-
-  // F4-09 (D2/D3): o "gerente responsável" é a RAIZ da cadeia (dado
-  // estrutural `gestorDiretoMatricula`), nunca `funcao`.
-  return atual;
+  const base = Array.from(porMatricula.values());
+  return ciclo ? getColaboradoresEfetivosNoCiclo(ciclo, base) : base;
 }
 
+/**
+ * Permissões de avaliação (gerente responsável, coordenador direto, colegiado).
+ *
+ * F5-08 P6 (correção da auditoria): os fatos vêm da ESTRUTURA SOBERANA —
+ * relações de posição/reporting line/ocupação vigente e colegiado vigente.
+ * Nenhum papel é inferido de `funcao` textual, cargo, nome ou matrícula; sem
+ * evidência estrutural NENHUM papel é concedido (fail-closed).
+ */
 export function obterPermissoesAvaliacao(
   usuarioAtual: Colaborador | undefined,
   colaboradorAvaliado: Colaborador,
   colaboradores: Colaborador[],
-  ciclo = getCicloAtivo()
+  ciclo: CicloAvaliacao | undefined = getCicloAtivo(),
+  estruturaSoberana?: EstruturaSoberanaDoCliente
 ): PermissoesAvaliacao {
-  if (!usuarioAtual) {
-    return {
-      podeAvaliarComoGerente: false,
-      podeAvaliarComoCoordenador: false,
-      podeAvaliarComoColegiado: false,
-      podeAvaliar: false,
-      papeisPermitidos: [],
-    };
-  }
+  if (!usuarioAtual) return semPermissoes();
 
-  const colaboradorEfetivo = efetivo(
-    colaboradorAvaliado,
-    colaboradores,
-    ciclo
-  );
-  const gerenteResponsavel = encontrarGerenteResponsavel(
-    colaboradorAvaliado,
-    colaboradores,
-    ciclo
-  );
+  const estrutura =
+    estruturaSoberana ??
+    estruturaSoberanaEfetiva(
+      mundoEfetivo(colaboradorAvaliado, colaboradores, ciclo)
+    );
 
+  const visao = visaoEstruturalLegada(estrutura, colaboradorAvaliado.matricula);
+  // FAIL-CLOSED: sem evidência estrutural soberana não há papel a conceder.
+  if (!visao) return semPermissoes();
+
+  // F4-09 (D2/D3): o "gerente responsável" é a RAIZ da cadeia (dado relacional,
+  // nunca `funcao`).
   const podeAvaliarComoGerente =
-    gerenteResponsavel?.matricula === usuarioAtual.matricula;
+    visao.raizMatriculaLegada !== null &&
+    visao.raizMatriculaLegada === usuarioAtual.matricula;
 
+  // "Coordenador direto" = gestor direto que é NÍVEL INTERMEDIÁRIO (tem
+  // superior). Gestor direto na raiz é o gerente responsável, não coordenador.
   const podeAvaliarComoCoordenador =
-    funcaoUsaEstruturaAvaliacaoAnalista(colaboradorEfetivo.funcao) &&
-    colaboradorEfetivo.gestorDiretoMatricula === usuarioAtual.matricula;
+    visao.gestorMatriculaLegada !== null &&
+    visao.gestorMatriculaLegada === usuarioAtual.matricula &&
+    visao.gestorTemSuperior;
 
-  const podeAvaliarComoColegiado =
-    funcaoUsaEstruturaAvaliacaoAnalista(colaboradorEfetivo.funcao) &&
-    (colaboradorEfetivo.avaliadoresColegiadoMatriculas?.includes(
-      usuarioAtual.matricula
-    ) ?? false);
+  // Colegiado: configuração VIGENTE na estrutura soberana.
+  const podeAvaliarComoColegiado = visao.colegiadoMatriculasLegadas.includes(
+    usuarioAtual.matricula
+  );
 
   const papeisPermitidos: string[] = [];
 

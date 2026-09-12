@@ -2,8 +2,15 @@ import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
 import type { Meta, TipoMeta } from "../types/Meta";
 import { getCiclosAvaliacao } from "./cicloAvaliacaoStorage";
-import { getColaboradorEfetivoNoCiclo } from "./historicoOrganizacionalStorage";
+import { getColaboradoresEfetivosNoCiclo } from "./historicoOrganizacionalStorage";
 import { getColaboradores } from "./colaboradorStorage";
+import {
+  estruturaSoberanaEfetiva,
+  vinculoLegado,
+  visaoEstruturalLegada,
+  type EstruturaSoberanaDoCliente,
+  type VisaoEstruturalLegada,
+} from "./estruturaSoberanaCliente";
 import { authorize } from "../authorization/policyEngine/policyEngine";
 import {
   criarProvidersMundoLocal,
@@ -123,85 +130,88 @@ function getCicloDaMeta(meta: Meta): CicloAvaliacao | undefined {
   return getCiclosAvaliacao().find((ciclo) => ciclo.id === meta.cicloId);
 }
 
-function getColaboradorEfetivoParaCiclo(
-  colaborador: Colaborador,
-  colaboradores: Colaborador[],
-  ciclo?: CicloAvaliacao
-): Colaborador {
-  return ciclo
-    ? getColaboradorEfetivoNoCiclo(colaborador, ciclo, colaboradores)
-    : colaborador;
+/**
+ * Estrutura SOBERANA usada pelas decisões de meta.
+ *
+ * F5-08 P6 (correção da auditoria): hierarquia e colegiado NÃO vêm mais de
+ * `gestorDiretoMatricula`/`funcao` do cadastro local. A estrutura é a do
+ * PRODUTOR soberano (projeção publicada pelo shell autenticado) ou a passada
+ * explicitamente (teste); sem evidência ela é VAZIA e cada decisão devolve o
+ * lado fail-closed. O mundo local (fixture) só é considerado sob o gate
+ * explícito de DEV.
+ */
+function estruturaDeMeta(
+  colaboradores: readonly Colaborador[],
+  ciclo: CicloAvaliacao | undefined,
+  envolvidos: readonly Colaborador[],
+  explicita?: EstruturaSoberanaDoCliente
+): EstruturaSoberanaDoCliente {
+  if (explicita) return explicita;
+
+  const porMatricula = new Map<number, Colaborador>();
+  [...colaboradores, ...envolvidos].forEach((colaborador) =>
+    porMatricula.set(colaborador.matricula, colaborador)
+  );
+  const base = Array.from(porMatricula.values());
+  const mundo = ciclo ? getColaboradoresEfetivosNoCiclo(ciclo, base) : base;
+
+  return estruturaSoberanaEfetiva(mundo);
 }
 
+/**
+ * "Gerente responsável" = RAIZ da cadeia SOBERANA (F4-09 D2/D3: dado relacional,
+ * nunca `funcao`). `null` sem evidência estrutural (fail-closed).
+ */
 function getGerenteResponsavelNoCiclo(
-  colaborador: Colaborador,
-  colaboradores: Colaborador[],
-  ciclo: CicloAvaliacao
-): Colaborador | undefined {
-  const porMatricula = new Map(
-    colaboradores.map((item) => [item.matricula, item])
-  );
-  const visitados = new Set<number>();
-  let atual = getColaboradorEfetivoNoCiclo(
-    colaborador,
-    ciclo,
-    colaboradores
-  );
-
-  while (atual.gestorDiretoMatricula) {
-    const matriculaGestor = atual.gestorDiretoMatricula;
-    if (visitados.has(matriculaGestor)) return undefined;
-    visitados.add(matriculaGestor);
-
-    const gestorBase = porMatricula.get(matriculaGestor);
-    if (!gestorBase) return undefined;
-
-    const gestor = getColaboradorEfetivoNoCiclo(
-      gestorBase,
-      ciclo,
-      colaboradores
-    );
-    atual = gestor;
-  }
-
-  // F4-09 (D2/D3): responsável = raiz da cadeia (dado), nunca `funcao`.
-  return atual;
+  visao: VisaoEstruturalLegada | null
+): number | null {
+  return visao?.raizMatriculaLegada ?? null;
 }
 
 export function metaExigeAprovacaoCoordenador(
   colaborador: Colaborador,
   colaboradores: Colaborador[],
-  ciclo?: CicloAvaliacao
+  ciclo?: CicloAvaliacao,
+  estruturaSoberana?: EstruturaSoberanaDoCliente
 ): boolean {
-  const efetivo = getColaboradorEfetivoParaCiclo(
-    colaborador,
+  const estrutura = estruturaDeMeta(
     colaboradores,
-    ciclo
+    ciclo,
+    [colaborador],
+    estruturaSoberana
   );
-  if (!efetivo.gestorDiretoMatricula) return false;
+  const visao = visaoEstruturalLegada(estrutura, colaborador.matricula);
 
-  const gestorBase = colaboradores.find(
-    (item) => item.matricula === efetivo.gestorDiretoMatricula
-  );
-  if (!gestorBase) return false;
+  // FAIL-CLOSED: sem evidência estrutural não é possível provar que a aprovação
+  // do coordenador NÃO é exigida — logo ela é exigida.
+  if (!visao) return true;
 
-  const gestor = getColaboradorEfetivoParaCiclo(
-    gestorBase,
-    colaboradores,
-    ciclo
-  );
-  return gestor.funcao === "COORDENADOR";
+  // Evidência explícita de que NÃO existe gestor acima: nada a exigir.
+  const vinculo = vinculoLegado(estrutura, colaborador.matricula);
+  if (vinculo?.gestorSoberanoPositionId === null) return false;
+
+  // Gestor existe mas não foi resolvido (posição vaga/cadeia não confiável):
+  // não é possível provar ⇒ fail-closed.
+  if (visao.gestorCollaboratorId === null) return true;
+
+  // "Coordenador" = nível INTERMEDIÁRIO da hierarquia (fato relacional).
+  return visao.gestorTemSuperior;
 }
 
 export function metaEstaAprovada(
   meta: Meta,
   colaborador: Colaborador,
-  colaboradores: Colaborador[]
+  colaboradores: Colaborador[],
+  estruturaSoberana?: EstruturaSoberanaDoCliente
 ): boolean {
   const ciclo = getCicloDaMeta(meta);
   const coordenadorOk =
-    !metaExigeAprovacaoCoordenador(colaborador, colaboradores, ciclo) ||
-    Boolean(meta.aprovacaoCoordenador);
+    !metaExigeAprovacaoCoordenador(
+      colaborador,
+      colaboradores,
+      ciclo,
+      estruturaSoberana
+    ) || Boolean(meta.aprovacaoCoordenador);
 
   // Aprovações já realizadas continuam válidas mesmo após transferência.
   return coordenadorOk && Boolean(meta.aprovacaoGerente);
@@ -211,21 +221,27 @@ export function podeAprovarMetaNoCiclo(
   aprovador: Colaborador,
   colaborador: Colaborador,
   colaboradores: Colaborador[],
-  ciclo: CicloAvaliacao
+  ciclo: CicloAvaliacao,
+  estruturaSoberana?: EstruturaSoberanaDoCliente
 ): boolean {
-  const efetivo = getColaboradorEfetivoNoCiclo(
-    colaborador,
+  const estrutura = estruturaDeMeta(
+    colaboradores,
     ciclo,
-    colaboradores
+    [colaborador, aprovador],
+    estruturaSoberana
   );
+  const visao = visaoEstruturalLegada(estrutura, colaborador.matricula);
+
+  // FAIL-CLOSED: sem evidência estrutural soberana, ninguém aprova.
+  if (!visao) return false;
 
   // F4-09 (D2/D3): coordenador = gestor direto (dado); gerente = raiz da
   // cadeia (dado). Nunca `funcao`.
   const ehCoordenadorDireto =
-    efetivo.gestorDiretoMatricula === aprovador.matricula;
-  const ehGerenteResponsavel =
-    getGerenteResponsavelNoCiclo(colaborador, colaboradores, ciclo)?.matricula ===
-    aprovador.matricula;
+    visao.gestorMatriculaLegada !== null &&
+    visao.gestorMatriculaLegada === aprovador.matricula;
+  const raiz = getGerenteResponsavelNoCiclo(visao);
+  const ehGerenteResponsavel = raiz !== null && raiz === aprovador.matricula;
 
   return ehCoordenadorDireto || ehGerenteResponsavel;
 }
@@ -377,7 +393,8 @@ export function aprovarMeta(
   id: string,
   aprovador: Colaborador,
   colaborador: Colaborador,
-  ciclo: CicloAvaliacao
+  ciclo: CicloAvaliacao,
+  estruturaSoberana?: EstruturaSoberanaDoCliente
 ): void {
   validarCicloAtivo(ciclo);
 
@@ -405,14 +422,31 @@ export function aprovarMeta(
     cicloId: ciclo.id,
   });
 
+  // F5-08 P6 (correção da auditoria): a relação de aprovação (coordenador direto
+  // e gerente responsável) vem da estrutura SOBERANA — nunca do cadastro local.
+  const estrutura = estruturaDeMeta(
+    colaboradores,
+    ciclo,
+    [colaborador, aprovador],
+    estruturaSoberana
+  );
+  const visao = visaoEstruturalLegada(estrutura, colaborador.matricula);
   const ehCoordenadorDireto =
-    colaborador.gestorDiretoMatricula === aprovador.matricula;
-  const ehGerenteResponsavel =
-    getGerenteResponsavelNoCiclo(colaborador, colaboradores, ciclo)?.matricula ===
-    aprovador.matricula;
+    visao?.gestorMatriculaLegada != null &&
+    visao.gestorMatriculaLegada === aprovador.matricula;
+  const raiz = getGerenteResponsavelNoCiclo(visao);
+  const ehGerenteResponsavel = raiz !== null && raiz === aprovador.matricula;
 
   if (ehCoordenadorDireto) {
-    if (!podeAprovarMetaNoCiclo(aprovador, colaborador, colaboradores, ciclo)) {
+    if (
+      !podeAprovarMetaNoCiclo(
+        aprovador,
+        colaborador,
+        colaboradores,
+        ciclo,
+        estrutura
+      )
+    ) {
       throw new Error(
         "Somente o coordenador direto responsável neste ciclo pode aprovar esta meta."
       );

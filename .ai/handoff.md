@@ -34,10 +34,125 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
-- **Atividade (rodada atual):** F5-07 — Colaboradores e histórico organizacional
-  soberanos (**implementação**; contrato em `docs/F5-07-desenho-tecnico.md`, D1–D20).
-- **Branch:** `feat/f5-07-colaboradores-soberanos` (sem PR; sem merge).
+- **Atividade (rodada atual):** F5-08 — Estrutura organizacional e catálogos
+  soberanos (**implementação P1–P6**; contrato em
+  `docs/F5-08-desenho-tecnico.md`, D1–D25).
+- **Base:** `main`/`origin/main` = `7a0e6fab607e97656333a67adaaff48fc1d8fd58`
+  (P1–P5 da F5-08 já integrados, um commit por fase).
+- **Branch do P6:** `feat/f5-08-p6-cutover-estrutura` — **sem PR, sem squash e sem
+  merge** nesta rodada; o P6 (cutover) **não está integrado**.
 - **Último commit:** consultar `git log --oneline -1` na branch.
+- **Entregue (P1–P5, já na base):** migrations `20260914000000`
+  (`structure_events` append-only + triggers I1–I3 + grants), `20260914010000`
+  (15 RPCs `estrutura_*`/`catalogo_*`) e `20260914020000` (chave única de advisory
+  lock, D24); contrato/Edge `supabase/functions/colaboradores`; porta/serviço do
+  cliente (`services/colaboradoresSoberanos/acessoColaboradoresSoberanos.ts`),
+  leitura soberana por RLS
+  (`infrastructure/supabase/estrutura/repositorioEstruturaSoberana.ts`); telas
+  Unidades/Posições/Catálogos/Colegiado e alocação do colaborador (ocupação +
+  reporting line).
+- **Entregue nesta rodada (P6 — cutover estrutural):**
+  - `authorizationPolicy.ts`: fallback do mundo funcional para o cadastro local
+    **removido**; resta apenas sob barreira explícita de DEV
+    (`simulacaoDevPermitida`) ⇒ produção fail-closed;
+  - `mundoFuncional.ts`: `SEM_BINDINGS_DEV` — a derivação local de bindings deixou
+    de ser implícita; sem binding explícito (teste) ou da projeção soberana, a
+    capability é NEGADA (inclusive o fluxo SELF);
+  - `historicoOrganizacionalStorage.ts`: sem promoção de texto `respondePara` a
+    relação de gestão (escrita local é barreira desde a F5-07);
+  - `src/data/evaluationTeam.ts` removido (código morto, sem consumidores);
+  - guardas do cutover: bloco P6 em
+    `src/authorization/estruturaUiSeguranca.test.ts` (sweep global de `src/`) e
+    `src/authorization/cutoverEstrutural.test.ts` (runtime, produção × DEV);
+  - `supabase/validacao/03-validar-f5-08-cutover.sql` (leitura RLS own-tenant
+    positiva/negativa, fail-closed sem membership ativa, superfície de escrita do
+    cliente fechada, capability negada, RPC como única autoridade, chave única de
+    serialização, idempotência e histórico preservado);
+  - `.github/workflows/ci.yml`: o job `supabase-local` passa a executar os **três**
+    validadores da F5-08 e a regressão F5-06/F5-07 (§13.7/§23.4); timeout 40 min.
+- **Blockers da auditoria RESOLVIDOS (correção nesta branch):** o §19.1 do
+  contrato exige que as decisões de elegibilidade/papel de `progressoAvaliacao`,
+  `cicloEquipeService` e `metaStorage` usem estrutura SOBERANA — não era decisão
+  futura da F5-09. Duas rodadas de correção, sem criar fonte nova (sem
+  migration/RPC/Edge/capability):
+  - **1ª rodada:** `src/services/projecaoEstruturalSoberana.ts` como fronteira; os
+    três módulos + `permissaoAvaliacao.ts` + `MinhaAvaliacaoDetalhePage.tsx`
+    deixaram de ler `funcao`, `gestorDiretoMatricula`,
+    `avaliadoresColegiadoMatriculas` e `getColaboradoresVisiveis`;
+    `authorization/providers/localWorld.ts` virou DEV-only (fora do gate ⇒ mundo
+    vazio ⇒ DENY); fail-closed em todas as decisões.
+  - **2ª rodada (blockers finais):** a projeção passou a ser **UUID-first** —
+    `collaboratorId`, `gestorSoberanoPositionId`, `cadeiaDeGestaoPositionIds`,
+    `cadeiaDeGestaoCollaboratorIds`, `colegiadoSoberanoCollaboratorIds` — e o
+    modelo **não conhece matrícula**; o campo textual `papel`
+    (GERENTE/COORDENADOR/OUTRO) foi **eliminado** e substituído por fatos
+    relacionais soberanos (`temCadeiaDeGestaoSoberana`,
+    `gestorSoberanoTemSuperior`, `raizDaCadeiaSoberana`, `colegiadoSoberano`);
+  - **PRODUTOR conectado:** `src/services/estruturaSoberanaCliente.ts` carrega a
+    estrutura pelo caminho normal já existente (`lerEstrutura` RLS/P4 +
+    `listarColaboradores` F5-07), publica a projeção e mantém a **ponte de
+    compatibilidade** matrícula ↔ UUID (fronteira, nunca chave estrutural);
+    `src/pages/useEstruturaSoberanaDoCliente.ts` é acionado pelo shell
+    autenticado (`LayoutFuncional` em `src/routes/AppRoutes.tsx`) — nenhum
+    consumidor injeta projeção manualmente e a ausência de injeção deixou de ser
+    "modo DENY";
+  - **Blocker final (corrida/multi-tenant) RESOLVIDO:** o produtor deixou de
+    deduplicar A e B como se fossem a mesma solicitação. Agora há **geração
+    monotônica** (`let geracao = 0`) + organização vigente: uma carga só publica
+    se ainda for a vigente (`publicarSeVigente`); iniciar uma carga publica
+    imediatamente `carregando` com estrutura VAZIA (a estrutura do tenant anterior
+    deixa de ser acessível na troca); a dedupe é **por organização**; e
+    `invalidarEstruturaSoberana()` (usada pelo hook quando a organização ativa
+    vira `null`/`undefined`) incrementa a geração, limpa a carga em curso e
+    publica estado inválido/vazio — resposta antiga nunca republica;
+  - **Residual final (unmount/logout) RESOLVIDO:** o hook ganhou um cleanup de
+    **dependência VAZIA** (`useEffect(() => () => invalidarEstruturaSoberana(), [])`)
+    que roda **apenas no unmount** do shell — o `LayoutAutenticado` pode parar de
+    renderizar o `LayoutFuncional` sem passar por `organizacaoAtivaId == null`;
+    sem ele, a estrutura do tenant A permanecia em memória após o logout e um
+    login posterior em B podia observá-la antes do novo efeito executar. Não roda
+    em re-render nem na troca A → B (que tem caminho próprio);
+  - provas: `projecaoEstruturalSoberana.test.ts` (8), `estruturaSoberanaCliente.test.ts`
+    (19 — corrida A→B determinística nos dois sentidos, dedupe por org, `null`
+    invalidando contexto, falha real sem vazar outro tenant e lifecycle do shell:
+    unmount invalida + assinatura removida, carga em voo não publica, novo login
+    em B nunca vê A, A→B sem unmount segue funcionando),
+    `cutoverEstruturalServicos.test.ts` (4) e o bloco estático
+    `estruturaUiSeguranca.test.ts` (39 no arquivo), que reprova modelo com
+    matrícula, consumidores lendo campos locais, produtor não acionado, produtor
+    sem proteção de troca de tenant e hook sem cleanup de unmount;
+  - `docs/F5-08-p6-duvida-mundo-funcional.md` documenta os blockers resolvidos, a
+    identidade UUID, a segurança multi-tenant (§2.3), o fail-closed e o que resta
+    à F5-09 (apenas o domínio de ciclos: persistência e estrutura POR CICLO) — sem
+    autoridade estrutural local.
+- **Residual declarado (fora do blocker, não silencioso):** `relatorioService`
+  (filtros por `gestorDiretoMatricula`), `exportarAvaliacaoPdf` (identificação de
+  avaliadores), `visibilidadeColaboradores` (sem chamador de produção) e
+  `historicoOrganizacionalStorage` (snapshots/efetivos). Registrado na §6 do
+  documento acima; exige atividade própria (relatórios/PDF).
+- **Consequência do cutover (verificada):** em produção a estrutura de
+  ciclo/metas é obtida da leitura soberana (RLS) pelo produtor publicado no shell
+  autenticado, sempre correspondendo à **organização ativa** (troca de tenant
+  segura); falha real do Supabase ⇒ fail-closed, e a decisão real de autorização
+  permanece server-side (Edge + Policy Engine + RLS). Coberto por
+  `cutoverEstrutural.test.ts`, `cutoverEstruturalServicos.test.ts`,
+  `projecaoEstruturalSoberana.test.ts` e `estruturaSoberanaCliente.test.ts`.
+- **Validação desta rodada:** `npm test` (**108 arquivos / 1677 testes** verdes),
+  `npm run build`, `npm run lint`, `npx tsc -b tsconfig.app.json` e
+  `git diff --check` executados localmente (todos verdes). Os **validadores SQL não
+  foram executados** neste host (Docker/Supabase indisponível) — rodam no job
+  `supabase-local` do CI; a limitação está registrada no relatório da atividade.
+  Nenhuma migration/RPC/Edge/capability nova foi criada nesta correção.
+- **Próxima atividade:** **F5-09** (ciclos) — **não iniciada** aqui.
+- **`.ai/current-task.md`:** não existe neste repositório (nem no histórico). A
+  ausência é registrada aqui conforme `AGENTS.md` §1; o estado operacional de
+  retomada continua sendo este arquivo.
+
+### 3.1 F5-07 (concluída e integrada)
+
+- **Atividade:** F5-07 — Colaboradores e histórico organizacional soberanos
+  (contrato em `docs/F5-07-desenho-tecnico.md`, D1–D20); integrada em `main` como
+  `7137f1f`.
 - **Entregue:** migrations `20260913000000`/`20260913010000` (extensões aditivas em
   `collaborators`, `job_roles.code`, log append-only `collaborator_events`, helper
   de ator e 16 funções/RPCs), Edge `colaboradores` (15 operações, com gate
@@ -45,18 +160,19 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   única `acessoColaboradoresSoberanos`, barreiras fail-closed em
   `colaboradorStorage`/`historicoOrganizacionalStorage`, telas migradas para UUID
   com matrícula resolvida no servidor e remoção do código morto.
-- **Validação:** `npm test` 94 arquivos / 1346 testes; `build`, `lint` e
-  `git diff --check` verdes; validadores SQL após `db reset` — F5-07 (44 PASS +
-  22 PASS de cutover), F4-08 (56 + 8) e F5-06 (25 + 13).
+- **Validação então registrada:** `npm test` 94 arquivos / 1346 testes; `build`,
+  `lint` e `git diff --check` verdes; validadores SQL após `db reset` — F5-07
+  (44 PASS + 22 PASS de cutover), F4-08 (56 + 8) e F5-06 (25 + 13).
 - **Limites assumidos:** alocação/estrutura (cargo, área, função, senioridade,
   gestor, colegiado) é **F5-08** — a F5-07 não fabrica estrutura sintética e as
   telas exibem "sem alocação". Ciclos/metas/observações seguem legados.
-- **Defeito PREEXISTENTE em `main`, não corrigido aqui:** a Edge
+- **Defeito PREEXISTENTE em `main`, não corrigido (fora de escopo):** a Edge
   `supabase/functions/avaliacoes/index.ts:8` importa
   `src/authorization/catalogoCapacidades.ts` (inexistente; o módulo real é
-  `catalogoCapabilities.ts`), o que impede o bundle da função F5-06.
+  `catalogoCapabilities.ts`), o que impede o bundle da função F5-06. Não afeta
+  `npm test`/`build`/`lint`/`tsc` (apenas o bundle Deno da Edge).
 
-### 3.1 BUG #170 (concluída e integrada)
+### 3.2 BUG #170 (concluída e integrada)
 
 - **Atividade:** BUG #170 — item "Ciclos" duplicado no menu para Gerente e
   Coordenador (Issue #170). Correção de **navegação/UX**, integrada em `main`.
@@ -82,7 +198,7 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 - **Validação desta rodada (todo exit 0):** `npm test` (85 arquivos, 1082 testes),
   `npm run build`, `npm run lint`, `git diff --check origin/main...HEAD`.
 
-### 3.1 DEV-02 (concluída e integrada)
+### 3.3 DEV-02 (concluída e integrada)
 
 - **Atividade:** DEV-02 — reduzir interrupções por elevação de acesso dos agentes
   (Issue #177). Somente camada de contexto; sem alteração funcional.
@@ -99,7 +215,7 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   limitação, nunca contornar a proteção (`.ai/git-rules.md` §3;
   `.ai/workflow.md` §6.4).
 
-### 3.2 F5-06 (concluída e integrada)
+### 3.4 F5-06 (concluída e integrada)
 
 - **Atividade:** F5-06 — Avaliações no PostgreSQL (Issue #103).
 - **Branch:** `feat/f5-06-avaliacoes-postgresql` — **squash merge em `main`** como

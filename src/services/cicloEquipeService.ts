@@ -1,6 +1,5 @@
 import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
-import { funcaoUsaEstruturaAvaliacaoAnalista } from "../types/Colaborador";
 import type { Feedback } from "../types/Feedback";
 import { criteriosAvaliacao } from "../data/modeloAvaliacao";
 import { getColaboradores } from "./colaboradorStorage";
@@ -21,12 +20,19 @@ import {
   lerAvaliacoesDoCiclo,
   registrarAvaliacoesDoCiclo,
 } from "../infrastructure/supabase/avaliacoes/cutover";
-import { getColaboradoresVisiveis } from "./visibilidadeColaboradores";
 import { getMetasDoCiclo } from "./metaStorage";
 import {
   getAplicabilidadeNoCiclo,
   getColaboradoresEfetivosNoCiclo,
 } from "./historicoOrganizacionalStorage";
+import { ERRO_ESTRUTURA_SOBERANA_INDISPONIVEL } from "./projecaoEstruturalSoberana";
+import {
+  alcanceLegado,
+  estruturaSoberanaEfetiva,
+  visaoEstruturalLegada,
+  type EstruturaSoberanaDoCliente,
+  type VisaoEstruturalLegada,
+} from "./estruturaSoberanaCliente";
 
 export type SituacaoAvaliacaoCiclo =
   | "NAO_INICIADA"
@@ -114,22 +120,35 @@ function temPreenchimento(feedback: Feedback): boolean {
  */
 export async function criarAvaliacoesDoCicloAtivado(
   ciclo: CicloAvaliacao,
-  deps: DependenciasCicloEquipe
+  deps: DependenciasCicloEquipe,
+  estruturaSoberana?: EstruturaSoberanaDoCliente
 ): Promise<{ criadas: number; existentes: number; bloqueadas: number }> {
   const colaboradores = getColaboradores();
   const efetivos = getColaboradoresEfetivosNoCiclo(ciclo, colaboradores);
   const feedbacksLegados = getFeedbacks();
 
-  const elegiveis = efetivos.filter(
-    (colaborador) =>
-      getAplicabilidadeNoCiclo(
-        colaboradores.find((item) => item.matricula === colaborador.matricula) ?? colaborador,
-        ciclo
-      ).aplicavel &&
+  // F5-08 P6 (correção da auditoria): a ELEGIBILIDADE ESTRUTURAL vem do PRODUTOR
+  // soberano (projeção publicada pelo shell autenticado). Sem evidência NADA é
+  // criado — a abertura automática de avaliações não pode ser disparada por dado
+  // local.
+  const estrutura = estruturaSoberana ?? estruturaSoberanaEfetiva(efetivos);
+  if (estrutura.projecao.vinculos.size === 0) {
+    throw new Error(ERRO_ESTRUTURA_SOBERANA_INDISPONIVEL);
+  }
+
+  const elegiveis = efetivos.filter((colaborador) => {
+    const visao = visaoEstruturalLegada(estrutura, colaborador.matricula);
+    return (
+      visao !== null &&
+      visao.gestorCollaboratorId !== null &&
       colaborador.status === "ATIVO" &&
-      colaborador.funcao !== "GERENTE" &&
-      colaborador.gestorDiretoMatricula !== undefined
-  );
+      getAplicabilidadeNoCiclo(
+        colaboradores.find((item) => item.matricula === colaborador.matricula) ??
+          colaborador,
+        ciclo
+      ).aplicavel
+    );
+  });
 
   let criadas = 0;
   let existentes = 0;
@@ -219,9 +238,8 @@ function criarProgressoPapel(
 }
 
 function calcularProgressoPapeis(
-  colaborador: Colaborador,
   feedback: Feedback | undefined,
-  colaboradores: Colaborador[],
+  visao: VisaoEstruturalLegada | null,
   cicloEncerrado: boolean,
   aplicavel: boolean
 ): {
@@ -260,14 +278,9 @@ function calcularProgressoPapeis(
     cicloEncerrado
   );
 
-  const gestorDireto = colaborador.gestorDiretoMatricula
-    ? colaboradores.find(
-        (item) => item.matricula === colaborador.gestorDiretoMatricula
-      )
-    : undefined;
-  const precisaCoordenador =
-    funcaoUsaEstruturaAvaliacaoAnalista(colaborador.funcao) &&
-    gestorDireto?.funcao === "COORDENADOR";
+  // F5-08 P6 (correção da auditoria): os papéis vêm de FATOS RELACIONAIS da
+  // estrutura soberana — nunca de `funcao`/`gestorDiretoMatricula` locais.
+  const precisaCoordenador = visao?.gestorTemSuperior ?? false;
 
   const coordenadorNotas = precisaCoordenador
     ? subcriterios.filter((subcriterio) => subcriterio.notaCoordenador > 0).length
@@ -285,8 +298,8 @@ function calcularProgressoPapeis(
 
   let votosRecebidos = 0;
   let votosEsperados = 0;
-  if (funcaoUsaEstruturaAvaliacaoAnalista(colaborador.funcao)) {
-    const atuais = new Set(colaborador.avaliadoresColegiadoMatriculas ?? []);
+  {
+    const atuais = new Set(visao?.colegiadoMatriculasLegadas ?? []);
 
     if (subcriterios.length === 0) {
       // Quando a avaliação ainda não foi criada, ainda assim existe uma
@@ -323,19 +336,30 @@ function calcularProgressoPapeis(
 export function getPainelCiclo(
   ciclo: CicloAvaliacao,
   usuario: Colaborador,
-  options: { incluirCanceladas?: boolean } = {}
+  options: { incluirCanceladas?: boolean } = {},
+  estruturaSoberana?: EstruturaSoberanaDoCliente
 ): LinhaPainelCiclo[] {
   const colaboradoresBase = getColaboradores();
   const colaboradores = getColaboradoresEfetivosNoCiclo(
     ciclo,
     colaboradoresBase
   );
-  const usuarioEfetivo =
-    colaboradores.find((item) => item.matricula === usuario.matricula) ?? usuario;
   const feedbacks = getFeedbacks();
 
-  const elegiveis = getColaboradoresVisiveis(usuarioEfetivo, colaboradores)
-    .filter((colaborador) => colaborador.funcao !== "GERENTE")
+  // F5-08 P6 (correção da auditoria): o ALCANCE do painel vem do PRODUTOR
+  // soberano. Sem evidência o alcance é VAZIO (nenhuma linha é exibida) — o
+  // cadastro local não define quem o ator enxerga.
+  const estrutura = estruturaSoberana ?? estruturaSoberanaEfetiva(colaboradores);
+  const alcance = alcanceLegado(estrutura, usuario.matricula);
+
+  const elegiveis = colaboradores
+    .filter((colaborador) => {
+      if (!alcance.has(colaborador.matricula)) return false;
+      // Só participa do painel quem tem responsável provado na hierarquia
+      // (substitui o antigo filtro textual `funcao !== "GERENTE"`).
+      return visaoEstruturalLegada(estrutura, colaborador.matricula)
+        ?.gestorCollaboratorId !== null;
+    })
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
   return elegiveis.flatMap((colaborador) => {
@@ -355,9 +379,8 @@ export function getPainelCiclo(
     }
 
     const progressoPapeis = calcularProgressoPapeis(
-      colaborador,
       feedback,
-      colaboradores,
+      visaoEstruturalLegada(estrutura, colaborador.matricula),
       ciclo.status === "ENCERRADO",
       aplicabilidade.aplicavel
     );
@@ -434,14 +457,15 @@ export function excluirAvaliacoesVaziasDoCiclo(
 export interface PendenciaAvaliacao {
   colaboradorId: number;
   colaboradorNome: string;
-  papel: "Gerente" | "Coordenador" | "Colegiado" | "Metas";
+  /** `Estrutura` = pendência de ESTRUTURA SOBERANA (fail-closed do P6). */
+  papel: "Gerente" | "Coordenador" | "Colegiado" | "Metas" | "Estrutura";
   quantidade: number;
   detalhes?: string[];
 }
 
 function notasEsperadasDoSubcriterio(
-  colaborador: Colaborador,
-  subcriterio: NonNullable<Feedback["criteriosDetalhados"]>[number]["subcriterios"][number]
+  subcriterio: NonNullable<Feedback["criteriosDetalhados"]>[number]["subcriterios"][number],
+  visao: VisaoEstruturalLegada | null
 ): Array<{ papel: PendenciaAvaliacao["papel"]; preenchida: boolean; quantidade?: number }> {
   const resultado: Array<{
     papel: PendenciaAvaliacao["papel"];
@@ -451,15 +475,21 @@ function notasEsperadasDoSubcriterio(
     { papel: "Gerente", preenchida: subcriterio.notaGerente > 0 },
   ];
 
-  if (funcaoUsaEstruturaAvaliacaoAnalista(colaborador.funcao)) {
-    const gestorDiretoMatricula = colaborador.gestorDiretoMatricula;
+  // F5-08 P6 (correção da auditoria): as expectativas vêm de FATOS RELACIONAIS
+  // da estrutura soberana (gestor intermediário e colegiado vigente). Sem
+  // evidência, apenas a expectativa BASE (Gerente) permanece — o lado
+  // conservador, que nunca declara completude.
+  if (visao === null) return resultado;
+
+  if (visao.gestorTemSuperior) {
     resultado.push({
       papel: "Coordenador",
-      preenchida:
-        !gestorDiretoMatricula || subcriterio.notaCoordenador > 0,
+      preenchida: subcriterio.notaCoordenador > 0,
     });
+  }
 
-    const atuais = new Set(colaborador.avaliadoresColegiadoMatriculas ?? []);
+  {
+    const atuais = new Set(visao.colegiadoMatriculasLegadas);
     const historicos = new Set(
       (subcriterio.votosColegiado ?? [])
         .filter((voto) => voto.nota > 0)
@@ -488,9 +518,15 @@ function notasEsperadasDoSubcriterio(
  * Pendências do fechamento. Lê o ACERVO (legado somente leitura + avaliações
  * novas do banco) para relatar o que falta; não decide completude oficial — a
  * completude que autoriza a conclusão normal é calculada no servidor (D18).
+ *
+ * F5-08 P6 (correção da auditoria): os papéis exigidos vêm da estrutura
+ * SOBERANA. Sem evidência, a lista NÃO pode afirmar "tudo completo": devolve uma
+ * pendência de ESTRUTURA (fail-closed), de modo que a tela nunca declare
+ * completude a partir de estrutura local.
  */
 export function analisarPendenciasDoCiclo(
-  ciclo: CicloAvaliacao
+  ciclo: CicloAvaliacao,
+  estruturaSoberana?: EstruturaSoberanaDoCliente
 ): PendenciaAvaliacao[] {
   const cicloPersistido = getCiclosAvaliacao().find(
     (item) => item.id === ciclo.id
@@ -503,6 +539,19 @@ export function analisarPendenciasDoCiclo(
     (feedback) => feedback.ano === ciclo.ano && feedback.ciclo === ciclo.ciclo
   );
   const pendencias = new Map<string, PendenciaAvaliacao>();
+
+  const estrutura = estruturaSoberana ?? estruturaSoberanaEfetiva(colaboradores);
+  if (estrutura.projecao.vinculos.size === 0) {
+    return [
+      {
+        colaboradorId: 0,
+        colaboradorNome: "Estrutura organizacional",
+        papel: "Estrutura",
+        quantidade: 1,
+        detalhes: [ERRO_ESTRUTURA_SOBERANA_INDISPONIVEL],
+      },
+    ];
+  }
 
   feedbacks.forEach((feedback) => {
     if (feedback.status === "CANCELADA") return;
@@ -519,7 +568,10 @@ export function analisarPendenciasDoCiclo(
 
     feedback.criteriosDetalhados?.forEach((criterio) => {
       criterio.subcriterios.forEach((subcriterio) => {
-        notasEsperadasDoSubcriterio(colaborador, subcriterio).forEach(
+        notasEsperadasDoSubcriterio(
+          subcriterio,
+          visaoEstruturalLegada(estrutura, colaborador.matricula)
+        ).forEach(
           ({ papel, preenchida, quantidade }) => {
             if (preenchida) return;
             const chave = `${colaborador.matricula}-${papel}`;
