@@ -39,6 +39,14 @@
 -- hash devolve o MESMO resultado (sem novo evento); hash divergente responde
 -- `F5_08_CONFLICT`. Evento e mutacao na MESMA transacao.
 --
+-- Algoritmo do hash (§8.3 do contrato): SHA-256 do payload canonico, 64
+-- caracteres hexadecimais — `encode(sha256(convert_to(<payload>::text,
+-- 'UTF8')), 'hex')`. Usa as funcoes de NUCLEO `sha256`/`encode` (pg_catalog),
+-- disponiveis sob `search_path = public`: o `digest()` do pgcrypto esta
+-- instalado no schema `extensions` e NAO resolve com o `search_path` fixo
+-- exigido pelo padrao de seguranca do repositorio. Nenhuma extensao nova e
+-- adicionada e a canonicalizacao do payload nao muda.
+--
 -- Concorrencia (D14/D24): toda mutacao toma
 -- `pg_advisory_xact_lock(hashtext('position_reporting_lines:' || org::text))`
 -- — a chave NORMATIVA da F3-04, unica no sistema apos o P1. A chave antiga
@@ -103,13 +111,13 @@ begin
   end if;
 
   -- (2) Hash canonico da intencao (D13/D14).
-  v_hash := md5(jsonb_build_object(
+  v_hash := encode(sha256(convert_to(jsonb_build_object(
     'operacao', 'estrutura_unidade_criar',
     'organization_id', v_org,
     'nome', v_nome,
     'valid_from', p_valid_from,
     'motivo', v_motivo
-  )::text);
+  )::text, 'UTF8')), 'hex');
 
   -- (3) Ator revalidado no banco (F5-06 D27).
   if not public.colaborador_ator_valido(p_actor_user_profile_id, v_org) then
@@ -227,14 +235,14 @@ begin
     raise exception 'F5_08_INVALID_INPUT: motivo obrigatorio';
   end if;
 
-  v_hash := md5(jsonb_build_object(
+  v_hash := encode(sha256(convert_to(jsonb_build_object(
     'operacao', 'estrutura_unidade_renomear',
     'organization_id', v_org,
     'unidade_id', p_unidade_id,
     'nome', v_nome,
     'expected_version', p_expected_version,
     'motivo', v_motivo
-  )::text);
+  )::text, 'UTF8')), 'hex');
 
   if not public.colaborador_ator_valido(p_actor_user_profile_id, v_org) then
     raise exception 'F5_08_FORBIDDEN: ator sem perfil ativo e membership ativa na organizacao';
@@ -369,14 +377,14 @@ begin
     raise exception 'F5_08_INVALID_INPUT: motivo obrigatorio';
   end if;
 
-  v_hash := md5(jsonb_build_object(
+  v_hash := encode(sha256(convert_to(jsonb_build_object(
     'operacao', 'estrutura_unidade_encerrar',
     'organization_id', v_org,
     'unidade_id', p_unidade_id,
     'valid_to', p_valid_to,
     'expected_version', p_expected_version,
     'motivo', v_motivo
-  )::text);
+  )::text, 'UTF8')), 'hex');
 
   if not public.colaborador_ator_valido(p_actor_user_profile_id, v_org) then
     raise exception 'F5_08_FORBIDDEN: ator sem perfil ativo e membership ativa na organizacao';
@@ -541,14 +549,14 @@ begin
     raise exception 'F5_08_INVALID_INPUT: motivo obrigatorio';
   end if;
 
-  v_hash := md5(jsonb_build_object(
+  v_hash := encode(sha256(convert_to(jsonb_build_object(
     'operacao', 'estrutura_unidade_parent_definir',
     'organization_id', v_org,
     'unidade_id', p_unidade_id,
     'parent_unit_id', p_parent_unit_id,
     'valid_from', p_valid_from,
     'motivo', v_motivo
-  )::text);
+  )::text, 'UTF8')), 'hex');
 
   if not public.colaborador_ator_valido(p_actor_user_profile_id, v_org) then
     raise exception 'F5_08_FORBIDDEN: ator sem perfil ativo e membership ativa na organizacao';
@@ -746,13 +754,13 @@ begin
     raise exception 'F5_08_INVALID_INPUT: motivo obrigatorio';
   end if;
 
-  v_hash := md5(jsonb_build_object(
+  v_hash := encode(sha256(convert_to(jsonb_build_object(
     'operacao', 'estrutura_unidade_parent_encerrar',
     'organization_id', v_org,
     'unidade_id', p_unidade_id,
     'valid_to', p_valid_to,
     'motivo', v_motivo
-  )::text);
+  )::text, 'UTF8')), 'hex');
 
   if not public.colaborador_ator_valido(p_actor_user_profile_id, v_org) then
     raise exception 'F5_08_FORBIDDEN: ator sem perfil ativo e membership ativa na organizacao';
@@ -890,7 +898,7 @@ begin
     raise exception 'F5_08_INVALID_INPUT: motivo obrigatorio';
   end if;
 
-  v_hash := md5(jsonb_build_object(
+  v_hash := encode(sha256(convert_to(jsonb_build_object(
     'operacao', 'estrutura_posicao_criar',
     'organization_id', v_org,
     'unidade_id', p_unidade_id,
@@ -898,7 +906,7 @@ begin
     'seniority_level_id', p_seniority_level_id,
     'valid_from', p_valid_from,
     'motivo', v_motivo
-  )::text);
+  )::text, 'UTF8')), 'hex');
 
   if not public.colaborador_ator_valido(p_actor_user_profile_id, v_org) then
     raise exception 'F5_08_FORBIDDEN: ator sem perfil ativo e membership ativa na organizacao';
@@ -1046,14 +1054,14 @@ begin
     raise exception 'F5_08_INVALID_INPUT: motivo obrigatorio';
   end if;
 
-  v_hash := md5(jsonb_build_object(
+  v_hash := encode(sha256(convert_to(jsonb_build_object(
     'operacao', 'estrutura_posicao_encerrar',
     'organization_id', v_org,
     'posicao_id', p_posicao_id,
     'valid_to', p_valid_to,
     'expected_version', p_expected_version,
     'motivo', v_motivo
-  )::text);
+  )::text, 'UTF8')), 'hex');
 
   if not public.colaborador_ator_valido(p_actor_user_profile_id, v_org) then
     raise exception 'F5_08_FORBIDDEN: ator sem perfil ativo e membership ativa na organizacao';
@@ -1203,13 +1211,13 @@ begin
     raise exception 'F5_08_INVALID_INPUT: motivo obrigatorio';
   end if;
 
-  v_hash := md5(jsonb_build_object(
+  v_hash := encode(sha256(convert_to(jsonb_build_object(
     'operacao', 'catalogo_cargo_criar',
     'organization_id', v_org,
     'nome', v_nome,
     'code', v_code,
     'motivo', v_motivo
-  )::text);
+  )::text, 'UTF8')), 'hex');
 
   if not public.colaborador_ator_valido(p_actor_user_profile_id, v_org) then
     raise exception 'F5_08_FORBIDDEN: ator sem perfil ativo e membership ativa na organizacao';
@@ -1327,14 +1335,14 @@ begin
     raise exception 'F5_08_INVALID_INPUT: motivo obrigatorio';
   end if;
 
-  v_hash := md5(jsonb_build_object(
+  v_hash := encode(sha256(convert_to(jsonb_build_object(
     'operacao', 'catalogo_cargo_renomear',
     'organization_id', v_org,
     'job_role_id', p_job_role_id,
     'nome', v_nome,
     'expected_version', p_expected_version,
     'motivo', v_motivo
-  )::text);
+  )::text, 'UTF8')), 'hex');
 
   if not public.colaborador_ator_valido(p_actor_user_profile_id, v_org) then
     raise exception 'F5_08_FORBIDDEN: ator sem perfil ativo e membership ativa na organizacao';
@@ -1470,14 +1478,14 @@ begin
     raise exception 'F5_08_INVALID_INPUT: motivo obrigatorio';
   end if;
 
-  v_hash := md5(jsonb_build_object(
+  v_hash := encode(sha256(convert_to(jsonb_build_object(
     'operacao', 'catalogo_cargo_status_alterar',
     'organization_id', v_org,
     'job_role_id', p_job_role_id,
     'status', v_status,
     'expected_version', p_expected_version,
     'motivo', v_motivo
-  )::text);
+  )::text, 'UTF8')), 'hex');
 
   if not public.colaborador_ator_valido(p_actor_user_profile_id, v_org) then
     raise exception 'F5_08_FORBIDDEN: ator sem perfil ativo e membership ativa na organizacao';
@@ -1597,12 +1605,12 @@ begin
     raise exception 'F5_08_INVALID_INPUT: motivo obrigatorio';
   end if;
 
-  v_hash := md5(jsonb_build_object(
+  v_hash := encode(sha256(convert_to(jsonb_build_object(
     'operacao', 'catalogo_senioridade_criar',
     'organization_id', v_org,
     'nome', v_nome,
     'motivo', v_motivo
-  )::text);
+  )::text, 'UTF8')), 'hex');
 
   if not public.colaborador_ator_valido(p_actor_user_profile_id, v_org) then
     raise exception 'F5_08_FORBIDDEN: ator sem perfil ativo e membership ativa na organizacao';
@@ -1711,14 +1719,14 @@ begin
     raise exception 'F5_08_INVALID_INPUT: motivo obrigatorio';
   end if;
 
-  v_hash := md5(jsonb_build_object(
+  v_hash := encode(sha256(convert_to(jsonb_build_object(
     'operacao', 'catalogo_senioridade_renomear',
     'organization_id', v_org,
     'seniority_level_id', p_seniority_level_id,
     'nome', v_nome,
     'expected_version', p_expected_version,
     'motivo', v_motivo
-  )::text);
+  )::text, 'UTF8')), 'hex');
 
   if not public.colaborador_ator_valido(p_actor_user_profile_id, v_org) then
     raise exception 'F5_08_FORBIDDEN: ator sem perfil ativo e membership ativa na organizacao';
@@ -1852,14 +1860,14 @@ begin
     raise exception 'F5_08_INVALID_INPUT: motivo obrigatorio';
   end if;
 
-  v_hash := md5(jsonb_build_object(
+  v_hash := encode(sha256(convert_to(jsonb_build_object(
     'operacao', 'catalogo_senioridade_status_alterar',
     'organization_id', v_org,
     'seniority_level_id', p_seniority_level_id,
     'status', v_status,
     'expected_version', p_expected_version,
     'motivo', v_motivo
-  )::text);
+  )::text, 'UTF8')), 'hex');
 
   if not public.colaborador_ator_valido(p_actor_user_profile_id, v_org) then
     raise exception 'F5_08_FORBIDDEN: ator sem perfil ativo e membership ativa na organizacao';
@@ -2006,14 +2014,14 @@ begin
     into v_membros_canon
     from unnest(v_membros) as m;
 
-  v_hash := md5(jsonb_build_object(
+  v_hash := encode(sha256(convert_to(jsonb_build_object(
     'operacao', 'estrutura_colegiado_definir',
     'organization_id', v_org,
     'collaborator_id', p_collaborator_id,
     'member_collaborator_ids', v_membros_canon,
     'valid_from', p_valid_from,
     'motivo', v_motivo
-  )::text);
+  )::text, 'UTF8')), 'hex');
 
   if not public.colaborador_ator_valido(p_actor_user_profile_id, v_org) then
     raise exception 'F5_08_FORBIDDEN: ator sem perfil ativo e membership ativa na organizacao';
@@ -2188,13 +2196,13 @@ begin
     raise exception 'F5_08_INVALID_INPUT: motivo obrigatorio';
   end if;
 
-  v_hash := md5(jsonb_build_object(
+  v_hash := encode(sha256(convert_to(jsonb_build_object(
     'operacao', 'estrutura_colegiado_encerrar',
     'organization_id', v_org,
     'collaborator_id', p_collaborator_id,
     'valid_to', p_valid_to,
     'motivo', v_motivo
-  )::text);
+  )::text, 'UTF8')), 'hex');
 
   if not public.colaborador_ator_valido(p_actor_user_profile_id, v_org) then
     raise exception 'F5_08_FORBIDDEN: ator sem perfil ativo e membership ativa na organizacao';

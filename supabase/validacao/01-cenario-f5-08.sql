@@ -353,7 +353,8 @@ insert into public.structure_events
   ('f8810000-0000-0000-0000-000000000001', 'f8a00000-0000-0000-0000-0000000000a1',
    'organizational_unit', 'f8110000-0000-0000-0000-000000000001', 'CRIADO',
    '2026-01-01T00:00:00Z', 'fixture F5-08 P1',
-   '{"name": "F5-08 Raiz"}'::jsonb, 'hash-fixture-f5-08-p1',
+   '{"name": "F5-08 Raiz"}'::jsonb,
+   encode(sha256(convert_to('fixture-f5-08-p1', 'UTF8')), 'hex'),
    'f8c00000-0000-0000-0000-0000000000a1', 'f8d00000-0000-0000-0000-0000000000a1',
    'f8900000-0000-0000-0000-000000000001');
 

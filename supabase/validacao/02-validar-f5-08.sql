@@ -2111,6 +2111,157 @@ begin
   raise notice '[PASS] J: 1 mutacao = 1 evento, autoria/motivo/hash/effective_date e delta before/after corretos';
 end $$;
 
+-- ----------------------------------------------------------------------------
+-- 8.11 L — `payload_hash` SHA-256 (contrato §8.3) e guarda anti-MD5
+-- ----------------------------------------------------------------------------
+do $$
+declare
+  v_errados text[];
+  v_n       int;
+begin
+  -- Todo evento da F5-08 tem hash SHA-256 em hexadecimal (64 caracteres).
+  select array_agg(e.operation_id::text) into v_errados
+    from public.structure_events e
+   where e.organization_id = 'f8a00000-0000-0000-0000-0000000000a1'
+     and e.payload_hash !~ '^[0-9a-f]{64}$';
+  if v_errados is not null then
+    raise exception '[FAIL] L: payload_hash fora do formato SHA-256 hex (64): %', v_errados;
+  end if;
+
+  -- Nenhum hash remanescente com 32 caracteres (MD5).
+  select count(*) into v_n
+    from public.structure_events e
+   where e.organization_id = 'f8a00000-0000-0000-0000-0000000000a1'
+     and length(e.payload_hash) = 32;
+  if v_n <> 0 then
+    raise exception '[FAIL] L: % evento(s) com payload_hash de 32 caracteres (MD5)', v_n;
+  end if;
+
+  -- O hash gravado e EXATAMENTE o SHA-256 do payload canonico da operacao.
+  if not exists (
+    select 1 from public.structure_events e
+     where e.organization_id = 'f8a00000-0000-0000-0000-0000000000a1'
+       and e.operation_id = 'f8920000-0000-0000-0000-0000000000e1'
+       and e.payload_hash = encode(sha256(convert_to(jsonb_build_object(
+             'operacao', 'estrutura_unidade_criar',
+             'organization_id', 'f8a00000-0000-0000-0000-0000000000a1'::uuid,
+             'nome', 'F5-08 P2 E1 Unidade',
+             'valid_from', '2026-06-01T00:00:00Z'::timestamptz,
+             'motivo', 'teste E1'
+           )::text, 'UTF8')), 'hex')
+  ) then
+    raise exception '[FAIL] L: payload_hash nao corresponde ao SHA-256 do payload canonico (unidade)';
+  end if;
+
+  -- Colegiado: canonicalizacao (ordenacao) do conjunto de membros preservada.
+  if not exists (
+    select 1 from public.structure_events e
+     where e.organization_id = 'f8a00000-0000-0000-0000-0000000000a1'
+       and e.operation_id = 'f8920000-0000-0000-0000-0000000000b3'
+       and e.payload_hash = encode(sha256(convert_to(jsonb_build_object(
+             'operacao', 'estrutura_colegiado_definir',
+             'organization_id', 'f8a00000-0000-0000-0000-0000000000a1'::uuid,
+             'collaborator_id', 'f8500000-0000-0000-0000-0000000000a1'::uuid,
+             'member_collaborator_ids',
+               (select coalesce(jsonb_agg(m order by m), '[]'::jsonb)
+                  from unnest(array['f8500000-0000-0000-0000-0000000000a2',
+                                    'f8500000-0000-0000-0000-0000000000a3']::uuid[]) as m),
+             'valid_from', '2026-06-01T00:00:00Z'::timestamptz,
+             'motivo', 'teste I1'
+           )::text, 'UTF8')), 'hex')
+  ) then
+    raise exception '[FAIL] L: payload_hash do colegiado nao corresponde ao SHA-256 canonico';
+  end if;
+
+  raise notice '[PASS] L: payload_hash SHA-256 (64 hex) conferido por recomputo do payload canonico';
+end $$;
+
+do $$
+declare
+  v_replay uuid;
+  v_n      int;
+  v_msg    text;
+begin
+  -- Replay idempotente continua devolvendo o MESMO resultado, com 1 unico evento.
+  v_replay := public.estrutura_unidade_criar(
+    'f8a00000-0000-0000-0000-0000000000a1', 'f8c00000-0000-0000-0000-0000000000a1',
+    'f8920000-0000-0000-0000-0000000000e1',
+    'F5-08 P2 E1 Unidade', '2026-06-01T00:00:00Z', 'teste E1');
+  if v_replay is distinct from (
+    select e.result_entity_id from public.structure_events e
+     where e.organization_id = 'f8a00000-0000-0000-0000-0000000000a1'
+       and e.operation_id = 'f8920000-0000-0000-0000-0000000000e1'
+  ) then
+    raise exception '[FAIL] L: replay idempotente devolveu resultado diferente';
+  end if;
+  select count(*) into v_n from public.structure_events
+   where organization_id = 'f8a00000-0000-0000-0000-0000000000a1'
+     and operation_id = 'f8920000-0000-0000-0000-0000000000e1';
+  if v_n <> 1 then
+    raise exception '[FAIL] L: replay duplicou evento (%)', v_n;
+  end if;
+
+  -- Payload divergente com o mesmo operation_id continua CONFLICT.
+  v_msg := null;
+  begin
+    perform public.estrutura_unidade_criar(
+      'f8a00000-0000-0000-0000-0000000000a1', 'f8c00000-0000-0000-0000-0000000000a1',
+      'f8920000-0000-0000-0000-0000000000e1',
+      'F5-08 P2 E1 Outra Intencao', '2026-06-01T00:00:00Z', 'teste E1');
+  exception when others then v_msg := sqlerrm;
+  end;
+  if v_msg is null or v_msg not like 'F5_08_CONFLICT%' then
+    raise exception '[FAIL] L: payload divergente deveria ser CONFLICT (msg=%)', v_msg;
+  end if;
+
+  raise notice '[PASS] L: replay mantem 1 evento e payload divergente continua CONFLICT (SHA-256)';
+end $$;
+
+do $$
+declare
+  v_com_md5 text[];
+  v_sem_sha text[];
+begin
+  -- Guarda de regressao: nenhuma RPC do P2 pode voltar a usar md5().
+  select array_agg(p.proname order by p.proname) into v_com_md5
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and p.proname = any (array[
+       'estrutura_unidade_criar','estrutura_unidade_renomear',
+       'estrutura_unidade_encerrar','estrutura_unidade_parent_definir',
+       'estrutura_unidade_parent_encerrar','estrutura_posicao_criar',
+       'estrutura_posicao_encerrar','estrutura_colegiado_definir',
+       'estrutura_colegiado_encerrar','catalogo_cargo_criar',
+       'catalogo_cargo_renomear','catalogo_cargo_status_alterar',
+       'catalogo_senioridade_criar','catalogo_senioridade_renomear',
+       'catalogo_senioridade_status_alterar'])
+     and p.prosrc like '%md5(%';
+  if v_com_md5 is not null then
+    raise exception '[FAIL] L: RPC do P2 ainda usa md5() no payload_hash: %', v_com_md5;
+  end if;
+
+  select array_agg(p.proname order by p.proname) into v_sem_sha
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and p.proname = any (array[
+       'estrutura_unidade_criar','estrutura_unidade_renomear',
+       'estrutura_unidade_encerrar','estrutura_unidade_parent_definir',
+       'estrutura_unidade_parent_encerrar','estrutura_posicao_criar',
+       'estrutura_posicao_encerrar','estrutura_colegiado_definir',
+       'estrutura_colegiado_encerrar','catalogo_cargo_criar',
+       'catalogo_cargo_renomear','catalogo_cargo_status_alterar',
+       'catalogo_senioridade_criar','catalogo_senioridade_renomear',
+       'catalogo_senioridade_status_alterar'])
+     and (p.prosrc not like '%sha256(%' or p.prosrc not like '%encode(%');
+  if v_sem_sha is not null then
+    raise exception '[FAIL] L: RPC do P2 sem SHA-256 no payload_hash: %', v_sem_sha;
+  end if;
+
+  raise notice '[PASS] L: 15 RPCs com SHA-256 e nenhuma ocorrencia de md5() no payload_hash';
+end $$;
+
 reset role;
 
 -- ============================================================================
