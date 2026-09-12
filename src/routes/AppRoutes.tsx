@@ -32,6 +32,10 @@ import FeedbackDetalhePage from "../pages/FeedbackDetalhePage";
 import EditarFeedbackPage from "../pages/EditarFeedbackPage";
 import ConfiguracoesAparenciaPage from "../pages/ConfiguracoesAparenciaPage";
 import RelatoriosPage from "../pages/RelatoriosPage";
+import CatalogosPage from "../pages/CatalogosPage";
+import UnidadesPage from "../pages/UnidadesPage";
+import PosicoesPage from "../pages/PosicoesPage";
+import ColegiadoPage from "../pages/ColegiadoPage";
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -128,6 +132,19 @@ function AppRoutes() {
               path="/configuracoes/aparencia"
               element={<ConfiguracoesAparenciaPage />}
             />
+
+            {/*
+              F5-08 P4: administração de estrutura e catálogos. A LEITURA é
+              soberana e own-tenant por RLS (D16) — nenhuma capability é exigida
+              para ler; as MUTAÇÕES vão à Edge `colaboradores`, que decide por
+              capability efetiva (`org.structure.manage` / `org.catalog.manage`)
+              e devolve o código público. Nenhuma regra de autorização é
+              replicada no React.
+            */}
+            <Route path="/unidades" element={<UnidadesPage />} />
+            <Route path="/posicoes" element={<PosicoesPage />} />
+            <Route path="/colegiado" element={<ColegiadoPage />} />
+            <Route path="/catalogos" element={<CatalogosPage />} />
 
             <Route
               path="/colaboradores/novo"

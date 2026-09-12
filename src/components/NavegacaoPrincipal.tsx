@@ -59,6 +59,27 @@ function IconTarget() {
   );
 }
 
+function IconStructure() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="9" y="3" width="6" height="5" rx="1" />
+      <rect x="2.5" y="16" width="6" height="5" rx="1" />
+      <rect x="15.5" y="16" width="6" height="5" rx="1" />
+      <path d="M12 8v4M5.5 16v-4h13v4" />
+    </svg>
+  );
+}
+
+function IconCatalog() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 5.5h9M4 12h7M4 18.5h5" />
+      <path d="M15 6.5 19 4l2 2.5-4 2.5z" />
+      <circle cx="17.5" cy="16" r="3.5" />
+    </svg>
+  );
+}
+
 interface ItemProps {
   to: string;
   end?: boolean;
@@ -161,6 +182,32 @@ function NavegacaoPrincipal() {
             Relatórios
           </NavItem>
         )}
+
+        {/*
+          F5-08 P4 — Estrutura e Catálogos. Os itens são VISÍVEIS a qualquer
+          membro ativo porque a LEITURA de estrutura/catálogo é own-tenant por
+          RLS e não exige capability (D16/§13.1). As MUTAÇÕES são decididas
+          SEMPRE no servidor (Edge `colaboradores` → capability efetiva) e a UI
+          exibe o `FORBIDDEN` quando ele nega. Nenhuma capability nova é criada e
+          nenhuma regra de autorização é replicada aqui: o cliente não possui
+          fonte soberana de capabilities para ocultar ações administrativas
+          (registrado no relatório do P4).
+        */}
+        <NavItem to="/unidades" icon={<IconStructure />}>
+          Unidades
+        </NavItem>
+
+        <NavItem to="/posicoes" icon={<IconStructure />}>
+          Posições
+        </NavItem>
+
+        <NavItem to="/colegiado" icon={<IconStructure />}>
+          Colegiado
+        </NavItem>
+
+        <NavItem to="/catalogos" icon={<IconCatalog />}>
+          Catálogos
+        </NavItem>
 
         {podeGerenciarConfiguracoes && (
           <NavItem

@@ -36,6 +36,12 @@ const OPERACAO_ID = "66666666-6666-4666-8666-666666666666";
 const RESPONSABILIDADE = "88888888-8888-4888-8888-888888888888";
 const CICLO = "55555555-5555-4555-8555-555555555555";
 const VIGENCIA = "2026-03-01T00:00:00.000Z";
+// F5-08 P4 — identidades fictícias das entidades estruturais/catalogais.
+const UNIDADE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const PERIODO = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const COLEGIADO = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const CARGO = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const SENIORIDADE = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 
 function colaboradorSoberano(parcial: Partial<ColaboradorSoberano> = {}): ColaboradorSoberano {
   return {
@@ -124,6 +130,28 @@ function repositorioFalso(
     obterHistorico: (entrada) =>
       registrar("obterHistorico", entrada, { ok: true, data: [eventoColaborador()] }),
     bootstrapCatalogo: (entrada) => registrar("bootstrapCatalogo", entrada, { ok: true, data: null }),
+    // F5-08 P4 — operações estruturais/catalogais do P3 (cliente).
+    criarUnidade: (entrada) => registrar("criarUnidade", entrada, { ok: true, data: UNIDADE }),
+    renomearUnidade: (entrada) => registrar("renomearUnidade", entrada, { ok: true, data: 4 }),
+    encerrarUnidade: (entrada) => registrar("encerrarUnidade", entrada, { ok: true, data: 5 }),
+    definirParentUnidade: (entrada) =>
+      registrar("definirParentUnidade", entrada, { ok: true, data: PERIODO }),
+    encerrarParentUnidade: (entrada) =>
+      registrar("encerrarParentUnidade", entrada, { ok: true, data: PERIODO }),
+    criarPosicao: (entrada) => registrar("criarPosicao", entrada, { ok: true, data: POSICAO }),
+    encerrarPosicao: (entrada) => registrar("encerrarPosicao", entrada, { ok: true, data: 6 }),
+    definirColegiado: (entrada) =>
+      registrar("definirColegiado", entrada, { ok: true, data: COLEGIADO }),
+    encerrarColegiado: (entrada) =>
+      registrar("encerrarColegiado", entrada, { ok: true, data: COLEGIADO }),
+    criarCargo: (entrada) => registrar("criarCargo", entrada, { ok: true, data: CARGO }),
+    renomearCargo: (entrada) => registrar("renomearCargo", entrada, { ok: true, data: 2 }),
+    alterarStatusCargo: (entrada) => registrar("alterarStatusCargo", entrada, { ok: true, data: 3 }),
+    criarSenioridade: (entrada) => registrar("criarSenioridade", entrada, { ok: true, data: SENIORIDADE }),
+    renomearSenioridade: (entrada) =>
+      registrar("renomearSenioridade", entrada, { ok: true, data: 2 }),
+    alterarStatusSenioridade: (entrada) =>
+      registrar("alterarStatusSenioridade", entrada, { ok: true, data: 3 }),
   };
 
   return { ...padrao, ...comportamentos, chamadas };
@@ -157,6 +185,21 @@ function falhaRepositorio(
     registrarSucessao: () => Promise.resolve(erro),
     obterHistorico: () => Promise.resolve(erro),
     bootstrapCatalogo: () => Promise.resolve(erro),
+    criarUnidade: () => Promise.resolve(erro),
+    renomearUnidade: () => Promise.resolve(erro),
+    encerrarUnidade: () => Promise.resolve(erro),
+    definirParentUnidade: () => Promise.resolve(erro),
+    encerrarParentUnidade: () => Promise.resolve(erro),
+    criarPosicao: () => Promise.resolve(erro),
+    encerrarPosicao: () => Promise.resolve(erro),
+    definirColegiado: () => Promise.resolve(erro),
+    encerrarColegiado: () => Promise.resolve(erro),
+    criarCargo: () => Promise.resolve(erro),
+    renomearCargo: () => Promise.resolve(erro),
+    alterarStatusCargo: () => Promise.resolve(erro),
+    criarSenioridade: () => Promise.resolve(erro),
+    renomearSenioridade: () => Promise.resolve(erro),
+    alterarStatusSenioridade: () => Promise.resolve(erro),
   } as Partial<RepositorioColaboradores>;
 }
 

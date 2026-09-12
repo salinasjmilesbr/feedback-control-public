@@ -12,6 +12,7 @@ import type {
   ColaboradorSoberano,
   EventoColaborador,
 } from "../../infrastructure/supabase/colaboradores/repositorioColaboradores";
+import type { EstruturaSoberana } from "../../infrastructure/supabase/estrutura/repositorioEstruturaSoberana";
 
 /**
  * F5-07 — PORTA ÚNICA das telas (§3).
@@ -73,6 +74,26 @@ function eventoColaborador(): EventoColaborador {
   };
 }
 
+/** F5-08 P4 — identidade fictícia devolvida pelas operações de estrutura. */
+const NOVA_UNIDADE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+
+/** Fotografia estrutural fictícia (leitura soberana injetada). */
+function estruturaSoberana(): EstruturaSoberana {
+  return {
+    unidades: [
+      { unitId: POSICAO, nome: "Unidade Fictícia", validFrom: VIGENCIA, validTo: null, version: 2 },
+    ],
+    periodosParent: [],
+    posicoes: [],
+    reportingLines: [],
+    ocupacoes: [],
+    cargos: [],
+    senioridades: [],
+    colegiados: [],
+    colaboradores: [{ collaboratorId: COLABORADOR, nome: "Maria Silva" }],
+  };
+}
+
 type Chamada = {
   readonly metodo: string;
   readonly argumentos: unknown;
@@ -106,6 +127,23 @@ function servicoFalso(
     registrarSucessao: (entrada) => registrar("registrarSucessao", entrada, null),
     obterHistorico: (entrada) => registrar("obterHistorico", entrada, [eventoColaborador()]),
     bootstrapCatalogo: (entrada) => registrar("bootstrapCatalogo", entrada, null),
+    // F5-08 P4 — leitura soberana (RLS/D16) e 15 operações administrativas.
+    lerEstrutura: (entrada) => registrar("lerEstrutura", entrada, estruturaSoberana()),
+    criarUnidade: (entrada) => registrar("criarUnidade", entrada, NOVA_UNIDADE),
+    renomearUnidade: (entrada) => registrar("renomearUnidade", entrada, 1),
+    encerrarUnidade: (entrada) => registrar("encerrarUnidade", entrada, 2),
+    definirParentUnidade: (entrada) => registrar("definirParentUnidade", entrada, NOVA_UNIDADE),
+    encerrarParentUnidade: (entrada) => registrar("encerrarParentUnidade", entrada, NOVA_UNIDADE),
+    criarPosicao: (entrada) => registrar("criarPosicao", entrada, POSICAO),
+    encerrarPosicao: (entrada) => registrar("encerrarPosicao", entrada, 3),
+    definirColegiado: (entrada) => registrar("definirColegiado", entrada, NOVA_UNIDADE),
+    encerrarColegiado: (entrada) => registrar("encerrarColegiado", entrada, NOVA_UNIDADE),
+    criarCargo: (entrada) => registrar("criarCargo", entrada, NOVA_UNIDADE),
+    renomearCargo: (entrada) => registrar("renomearCargo", entrada, 4),
+    alterarStatusCargo: (entrada) => registrar("alterarStatusCargo", entrada, 5),
+    criarSenioridade: (entrada) => registrar("criarSenioridade", entrada, NOVA_UNIDADE),
+    renomearSenioridade: (entrada) => registrar("renomearSenioridade", entrada, 6),
+    alterarStatusSenioridade: (entrada) => registrar("alterarStatusSenioridade", entrada, 7),
   };
 
   return { ...padrao, ...comportamentos, chamadas };
@@ -325,6 +363,30 @@ const CASOS_DA_PORTA: readonly CasoDaPorta[] = [
 
 const EXPORTS_DA_PORTA = CASOS_DA_PORTA.map((caso) => caso.nome).sort();
 
+/**
+ * F5-08 P4 — superfície ADICIONADA pela administração de estrutura/catálogo
+ * (leitura soberana + as 15 operações administrativas do P3). O comportamento
+ * de cada uma é exercitado em `acessoEstruturaSoberana.test.ts`.
+ */
+const EXPORTS_P4 = [
+  "lerEstrutura",
+  "criarUnidade",
+  "renomearUnidade",
+  "encerrarUnidade",
+  "definirParentUnidade",
+  "encerrarParentUnidade",
+  "criarPosicao",
+  "encerrarPosicao",
+  "definirColegiado",
+  "encerrarColegiado",
+  "criarCargo",
+  "renomearCargo",
+  "alterarStatusCargo",
+  "criarSenioridade",
+  "renomearSenioridade",
+  "alterarStatusSenioridade",
+].sort();
+
 const AUXILIARES = ["obterOperacoesColaboradoresSoberanos", "redefinirAcessoColaboradoresSoberanos"];
 
 const NEGADO = {
@@ -395,13 +457,15 @@ beforeEach(() => {
 });
 
 describe("F5-07 porta — superfície EXATA da espinha §3", () => {
-  it("expõe os 15 exports nomeados (e nenhuma função além deles e dos auxiliares)", () => {
+  it("expõe os 15 exports da espinha + os 16 do P4 (e nenhuma função além deles)", () => {
     const funcoes = Object.entries(porta as unknown as Record<string, unknown>)
       .filter(([, valor]) => typeof valor === "function")
       .map(([nome]) => nome);
 
-    expect(funcoes.filter((nome) => !AUXILIARES.includes(nome)).sort()).toEqual(EXPORTS_DA_PORTA);
-    for (const nome of EXPORTS_DA_PORTA) {
+    expect(funcoes.filter((nome) => !AUXILIARES.includes(nome)).sort()).toEqual(
+      [...EXPORTS_DA_PORTA, ...EXPORTS_P4].sort()
+    );
+    for (const nome of [...EXPORTS_DA_PORTA, ...EXPORTS_P4]) {
       expect(typeof (porta as unknown as Record<string, unknown>)[nome], nome).toBe("function");
     }
   });
