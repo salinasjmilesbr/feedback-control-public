@@ -206,6 +206,158 @@ export interface EntradaBootstrapCatalogo {
   };
 }
 
+// ---------------------------------------------------------------------------
+// F5-08 P3/P4 — entradas das 15 operações estruturais/catalogais
+//
+// Os nomes são os do PAYLOAD PÚBLICO (camelCase) validado pelo contrato
+// compartilhado (`contrato.ts`); o repositório apenas os repassa à Edge. A
+// vigência (`validFrom`/`validTo`) é obrigatória porque o contrato a exige
+// (data `YYYY-MM-DD` ou instante ISO) — a interpretação/rotação é do banco.
+// ---------------------------------------------------------------------------
+
+/** `estrutura.unidade.criar` — devolve o UUID da unidade criada. */
+export interface EntradaCriarUnidade {
+  readonly organizationId?: string | null;
+  readonly operationId: string;
+  readonly nome: string;
+  readonly validFrom: string;
+  readonly motivo: string;
+}
+
+/** `estrutura.unidade.renomear` — devolve a versão otimista resultante. */
+export interface EntradaRenomearUnidade {
+  readonly organizationId?: string | null;
+  readonly operationId: string;
+  readonly unidadeId: string;
+  readonly nome: string;
+  readonly expectedVersion: number;
+  readonly motivo: string;
+}
+
+/** `estrutura.unidade.encerrar` — devolve a versão otimista resultante. */
+export interface EntradaEncerrarUnidade {
+  readonly organizationId?: string | null;
+  readonly operationId: string;
+  readonly unidadeId: string;
+  readonly validTo: string;
+  readonly expectedVersion: number;
+  readonly motivo: string;
+}
+
+/** `estrutura.unidade.parent.definir` — `parentUnitId: null` = raiz. */
+export interface EntradaDefinirParentUnidade {
+  readonly organizationId?: string | null;
+  readonly operationId: string;
+  readonly unidadeId: string;
+  readonly parentUnitId: string | null;
+  readonly validFrom: string;
+  readonly motivo: string;
+}
+
+/** `estrutura.unidade.parent.encerrar` — a unidade volta a ser raiz. */
+export interface EntradaEncerrarParentUnidade {
+  readonly organizationId?: string | null;
+  readonly operationId: string;
+  readonly unidadeId: string;
+  readonly validTo: string;
+  readonly motivo: string;
+}
+
+/** `estrutura.posicao.criar` — devolve o UUID da posição criada. */
+export interface EntradaCriarPosicao {
+  readonly organizationId?: string | null;
+  readonly operationId: string;
+  readonly unidadeId: string;
+  readonly jobRoleId: string;
+  readonly seniorityLevelId: string | null;
+  readonly validFrom: string;
+  readonly motivo: string;
+}
+
+/** `estrutura.posicao.encerrar` — devolve a versão otimista resultante. */
+export interface EntradaEncerrarPosicao {
+  readonly organizationId?: string | null;
+  readonly operationId: string;
+  readonly posicaoId: string;
+  readonly validTo: string;
+  readonly expectedVersion: number;
+  readonly motivo: string;
+}
+
+/**
+ * `estrutura.colegiado.definir` — lista vazia é "sem colegiado" EXPLÍCITO
+ * (0..N membros; nenhum teto é imposto no cliente).
+ */
+export interface EntradaDefinirColegiado {
+  readonly organizationId?: string | null;
+  readonly operationId: string;
+  readonly collaboratorId: string;
+  readonly memberCollaboratorIds: readonly string[];
+  readonly validFrom: string;
+  readonly motivo: string;
+}
+
+/** `estrutura.colegiado.encerrar` — fecha a versão vigente. */
+export interface EntradaEncerrarColegiado {
+  readonly organizationId?: string | null;
+  readonly operationId: string;
+  readonly collaboratorId: string;
+  readonly validTo: string;
+  readonly motivo: string;
+}
+
+/** `catalogo.cargo.criar` — `code` é rótulo estável opcional (D5). */
+export interface EntradaCriarCargo {
+  readonly organizationId?: string | null;
+  readonly operationId: string;
+  readonly nome: string;
+  readonly code: string | null;
+  readonly motivo: string;
+}
+
+export interface EntradaRenomearCargo {
+  readonly organizationId?: string | null;
+  readonly operationId: string;
+  readonly jobRoleId: string;
+  readonly nome: string;
+  readonly expectedVersion: number;
+  readonly motivo: string;
+}
+
+export interface EntradaAlterarStatusCargo {
+  readonly organizationId?: string | null;
+  readonly operationId: string;
+  readonly jobRoleId: string;
+  readonly status: "active" | "disabled";
+  readonly expectedVersion: number;
+  readonly motivo: string;
+}
+
+export interface EntradaCriarSenioridade {
+  readonly organizationId?: string | null;
+  readonly operationId: string;
+  readonly nome: string;
+  readonly motivo: string;
+}
+
+export interface EntradaRenomearSenioridade {
+  readonly organizationId?: string | null;
+  readonly operationId: string;
+  readonly seniorityLevelId: string;
+  readonly nome: string;
+  readonly expectedVersion: number;
+  readonly motivo: string;
+}
+
+export interface EntradaAlterarStatusSenioridade {
+  readonly organizationId?: string | null;
+  readonly operationId: string;
+  readonly seniorityLevelId: string;
+  readonly status: "active" | "disabled";
+  readonly expectedVersion: number;
+  readonly motivo: string;
+}
+
 /**
  * Resultado de LEITURA da projeção. `resultadoCru` preserva a linha como o
  * servidor a devolveu (a projeção tipada cobre o contrato da espinha; campos
@@ -266,6 +418,51 @@ export interface RepositorioColaboradores {
   bootstrapCatalogo(
     entrada: EntradaBootstrapCatalogo
   ): Promise<ResultadoRepositorioColaboradores<null>>;
+  // F5-08 P4 — 15 operações estruturais/catalogais do P3 (D19: plano
+  // administrativo server-side; o cliente envia apenas INTENÇÃO).
+  criarUnidade(
+    entrada: EntradaCriarUnidade
+  ): Promise<ResultadoRepositorioColaboradores<string>>;
+  renomearUnidade(
+    entrada: EntradaRenomearUnidade
+  ): Promise<ResultadoRepositorioColaboradores<number>>;
+  encerrarUnidade(
+    entrada: EntradaEncerrarUnidade
+  ): Promise<ResultadoRepositorioColaboradores<number>>;
+  definirParentUnidade(
+    entrada: EntradaDefinirParentUnidade
+  ): Promise<ResultadoRepositorioColaboradores<string>>;
+  encerrarParentUnidade(
+    entrada: EntradaEncerrarParentUnidade
+  ): Promise<ResultadoRepositorioColaboradores<string>>;
+  criarPosicao(
+    entrada: EntradaCriarPosicao
+  ): Promise<ResultadoRepositorioColaboradores<string>>;
+  encerrarPosicao(
+    entrada: EntradaEncerrarPosicao
+  ): Promise<ResultadoRepositorioColaboradores<number>>;
+  definirColegiado(
+    entrada: EntradaDefinirColegiado
+  ): Promise<ResultadoRepositorioColaboradores<string>>;
+  encerrarColegiado(
+    entrada: EntradaEncerrarColegiado
+  ): Promise<ResultadoRepositorioColaboradores<string>>;
+  criarCargo(entrada: EntradaCriarCargo): Promise<ResultadoRepositorioColaboradores<string>>;
+  renomearCargo(
+    entrada: EntradaRenomearCargo
+  ): Promise<ResultadoRepositorioColaboradores<number>>;
+  alterarStatusCargo(
+    entrada: EntradaAlterarStatusCargo
+  ): Promise<ResultadoRepositorioColaboradores<number>>;
+  criarSenioridade(
+    entrada: EntradaCriarSenioridade
+  ): Promise<ResultadoRepositorioColaboradores<string>>;
+  renomearSenioridade(
+    entrada: EntradaRenomearSenioridade
+  ): Promise<ResultadoRepositorioColaboradores<number>>;
+  alterarStatusSenioridade(
+    entrada: EntradaAlterarStatusSenioridade
+  ): Promise<ResultadoRepositorioColaboradores<number>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -625,6 +822,189 @@ export function criarRepositorioColaboradoresSupabase(
           },
         }),
         () => null
+      ),
+
+    // -----------------------------------------------------------------------
+    // F5-08 P4 — 15 operações estruturais/catalogais (payload camelCase do P3).
+    //
+    // O cliente NÃO decide nada: envia `operationId` (idempotência),
+    // `expectedVersion` (concorrência otimista), vigência e `motivo`, e traduz o
+    // resultado/erro público. Nenhuma identidade/tenant é fabricado aqui.
+    // -----------------------------------------------------------------------
+
+    criarUnidade: (entrada) =>
+      invocar(
+        montarCorpo("estrutura.unidade.criar", entrada.organizationId, {
+          operationId: entrada.operationId,
+          nome: entrada.nome,
+          validFrom: entrada.validFrom,
+          motivo: entrada.motivo,
+        }),
+        (resultado) => texto(resultado)
+      ),
+
+    renomearUnidade: (entrada) =>
+      invocar(
+        montarCorpo("estrutura.unidade.renomear", entrada.organizationId, {
+          operationId: entrada.operationId,
+          unidadeId: entrada.unidadeId,
+          nome: entrada.nome,
+          expectedVersion: entrada.expectedVersion,
+          motivo: entrada.motivo,
+        }),
+        (resultado) => numero(resultado)
+      ),
+
+    encerrarUnidade: (entrada) =>
+      invocar(
+        montarCorpo("estrutura.unidade.encerrar", entrada.organizationId, {
+          operationId: entrada.operationId,
+          unidadeId: entrada.unidadeId,
+          validTo: entrada.validTo,
+          expectedVersion: entrada.expectedVersion,
+          motivo: entrada.motivo,
+        }),
+        (resultado) => numero(resultado)
+      ),
+
+    definirParentUnidade: (entrada) =>
+      invocar(
+        montarCorpo("estrutura.unidade.parent.definir", entrada.organizationId, {
+          operationId: entrada.operationId,
+          unidadeId: entrada.unidadeId,
+          parentUnitId: entrada.parentUnitId,
+          validFrom: entrada.validFrom,
+          motivo: entrada.motivo,
+        }),
+        (resultado) => texto(resultado)
+      ),
+
+    encerrarParentUnidade: (entrada) =>
+      invocar(
+        montarCorpo("estrutura.unidade.parent.encerrar", entrada.organizationId, {
+          operationId: entrada.operationId,
+          unidadeId: entrada.unidadeId,
+          validTo: entrada.validTo,
+          motivo: entrada.motivo,
+        }),
+        (resultado) => texto(resultado)
+      ),
+
+    criarPosicao: (entrada) =>
+      invocar(
+        montarCorpo("estrutura.posicao.criar", entrada.organizationId, {
+          operationId: entrada.operationId,
+          unidadeId: entrada.unidadeId,
+          jobRoleId: entrada.jobRoleId,
+          seniorityLevelId: entrada.seniorityLevelId,
+          validFrom: entrada.validFrom,
+          motivo: entrada.motivo,
+        }),
+        (resultado) => texto(resultado)
+      ),
+
+    encerrarPosicao: (entrada) =>
+      invocar(
+        montarCorpo("estrutura.posicao.encerrar", entrada.organizationId, {
+          operationId: entrada.operationId,
+          posicaoId: entrada.posicaoId,
+          validTo: entrada.validTo,
+          expectedVersion: entrada.expectedVersion,
+          motivo: entrada.motivo,
+        }),
+        (resultado) => numero(resultado)
+      ),
+
+    definirColegiado: (entrada) =>
+      invocar(
+        montarCorpo("estrutura.colegiado.definir", entrada.organizationId, {
+          operationId: entrada.operationId,
+          collaboratorId: entrada.collaboratorId,
+          memberCollaboratorIds: [...entrada.memberCollaboratorIds],
+          validFrom: entrada.validFrom,
+          motivo: entrada.motivo,
+        }),
+        (resultado) => texto(resultado)
+      ),
+
+    encerrarColegiado: (entrada) =>
+      invocar(
+        montarCorpo("estrutura.colegiado.encerrar", entrada.organizationId, {
+          operationId: entrada.operationId,
+          collaboratorId: entrada.collaboratorId,
+          validTo: entrada.validTo,
+          motivo: entrada.motivo,
+        }),
+        (resultado) => texto(resultado)
+      ),
+
+    criarCargo: (entrada) =>
+      invocar(
+        montarCorpo("catalogo.cargo.criar", entrada.organizationId, {
+          operationId: entrada.operationId,
+          nome: entrada.nome,
+          code: entrada.code,
+          motivo: entrada.motivo,
+        }),
+        (resultado) => texto(resultado)
+      ),
+
+    renomearCargo: (entrada) =>
+      invocar(
+        montarCorpo("catalogo.cargo.renomear", entrada.organizationId, {
+          operationId: entrada.operationId,
+          jobRoleId: entrada.jobRoleId,
+          nome: entrada.nome,
+          expectedVersion: entrada.expectedVersion,
+          motivo: entrada.motivo,
+        }),
+        (resultado) => numero(resultado)
+      ),
+
+    alterarStatusCargo: (entrada) =>
+      invocar(
+        montarCorpo("catalogo.cargo.status.alterar", entrada.organizationId, {
+          operationId: entrada.operationId,
+          jobRoleId: entrada.jobRoleId,
+          status: entrada.status,
+          expectedVersion: entrada.expectedVersion,
+          motivo: entrada.motivo,
+        }),
+        (resultado) => numero(resultado)
+      ),
+
+    criarSenioridade: (entrada) =>
+      invocar(
+        montarCorpo("catalogo.senioridade.criar", entrada.organizationId, {
+          operationId: entrada.operationId,
+          nome: entrada.nome,
+          motivo: entrada.motivo,
+        }),
+        (resultado) => texto(resultado)
+      ),
+
+    renomearSenioridade: (entrada) =>
+      invocar(
+        montarCorpo("catalogo.senioridade.renomear", entrada.organizationId, {
+          operationId: entrada.operationId,
+          seniorityLevelId: entrada.seniorityLevelId,
+          nome: entrada.nome,
+          expectedVersion: entrada.expectedVersion,
+          motivo: entrada.motivo,
+        }),
+        (resultado) => numero(resultado)
+      ),
+
+    alterarStatusSenioridade: (entrada) =>
+      invocar(
+        montarCorpo("catalogo.senioridade.status.alterar", entrada.organizationId, {
+          operationId: entrada.operationId,
+          seniorityLevelId: entrada.seniorityLevelId,
+          status: entrada.status,
+          expectedVersion: entrada.expectedVersion,
+          motivo: entrada.motivo,
+        }),
+        (resultado) => numero(resultado)
       ),
   };
 }

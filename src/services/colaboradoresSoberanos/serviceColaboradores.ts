@@ -23,22 +23,42 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { criarClienteSupabase } from "../../infrastructure/supabase/supabaseClient";
 import {
+  criarLeituraEstrutura,
+  type EstruturaSoberana,
+  type LeituraEstrutura,
+} from "../../infrastructure/supabase/estrutura/repositorioEstruturaSoberana";
+import {
   criarRepositorioColaboradoresSupabase,
   type ColaboradorSoberano,
   type EntradaAlterarStatus,
+  type EntradaAlterarStatusCargo,
+  type EntradaAlterarStatusSenioridade,
   type EntradaBootstrapCatalogo,
+  type EntradaCriarCargo,
   type EntradaCriarColaborador,
+  type EntradaCriarPosicao,
+  type EntradaCriarSenioridade,
+  type EntradaCriarUnidade,
+  type EntradaDefinirColegiado,
   type EntradaDefinirIdentificador,
   type EntradaDefinirOcupacao,
+  type EntradaDefinirParentUnidade,
   type EntradaDefinirReportingLine,
   type EntradaDefinirResponsabilidade,
   type EntradaEditarColaborador,
+  type EntradaEncerrarColegiado,
   type EntradaEncerrarOcupacao,
+  type EntradaEncerrarParentUnidade,
+  type EntradaEncerrarPosicao,
   type EntradaEncerrarReportingLine,
   type EntradaEncerrarResponsabilidade,
+  type EntradaEncerrarUnidade,
   type EntradaListarColaboradores,
   type EntradaObterColaborador,
   type EntradaRegistrarSucessao,
+  type EntradaRenomearCargo,
+  type EntradaRenomearSenioridade,
+  type EntradaRenomearUnidade,
   type ErroRepositorioColaboradores,
   type EventoColaborador,
   type RepositorioColaboradores,
@@ -62,6 +82,8 @@ export interface DependenciasServiceColaboradores {
   readonly repositorio?: RepositorioColaboradores;
   /** Cliente Supabase já construído (injetável para teste). */
   readonly cliente?: SupabaseClient | null;
+  /** Leitura soberana de estrutura/catálogo (RLS D16; injetável para teste). */
+  readonly leitura?: LeituraEstrutura;
 }
 
 /**
@@ -127,6 +149,36 @@ export interface ServiceColaboradores {
     readonly referenceCycleId?: string;
   }): Promise<ResultadoColaboradores<readonly EventoColaboradorProjetado[]>>;
   bootstrapCatalogo(entrada: EntradaBootstrapCatalogo): Promise<ResultadoColaboradores<null>>;
+  // F5-08 P4 — leitura soberana de estrutura/catálogo (RLS F4-08 / D16).
+  lerEstrutura(entrada: {
+    readonly organizationId?: string | null;
+  }): Promise<ResultadoColaboradores<EstruturaSoberana>>;
+  // F5-08 P4 — 15 operações estruturais/catalogais (plano administrativo D19).
+  criarUnidade(entrada: EntradaCriarUnidade): Promise<ResultadoColaboradores<string>>;
+  renomearUnidade(entrada: EntradaRenomearUnidade): Promise<ResultadoColaboradores<number>>;
+  encerrarUnidade(entrada: EntradaEncerrarUnidade): Promise<ResultadoColaboradores<number>>;
+  definirParentUnidade(
+    entrada: EntradaDefinirParentUnidade
+  ): Promise<ResultadoColaboradores<string>>;
+  encerrarParentUnidade(
+    entrada: EntradaEncerrarParentUnidade
+  ): Promise<ResultadoColaboradores<string>>;
+  criarPosicao(entrada: EntradaCriarPosicao): Promise<ResultadoColaboradores<string>>;
+  encerrarPosicao(entrada: EntradaEncerrarPosicao): Promise<ResultadoColaboradores<number>>;
+  definirColegiado(entrada: EntradaDefinirColegiado): Promise<ResultadoColaboradores<string>>;
+  encerrarColegiado(entrada: EntradaEncerrarColegiado): Promise<ResultadoColaboradores<string>>;
+  criarCargo(entrada: EntradaCriarCargo): Promise<ResultadoColaboradores<string>>;
+  renomearCargo(entrada: EntradaRenomearCargo): Promise<ResultadoColaboradores<number>>;
+  alterarStatusCargo(
+    entrada: EntradaAlterarStatusCargo
+  ): Promise<ResultadoColaboradores<number>>;
+  criarSenioridade(entrada: EntradaCriarSenioridade): Promise<ResultadoColaboradores<string>>;
+  renomearSenioridade(
+    entrada: EntradaRenomearSenioridade
+  ): Promise<ResultadoColaboradores<number>>;
+  alterarStatusSenioridade(
+    entrada: EntradaAlterarStatusSenioridade
+  ): Promise<ResultadoColaboradores<number>>;
 }
 
 const ERRO_SEM_ORGANIZACAO = "Selecione uma organização ativa para operar colaboradores.";
@@ -141,6 +193,22 @@ function falhaSimples<T>(codigo: CodigoPublico, mensagem: string): ResultadoCola
   return { ok: false, codigo, mensagem };
 }
 
+/**
+ * Falha das operações de ESTRUTURA/CATÁLOGO. `NOT_FOUND` é genérico por
+ * contrato (nunca revela existência em outro tenant) e não pode reusar a
+ * mensagem de colaborador; os demais códigos seguem a taxonomia pública.
+ */
+function falhaEstrutura<T>(erro: ErroRepositorioColaboradores): ResultadoColaboradores<T> {
+  if (erro.code === "NOT_FOUND") {
+    return {
+      ok: false,
+      codigo: "NOT_FOUND",
+      mensagem: "Registro não encontrado nesta organização.",
+    };
+  }
+  return falha(erro);
+}
+
 /** Constrói o repositório de produção; `null` sem configuração (fail-closed). */
 export function criarRepositorioColaboradoresProducao(
   cliente?: SupabaseClient | null
@@ -148,6 +216,15 @@ export function criarRepositorioColaboradoresProducao(
   const resolvido = cliente ?? criarClienteSupabase();
   if (!resolvido) return null;
   return criarRepositorioColaboradoresSupabase(resolvido);
+}
+
+/** Leitura soberana de produção (RLS own-tenant); `null` sem configuração. */
+export function criarLeituraEstruturaProducao(
+  cliente?: SupabaseClient | null
+): LeituraEstrutura | null {
+  const resolvido = cliente ?? criarClienteSupabase();
+  if (!resolvido) return null;
+  return criarLeituraEstrutura(resolvido);
 }
 
 export function criarServiceColaboradores(
@@ -160,6 +237,15 @@ export function criarServiceColaboradores(
     if (memoizado !== undefined) return memoizado;
     memoizado = criarRepositorioColaboradoresProducao(deps.cliente ?? null);
     return memoizado;
+  }
+
+  let leituraMemoizada: LeituraEstrutura | null | undefined;
+
+  function leitura(): LeituraEstrutura | null {
+    if (deps.leitura) return deps.leitura;
+    if (leituraMemoizada !== undefined) return leituraMemoizada;
+    leituraMemoizada = criarLeituraEstruturaProducao(deps.cliente ?? null);
+    return leituraMemoizada;
   }
 
   /**
@@ -200,6 +286,44 @@ export function criarServiceColaboradores(
     const resolvido = await resultado;
     if (!resolvido.ok) return falha(resolvido.error);
     return { ok: true, dados: resolvido.data };
+  }
+
+  /** Igual a `propagar`, com a mensagem pública de estrutura/catálogo. */
+  async function propagarEstrutura<T>(
+    resultado: Promise<
+      | { readonly ok: true; readonly data: T }
+      | { readonly ok: false; readonly error: ErroRepositorioColaboradores }
+    >
+  ): Promise<ResultadoColaboradores<T>> {
+    const resolvido = await resultado;
+    if (!resolvido.ok) return falhaEstrutura(resolvido.error);
+    return { ok: true, dados: resolvido.data };
+  }
+
+  /**
+   * Contexto da LEITURA soberana: exige organização ativa e o caminho de leitura
+   * (RLS). O repositório de escrita não participa — ler não é mutar.
+   */
+  async function comContextoLeitura<T>(
+    informada: string | null | undefined,
+    executar: (
+      organização: string,
+      leitor: LeituraEstrutura
+    ) => Promise<
+      | { readonly ok: true; readonly data: T }
+      | { readonly ok: false; readonly error: { code: CodigoPublico; message: string } }
+    >
+  ): Promise<ResultadoColaboradores<T>> {
+    const organização = organizacaoAlvo(informada);
+    if (!organização) return falhaSimples("FORBIDDEN", ERRO_SEM_ORGANIZACAO);
+
+    const leitor = leitura();
+    if (!leitor) return falhaSimples("INTERNAL", ERRO_SEM_CAMINHO);
+
+    const resultado = await executar(organização, leitor);
+    return resultado.ok
+      ? { ok: true, dados: resultado.data }
+      : { ok: false, codigo: resultado.error.code, mensagem: resultado.error.message };
   }
 
   return {
@@ -300,6 +424,90 @@ export function criarServiceColaboradores(
     bootstrapCatalogo: (entrada) =>
       comContexto(entrada.organizationId, ({ organização, repo }) =>
         propagar(repo.bootstrapCatalogo({ ...entrada, organizationId: organização }))
+      ),
+
+    // -----------------------------------------------------------------------
+    // F5-08 P4 — leitura soberana (RLS F4-08/D16) e 15 operações administrativas
+    // -----------------------------------------------------------------------
+
+    lerEstrutura: (entrada) =>
+      comContextoLeitura(entrada.organizationId, (organização, leitor) =>
+        leitor.ler({ organizationId: organização })
+      ),
+
+    criarUnidade: (entrada) =>
+      comContexto(entrada.organizationId, ({ organização, repo }) =>
+        propagarEstrutura(repo.criarUnidade({ ...entrada, organizationId: organização }))
+      ),
+
+    renomearUnidade: (entrada) =>
+      comContexto(entrada.organizationId, ({ organização, repo }) =>
+        propagarEstrutura(repo.renomearUnidade({ ...entrada, organizationId: organização }))
+      ),
+
+    encerrarUnidade: (entrada) =>
+      comContexto(entrada.organizationId, ({ organização, repo }) =>
+        propagarEstrutura(repo.encerrarUnidade({ ...entrada, organizationId: organização }))
+      ),
+
+    definirParentUnidade: (entrada) =>
+      comContexto(entrada.organizationId, ({ organização, repo }) =>
+        propagarEstrutura(repo.definirParentUnidade({ ...entrada, organizationId: organização }))
+      ),
+
+    encerrarParentUnidade: (entrada) =>
+      comContexto(entrada.organizationId, ({ organização, repo }) =>
+        propagarEstrutura(repo.encerrarParentUnidade({ ...entrada, organizationId: organização }))
+      ),
+
+    criarPosicao: (entrada) =>
+      comContexto(entrada.organizationId, ({ organização, repo }) =>
+        propagarEstrutura(repo.criarPosicao({ ...entrada, organizationId: organização }))
+      ),
+
+    encerrarPosicao: (entrada) =>
+      comContexto(entrada.organizationId, ({ organização, repo }) =>
+        propagarEstrutura(repo.encerrarPosicao({ ...entrada, organizationId: organização }))
+      ),
+
+    definirColegiado: (entrada) =>
+      comContexto(entrada.organizationId, ({ organização, repo }) =>
+        propagarEstrutura(repo.definirColegiado({ ...entrada, organizationId: organização }))
+      ),
+
+    encerrarColegiado: (entrada) =>
+      comContexto(entrada.organizationId, ({ organização, repo }) =>
+        propagarEstrutura(repo.encerrarColegiado({ ...entrada, organizationId: organização }))
+      ),
+
+    criarCargo: (entrada) =>
+      comContexto(entrada.organizationId, ({ organização, repo }) =>
+        propagarEstrutura(repo.criarCargo({ ...entrada, organizationId: organização }))
+      ),
+
+    renomearCargo: (entrada) =>
+      comContexto(entrada.organizationId, ({ organização, repo }) =>
+        propagarEstrutura(repo.renomearCargo({ ...entrada, organizationId: organização }))
+      ),
+
+    alterarStatusCargo: (entrada) =>
+      comContexto(entrada.organizationId, ({ organização, repo }) =>
+        propagarEstrutura(repo.alterarStatusCargo({ ...entrada, organizationId: organização }))
+      ),
+
+    criarSenioridade: (entrada) =>
+      comContexto(entrada.organizationId, ({ organização, repo }) =>
+        propagarEstrutura(repo.criarSenioridade({ ...entrada, organizationId: organização }))
+      ),
+
+    renomearSenioridade: (entrada) =>
+      comContexto(entrada.organizationId, ({ organização, repo }) =>
+        propagarEstrutura(repo.renomearSenioridade({ ...entrada, organizationId: organização }))
+      ),
+
+    alterarStatusSenioridade: (entrada) =>
+      comContexto(entrada.organizationId, ({ organização, repo }) =>
+        propagarEstrutura(repo.alterarStatusSenioridade({ ...entrada, organizationId: organização }))
       ),
   };
 }

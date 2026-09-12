@@ -26,6 +26,7 @@ import {
   type ResultadoColaboradores,
   type ServiceColaboradores,
 } from "./serviceColaboradores";
+import type { EstruturaSoberana } from "../../infrastructure/supabase/estrutura/repositorioEstruturaSoberana";
 
 /** Projeção soberana do colaborador (espinha §3). */
 export type ColaboradorSoberano = ColaboradorSoberanoProjetado;
@@ -330,4 +331,238 @@ export function bootstrapCatalogo(
       ...(entrada.organizationId ? { organizationId: entrada.organizationId } : {}),
     })
   );
+}
+
+// ---------------------------------------------------------------------------
+// F5-08 P4 — ESTRUTURA ORGANIZACIONAL E CATÁLOGOS
+//
+// Leitura soberana (D16): `select` sob RLS own-tenant, sem capability e sem
+// RPC de listagem. Escrita (D19): as 15 operações administrativas do P3 pela
+// Edge `colaboradores`, que revalida capability efetiva e ator no servidor.
+//
+// Esta porta NÃO decide autorização nem tenant: envia `operationId`
+// (idempotência), `expectedVersion` (concorrência otimista — sempre o valor
+// lido do servidor), vigência e `motivo` obrigatório. Nada é gravado
+// localmente e nenhuma identidade/tenant é fabricada.
+// ---------------------------------------------------------------------------
+
+/** Fotografia soberana da estrutura/catálogo do tenant (RLS F4-08). */
+export type EstruturaSoberanaProjetada = EstruturaSoberana;
+
+export function lerEstrutura(
+  entrada: { readonly organizationId?: string | null } = {},
+  deps: DependenciasAcessoColaboradores = {}
+): Promise<ResultadoColaboradores<EstruturaSoberanaProjetada>> {
+  return executar(deps, (servico) => servico.lerEstrutura(entrada));
+}
+
+export function criarUnidade(
+  entrada: {
+    readonly operationId: string;
+    readonly nome: string;
+    readonly validFrom: string;
+    readonly motivo: string;
+    readonly organizationId?: string | null;
+  },
+  deps: DependenciasAcessoColaboradores = {}
+): Promise<ResultadoColaboradores<string>> {
+  return executar(deps, (servico) => servico.criarUnidade(entrada));
+}
+
+export function renomearUnidade(
+  entrada: {
+    readonly operationId: string;
+    readonly unidadeId: string;
+    readonly nome: string;
+    readonly expectedVersion: number;
+    readonly motivo: string;
+    readonly organizationId?: string | null;
+  },
+  deps: DependenciasAcessoColaboradores = {}
+): Promise<ResultadoColaboradores<number>> {
+  return executar(deps, (servico) => servico.renomearUnidade(entrada));
+}
+
+export function encerrarUnidade(
+  entrada: {
+    readonly operationId: string;
+    readonly unidadeId: string;
+    readonly validTo: string;
+    readonly expectedVersion: number;
+    readonly motivo: string;
+    readonly organizationId?: string | null;
+  },
+  deps: DependenciasAcessoColaboradores = {}
+): Promise<ResultadoColaboradores<number>> {
+  return executar(deps, (servico) => servico.encerrarUnidade(entrada));
+}
+
+/** `parentUnitId: null` define a unidade como RAIZ no novo período. */
+export function definirParentUnidade(
+  entrada: {
+    readonly operationId: string;
+    readonly unidadeId: string;
+    readonly parentUnitId: string | null;
+    readonly validFrom: string;
+    readonly motivo: string;
+    readonly organizationId?: string | null;
+  },
+  deps: DependenciasAcessoColaboradores = {}
+): Promise<ResultadoColaboradores<string>> {
+  return executar(deps, (servico) => servico.definirParentUnidade(entrada));
+}
+
+/** Encerra o período pai/filho vigente: a unidade volta a ser raiz. */
+export function encerrarParentUnidade(
+  entrada: {
+    readonly operationId: string;
+    readonly unidadeId: string;
+    readonly validTo: string;
+    readonly motivo: string;
+    readonly organizationId?: string | null;
+  },
+  deps: DependenciasAcessoColaboradores = {}
+): Promise<ResultadoColaboradores<string>> {
+  return executar(deps, (servico) => servico.encerrarParentUnidade(entrada));
+}
+
+export function criarPosicao(
+  entrada: {
+    readonly operationId: string;
+    readonly unidadeId: string;
+    readonly jobRoleId: string;
+    readonly seniorityLevelId: string | null;
+    readonly validFrom: string;
+    readonly motivo: string;
+    readonly organizationId?: string | null;
+  },
+  deps: DependenciasAcessoColaboradores = {}
+): Promise<ResultadoColaboradores<string>> {
+  return executar(deps, (servico) => servico.criarPosicao(entrada));
+}
+
+export function encerrarPosicao(
+  entrada: {
+    readonly operationId: string;
+    readonly posicaoId: string;
+    readonly validTo: string;
+    readonly expectedVersion: number;
+    readonly motivo: string;
+    readonly organizationId?: string | null;
+  },
+  deps: DependenciasAcessoColaboradores = {}
+): Promise<ResultadoColaboradores<number>> {
+  return executar(deps, (servico) => servico.encerrarPosicao(entrada));
+}
+
+/**
+ * Define a versão vigente do colegiado do avaliado. Lista vazia é "sem
+ * colegiado" EXPLÍCITO (0..N membros — nenhum teto no cliente).
+ */
+export function definirColegiado(
+  entrada: {
+    readonly operationId: string;
+    readonly collaboratorId: string;
+    readonly memberCollaboratorIds: readonly string[];
+    readonly validFrom: string;
+    readonly motivo: string;
+    readonly organizationId?: string | null;
+  },
+  deps: DependenciasAcessoColaboradores = {}
+): Promise<ResultadoColaboradores<string>> {
+  return executar(deps, (servico) => servico.definirColegiado(entrada));
+}
+
+export function encerrarColegiado(
+  entrada: {
+    readonly operationId: string;
+    readonly collaboratorId: string;
+    readonly validTo: string;
+    readonly motivo: string;
+    readonly organizationId?: string | null;
+  },
+  deps: DependenciasAcessoColaboradores = {}
+): Promise<ResultadoColaboradores<string>> {
+  return executar(deps, (servico) => servico.encerrarColegiado(entrada));
+}
+
+export function criarCargo(
+  entrada: {
+    readonly operationId: string;
+    readonly nome: string;
+    readonly code: string | null;
+    readonly motivo: string;
+    readonly organizationId?: string | null;
+  },
+  deps: DependenciasAcessoColaboradores = {}
+): Promise<ResultadoColaboradores<string>> {
+  return executar(deps, (servico) => servico.criarCargo(entrada));
+}
+
+export function renomearCargo(
+  entrada: {
+    readonly operationId: string;
+    readonly jobRoleId: string;
+    readonly nome: string;
+    readonly expectedVersion: number;
+    readonly motivo: string;
+    readonly organizationId?: string | null;
+  },
+  deps: DependenciasAcessoColaboradores = {}
+): Promise<ResultadoColaboradores<number>> {
+  return executar(deps, (servico) => servico.renomearCargo(entrada));
+}
+
+export function alterarStatusCargo(
+  entrada: {
+    readonly operationId: string;
+    readonly jobRoleId: string;
+    readonly status: "active" | "disabled";
+    readonly expectedVersion: number;
+    readonly motivo: string;
+    readonly organizationId?: string | null;
+  },
+  deps: DependenciasAcessoColaboradores = {}
+): Promise<ResultadoColaboradores<number>> {
+  return executar(deps, (servico) => servico.alterarStatusCargo(entrada));
+}
+
+export function criarSenioridade(
+  entrada: {
+    readonly operationId: string;
+    readonly nome: string;
+    readonly motivo: string;
+    readonly organizationId?: string | null;
+  },
+  deps: DependenciasAcessoColaboradores = {}
+): Promise<ResultadoColaboradores<string>> {
+  return executar(deps, (servico) => servico.criarSenioridade(entrada));
+}
+
+export function renomearSenioridade(
+  entrada: {
+    readonly operationId: string;
+    readonly seniorityLevelId: string;
+    readonly nome: string;
+    readonly expectedVersion: number;
+    readonly motivo: string;
+    readonly organizationId?: string | null;
+  },
+  deps: DependenciasAcessoColaboradores = {}
+): Promise<ResultadoColaboradores<number>> {
+  return executar(deps, (servico) => servico.renomearSenioridade(entrada));
+}
+
+export function alterarStatusSenioridade(
+  entrada: {
+    readonly operationId: string;
+    readonly seniorityLevelId: string;
+    readonly status: "active" | "disabled";
+    readonly expectedVersion: number;
+    readonly motivo: string;
+    readonly organizationId?: string | null;
+  },
+  deps: DependenciasAcessoColaboradores = {}
+): Promise<ResultadoColaboradores<number>> {
+  return executar(deps, (servico) => servico.alterarStatusSenioridade(entrada));
 }

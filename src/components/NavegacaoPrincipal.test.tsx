@@ -118,17 +118,37 @@ describe("NavegacaoPrincipal — item 'Ciclos' não pode duplicar (bug #170)", (
     expect(rotulos(renderizar(usuario))).not.toContain("Ciclos");
   });
 
+  /**
+   * F5-08 P4: a administração de estrutura/catálogo entra no menu. Os itens são
+   * VISÍVEIS a qualquer membro ativo porque a LEITURA é own-tenant por RLS e não
+   * exige capability (D16); as mutações continuam decididas no servidor. Nenhum
+   * item duplica e os demais itens permanecem exatamente como estavam.
+   */
+  const ITENS_ESTRUTURA = ["Unidades", "Posições", "Colegiado", "Catálogos"];
+
   it.each([
-    ["Gerente", gerente, ["Início", "Ciclos", "Relatórios", "Configurações"]],
+    ["Gerente", gerente, ["Início", "Ciclos", "Relatórios", ...ITENS_ESTRUTURA, "Configurações"]],
     [
       "Coordenador",
       coordenador,
-      ["Início", "Ciclos", "Minhas avaliações", "Minhas metas", "Relatórios"],
+      ["Início", "Ciclos", "Minhas avaliações", "Minhas metas", "Relatórios", ...ITENS_ESTRUTURA],
     ],
-    ["Analista", analista, ["Início", "Minhas avaliações", "Minhas metas"]],
-    ["Consultor", consultor, ["Início", "Minhas avaliações", "Minhas metas"]],
-    ["Estagiário", estagiario, ["Início", "Minhas avaliações", "Minhas metas"]],
-    ["Sem função", semFuncao, ["Início"]],
+    [
+      "Analista",
+      analista,
+      ["Início", "Minhas avaliações", "Minhas metas", ...ITENS_ESTRUTURA],
+    ],
+    [
+      "Consultor",
+      consultor,
+      ["Início", "Minhas avaliações", "Minhas metas", ...ITENS_ESTRUTURA],
+    ],
+    [
+      "Estagiário",
+      estagiario,
+      ["Início", "Minhas avaliações", "Minhas metas", ...ITENS_ESTRUTURA],
+    ],
+    ["Sem função", semFuncao, ["Início", ...ITENS_ESTRUTURA]],
   ] as const)(
     "menu de %s permanece o esperado (sem regressão nos demais itens)",
     (_perfil, usuario, esperado) => {
