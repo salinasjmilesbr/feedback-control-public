@@ -3,14 +3,10 @@ import type { Colaborador } from "../types/Colaborador";
 import { getCicloAtivo } from "./cicloAvaliacaoStorage";
 import { getColaboradoresEfetivosNoCiclo } from "./historicoOrganizacionalStorage";
 import {
-  avaliadoresColegiadoSoberanos,
-  gestorSoberano,
-  raizDaCadeiaSoberana,
-  resolverProjecaoEstrutural,
-  usaEstruturaAvaliacaoSoberana,
-  vinculoEstrutural,
-  type ProjecaoEstruturalSoberana,
-} from "./projecaoEstruturalSoberana";
+  estruturaSoberanaEfetiva,
+  visaoEstruturalLegada,
+  type EstruturaSoberanaDoCliente,
+} from "./estruturaSoberanaCliente";
 
 export type PermissoesAvaliacao = {
   podeAvaliarComoGerente: boolean;
@@ -32,8 +28,8 @@ function semPermissoes(): PermissoesAvaliacao {
 
 /**
  * Mundo de apoio: os colaboradores EFETIVOS do ciclo (snapshot F3-08), apenas
- * para o adaptador de fixture em DEV. Em produção a projeção é a soberana
- * (injetada) ou VAZIA — este mundo nunca decide papel.
+ * para o adaptador de fixture em DEV. Em produção a estrutura é a SOBERANA
+ * publicada pelo shell autenticado — este mundo nunca decide papel.
  */
 function mundoEfetivo(
   colaboradorAvaliado: Colaborador,
@@ -51,53 +47,47 @@ function mundoEfetivo(
 /**
  * Permissões de avaliação (gerente responsável, coordenador direto, colegiado).
  *
- * F5-08 P6 (correção da auditoria): papel, cadeia e colegiado vêm da PROJEÇÃO
- * ESTRUTURAL SOBERANA — nunca de `funcao` textual nem de
- * `gestorDiretoMatricula` local. Sem evidência estrutural NENHUM papel é
- * concedido (fail-closed), jamais por fallback local.
+ * F5-08 P6 (correção da auditoria): os fatos vêm da ESTRUTURA SOBERANA —
+ * relações de posição/reporting line/ocupação vigente e colegiado vigente.
+ * Nenhum papel é inferido de `funcao` textual, cargo, nome ou matrícula; sem
+ * evidência estrutural NENHUM papel é concedido (fail-closed).
  */
 export function obterPermissoesAvaliacao(
   usuarioAtual: Colaborador | undefined,
   colaboradorAvaliado: Colaborador,
   colaboradores: Colaborador[],
   ciclo: CicloAvaliacao | undefined = getCicloAtivo(),
-  projecaoEstrutural?: ProjecaoEstruturalSoberana
+  estruturaSoberana?: EstruturaSoberanaDoCliente
 ): PermissoesAvaliacao {
   if (!usuarioAtual) return semPermissoes();
 
-  const projecao =
-    projecaoEstrutural ??
-    resolverProjecaoEstrutural(
-      undefined,
+  const estrutura =
+    estruturaSoberana ??
+    estruturaSoberanaEfetiva(
       mundoEfetivo(colaboradorAvaliado, colaboradores, ciclo)
     );
 
-  const vinculo = vinculoEstrutural(projecao, colaboradorAvaliado.matricula);
+  const visao = visaoEstruturalLegada(estrutura, colaboradorAvaliado.matricula);
   // FAIL-CLOSED: sem evidência estrutural soberana não há papel a conceder.
-  if (!vinculo) return semPermissoes();
+  if (!visao) return semPermissoes();
 
-  // F4-09 (D2/D3): o "gerente responsável" é a RAIZ da cadeia (dado
-  // estrutural), nunca `funcao`.
-  const raiz = raizDaCadeiaSoberana(projecao, colaboradorAvaliado.matricula);
+  // F4-09 (D2/D3): o "gerente responsável" é a RAIZ da cadeia (dado relacional,
+  // nunca `funcao`).
   const podeAvaliarComoGerente =
-    raiz !== null && raiz === usuarioAtual.matricula;
+    visao.raizMatriculaLegada !== null &&
+    visao.raizMatriculaLegada === usuarioAtual.matricula;
 
-  const usaEstrutura = usaEstruturaAvaliacaoSoberana(
-    projecao,
-    colaboradorAvaliado.matricula
-  );
-
+  // "Coordenador direto" = gestor direto que é NÍVEL INTERMEDIÁRIO (tem
+  // superior). Gestor direto na raiz é o gerente responsável, não coordenador.
   const podeAvaliarComoCoordenador =
-    usaEstrutura &&
-    gestorSoberano(projecao, colaboradorAvaliado.matricula) ===
-      usuarioAtual.matricula;
+    visao.gestorMatriculaLegada !== null &&
+    visao.gestorMatriculaLegada === usuarioAtual.matricula &&
+    visao.gestorTemSuperior;
 
-  const podeAvaliarComoColegiado =
-    usaEstrutura &&
-    avaliadoresColegiadoSoberanos(
-      projecao,
-      colaboradorAvaliado.matricula
-    ).includes(usuarioAtual.matricula);
+  // Colegiado: configuração VIGENTE na estrutura soberana.
+  const podeAvaliarComoColegiado = visao.colegiadoMatriculasLegadas.includes(
+    usuarioAtual.matricula
+  );
 
   const papeisPermitidos: string[] = [];
 

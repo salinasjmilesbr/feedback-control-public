@@ -1,35 +1,32 @@
 /**
- * F5-08 P6 (correção da auditoria GPT) — CUTOVER ESTRUTURAL DOS SERVIÇOS.
+ * F5-08 P6 (correção da auditoria GPT) — CONSUMIDORES com estrutura SOBERANA.
  *
- * Prova, em RUNTIME, que os caminhos produtivos de ciclo/metas deixaram de
- * decidir PAPEL/ELEGIBILIDADE/HIERARQUIA por estrutura local:
+ * Prova o contrato das decisões de ciclo/meta quando recebem uma estrutura
+ * soberana EXPLÍCITA (UUID canônico + ponte de compatibilidade):
  *
- * 1. `progressoAvaliacao` não decide papel por `funcao` textual;
- * 2. `progressoAvaliacao` não decide cadeia por `gestorDiretoMatricula` local;
- * 3. `cicloEquipeService` não decide gerente/coordenador por estrutura local;
- * 4. `cicloEquipeService` não usa seed/`localStorage` como fallback estrutural;
- * 5. `metaStorage` não decide hierarquia/elegibilidade por estrutura local;
- * 6. sem evidência soberana ⇒ FAIL-CLOSED (e, com evidência, a decisão segue a
- *    projeção SOBERANA mesmo quando ela CONTRADIZ os dados locais);
- * 7. DEV/teste continuam funcionando, atrás do gate explícito;
- * 8. `permissaoAvaliacao` (mesma classe de decisão) também não concede papel
- *    por estrutura local.
+ * 1. com evidência estrutural as decisões funcionam (não é bloqueio cego);
+ * 2. a estrutura soberana VENCE o cadastro local quando eles divergem;
+ * 3. sem evidência (produção, nada carregado) tudo é fail-closed;
+ * 4. em DEV, a fixture local continua funcionando atrás do gate explícito.
  *
- * O gate estático que detecta a REINTRODUÇÃO desses caminhos vive em
- * `src/authorization/estruturaUiSeguranca.test.ts` (bloco P6).
+ * O produtor real (leitura RLS + porta F5-07, sem injeção manual) é provado em
+ * `estruturaSoberanaCliente.test.ts`.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { instalarLocalStorageEmMemoria } from "../test/localStorageMock";
 import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
-import type { Meta } from "../types/Meta";
-import type {
-  PapelEstrutural,
-  VinculoEstruturalSoberano,
+import {
+  criarProjecaoEstrutural,
+  type VinculoEstruturalSoberano,
 } from "./projecaoEstruturalSoberana";
+import {
+  criarEstruturaDoCliente,
+  redefinirEstruturaSoberana,
+  type EstruturaSoberanaDoCliente,
+} from "./estruturaSoberanaCliente";
 
-const ORG = "11111111-1111-4111-8111-111111111111";
 const CHAVE_COLABORADORES = "feedback-control-colaboradores";
 const CHAVE_CICLOS = "feedback-control-ciclos";
 const CHAVE_METAS = "feedback-control-metas";
@@ -54,11 +51,11 @@ function pessoa(
   };
 }
 
-/** Fixture LOCAL com estrutura completa (o que o P6 não aceita mais decidir). */
+/** Cadastro LOCAL (legado) — nunca é a fonte estrutural em produção. */
 const gerente = pessoa(1, "GERENTE");
-const coordenador = pessoa(2, "COORDENADOR", gerente.matricula);
-const analista = pessoa(3, "ANALISTA", coordenador.matricula, [4]);
-const colega = pessoa(4, "ANALISTA", coordenador.matricula);
+const coordenador = pessoa(2, "COORDENADOR", 1);
+const analista = pessoa(3, "ANALISTA", 2, [4]);
+const colega = pessoa(4, "ANALISTA", 2);
 const mundo = [gerente, coordenador, analista, colega];
 
 const ciclo: CicloAvaliacao = {
@@ -80,81 +77,85 @@ const notasCompletas = {
 };
 const votosCompletos = { c1: { s1: { 4: 5 } } };
 
-function metaDe(colaborador: Colaborador, aprovacoes = {}): Meta {
-  return {
-    id: "meta-1",
-    colaboradorMatricula: colaborador.matricula,
-    colaboradorNome: colaborador.nome,
-    cicloId: ciclo.id,
-    ano: ciclo.ano,
-    ciclo: ciclo.ciclo,
-    tipo: "INDIVIDUAL",
-    descricao: "Meta fictícia",
-    kpi: "KPI fictício",
-    valorAlvo: "1",
-    status: "EM_ANDAMENTO",
-    dataCriacao: "2026-01-02T00:00:00.000Z",
-    dataUltimaAtualizacao: "2026-01-02T00:00:00.000Z",
-    excluida: false,
-    historico: [],
-    ...aprovacoes,
-  };
+// UUIDs canônicos (identidade estrutural).
+const ID_GERENTE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const ID_COORD = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const ID_ANALISTA = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const ID_COLEGA = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+
+function posicaoDe(collaboratorId: string): string {
+  return `pos-${collaboratorId}`;
 }
 
+/** Vínculo com a cadeia EXPLÍCITA (UUID), do gestor direto à raiz. */
 function vinculo(
-  matricula: number,
-  papel: PapelEstrutural,
-  gestorSoberanoMatricula: number | null,
-  extras: Partial<VinculoEstruturalSoberano> = {}
+  collaboratorId: string,
+  cadeia: readonly string[],
+  extras: {
+    readonly colegiado?: readonly string[];
+    readonly gestorTemSuperior?: boolean;
+    readonly cadeiaConfiavel?: boolean;
+  } = {}
 ): VinculoEstruturalSoberano {
+  const gestor = cadeia[0] ?? null;
   return {
-    matricula,
-    papel,
-    gestorSoberanoMatricula,
-    cadeiaDeGestaoMatriculas: [],
-    cadeiaConfiavel: true,
-    colegiadoSoberanoMatriculas: [],
-    usaEstruturaAvaliacao: false,
-    ...extras,
+    collaboratorId,
+    posicaoId: posicaoDe(collaboratorId),
+    gestorSoberanoPositionId: gestor === null ? null : posicaoDe(gestor),
+    gestorSoberanoCollaboratorId: gestor,
+    cadeiaDeGestaoPositionIds: cadeia.map(posicaoDe),
+    cadeiaDeGestaoCollaboratorIds: cadeia,
+    cadeiaConfiavel: extras.cadeiaConfiavel ?? true,
+    gestorTemSuperior: extras.gestorTemSuperior ?? cadeia.length > 1,
+    colegiadoSoberanoCollaboratorIds: [...(extras.colegiado ?? [])],
   };
 }
 
-/** Projeção SOBERANA coerente com a estrutura real (gerente → coord → analista). */
-function projecaoSoberana(criar: ProjecaoCriar) {
-  return criar([
-    vinculo(1, "GERENTE", null),
-    vinculo(2, "COORDENADOR", 1, { cadeiaDeGestaoMatriculas: [1] }),
-    vinculo(3, "OUTRO", 2, {
-      cadeiaDeGestaoMatriculas: [2, 1],
-      colegiadoSoberanoMatriculas: [4],
-      usaEstruturaAvaliacao: true,
-    }),
-    vinculo(4, "OUTRO", 2, { cadeiaDeGestaoMatriculas: [2, 1] }),
-  ]);
+function estruturaSoberana(
+  vinculos: readonly VinculoEstruturalSoberano[],
+  ponte: readonly (readonly [number, string])[]
+): EstruturaSoberanaDoCliente {
+  return criarEstruturaDoCliente({
+    projecao: criarProjecaoEstrutural(vinculos),
+    ponteMatriculas: new Map(ponte.map(([matricula, id]) => [String(matricula), id])),
+    matriculaLegada: new Map(ponte.map(([matricula, id]) => [id, matricula])),
+  });
 }
 
-/**
- * Projeção SOBERANA que CONTRADIZ o cadastro local: o local diz GERENTE (1),
- * COORDENADOR (2) e ANALISTA (3) com colegiado (4); a soberana diz que a cadeia
- * de 3 passa por 4 (que é a RAIZ) e que NÃO existe papel de gerente/coordenador
- * nem estrutura de analista. Se a decisão seguir o local, o teste falha.
- */
-function projecaoContraditoria(criar: ProjecaoCriar) {
-  return criar([
-    vinculo(4, "OUTRO", null),
-    vinculo(3, "OUTRO", 4, {
-      cadeiaDeGestaoMatriculas: [4],
-      colegiadoSoberanoMatriculas: [],
-      usaEstruturaAvaliacao: false,
-    }),
-  ]);
+const PONTE = [
+  [1, ID_GERENTE],
+  [2, ID_COORD],
+  [3, ID_ANALISTA],
+  [4, ID_COLEGA],
+] as const;
+
+/** Estrutura coerente: gerente ← coordenação ← analista (colegiado = 4). */
+function estruturaCoerente(): EstruturaSoberanaDoCliente {
+  return estruturaSoberana(
+    [
+      vinculo(ID_GERENTE, []),
+      vinculo(ID_COORD, [ID_GERENTE], { gestorTemSuperior: false }),
+      vinculo(ID_ANALISTA, [ID_COORD, ID_GERENTE], { colegiado: [ID_COLEGA] }),
+      vinculo(ID_COLEGA, [ID_COORD, ID_GERENTE]),
+    ],
+    PONTE
+  );
 }
 
-type ProjecaoCriar = (
-  vinculos: readonly VinculoEstruturalSoberano[]
-) => { readonly vinculos: ReadonlyMap<number, VinculoEstruturalSoberano> };
+/** Estrutura que CONTRADIZ o cadastro local: o analista (3) responde a 4, que é
+ * a RAIZ da cadeia; o "gerente local" (1) e o "coordenador local" (2) não
+ * participam da hierarquia soberana do analista. */
+function estruturaContraditoria(): EstruturaSoberanaDoCliente {
+  return estruturaSoberana(
+    [
+      vinculo(ID_GERENTE, []),
+      vinculo(ID_COLEGA, [], { gestorTemSuperior: false }),
+      vinculo(ID_ANALISTA, [ID_COLEGA], { gestorTemSuperior: false }),
+    ],
+    PONTE
+  );
+}
 
-/** Carrega os módulos num contexto de PRODUÇÃO (fora do gate DEV). */
 async function carregarProducao() {
   vi.stubEnv("DEV", false);
   vi.stubEnv("PROD", true);
@@ -162,7 +163,6 @@ async function carregarProducao() {
   return carregarModulos();
 }
 
-/** Carrega os módulos no contexto DEV do Vite (fixtures fictícias). */
 async function carregarDev() {
   vi.stubEnv("DEV", true);
   vi.stubEnv("PROD", false);
@@ -175,12 +175,12 @@ async function carregarModulos() {
   const cicloEquipe = await import("./cicloEquipeService");
   const metas = await import("./metaStorage");
   const permissao = await import("./permissaoAvaliacao");
-  const projecao = await import("./projecaoEstruturalSoberana");
-  return { progresso, cicloEquipe, metas, permissao, projecao };
+  return { progresso, cicloEquipe, metas, permissao };
 }
 
 beforeEach(() => {
   vi.resetModules();
+  redefinirEstruturaSoberana();
   instalarLocalStorageEmMemoria();
   localStorage.setItem(CHAVE_COLABORADORES, JSON.stringify(mundo));
   localStorage.setItem(CHAVE_CICLOS, JSON.stringify([ciclo]));
@@ -188,226 +188,171 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  redefinirEstruturaSoberana();
   vi.resetModules();
 });
 
-describe("F5-08 P6 — produção: papel/elegibilidade sem estrutura local", () => {
-  it("progressoAvaliacao NÃO decide papel por `funcao` nem por cadeia local (fail-closed)", async () => {
-    const { progresso, projecao } = await carregarProducao();
+describe("F5-08 P6 — consumidores com estrutura soberana explícita (UUID)", () => {
+  it("com evidência estrutural as decisões funcionam (ciclo, metas, painel, permissões)", async () => {
+    const { progresso, cicloEquipe, metas, permissao } = await carregarProducao();
+    const estrutura = estruturaCoerente();
 
-    // Mesmo com a estrutura local completa E todas as notas preenchidas, a
-    // avaliação NÃO é declarada completa em produção.
     const resultado = progresso.calcularProgressoAvaliacao(
       criterios,
       notasCompletas,
       votosCompletos,
       analista,
       mundo,
-      "feedback do gerente",
-      "feedback do coordenador"
+      "ok",
+      "ok",
+      estrutura
     );
+    expect(resultado.gerente.necessario).toBe(true);
+    expect(resultado.coordenador.necessario).toBe(true);
+    expect(resultado.colegiado.necessario).toBe(true);
+    expect(resultado.completo).toBe(true);
 
-    expect(resultado.gerente.necessario).toBe(false);
+    expect(
+      cicloEquipe
+        .getPainelCiclo(ciclo, gerente, {}, estrutura)
+        .map((linha) => linha.colaborador.matricula)
+    ).toEqual([2, 3, 4]);
+
+    expect(
+      metas.podeAprovarMetaNoCiclo(coordenador, analista, mundo, ciclo, estrutura)
+    ).toBe(true);
+    expect(
+      metas.podeAprovarMetaNoCiclo(gerente, analista, mundo, ciclo, estrutura)
+    ).toBe(true);
+    expect(
+      metas.metaExigeAprovacaoCoordenador(analista, mundo, ciclo, estrutura)
+    ).toBe(true);
+
+    const permissoes = permissao.obterPermissoesAvaliacao(
+      coordenador,
+      analista,
+      mundo,
+      ciclo,
+      estrutura
+    );
+    expect(permissoes.podeAvaliarComoCoordenador).toBe(true);
+    expect(permissoes.podeAvaliar).toBe(true);
+  });
+
+  it("a estrutura SOBERANA vence o cadastro local quando divergem", async () => {
+    const { progresso, cicloEquipe, metas, permissao } = await carregarProducao();
+    const contraditoria = estruturaContraditoria();
+
+    const resultado = progresso.calcularProgressoAvaliacao(
+      criterios,
+      notasCompletas,
+      votosCompletos,
+      analista,
+      mundo,
+      "ok",
+      "ok",
+      contraditoria
+    );
+    expect(resultado.gerente.necessario).toBe(true);
+    // O cadastro local diz que o gestor direto é COORDENADOR; a estrutura
+    // soberana diz que ele é a RAIZ da cadeia ⇒ nenhum papel de coordenador.
     expect(resultado.coordenador.necessario).toBe(false);
-    expect(resultado.colegiado.necessario).toBe(false);
+
+    // Quem aprova: o gestor direto SOBERANO (4), que também é a raiz — nunca o
+    // 2 (que o cadastro local aponta como gestor) nem o 1.
+    expect(
+      metas.podeAprovarMetaNoCiclo(coordenador, analista, mundo, ciclo, contraditoria)
+    ).toBe(false);
+    expect(
+      metas.podeAprovarMetaNoCiclo(colega, analista, mundo, ciclo, contraditoria)
+    ).toBe(true);
+    expect(
+      metas.podeAprovarMetaNoCiclo(gerente, analista, mundo, ciclo, contraditoria)
+    ).toBe(false);
+
+    // Painel do gerente (1) segue o alcance SOBERANO: ninguém reporta a ele.
+    expect(cicloEquipe.getPainelCiclo(ciclo, gerente, {}, contraditoria)).toEqual([]);
+
+    // O gestor direto soberano (4) é a RAIZ da cadeia do analista ⇒ avalia como
+    // gerente responsável; o "gerente local" (1) NÃO é responsável por nada.
+    const permissoesDoColega = permissao.obterPermissoesAvaliacao(
+      colega,
+      analista,
+      mundo,
+      ciclo,
+      contraditoria
+    );
+    expect(permissoesDoColega.podeAvaliarComoGerente).toBe(true);
+    expect(permissoesDoColega.podeAvaliarComoCoordenador).toBe(false);
+
+    const permissoesDoGerenteLocal = permissao.obterPermissoesAvaliacao(
+      gerente,
+      analista,
+      mundo,
+      ciclo,
+      contraditoria
+    );
+    expect(permissoesDoGerenteLocal.podeAvaliar).toBe(false);
+  });
+
+  it("sem estrutura (produção, nada carregado) é fail-closed", async () => {
+    const { progresso, cicloEquipe, metas, permissao } = await carregarProducao();
+
+    const resultado = progresso.calcularProgressoAvaliacao(
+      criterios,
+      notasCompletas,
+      votosCompletos,
+      analista,
+      mundo,
+      "ok",
+      "ok"
+    );
     expect(resultado.completo).toBe(false);
-    expect(resultado.pendencias).toContain(
-      projecao.ERRO_ESTRUTURA_SOBERANA_INDISPONIVEL
-    );
-  });
+    expect(resultado.pendencias.join(" ")).toContain("fail-closed");
 
-  it("progressoAvaliacao segue a projeção SOBERANA mesmo quando ela contradiz o cadastro local", async () => {
-    const { progresso, projecao } = await carregarProducao();
-
-    const coerente = progresso.calcularProgressoAvaliacao(
-      criterios,
-      notasCompletas,
-      votosCompletos,
-      analista,
-      mundo,
-      "ok",
-      "ok",
-      projecaoSoberana(projecao.criarProjecaoEstrutural)
-    );
-    expect(coerente.gerente.necessario).toBe(true);
-    expect(coerente.coordenador.necessario).toBe(true);
-    expect(coerente.colegiado.necessario).toBe(true);
-    expect(coerente.completo).toBe(true);
-
-    // A projeção contraditória NÃO tem GERENTE na cadeia e o "gestor direto"
-    // (4) é OUTRO ⇒ nenhum papel exigido, apesar de o cadastro local dizer
-    // GERENTE/COORDENADOR/colegiado.
-    const contraditorio = progresso.calcularProgressoAvaliacao(
-      criterios,
-      notasCompletas,
-      votosCompletos,
-      analista,
-      mundo,
-      "ok",
-      "ok",
-      projecaoContraditoria(projecao.criarProjecaoEstrutural)
-    );
-    expect(contraditorio.gerente.necessario).toBe(false);
-    expect(contraditorio.coordenador.necessario).toBe(false);
-    expect(contraditorio.colegiado.necessario).toBe(false);
-    expect(contraditorio.completo).toBe(true);
-  });
-
-  it("cicloEquipeService não expõe painel nem pendências por alcance local", async () => {
-    const { cicloEquipe } = await carregarProducao();
-
-    // Sem projeção soberana: painel VAZIO (o alcance local não é autoridade) e
-    // pendência explícita de ESTRUTURA — nunca "tudo completo".
     expect(cicloEquipe.getPainelCiclo(ciclo, gerente)).toEqual([]);
+    expect(cicloEquipe.analisarPendenciasDoCiclo(ciclo)[0]?.papel).toBe("Estrutura");
 
-    const pendencias = cicloEquipe.analisarPendenciasDoCiclo(ciclo);
-    expect(pendencias).toHaveLength(1);
-    expect(pendencias[0]?.papel).toBe("Estrutura");
-    expect(pendencias[0]?.detalhes?.join(" ")).toContain("fail-closed");
-
-    // Com projeção soberana, o painel volta a ser derivado da ESTRUTURA.
-    const projecaoModulo = await import("./projecaoEstruturalSoberana");
-    const linhas = cicloEquipe.getPainelCiclo(ciclo, gerente, {}, projecaoSoberana(projecaoModulo.criarProjecaoEstrutural));
-    expect(linhas.map((linha) => linha.colaborador.matricula)).toEqual([2, 3, 4]);
-  });
-
-  it("cicloEquipeService não usa seed/localStorage como fallback estrutural (recusa explícita)", async () => {
-    const { cicloEquipe, projecao } = await carregarProducao();
-
-    const chamadas: string[] = [];
-    const deps = {
-      organizationId: ORG,
-      criarCutover: () => {
-        chamadas.push("criarCutover");
-        return null;
-      },
-    };
-
-    await expect(
-      cicloEquipe.criarAvaliacoesDoCicloAtivado(ciclo, deps)
-    ).rejects.toThrow(projecao.ERRO_ESTRUTURA_SOBERANA_INDISPONIVEL);
-
-    // Nem o caminho soberano é acionado: nada é criado, nada é lido.
-    expect(chamadas).toEqual([]);
-    expect(localStorage.getItem(CHAVE_METAS)).toBeNull();
-
-    // O mesmo vale quando o cadastro local nem existe (seed NÃO é fallback).
-    localStorage.removeItem(CHAVE_COLABORADORES);
-    await expect(
-      cicloEquipe.criarAvaliacoesDoCicloAtivado(ciclo, deps)
-    ).rejects.toThrow(projecao.ERRO_ESTRUTURA_SOBERANA_INDISPONIVEL);
-    expect(chamadas).toEqual([]);
-  });
-
-  it("metaStorage não decide hierarquia/elegibilidade por estrutura local", async () => {
-    const { metas } = await carregarProducao();
-
-    // Relação de aprovação: gestor direto e raiz locais NÃO concedem nada.
     expect(
       metas.podeAprovarMetaNoCiclo(coordenador, analista, mundo, ciclo)
     ).toBe(false);
-    expect(metas.podeAprovarMetaNoCiclo(gerente, analista, mundo, ciclo)).toBe(
-      false
-    );
-
-    // Exigência de aprovação do coordenador: fail-closed (não é possível provar
-    // que NÃO é exigida).
-    expect(metas.metaExigeAprovacaoCoordenador(analista, mundo, ciclo)).toBe(
-      true
-    );
-
-    // Meta sem aprovações e meta com apenas a aprovação do gerente NÃO estão
-    // aprovadas (a do coordenador não é dispensada por dado local).
-    expect(metas.metaEstaAprovada(metaDe(analista), analista, mundo)).toBe(false);
+    expect(metas.metaExigeAprovacaoCoordenador(analista, mundo, ciclo)).toBe(true);
     expect(
       metas.metaEstaAprovada(
-        metaDe(analista, {
-          aprovacaoGerente: {
-            matricula: gerente.matricula,
-            nome: gerente.nome,
-            data: "2026-01-03T00:00:00.000Z",
-          },
-        }),
+        {
+          id: "meta-1",
+          colaboradorMatricula: analista.matricula,
+          colaboradorNome: analista.nome,
+          cicloId: ciclo.id,
+          ano: ciclo.ano,
+          ciclo: ciclo.ciclo,
+          tipo: "INDIVIDUAL",
+          descricao: "Meta fictícia",
+          kpi: "KPI",
+          valorAlvo: "1",
+          status: "EM_ANDAMENTO",
+          dataCriacao: "2026-01-02T00:00:00.000Z",
+          dataUltimaAtualizacao: "2026-01-02T00:00:00.000Z",
+          excluida: false,
+          historico: [],
+        },
         analista,
         mundo
       )
     ).toBe(false);
 
-    // Mutação própria de meta: o engine nega (mundo local não é provider de
-    // produção) e NADA é gravado.
+    expect(
+      permissao.obterPermissoesAvaliacao(coordenador, analista, mundo, ciclo).podeAvaliar
+    ).toBe(false);
+
     expect(() =>
       metas.criarMeta(analista, ciclo, "INDIVIDUAL", "Nova", "KPI", "1")
     ).toThrow();
     expect(localStorage.getItem(CHAVE_METAS)).toBeNull();
   });
-
-  it("metaStorage segue a projeção SOBERANA (e não o `funcao` local) na relação de aprovação", async () => {
-    const { metas, projecao } = await carregarProducao();
-
-    // Soberano coerente: gestor direto é COORDENADOR e a raiz é o gerente.
-    const coerente = projecaoSoberana(projecao.criarProjecaoEstrutural);
-    expect(
-      metas.podeAprovarMetaNoCiclo(coordenador, analista, mundo, ciclo, coerente)
-    ).toBe(true);
-    expect(
-      metas.podeAprovarMetaNoCiclo(gerente, analista, mundo, ciclo, coerente)
-    ).toBe(true);
-    expect(
-      metas.metaExigeAprovacaoCoordenador(analista, mundo, ciclo, coerente)
-    ).toBe(true);
-
-    // Soberano contraditório: o cadastro local diz COORDENADOR, a estrutura
-    // soberana diz OUTRO ⇒ a aprovação do coordenador NÃO é exigida.
-    const contraditorio = projecaoContraditoria(projecao.criarProjecaoEstrutural);
-    expect(
-      metas.podeAprovarMetaNoCiclo(coordenador, analista, mundo, ciclo, contraditorio)
-    ).toBe(false);
-    expect(
-      metas.podeAprovarMetaNoCiclo(gerente, analista, mundo, ciclo, contraditorio)
-    ).toBe(false);
-    expect(
-      metas.metaExigeAprovacaoCoordenador(analista, mundo, ciclo, contraditorio)
-    ).toBe(false);
-  });
-
-  it("permissaoAvaliacao não concede papel por estrutura local (fail-closed)", async () => {
-    const { permissao, projecao } = await carregarProducao();
-
-    const semProjecao = permissao.obterPermissoesAvaliacao(
-      coordenador,
-      analista,
-      mundo,
-      ciclo
-    );
-    expect(semProjecao.podeAvaliar).toBe(false);
-    expect(semProjecao.papeisPermitidos).toEqual([]);
-
-    // Com a projeção soberana contraditória, o papel segue a ESTRUTURA (e não o
-    // `funcao`/`gestorDiretoMatricula` local).
-    const contraditorio = permissao.obterPermissoesAvaliacao(
-      coordenador,
-      analista,
-      mundo,
-      ciclo,
-      projecaoContraditoria(projecao.criarProjecaoEstrutural)
-    );
-    expect(contraditorio.podeAvaliarComoCoordenador).toBe(false);
-    expect(contraditorio.podeAvaliarComoColegiado).toBe(false);
-    expect(contraditorio.podeAvaliar).toBe(false);
-
-    const coerente = permissao.obterPermissoesAvaliacao(
-      coordenador,
-      analista,
-      mundo,
-      ciclo,
-      projecaoSoberana(projecao.criarProjecaoEstrutural)
-    );
-    expect(coerente.podeAvaliarComoCoordenador).toBe(true);
-    expect(coerente.podeAvaliar).toBe(true);
-  });
 });
 
-describe("F5-08 P6 — DEV: fixtures continuam atrás do gate explícito", () => {
+describe("F5-08 P6 — DEV: fixture local atrás do gate explícito", () => {
   it("o mundo local decide papel/elegibilidade apenas em DEV", async () => {
     const { progresso, cicloEquipe, metas, permissao } = await carregarDev();
 
@@ -428,10 +373,7 @@ describe("F5-08 P6 — DEV: fixtures continuam atrás do gate explícito", () =>
     expect(
       metas.podeAprovarMetaNoCiclo(coordenador, analista, mundo, ciclo)
     ).toBe(true);
-    expect(metas.metaExigeAprovacaoCoordenador(analista, mundo, ciclo)).toBe(
-      true
-    );
-
+    expect(metas.metaExigeAprovacaoCoordenador(analista, mundo, ciclo)).toBe(true);
     expect(
       permissao.obterPermissoesAvaliacao(coordenador, analista, mundo, ciclo)
         .podeAvaliarComoCoordenador
@@ -439,8 +381,6 @@ describe("F5-08 P6 — DEV: fixtures continuam atrás do gate explícito", () =>
 
     expect(cicloEquipe.getPainelCiclo(ciclo, gerente).length).toBeGreaterThan(0);
 
-    // A mutação própria de meta continua possível em DEV (fixture), sem
-    // qualquer escrita fora do domínio de metas.
     metas.criarMeta(analista, ciclo, "INDIVIDUAL", "Nova", "KPI", "1");
     expect(localStorage.getItem(CHAVE_METAS)).toContain("Nova");
   });

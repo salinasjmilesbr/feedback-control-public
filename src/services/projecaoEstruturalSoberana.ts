@@ -1,74 +1,96 @@
 /**
- * F5-08 P6 (correção da auditoria GPT) — PROJEÇÃO ESTRUTURAL SOBERANA.
+ * F5-08 P6 (correção da auditoria GPT) — PROJEÇÃO ESTRUTURAL SOBERANA (UUID).
  *
- * ## O que este módulo encerra
+ * ## O que este módulo é
  *
- * O contrato F5-08 §19.1 é explícito: as decisões de **papel/elegibilidade** de
- * `progressoAvaliacao`, `cicloEquipeService` e `metaStorage` passam a usar a
- * estrutura SOBERANA — `funcao` textual e `gestorDiretoMatricula` local **não**
- * decidem hierarquia. Antes desta correção esses três módulos derivavam papel,
- * cadeia de gestão e colegiado do cadastro local (`colaboradorStorage` /
- * `src/data/colaboradores`), inclusive em produção.
+ * Um ADAPTADOR DE LEITURA: converte a fotografia SOBERANA já entregue pelo P4
+ * (`lerEstrutura` → RLS own-tenant) em fatos estruturais prontos para as decisões
+ * de papel/elegibilidade do domínio de ciclo/metas.
  *
- * Este módulo é a ÚNICA fronteira entre a estrutura organizacional e essas
- * decisões: os consumidores recebem uma **projeção** (fatos já resolvidos) e
- * nunca mais leem os campos estruturais locais. Por isso os fatos soberanos têm
- * nomes PRÓPRIOS (`gestorSoberanoMatricula`, `colegiadoSoberanoMatriculas`) —
- * distintos dos campos do cadastro local —, e a guarda estática
- * (`estruturaUiSeguranca.test.ts`) reprova quem voltar a lê-los.
+ * Fontes soberanas usadas (todas já existentes; nenhuma fonte nova):
+ * - `organizational_positions` (`posicoes`);
+ * - `occupations` vigentes (`ocupacoes`);
+ * - `position_reporting_lines` vigentes (`reportingLines`);
+ * - `collegiate_configurations` + membros (`colegiados`).
  *
- * ## De onde vem a projeção
+ * ## Identidade
  *
- * 1. **Soberana (produção):** injetada por quem tem a estrutura lida do
- *    PostgreSQL pela leitura RLS/portas já existentes (P4/P5) — nenhuma fonte
- *    nova é criada aqui. Enquanto essa injeção não existir para um domínio, a
- *    projeção é VAZIA e a decisão é **fail-closed** (§19.1: "sem dado soberano ⇒
- *    vazio, nunca inventado").
- * 2. **Fixture de DEV/teste:** `projecaoDeFixtureLocal` converte o mundo local
- *    em projeção e é o ÚNICO lugar onde `funcao` textual e
- *    `gestorDiretoMatricula` local podem virar papel/cadeia — atrás do gate
- *    explícito de DEV (`simulacaoDevPermitida`), como o resto do cutover do P6.
+ * A identidade aqui é SEMPRE o UUID canônico (`collaborators.id`,
+ * `organizational_positions.id`). **Este arquivo não conhece matrícula** — nem
+ * como chave, nem como rótulo, nem como fallback (§19.3/§19.1: matrícula não é
+ * identidade funcional). A compatibilidade com os domínios legados que ainda
+ * usam matrícula vive na fronteira explícita de
+ * `src/services/estruturaSoberanaCliente.ts` (ponte matrícula ↔ UUID), nunca
+ * aqui.
  *
- * ## Proibições preservadas
+ * ## Hierarquia
  *
- * - nenhum papel é concedido por cargo/nome/matrícula textual;
- * - nenhuma cadeia é inferida de `respostaPara`, de `funcao` ou de fixture;
- * - nenhuma estrutura é fabricada para "destravar" a UI (§19.3): sem evidência,
- *   o consumidor devolve o estado NEGATIVO (não aplicável/sem alcance/negado).
+ * A hierarquia vem EXCLUSIVAMENTE de posições + reporting lines + ocupação
+ * vigente (relações persistidas). Nenhum papel é inferido de texto, cargo, nome,
+ * função ou matrícula: o que existe são FATOS RELACIONAIS —
+ * "tem gestor?", "o gestor tem superior (é nível intermediário)?", "quem é a
+ * raiz da cadeia?", "quem está no colegiado?".
+ *
+ * ## Vigência
+ *
+ * Modelo meio-aberto `[validFrom, validTo)` com referência injetável (mesma
+ * regra do P4/P5 — `vigenteNaReferencia` replica `estaVigente` de
+ * `apoioEstrutura`, com teste de equivalência). Valor inválido é FAIL-CLOSED:
+ * nunca é tratado como vigente.
+ *
+ * ## Fail-closed
+ *
+ * Estrutura inconsistente (duas vigências simultâneas, ciclo de reporting,
+ * posição de gestor vaga, ocupação ausente) NÃO é "adivinhada": o vínculo fica
+ * marcado como não confiável e as decisões devolvem o lado negativo.
  */
 
-import { simulacaoDevPermitida } from "../config/ambiente";
-import type { Colaborador } from "../types/Colaborador";
-import { funcaoUsaEstruturaAvaliacaoAnalista } from "../types/Colaborador";
+import type {
+  ColegiadoSoberano,
+  OcupacaoSoberana,
+  PeriodoParentSoberano,
+  PosicaoSoberana,
+  ReportingLineSoberana,
+  UnidadeSoberana,
+} from "../infrastructure/supabase/estrutura/repositorioEstruturaSoberana";
 
-/** Papel estrutural RESOLVIDO pela estrutura organizacional (posição/cargo). */
-export type PapelEstrutural = "GERENTE" | "COORDENADOR" | "OUTRO";
-
-/** Fatos estruturais de UM colaborador, já resolvidos na origem. */
+/** Fatos estruturais de UM colaborador, resolvidos na hierarquia soberana. */
 export interface VinculoEstruturalSoberano {
-  readonly matricula: number;
-  readonly papel: PapelEstrutural;
-  /** Gestor DIRETO resolvido pela relação hierárquica vigente. */
-  readonly gestorSoberanoMatricula: number | null;
-  /**
-   * Cadeia de gestão resolvida (gestor direto → raiz). Vazia quando não há
-   * gestor ou quando a cadeia NÃO pôde ser resolvida por inteiro.
-   */
-  readonly cadeiaDeGestaoMatriculas: readonly number[];
-  /**
-   * `true` somente quando a cadeia foi resolvida até uma raiz real. Ciclo ou
-   * elo ausente ⇒ `false` (nunca inventa raiz).
-   */
+  /** UUID canônico (`collaborators.id`). */
+  readonly collaboratorId: string;
+  /** Posição ocupada VIGENTE (ou `null` sem ocupação vigente). */
+  readonly posicaoId: string | null;
+  /** Posição do gestor direto, resolvida por reporting line vigente. */
+  readonly gestorSoberanoPositionId: string | null;
+  /** Ocupante da posição do gestor (UUID) — `null` se a posição estiver vaga. */
+  readonly gestorSoberanoCollaboratorId: string | null;
+  /** Cadeia de gestão em POSIÇÕES (gestor direto → raiz). */
+  readonly cadeiaDeGestaoPositionIds: readonly string[];
+  /** Cadeia de gestão em COLABORADORES (gestor direto → raiz), em UUID. */
+  readonly cadeiaDeGestaoCollaboratorIds: readonly string[];
+  /** `true` somente quando a cadeia foi resolvida por inteiro até uma raiz. */
   readonly cadeiaConfiavel: boolean;
-  /** Avaliadores de colegiado vigentes na estrutura organizacional. */
-  readonly colegiadoSoberanoMatriculas: readonly number[];
-  /** A estrutura de avaliação (gerente/coordenador/colegiado) se aplica? */
-  readonly usaEstruturaAvaliacao: boolean;
+  /** O gestor direto tem superior (é nível INTERMEDIÁRIO da hierarquia)? */
+  readonly gestorTemSuperior: boolean;
+  /** Avaliadores de colegiado VIGENTES do colaborador (UUID). */
+  readonly colegiadoSoberanoCollaboratorIds: readonly string[];
 }
 
 /** Projeção estrutural consumida pelos serviços de ciclo/metas. */
 export interface ProjecaoEstruturalSoberana {
-  readonly vinculos: ReadonlyMap<number, VinculoEstruturalSoberano>;
+  readonly vinculos: ReadonlyMap<string, VinculoEstruturalSoberano>;
+}
+
+/** Fotografia soberana de entrada do adaptador (tipos do P4). */
+export interface FotografiaEstruturalSoberana {
+  readonly unidades?: readonly UnidadeSoberana[];
+  readonly periodosParent?: readonly PeriodoParentSoberano[];
+  readonly posicoes?: readonly PosicaoSoberana[];
+  readonly reportingLines: readonly ReportingLineSoberana[];
+  readonly ocupacoes: readonly OcupacaoSoberana[];
+  readonly colegiados: readonly ColegiadoSoberano[];
+  /** Instante ISO de referência da vigência (injetável; default = agora). */
+  readonly referencia?: string;
 }
 
 /** Projeção VAZIA — nenhuma evidência estrutural ⇒ fail-closed. */
@@ -77,237 +99,377 @@ export const PROJECAO_ESTRUTURAL_VAZIA: ProjecaoEstruturalSoberana = {
 };
 
 /**
- * Mensagem única da barreira: sem estrutura soberana NÃO existe derivação
- * local de papel/cadeia/elegibilidade (fail-closed).
+ * Mensagem única da barreira: sem estrutura soberana NÃO existe derivação local
+ * de papel/cadeia/elegibilidade (fail-closed).
  */
 export const ERRO_ESTRUTURA_SOBERANA_INDISPONIVEL =
   "A estrutura organizacional não pôde ser resolvida a partir do PostgreSQL. " +
   "Papel, cadeia de gestão e elegibilidade não são derivados de dados locais; " +
   "a operação foi recusada (fail-closed).";
 
+// ---------------------------------------------------------------------------
+// Vigência (meio-aberto `[validFrom, validTo)`) — mesma regra do P4/P5
+// ---------------------------------------------------------------------------
+
+function instanteMs(valor: string | null | undefined): number | null {
+  if (typeof valor !== "string") return null;
+  const limpo = valor.trim();
+  if (limpo.length === 0) return null;
+  const ms = Date.parse(limpo);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * Janela VIGENTE na referência? Início inclusivo, fim exclusivo. `validTo`
+ * nulo/ausente = "sem término definido"; presente e inválido = FAIL-CLOSED.
+ */
+export function vigenteNaReferencia(
+  validFrom: string | null | undefined,
+  validTo: string | null | undefined,
+  referencia: string
+): boolean {
+  const inicio = instanteMs(validFrom);
+  const ref = instanteMs(referencia);
+  const fimBruto = validTo === null || validTo === undefined ? null : validTo;
+  const fim = fimBruto === null ? null : instanteMs(fimBruto);
+
+  if (inicio === null || ref === null) return false;
+  if (fimBruto !== null && fim === null) return false;
+  if (fim !== null && fim <= inicio) return false;
+
+  if (ref < inicio) return false;
+  if (fim !== null && ref >= fim) return false;
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Índices da fotografia (por UUID)
+// ---------------------------------------------------------------------------
+
+interface IndicesEstruturais {
+  readonly posicaoDoColaborador: ReadonlyMap<string, string | null>;
+  readonly gestorPosicaoDaPosicao: ReadonlyMap<string, string | null>;
+  readonly ocupanteDaPosicao: ReadonlyMap<string, string | null>;
+  readonly colegiadoDoColaborador: ReadonlyMap<string, readonly string[]>;
+  readonly inconsistente: ReadonlySet<string>;
+}
+
+function montarIndices(fotografia: FotografiaEstruturalSoberana): IndicesEstruturais {
+  const referencia = fotografia.referencia ?? new Date().toISOString();
+  const inconsistente = new Set<string>();
+  const vigente = <T extends { readonly validFrom: string; readonly validTo: string | null }>(
+    item: T
+  ) => vigenteNaReferencia(item.validFrom, item.validTo, referencia);
+
+  const ocupacoesVigentes = fotografia.ocupacoes.filter(vigente);
+
+  const posicaoDoColaborador = new Map<string, string | null>();
+  for (const [collaboratorId, ocupacoes] of agrupar(
+    ocupacoesVigentes,
+    (ocupacao) => ocupacao.collaboratorId
+  )) {
+    if (ocupacoes.length > 1) {
+      // Duas ocupações vigentes: a estrutura é ambígua ⇒ fail-closed.
+      inconsistente.add(`colaborador:${collaboratorId}`);
+      posicaoDoColaborador.set(collaboratorId, null);
+      continue;
+    }
+    posicaoDoColaborador.set(collaboratorId, ocupacoes[0]?.posicaoId ?? null);
+  }
+
+  const ocupanteDaPosicao = new Map<string, string | null>();
+  for (const [posicaoId, ocupacoes] of agrupar(
+    ocupacoesVigentes,
+    (ocupacao) => ocupacao.posicaoId
+  )) {
+    if (ocupacoes.length > 1) {
+      inconsistente.add(`posicao:${posicaoId}`);
+      ocupanteDaPosicao.set(posicaoId, null);
+      continue;
+    }
+    ocupanteDaPosicao.set(posicaoId, ocupacoes[0]?.collaboratorId ?? null);
+  }
+
+  const gestorPosicaoDaPosicao = new Map<string, string | null>();
+  for (const [posicaoId, linhas] of agrupar(
+    fotografia.reportingLines.filter(vigente),
+    (linha) => linha.subordinatePositionId
+  )) {
+    if (linhas.length > 1) {
+      inconsistente.add(`reporting:${posicaoId}`);
+      gestorPosicaoDaPosicao.set(posicaoId, null);
+      continue;
+    }
+    gestorPosicaoDaPosicao.set(posicaoId, linhas[0]?.managerPositionId ?? null);
+  }
+
+  const colegiadoDoColaborador = new Map<string, readonly string[]>();
+  for (const [collaboratorId, colegiados] of agrupar(
+    fotografia.colegiados.filter(vigente),
+    (colegiado) => colegiado.collaboratorId
+  )) {
+    if (colegiados.length > 1) {
+      // Versão vigente ambígua ⇒ fail-closed: nenhum membro é presumido.
+      inconsistente.add(`colegiado:${collaboratorId}`);
+      colegiadoDoColaborador.set(collaboratorId, []);
+      continue;
+    }
+    colegiadoDoColaborador.set(collaboratorId, [...(colegiados[0]?.membroIds ?? [])]);
+  }
+
+  return {
+    posicaoDoColaborador,
+    gestorPosicaoDaPosicao,
+    ocupanteDaPosicao,
+    colegiadoDoColaborador,
+    inconsistente,
+  };
+}
+
+function agrupar<T>(
+  itens: readonly T[],
+  chave: (item: T) => string
+): ReadonlyMap<string, readonly T[]> {
+  const grupos = new Map<string, T[]>();
+  for (const item of itens) {
+    const atual = grupos.get(chave(item)) ?? [];
+    atual.push(item);
+    grupos.set(chave(item), atual);
+  }
+  return grupos;
+}
+
+/**
+ * ADAPTADOR de leitura: fotografia soberana → projeção estrutural por UUID.
+ *
+ * Percorre a hierarquia por POSIÇÕES (reporting lines) e resolve cada elo no
+ * OCUPANTE da posição. Qualquer elo não resolvido (posição vaga, ciclo, dado
+ * ambíguo) marca a cadeia como NÃO confiável — nunca é adivinhado.
+ */
+export function montarProjecaoEstrutural(
+  fotografia: FotografiaEstruturalSoberana
+): ProjecaoEstruturalSoberana {
+  const indices = montarIndices(fotografia);
+  const gestorDaPosicao = (posicaoId: string): string | null =>
+    indices.gestorPosicaoDaPosicao.get(posicaoId) ?? null;
+
+  const vinculos = new Map<string, VinculoEstruturalSoberano>();
+
+  for (const [collaboratorId, posicaoId] of indices.posicaoDoColaborador) {
+    const cadeiaPosicoes: string[] = [];
+    const cadeiaColaboradores: string[] = [];
+    let confiavel = !indices.inconsistente.has(`colaborador:${collaboratorId}`);
+
+    let posicaoAtual = posicaoId;
+    const visitados = new Set<string>(posicaoId ? [posicaoId] : []);
+
+    while (posicaoAtual) {
+      if (indices.inconsistente.has(`reporting:${posicaoAtual}`)) confiavel = false;
+
+      const posicaoGestor = gestorDaPosicao(posicaoAtual);
+      if (posicaoGestor === null) break;
+
+      if (visitados.has(posicaoGestor)) {
+        // Ciclo de reporting (o banco barra, mas a leitura não confia).
+        confiavel = false;
+        break;
+      }
+      visitados.add(posicaoGestor);
+      cadeiaPosicoes.push(posicaoGestor);
+
+      const ocupante = indices.ocupanteDaPosicao.get(posicaoGestor) ?? null;
+      if (ocupante === null) {
+        // Posição de gestor VAGA: não há gestor provado ⇒ fail-closed.
+        confiavel = false;
+        break;
+      }
+      if (indices.inconsistente.has(`posicao:${posicaoGestor}`)) confiavel = false;
+
+      cadeiaColaboradores.push(ocupante);
+      posicaoAtual = posicaoGestor;
+    }
+
+    const gestorSoberanoPositionId = posicaoId ? gestorDaPosicao(posicaoId) : null;
+    const gestorSoberanoCollaboratorId = cadeiaColaboradores[0] ?? null;
+
+    vinculos.set(collaboratorId, {
+      collaboratorId,
+      posicaoId,
+      gestorSoberanoPositionId,
+      gestorSoberanoCollaboratorId,
+      cadeiaDeGestaoPositionIds: cadeiaPosicoes,
+      cadeiaDeGestaoCollaboratorIds: cadeiaColaboradores,
+      // `cadeiaConfiavel` = a cadeia foi resolvida POR INTEIRO, inclusive a
+      // evidência de RAIZ quando não há gestor acima. Não confundir com "tem
+      // gestor": quem não tem gestor é raiz PROVADA, não cadeia desconhecida.
+      cadeiaConfiavel: confiavel,
+      gestorTemSuperior:
+        gestorSoberanoPositionId !== null &&
+        gestorDaPosicao(gestorSoberanoPositionId) !== null,
+      colegiadoSoberanoCollaboratorIds: [
+        ...(indices.colegiadoDoColaborador.get(collaboratorId) ?? []),
+      ],
+    });
+  }
+
+  return { vinculos };
+}
+
+/** Projeção a partir de vínculos já resolvidos (teste/fixture explícita). */
 export function criarProjecaoEstrutural(
   vinculos: readonly VinculoEstruturalSoberano[]
 ): ProjecaoEstruturalSoberana {
   return {
-    vinculos: new Map(vinculos.map((vinculo) => [vinculo.matricula, vinculo])),
+    vinculos: new Map(vinculos.map((vinculo) => [vinculo.collaboratorId, vinculo])),
   };
 }
 
-/**
- * Projeção efetiva: a EXPLÍCITA (soberana) sempre vence; só o contexto DEV do
- * Vite pode cair na fixture local; fora dele, projeção VAZIA (fail-closed).
- */
-export function resolverProjecaoEstrutural(
-  explicita: ProjecaoEstruturalSoberana | undefined,
-  mundoLocalDev: readonly Colaborador[] | undefined
-): ProjecaoEstruturalSoberana {
-  if (explicita) return explicita;
-  if (simulacaoDevPermitida && mundoLocalDev) {
-    return projecaoDeFixtureLocal(mundoLocalDev);
-  }
-  return PROJECAO_ESTRUTURAL_VAZIA;
-}
+// ---------------------------------------------------------------------------
+// Consultas soberanas (SEMPRE por UUID canônico)
+// ---------------------------------------------------------------------------
 
 export function vinculoEstrutural(
   projecao: ProjecaoEstruturalSoberana,
-  matricula: number
+  collaboratorId: string
 ): VinculoEstruturalSoberano | undefined {
-  return projecao.vinculos.get(matricula);
+  return projecao.vinculos.get(collaboratorId);
 }
 
-/** Existe evidência estrutural soberana para a matrícula? */
+/** Existe evidência estrutural soberana para o colaborador (UUID)? */
 export function temEvidenciaEstrutural(
   projecao: ProjecaoEstruturalSoberana,
-  matricula: number
+  collaboratorId: string
 ): boolean {
-  return projecao.vinculos.has(matricula);
+  return projecao.vinculos.has(collaboratorId);
 }
 
-/** Matrícula do gestor SOBERANO direto (ou `null`). */
+/** Posição ocupada VIGENTE (UUID) ou `null`. */
+export function posicaoSoberana(
+  projecao: ProjecaoEstruturalSoberana,
+  collaboratorId: string
+): string | null {
+  return vinculoEstrutural(projecao, collaboratorId)?.posicaoId ?? null;
+}
+
+/** Gestor direto (UUID) resolvido pela hierarquia, ou `null`. */
 export function gestorSoberano(
   projecao: ProjecaoEstruturalSoberana,
-  matricula: number
-): number | null {
-  return vinculoEstrutural(projecao, matricula)?.gestorSoberanoMatricula ?? null;
-}
-
-/** Papel do gestor DIRETO (ou `undefined` sem evidência/gestor). */
-export function papelDoGestorDireto(
-  projecao: ProjecaoEstruturalSoberana,
-  matricula: number
-): PapelEstrutural | undefined {
-  const matriculaGestor = gestorSoberano(projecao, matricula);
-  if (matriculaGestor === null) return undefined;
-  return vinculoEstrutural(projecao, matriculaGestor)?.papel;
-}
-
-/** Algum membro da cadeia de gestão (direto → raiz) possui o papel? */
-export function temPapelNaCadeia(
-  projecao: ProjecaoEstruturalSoberana,
-  matricula: number,
-  papel: PapelEstrutural
-): boolean {
-  const vinculo = vinculoEstrutural(projecao, matricula);
-  if (!vinculo) return false;
-  return vinculo.cadeiaDeGestaoMatriculas.some(
-    (matriculaGestor) =>
-      vinculoEstrutural(projecao, matriculaGestor)?.papel === papel
-  );
+  collaboratorId: string
+): string | null {
+  const vinculo = vinculoEstrutural(projecao, collaboratorId);
+  if (!vinculo || !vinculo.cadeiaConfiavel) return null;
+  return vinculo.gestorSoberanoCollaboratorId;
 }
 
 /**
- * Raiz da cadeia de gestão = "gerente responsável" (dado estrutural, nunca
- * `funcao`). Sem gestor, a própria pessoa é a raiz — mesma semântica do domínio.
- * Sem evidência ou com cadeia não resolvida devolve `null` (fail-closed).
+ * Existe cadeia de gestão RESOLVIDA acima do colaborador? É o fato relacional
+ * que sustenta "há um responsável pela avaliação" (antes: "existe GERENTE na
+ * cadeia" por `funcao` textual).
+ */
+export function temCadeiaDeGestaoSoberana(
+  projecao: ProjecaoEstruturalSoberana,
+  collaboratorId: string
+): boolean {
+  const vinculo = vinculoEstrutural(projecao, collaboratorId);
+  return Boolean(vinculo?.cadeiaConfiavel && vinculo.gestorSoberanoCollaboratorId);
+}
+
+/**
+ * O gestor direto é NÍVEL INTERMEDIÁRIO (tem superior)? Fato relacional que
+ * sustenta o papel "coordenador direto" (antes: `gestor.funcao === "COORDENADOR"`).
+ */
+export function gestorSoberanoTemSuperior(
+  projecao: ProjecaoEstruturalSoberana,
+  collaboratorId: string
+): boolean {
+  const vinculo = vinculoEstrutural(projecao, collaboratorId);
+  if (!vinculo || !vinculo.cadeiaConfiavel) return false;
+  return vinculo.gestorTemSuperior;
+}
+
+/**
+ * Raiz da cadeia = "gerente responsável" (F4-09 D2/D3: dado relacional, nunca
+ * `funcao`). Sem gestor, a própria pessoa é a raiz. Sem evidência/cadeia não
+ * resolvida devolve `null` (fail-closed).
  */
 export function raizDaCadeiaSoberana(
   projecao: ProjecaoEstruturalSoberana,
-  matricula: number
-): number | null {
-  const vinculo = vinculoEstrutural(projecao, matricula);
+  collaboratorId: string
+): string | null {
+  const vinculo = vinculoEstrutural(projecao, collaboratorId);
   if (!vinculo || !vinculo.cadeiaConfiavel) return null;
-  const cadeia = vinculo.cadeiaDeGestaoMatriculas;
-  return cadeia.length > 0 ? (cadeia[cadeia.length - 1] as number) : matricula;
+  const cadeia = vinculo.cadeiaDeGestaoCollaboratorIds;
+  return cadeia.length > 0 ? (cadeia[cadeia.length - 1] as string) : collaboratorId;
 }
 
-/** A estrutura de avaliação (gerente/coordenador/colegiado) se aplica? */
-export function usaEstruturaAvaliacaoSoberana(
+/** Avaliadores de colegiado VIGENTES (UUID); vazio sem evidência. */
+export function colegiadoSoberano(
   projecao: ProjecaoEstruturalSoberana,
-  matricula: number
-): boolean {
-  return vinculoEstrutural(projecao, matricula)?.usaEstruturaAvaliacao ?? false;
+  collaboratorId: string
+): readonly string[] {
+  return (
+    vinculoEstrutural(projecao, collaboratorId)?.colegiadoSoberanoCollaboratorIds ?? []
+  );
 }
 
-/** Avaliadores de colegiado vigentes (vazio sem evidência). */
-export function avaliadoresColegiadoSoberanos(
-  projecao: ProjecaoEstruturalSoberana,
-  matricula: number
-): readonly number[] {
-  const vinculo = vinculoEstrutural(projecao, matricula);
-  if (!vinculo || !vinculo.usaEstruturaAvaliacao) return [];
-  return vinculo.colegiadoSoberanoMatriculas;
-}
-
-/** Subordinados DIRETOS na estrutura. */
+/** Subordinados DIRETOS (UUID) na hierarquia. */
 export function subordinadosDiretosSoberanos(
   projecao: ProjecaoEstruturalSoberana,
-  matricula: number
-): readonly number[] {
-  const resultado: number[] = [];
+  collaboratorId: string
+): readonly string[] {
+  const resultado: string[] = [];
   for (const vinculo of projecao.vinculos.values()) {
     if (
-      vinculo.matricula !== matricula &&
-      vinculo.gestorSoberanoMatricula === matricula
+      vinculo.collaboratorId !== collaboratorId &&
+      vinculo.cadeiaConfiavel &&
+      vinculo.gestorSoberanoCollaboratorId === collaboratorId
     ) {
-      resultado.push(vinculo.matricula);
+      resultado.push(vinculo.collaboratorId);
     }
   }
   return resultado;
 }
 
 /**
- * Alcance estrutural do ator (quem ele ENXERGA pela estrutura):
+ * Alcance estrutural do ator (quem ele ENXERGA pela estrutura), em UUID:
  * - sem evidência estrutural ⇒ vazio (fail-closed, nada é concedido);
- * - raiz da cadeia ⇒ todos os descendentes;
+ * - raiz (sem gestor) ⇒ todos os descendentes;
  * - demais ⇒ subordinados diretos + colaboradores que ele avalia no colegiado.
  *
- * Espelha exatamente a semântica de `getColaboradoresVisiveis` (F4-09 D2/D3),
- * agora derivada da projeção e não do cadastro local.
+ * Espelha a semântica de `getColaboradoresVisiveis` (F4-09 D2/D3), agora
+ * derivada das relações soberanas — nunca do cadastro local.
  */
 export function alcanceSoberano(
   projecao: ProjecaoEstruturalSoberana,
-  matricula: number
-): ReadonlySet<number> {
-  const vinculo = vinculoEstrutural(projecao, matricula);
+  collaboratorId: string
+): ReadonlySet<string> {
+  const vinculo = vinculoEstrutural(projecao, collaboratorId);
   if (!vinculo) return new Set();
 
-  if (vinculo.gestorSoberanoMatricula === null) {
-    const descendentes = new Set<number>();
+  if (gestorSoberano(projecao, collaboratorId) === null) {
+    const descendentes = new Set<string>();
     for (const candidato of projecao.vinculos.values()) {
       if (
-        candidato.matricula !== matricula &&
-        candidato.cadeiaDeGestaoMatriculas.includes(matricula)
+        candidato.collaboratorId !== collaboratorId &&
+        candidato.cadeiaConfiavel &&
+        candidato.cadeiaDeGestaoCollaboratorIds.includes(collaboratorId)
       ) {
-        descendentes.add(candidato.matricula);
+        descendentes.add(candidato.collaboratorId);
       }
     }
     return descendentes;
   }
 
-  const alcance = new Set<number>(
-    subordinadosDiretosSoberanos(projecao, matricula)
+  const alcance = new Set<string>(
+    subordinadosDiretosSoberanos(projecao, collaboratorId)
   );
   for (const candidato of projecao.vinculos.values()) {
     if (
-      candidato.matricula !== matricula &&
-      candidato.colegiadoSoberanoMatriculas.includes(matricula)
+      candidato.collaboratorId !== collaboratorId &&
+      candidato.colegiadoSoberanoCollaboratorIds.includes(collaboratorId)
     ) {
-      alcance.add(candidato.matricula);
+      alcance.add(candidato.collaboratorId);
     }
   }
   return alcance;
-}
-
-// ---------------------------------------------------------------------------
-// ADAPTADOR DE FIXTURE (DEV/teste) — nunca autoridade de produção
-// ---------------------------------------------------------------------------
-
-function papelDeFixture(colaborador: Colaborador): PapelEstrutural {
-  if (colaborador.funcao === "GERENTE") return "GERENTE";
-  if (colaborador.funcao === "COORDENADOR") return "COORDENADOR";
-  return "OUTRO";
-}
-
-/**
- * Converte o mundo LOCAL (fixture/DEV) em projeção. É o único ponto do caminho
- * de ciclo/metas onde `funcao` textual e `gestorDiretoMatricula` local podem
- * virar papel e cadeia — e somente sob o gate DEV (`simulacaoDevPermitida`).
- */
-export function projecaoDeFixtureLocal(
-  colaboradores: readonly Colaborador[]
-): ProjecaoEstruturalSoberana {
-  const porMatricula = new Map(
-    colaboradores.map((colaborador) => [colaborador.matricula, colaborador])
-  );
-
-  const vinculos = colaboradores.map((colaborador): VinculoEstruturalSoberano => {
-    const cadeia: number[] = [];
-    const visitados = new Set<number>([colaborador.matricula]);
-    let confiavel = true;
-    let atual = colaborador;
-
-    while (atual.gestorDiretoMatricula) {
-      const matriculaGestor = atual.gestorDiretoMatricula;
-      if (visitados.has(matriculaGestor)) {
-        confiavel = false;
-        break;
-      }
-      visitados.add(matriculaGestor);
-
-      const gestor = porMatricula.get(matriculaGestor);
-      if (!gestor) {
-        confiavel = false;
-        break;
-      }
-
-      cadeia.push(matriculaGestor);
-      atual = gestor;
-    }
-
-    return {
-      matricula: colaborador.matricula,
-      papel: papelDeFixture(colaborador),
-      gestorSoberanoMatricula: colaborador.gestorDiretoMatricula ?? null,
-      cadeiaDeGestaoMatriculas: cadeia,
-      cadeiaConfiavel: confiavel,
-      colegiadoSoberanoMatriculas: [
-        ...(colaborador.avaliadoresColegiadoMatriculas ?? []),
-      ],
-      usaEstruturaAvaliacao: funcaoUsaEstruturaAvaliacaoAnalista(
-        colaborador.funcao
-      ),
-    };
-  });
-
-  return criarProjecaoEstrutural(vinculos);
 }

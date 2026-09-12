@@ -1,14 +1,10 @@
 import type { Colaborador } from "../types/Colaborador";
+import { ERRO_ESTRUTURA_SOBERANA_INDISPONIVEL } from "./projecaoEstruturalSoberana";
 import {
-  ERRO_ESTRUTURA_SOBERANA_INDISPONIVEL,
-  avaliadoresColegiadoSoberanos,
-  papelDoGestorDireto,
-  resolverProjecaoEstrutural,
-  temEvidenciaEstrutural,
-  temPapelNaCadeia,
-  usaEstruturaAvaliacaoSoberana,
-  type ProjecaoEstruturalSoberana,
-} from "./projecaoEstruturalSoberana";
+  estruturaSoberanaEfetiva,
+  visaoEstruturalLegada,
+  type EstruturaSoberanaDoCliente,
+} from "./estruturaSoberanaCliente";
 
 type CriterioBase = {
   id: string;
@@ -51,19 +47,12 @@ function percentual(preenchidos: number, total: number) {
 }
 
 /**
- * O colaborador possui um GERENTE em algum ponto da cadeia de gestão?
- *
- * F5-08 P6 (correção da auditoria): a cadeia vem da PROJEÇÃO ESTRUTURAL
- * SOBERANA — nunca de `gestorDiretoMatricula`/`funcao` do cadastro local.
- * Sem evidência, a resposta é `false` (fail-closed).
+ * Papéis exigidos pela estrutura de avaliação — FATOS RELACIONAIS da estrutura
+ * soberana (nunca `funcao` textual, nunca cadeia local):
+ * - gerente: existe cadeia de gestão resolvida acima do avaliado;
+ * - coordenador: o gestor direto é nível INTERMEDIÁRIO (tem superior);
+ * - colegiado: existe configuração de colegiado vigente com membros.
  */
-function temGerenteResponsavel(
-  projecao: ProjecaoEstruturalSoberana,
-  matricula: number
-) {
-  return temPapelNaCadeia(projecao, matricula, "GERENTE");
-}
-
 export function calcularProgressoAvaliacao(
   criterios: CriterioBase[],
   avaliacoes: AvaliacoesBase,
@@ -72,39 +61,26 @@ export function calcularProgressoAvaliacao(
   colaboradores: Colaborador[],
   feedbackFinalGerente: string,
   feedbackFinalCoordenador: string,
-  projecaoEstrutural?: ProjecaoEstruturalSoberana
+  estruturaSoberana?: EstruturaSoberanaDoCliente
 ): ProgressoAvaliacao {
   const totalSubcriterios = criterios.reduce(
     (total, criterio) => total + criterio.subcriterios.length,
     0
   );
 
-  // F5-08 P6: papel, cadeia e colegiado vêm da projeção estrutural SOBERANA
-  // (fixture local somente sob o gate explícito de DEV).
-  const projecao = resolverProjecaoEstrutural(projecaoEstrutural, [
-    ...colaboradores,
-    colaborador,
-  ]);
-  const semEvidenciaEstrutural = !temEvidenciaEstrutural(
-    projecao,
-    colaborador.matricula
-  );
+  // F5-08 P6: a estrutura vem do PRODUTOR soberano (leitura RLS publicada pelo
+  // shell autenticado). A fixture local só existe sob o gate explícito de DEV.
+  const estrutura =
+    estruturaSoberana ??
+    estruturaSoberanaEfetiva([...colaboradores, colaborador]);
+  const visao = visaoEstruturalLegada(estrutura, colaborador.matricula);
 
-  const gerenteNecessario = temGerenteResponsavel(
-    projecao,
-    colaborador.matricula
-  );
-  const usaEstruturaAnalista = usaEstruturaAvaliacaoSoberana(
-    projecao,
-    colaborador.matricula
-  );
-  const coordenadorNecessario =
-    usaEstruturaAnalista &&
-    papelDoGestorDireto(projecao, colaborador.matricula) === "COORDENADOR";
-  const avaliadoresColegiado = avaliadoresColegiadoSoberanos(
-    projecao,
-    colaborador.matricula
-  );
+  // FAIL-CLOSED: sem evidência estrutural nenhuma exigência é presumida e a
+  // avaliação NUNCA é declarada completa por dado local.
+  const semEvidenciaEstrutural = visao === null;
+  const gerenteNecessario = visao?.temCadeiaDeGestao ?? false;
+  const coordenadorNecessario = visao?.gestorTemSuperior ?? false;
+  const avaliadoresColegiado = visao?.colegiadoMatriculasLegadas ?? [];
   const colegiadoNecessario = avaliadoresColegiado.length > 0;
 
   let gerentePreenchidos = 0;

@@ -1,116 +1,126 @@
-# F5-08 P6 — papel/elegibilidade sem estrutura local (blocker da auditoria **resolvido**)
+# F5-08 P6 — estrutura soberana por UUID no caminho de ciclo/metas
 
-> **Status:** **RESOLVIDO no P6.** Este arquivo **não** registra mais uma "dúvida para a
-> F5-09": o contrato F5-08 §19.1 é fechado e passou a ser cumprido no cutover. O que
-> permanece para a F5-09 é apenas o **domínio de ciclos/metas** (persistência e o produtor da
-> projeção), **sem** autoridade estrutural local.
+> **Status:** **blockers da auditoria RESOLVIDOS** (identidade UUID e produtor
+> conectado). Este arquivo **não** transfere mais nada do cutover estrutural para
+> a F5-09: a F5-09 continua responsável **apenas** pelo domínio de ciclos
+> (persistência e estrutura por ciclo), nunca por "ligar o produtor" da F5-08.
 >
 > Referenciado por `src/authorization/cutoverEstrutural.test.ts`.
 
-## 1. O blocker (auditoria GPT)
+## 1. Os dois blockers (auditoria GPT)
 
-A rodada anterior do P6 havia registrado como "decisão futura da F5-09" o uso de estrutura
-local em três caminhos produtivos:
-
-| Caminho | O que decidia por estrutura local |
-| --- | --- |
-| `progressoAvaliacao.ts` | papéis exigidos da avaliação (gerente/coordenador/colegiado) por `funcao` textual + cadeia `gestorDiretoMatricula` |
-| `cicloEquipeService.ts` | elegibilidade para abrir avaliação, alcance do painel do ciclo e papéis por `funcao` + cadeia local |
-| `metaStorage.ts` | "quem aprova quem" (coordenador direto/gerente responsável) por `funcao` + cadeia local, e autorização com o **mundo local sintético** como provider |
-
-Isso conflita com `docs/F5-08-desenho-tecnico.md` §19.1: `funcao` textual **não** decide
-hierarquia, e `localWorld` existe "apenas para DEV/teste, atrás do gate de modo DEV já
-existente; **nunca** em produção". Decisão da auditoria: **não** é escopo de F5-09; o P6 não
-podia ser considerado concluído com esses caminhos decidindo papel/elegibilidade localmente.
-
-## 2. Solução adotada (reuso, sem fonte nova)
-
-Nenhum mecanismo novo foi criado (sem migration, RPC, Edge operation, capability, allowlist ou
-porta). A correção introduz **uma fronteira** entre a estrutura e essas decisões:
-
-**`src/services/projecaoEstruturalSoberana.ts`** (novo módulo de fronteira):
-
-- `VinculoEstruturalSoberano` / `ProjecaoEstruturalSoberana`: fatos estruturais **já
-  resolvidos** na origem (papel, gestor direto, cadeia, colegiado, aplicabilidade da estrutura
-  de avaliação). Os fatos soberanos têm nomes PRÓPRIOS (`gestorSoberanoMatricula`,
-  `colegiadoSoberanoMatriculas`), distintos dos campos do cadastro local;
-- `resolverProjecaoEstrutural(explicita, mundoLocalDev)`: a projeção **explícita (soberana)
-  sempre vence**; só o contexto DEV do Vite (`simulacaoDevPermitida`) pode cair na fixture
-  local; fora dele devolve `PROJECAO_ESTRUTURAL_VAZIA` (**fail-closed**);
-- `projecaoDeFixtureLocal`: **único** ponto do caminho de ciclo/metas onde `funcao` textual e
-  `gestorDiretoMatricula` local podem virar papel/cadeia — e só atrás do gate de DEV;
-- consultas soberanas usadas pelos consumidores: `vinculoEstrutural`, `gestorSoberano`,
-  `papelDoGestorDireto`, `temPapelNaCadeia`, `raizDaCadeiaSoberana`,
-  `usaEstruturaAvaliacaoSoberana`, `avaliadoresColegiadoSoberanos`, `alcanceSoberano`;
-- `ERRO_ESTRUTURA_SOBERANA_INDISPONIVEL`: mensagem única da barreira.
-
-**Consumidores convertidos** (nenhum deles lê mais `funcao`, `gestorDiretoMatricula`,
-`avaliadoresColegiadoMatriculas` nem `getColaboradoresVisiveis`):
-
-| Arquivo | Mudança |
-| --- | --- |
-| `src/services/progressoAvaliacao.ts` | papéis vêm da projeção; sem evidência ⇒ `completo: false` + pendência explícita (nunca "completo" por dado local) |
-| `src/services/cicloEquipeService.ts` | elegibilidade, alcance do painel e papéis vêm da projeção; sem evidência ⇒ `criarAvaliacoesDoCicloAtivado` **recusa** e o painel fica vazio; pendências ganham o papel `Estrutura` |
-| `src/services/metaStorage.ts` | "quem aprova quem" e "exige coordenador" vêm da projeção; sem evidência ⇒ ninguém aprova e a aprovação do coordenador é exigida |
-| `src/services/permissaoAvaliacao.ts` | permissões de avaliação (gerente/coordenador/colegiado) vêm da projeção; sem evidência ⇒ `podeAvaliar: false` |
-| `src/pages/MinhaAvaliacaoDetalhePage.tsx` | seções de papel e identificação dos avaliadores vêm da projeção (antes: `funcao` + cadeia local) |
-| `src/authorization/providers/localWorld.ts` | `criarProvidersMundoLocal` passa a ser **DEV-only**: fora do gate devolve o mundo soberano VAZIO (`criarProvidersMundoFuncional({ actor, colaboradores: [] })`) ⇒ nenhuma capability ⇒ DENY |
-| `src/pages/CiclosAvaliacaoPage.tsx` | exibe a pendência de `Estrutura` (fail-closed) no encerramento do ciclo |
-
-## 3. Comportamento fail-closed (sem evidência soberana)
-
-| Decisão | Antes (local) | Agora (produção) |
+| # | Blocker | Correção |
 | --- | --- | --- |
-| Papéis exigidos da avaliação | derivados de `funcao`/cadeia | `necessario: false` **e** `completo: false` com pendência de estrutura |
-| Abrir avaliações na ativação do ciclo | lista derivada do cadastro local | **recusa** (`ERRO_ESTRUTURA_SOBERANA_INDISPONIVEL`), nada é criado |
-| Alcance do painel do ciclo | `getColaboradoresVisiveis` local | **vazio** (nenhuma linha exibida) |
-| Pendências do encerramento | lista local | pendência `Estrutura` (nunca "tudo completo") |
-| Aprovar meta | relação local | `podeAprovarMetaNoCiclo` = `false`; `metaExigeAprovacaoCoordenador` = `true`; `metaEstaAprovada` = `false` |
-| Mutação de meta própria | provider do mundo local sintético | `authorize()` nega (mundo vazio), nada é gravado |
-| Permissões de avaliação | papéis por `funcao`/cadeia local | `podeAvaliar: false`, `papeisPermitidos: []` |
+| 1 | A projeção estrutural era indexada por **matrícula** (`gestorSoberanoMatricula`, `cadeiaDeGestaoMatriculas`, `colegiadoSoberanoMatriculas`), violando §19.3 ("nenhuma matrícula como identidade funcional") e a F5-07 (identidade canônica = UUID) | O **modelo** passou a ser UUID-first (`collaboratorId`, `gestorSoberanoPositionId`, `cadeiaDeGestaoPositionIds`, `cadeiaDeGestaoCollaboratorIds`, `colegiadoSoberanoCollaboratorIds`) e **não conhece matrícula**. A matrícula vive apenas na **ponte de compatibilidade** da fronteira |
+| 2 | O produtor soberano existia como interface, mas **ninguém o alimentava** em produção: sem parâmetro manual ⇒ projeção vazia ⇒ DENY geral ("ligar na F5-09") | O produtor passou a carregar a estrutura pelo **caminho normal já existente** (leitura RLS do P4 + porta de colaboradores F5-07) e é acionado pelo **shell autenticado**; os consumidores leem a projeção publicada, sem injeção manual |
 
-Sentido do fail-closed: **não conceder**. Sempre que a estrutura não puder ser provada, a
-resposta é a negativa (não aplicável/sem alcance/negado/exige aprovação) — nunca um fallback
-local.
+## 2. Solução adotada (reuso integral; nenhuma fonte nova)
 
-## 4. Provas
+### 2.1 Modelo estrutural — `src/services/projecaoEstruturalSoberana.ts`
 
-- `src/services/cutoverEstruturalServicos.test.ts` (novo, 8 testes): produção × DEV; inclui
-  projeções **contraditórias** ao cadastro local (prova que a decisão segue o soberano, não o
-  `funcao`), recusa de criação de avaliações sem evidência, ausência de escrita local e DEV
-  preservado atrás do gate.
-- `src/authorization/estruturaUiSeguranca.test.ts` (bloco novo, 4 testes): guarda estática que
-  **detecta a reintrodução** dos caminhos (campos estruturais locais proibidos nos quatro
-  módulos; `funcaoUsaEstruturaAvaliacaoAnalista` só no adaptador de fixture; `localWorld` só
-  sob o gate DEV; sem `.rpc(`/`functions.invoke`/`service_role`).
-- `src/authorization/cutoverEstrutural.test.ts`: política/mundo funcional fail-closed (P6).
-- SQL: `supabase/validacao/03-validar-f5-08-cutover.sql` (inalterado nesta correção — não há
-  superfície de banco nova).
+ADAPTADOR de leitura sobre a fotografia soberana do P4. Fontes (todas já
+existentes): `organizational_positions`, `occupations` vigentes,
+`position_reporting_lines` vigentes e `collegiate_configurations` + membros.
 
-## 5. O que permanece para a F5-09 (sem autoridade estrutural local)
+A hierarquia é percorrida **por posições** (reporting lines) e cada elo é
+resolvido no **ocupante** da posição (UUID). O modelo não conhece texto, cargo,
+nome, função nem matrícula: o que existem são **fatos relacionais** —
 
-1. **Persistência do domínio de ciclos/metas** continua em `localStorage` (legado) — o P6 não
-   migra persistência (§19.2/§21.3).
-2. **Produtor da projeção soberana**: ligar a leitura RLS/portas do P4/P5 (posições, ocupações,
-   reporting lines, colegiado) ao `resolverProjecaoEstrutural(projecao, …)` das telas, de modo
-   que a decisão deixe de ser fail-closed. A regra "qual cargo/posição ⇒ qual papel" pertence
-   ao domínio (não é inventada aqui e não existe no contrato da F5-08).
-3. **Aptidão por status** (`getAplicabilidadeNoCiclo`, snapshot F3-08 local) permanece como
-   leitura de **estreitamento**: ela só pode EXCLUIR alguém de um conjunto já derivado da
-   projeção soberana; nunca concede papel, alcance ou hierarquia. Migrá-la para
-   `collaborator_status_periods` soberano é evolução do mesmo domínio.
+- `temCadeiaDeGestaoSoberana` — há responsável resolvido acima (antes: "existe
+  GERENTE na cadeia" por `funcao`);
+- `gestorSoberanoTemSuperior` — o gestor direto é **nível intermediário**
+  (antes: `gestor.funcao === "COORDENADOR"`);
+- `raizDaCadeiaSoberana` — "gerente responsável" = **raiz da cadeia** (F4-09
+  D2/D3, já era relacional);
+- `colegiadoSoberano` — membros da configuração **vigente** (UUID).
 
-## 6. Residual declarado (fora deste blocker, não silencioso)
+Vigência: meio-aberto `[validFrom, validTo)` com referência injetável
+(`vigenteNaReferencia`, com teste de equivalência a `estaVigente` do P4).
+Inconsistência (duas vigências simultâneas, ciclo de reporting, posição de gestor
+vaga, ocupação ausente) ⇒ vínculo **não confiável** ⇒ fail-closed.
 
-Estes caminhos ainda leem campos estruturais locais e **não** estão entre os três módulos do
-blocker; ficam registrados para não serem esquecidos:
+> O campo `papel: "GERENTE" | "COORDENADOR" | "OUTRO"` foi **eliminado**: papel
+> textual era hierarquia paralela. As regras de domínio passaram a ser
+> consequência explícita das relações contratadas (§ acima).
+
+### 2.2 Produtor e ponte — `src/services/estruturaSoberanaCliente.ts`
+
+- **PRODUTOR**: `carregarEstruturaSoberana({ organizationId }, deps)` chama, em
+  paralelo, `lerEstrutura` (RLS/own-tenant, D16 — **sem RPC de listagem**) e
+  `listarColaboradores` (F5-07, que traz a ponte de matrícula e o gestor
+  derivado server-side da ocupação vigente), monta a projeção por UUID e
+  **publica** o estado (`ocioso`/`carregando`/`pronta`/`indisponivel`).
+- **PONTE de compatibilidade**: `ponteMatriculas` (matrícula → UUID) e
+  `matriculaLegada` (UUID → matrícula numérica) permitem que os domínios legados
+  que ainda indexam por matrícula (ciclo/meta) alcancem os fatos por UUID. A
+  ponte é **fronteira**, não chave: o modelo estrutural permanece UUID-first.
+- **FIXTURE de DEV**: `estruturaDeFixtureLocal` converte o mundo local em
+  estrutura usando identificadores **de fixture** (`fixture:<matrícula>`),
+  atrás do gate `simulacaoDevPermitida` — nem em DEV a matrícula é a chave.
+- **Wiring**: `src/pages/useEstruturaSoberanaDoCliente.ts` (hook) é chamado pelo
+  shell autenticado (`LayoutFuncional` em `src/routes/AppRoutes.tsx`) com a
+  organização ativa do `useAuth()`. Nenhum consumidor precisa injetar nada.
+
+## 3. Identidade: onde a matrícula ainda aparece (e por quê)
+
+| Lugar | Uso | Natureza |
+| --- | --- | --- |
+| `estruturaSoberanaCliente.ponteMatriculas/matriculaLegada` | tradução matrícula ↔ UUID | **ponte** explícita de compatibilidade |
+| `visaoEstruturalLegada` / `alcanceLegado` | devolvem os fatos em matrícula | **view legada** para telas/serviços que ainda indexam por matrícula |
+| payloads legados (`feedbackStorage`, `metaStorage`, `votosColegiado[...][matricula]`) | identificação do colaborador | contrato legado do domínio (F5-09/F5-10 migram) |
+| `estruturaDeFixtureLocal` | id de fixture derivado da matrícula | DEV/teste, gated, namespaced |
+| `historicoOrganizacionalStorage`, `colaboradorStorage` | cadastro local (leitura) | classificação B — só exibição/aptidão |
+
+**Prova de que a matrícula não é identidade estrutural (guarda estática):** o
+arquivo do modelo não contém a palavra `matricula` (nem `Matricula`); a ponte só
+existe em um módulo; e um consumidor novo que citar `ponteMatriculas` fora da
+fronteira reprova o CI (`estruturaUiSeguranca.test.ts`).
+
+**Prova comportamental:** duas pessoas com o mesmo rótulo humano permanecem
+distintas na projeção (chaves UUID) e uma matrícula **não numérica** não é
+endereçável pelo domínio legado, enquanto o vínculo estrutural continua existindo
+por UUID — nenhum fato é inventado.
+
+## 4. Fail-closed (o que continua obrigatório)
+
+| Situação | Resultado |
+| --- | --- |
+| Supabase/serviço falhou (`lerEstrutura`/`listarColaboradores` com erro) | estado `indisponivel`; decisões NEGATIVAS (nunca `localStorage`/seed) |
+| Sem sessão/organização ativa | `indisponivel` (`FORBIDDEN`) e nada é carregado |
+| Colaborador não resolvido (sem ocupação vigente / sem ponte) | vínculo inexistente ⇒ papel/elegibilidade negados |
+| Estrutura inconsistente (2 ocupações, ciclo, posição de gestor vaga) | cadeia não confiável ⇒ papéis falsos e ninguém aprova |
+| Sem evidência estrutural | `progressoAvaliacao` NUNCA declara completo; painel vazio; pendência `Estrutura`; mutação de meta negada |
+| Nada carregado ainda (transiente de boot) | mesma negativa — e o carregamento é automático pelo shell, não uma injeção manual |
+
+## 5. Provas (testes)
+
+| Arquivo | O que prova |
+| --- | --- |
+| `src/services/projecaoEstruturalSoberana.test.ts` (8) | adaptador por UUID; cadeia por posições/reporting lines; raiz/intermediário; colegiado vigente; equivalência de vigência com o P4; posição vaga, ciclo, ambiguidade e ocupação ausente ⇒ fail-closed |
+| `src/services/estruturaSoberanaCliente.test.ts` (8) | carregamento pelas portas existentes (**sem injeção manual**); ciclo/metas/painel/permissões funcionando em produção com a estrutura soberana; soberano vence o cadastro local; falha real ⇒ fail-closed sem `localStorage`; DEV isolado e gated; ponte (matrícula não numérica) |
+| `src/services/cutoverEstruturalServicos.test.ts` (4) | consumidores com estrutura soberana explícita: decisões funcionam; soberano vence o local; sem estrutura é fail-closed; DEV preservado |
+| `src/authorization/estruturaUiSeguranca.test.ts` (37) | guardas estáticas: modelo sem matrícula; nenhum consumidor lê `funcao`/`gestorDiretoMatricula`/`avaliadoresColegiadoMatriculas`; `funcaoUsaEstruturaAvaliacaoAnalista` sem consumidor produtivo; produtor usa as portas soberanas e é acionado pelo shell; `localWorld` só em DEV; sem RPC/Edge/credencial nova |
+| SQL | inalterado: a correção não cria superfície de banco (o validador de cutover do P6 segue no CI) |
+
+## 6. O que permanece para a F5-09 (apenas domínio de ciclos)
+
+1. **Persistência** de ciclos/metas (hoje `localStorage`, §19.2/§21.3).
+2. **Estrutura POR CICLO**: a projeção usa a vigência ATUAL das posições/
+   ocupações/reporting lines. O snapshot por ciclo (F3-08) e a composição de
+   equipe/colegiado por ciclo são do domínio de ciclos (F5-09) — quando existirem
+   sovereignemente, basta injetar a fotografia da referência do ciclo na MESMA
+   projeção (o adaptador já aceita `referencia`).
+3. **Aptidão por status** (`getAplicabilidadeNoCiclo`, snapshot local) segue como
+   leitura de **estreitamento**: só EXCLUI de um conjunto já derivado da
+   estrutura soberana; nunca concede papel, alcance ou hierarquia.
+
+## 7. Residual declarado (fora deste blocker, não silencioso)
 
 | Arquivo | Uso local | Observação |
 | --- | --- | --- |
-| `src/services/relatorioService.ts:84,154-157,195` | filtros/alcance de relatório por `gestorDiretoMatricula` | domínio de relatórios; não concede papel de avaliação/aprovação |
-| `src/services/exportarAvaliacaoPdf.ts:49-73` | identificação de gestor/colegiado no PDF | exibição documental |
-| `src/services/visibilidadeColaboradores.ts` | alcance por cadeia/colegiado | único consumidor de produção restante é `authorizationPolicy.scopeCollaborators` (sem chamador de produção; usado por testes) |
-| `src/services/historicoOrganizacionalStorage.ts` | snapshots/efetivos do ciclo | leitura legada de exibição + aptidão (item 5.3), sem autoridade de papel |
+| `src/services/relatorioService.ts` | filtros/alcance de relatório por `gestorDiretoMatricula` | domínio de relatórios; não concede papel de avaliação/aprovação |
+| `src/services/exportarAvaliacaoPdf.ts` | identificação de gestor/colegiado no PDF | exibição documental |
+| `src/services/visibilidadeColaboradores.ts` | alcance por cadeia/colegiado | único consumidor de produção restante é `authorizationPolicy.scopeCollaborators` (sem chamador de produção) |
+| `src/services/historicoOrganizacionalStorage.ts` | snapshots/efetivos do ciclo | leitura legada de exibição + aptidão (item 6.3) |
 
-Tratar esses pontos exige atividade própria (relatórios/PDF) e não foi feito aqui para não
-ampliar o escopo do blocker.
+Tratar esses pontos exige atividade própria (relatórios/PDF).

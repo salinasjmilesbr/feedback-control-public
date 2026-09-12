@@ -545,9 +545,10 @@ describe("F5-08 P6 — nenhuma autoridade estrutural local", () => {
 /**
  * Módulos que decidem QUEM GERENCIA QUEM, QUEM AVALIA QUEM, quem é
  * GERENTE/COORDENADOR e quem é ELEGÍVEL. Depois da correção eles derivam esses
- * fatos da PROJEÇÃO ESTRUTURAL SOBERANA (`projecaoEstruturalSoberana`) — nunca
- * mais dos campos do cadastro local (`funcao`, `gestorDiretoMatricula`,
- * `avaliadoresColegiadoMatriculas`) nem de `getColaboradoresVisiveis`.
+ * fatos da ESTRUTURA SOBERANA (projeção por UUID produzida pelas portas do
+ * P4/F5-07) — nunca mais dos campos do cadastro local (`funcao`,
+ * `gestorDiretoMatricula`, `avaliadoresColegiadoMatriculas`) nem de
+ * `getColaboradoresVisiveis`.
  */
 const CAMINHOS_PAPEL_ELEGIBILIDADE: readonly string[] = [
   "../services/progressoAvaliacao.ts",
@@ -556,7 +557,10 @@ const CAMINHOS_PAPEL_ELEGIBILIDADE: readonly string[] = [
   "../services/permissaoAvaliacao.ts",
 ];
 
+/** Modelo estrutural (UUID) e fronteira de compatibilidade do cliente. */
 const PROJECAO_ESTRUTURAL = "../services/projecaoEstruturalSoberana.ts";
+const ESTRUTURA_DO_CLIENTE = "../services/estruturaSoberanaCliente.ts";
+const HOOK_ESTRUTURA = "../pages/useEstruturaSoberanaDoCliente.ts";
 
 describe("F5-08 P6 (correção) — papel/elegibilidade sem estrutura local", () => {
   it("os módulos de papel/elegibilidade não leem campos estruturais locais", () => {
@@ -574,31 +578,77 @@ describe("F5-08 P6 (correção) — papel/elegibilidade sem estrutura local", ()
     }
   });
 
-  it("a derivação por `funcao` existe SOMENTE no adaptador de fixture (DEV)", () => {
-    // Reintroduzir a decisão por `funcao` em qualquer outro arquivo de produção
-    // reprova aqui.
-    expect(
-      [...produtoresQueCitam("funcaoUsaEstruturaAvaliacaoAnalista")].sort()
-    ).toEqual([
-      "src/services/projecaoEstruturalSoberana.ts",
-      "src/types/Colaborador.ts",
-    ]);
-    expect(produtoresQueCitam("projecaoDeFixtureLocal")).toEqual([
-      "src/services/projecaoEstruturalSoberana.ts",
-    ]);
-  });
-
-  it("o adaptador de fixture só entrega projeção sob o gate explícito de DEV", () => {
+  it("o MODELO estrutural é UUID-first e não conhece matrícula", () => {
     const codigo = apenasCodigo(fonteDeProducao(PROJECAO_ESTRUTURAL));
 
-    expect(codigo).toContain("simulacaoDevPermitida");
-    expect(codigo).toMatch(/if \(simulacaoDevPermitida && mundoLocalDev\)/);
-    expect(codigo).toContain("PROJECAO_ESTRUTURAL_VAZIA");
-
+    // §19.3/§19.1: matrícula não é identidade funcional nem chave estrutural.
+    expect(codigo).not.toContain("matricula");
+    expect(codigo).not.toContain("Matricula");
+    // A hierarquia vem das relações soberanas: posições + reporting lines.
+    expect(codigo).toContain("gestorSoberanoPositionId");
+    expect(codigo).toContain("cadeiaDeGestaoPositionIds");
+    expect(codigo).toContain("cadeiaDeGestaoCollaboratorIds");
+    expect(codigo).toContain("collaboratorId");
     // Nenhuma superfície nova (RPC/Edge/credencial) foi criada para isso.
     for (const proibido of [".rpc(", "functions.invoke", "service_role", "SERVICE_ROLE"]) {
       expect(codigo, proibido).not.toContain(proibido);
     }
+  });
+
+  it("a derivação por `funcao` não é consumida por nenhum módulo de produção", () => {
+    // Reintroduzir a decisão por `funcao` em qualquer caminho produtivo reprova
+    // aqui: depois da correção o helper existe apenas como vocabulário do
+    // domínio (tipos), sem consumidor.
+    expect(
+      [...produtoresQueCitam("funcaoUsaEstruturaAvaliacaoAnalista")].sort()
+    ).toEqual(["src/types/Colaborador.ts"]);
+    // O adaptador de fixture usa as RELAÇÕES (cadeia e colegiado), nunca `funcao`.
+    const fixture = apenasCodigo(fonteDeProducao(ESTRUTURA_DO_CLIENTE));
+    expect(fixture).not.toContain("funcaoUsaEstruturaAvaliacaoAnalista");
+    expect(produtoresQueCitam("estruturaDeFixtureLocal")).toEqual([
+      "src/services/estruturaSoberanaCliente.ts",
+    ]);
+    // A matrícula como IDENTIFICADOR legado aparece só na fronteira.
+    expect([...produtoresQueCitam("ponteMatriculas")].sort()).toEqual([
+      "src/services/estruturaSoberanaCliente.ts",
+    ]);
+  });
+
+  it("o produtor carrega a estrutura pelas portas soberanas e é acionado pelo shell", () => {
+    const produtor = apenasCodigo(fonteDeProducao(ESTRUTURA_DO_CLIENTE));
+
+    // Fonte: as portas JÁ existentes (leitura RLS do P4 + colaboradores F5-07).
+    expect(produtor).toContain("lerEstrutura(");
+    expect(produtor).toContain("listarColaboradores(");
+    expect(produtor).toContain("montarProjecaoEstrutural(");
+    expect(produtor).toContain("carregarEstruturaSoberana");
+    // O caminho normal NÃO depende de injeção manual de projeção.
+    expect(produtor).toContain("estruturaSoberanaEfetiva");
+    // Nenhuma superfície nova (RPC/Edge/credencial).
+    for (const proibido of [".rpc(", "functions.invoke", "service_role", "SERVICE_ROLE"]) {
+      expect(produtor, proibido).not.toContain(proibido);
+    }
+
+    // O shell autenticado aciona o produtor com a organização ativa.
+    const rotas = apenasCodigo(fonteDeProducao("../routes/AppRoutes.tsx"));
+    expect(rotas).toContain("useEstruturaSoberanaDoCliente(organizacaoAtivaId)");
+    expect(rotas).toContain("import { useAuth }");
+
+    const hook = apenasCodigo(fonteDeProducao(HOOK_ESTRUTURA));
+    expect(hook).toContain("carregarEstruturaSoberana");
+  });
+
+  it("o adaptador de fixture só entrega estrutura sob o gate explícito de DEV", () => {
+    const codigo = apenasCodigo(fonteDeProducao(ESTRUTURA_DO_CLIENTE));
+
+    expect(codigo).toContain("simulacaoDevPermitida");
+    expect(codigo).toMatch(
+      /if \(simulacaoDevPermitida && mundoLocalDev\) return estruturaDeFixtureLocal\(mundoLocalDev\);/
+    );
+    // Mesmo em DEV a matrícula não é a chave estrutural: o identificador é de
+    // FIXTURE, namespaced.
+    expect(codigo).toContain("idDeFixture");
+    expect(codigo).toMatch(/return `fixture:\$\{matricula\}`/);
   });
 
   it("o mundo sintético de `localWorld` só é construído atrás do gate de DEV", () => {

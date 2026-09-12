@@ -22,11 +22,9 @@ import {
   possuiNotaAvaliacao,
 } from "../services/apresentacaoNota";
 import {
-  gestorSoberano,
-  papelDoGestorDireto,
-  resolverProjecaoEstrutural,
-  usaEstruturaAvaliacaoSoberana,
-} from "../services/projecaoEstruturalSoberana";
+  estruturaSoberanaEfetiva,
+  visaoEstruturalLegada,
+} from "../services/estruturaSoberanaCliente";
 import "../styles/avaliacoes.css";
 
 const criterioIcons = Array.from({ length: 8 }, (_, index) => (
@@ -58,16 +56,17 @@ function MinhaAvaliacaoDetalhePage() {
     );
   }
 
-  // F5-08 P6 (correção da auditoria): papel estrutural e cadeia de gestão vêm da
-  // PROJEÇÃO ESTRUTURAL SOBERANA. `funcao` textual e `gestorDiretoMatricula`
-  // local não decidem quem avalia quem; sem evidência soberana a decisão é
-  // fail-closed (nenhuma seção de papel é presumida).
+  // F5-08 P6 (correção da auditoria): a estrutura vem do PRODUTOR soberano
+  // (projeção publicada pelo shell autenticado). `funcao` textual e
+  // `gestorDiretoMatricula` local não decidem quem avalia quem; sem evidência
+  // soberana a decisão é fail-closed (nenhuma seção de papel é presumida).
   const colaboradores = getColaboradores();
-  const projecaoEstrutural = resolverProjecaoEstrutural(undefined, colaboradores);
-  const usaEstruturaAvaliacaoAnalista = usaEstruturaAvaliacaoSoberana(
-    projecaoEstrutural,
+  const estruturaSoberana = estruturaSoberanaEfetiva(colaboradores);
+  const visaoEstrutural = visaoEstruturalLegada(
+    estruturaSoberana,
     usuarioAtual.matricula
   );
+  const usaEstruturaAvaliacaoAnalista = visaoEstrutural?.temCadeiaDeGestao ?? false;
 
   const feedback = getFeedbacksByColaborador(
     usuarioAtual.matricula
@@ -132,30 +131,25 @@ function MinhaAvaliacaoDetalhePage() {
       feedback.feedbackFinalCoordenador
   );
 
-  const matriculaGestorSoberano = gestorSoberano(
-    projecaoEstrutural,
-    usuarioAtual.matricula
-  );
   const gestorDireto =
-    matriculaGestorSoberano === null
+    visaoEstrutural?.gestorMatriculaLegada == null
       ? undefined
       : colaboradores.find(
-          (item) => item.matricula === matriculaGestorSoberano
+          (item) => item.matricula === visaoEstrutural.gestorMatriculaLegada
         );
 
-  const papelDoGestor = papelDoGestorDireto(
-    projecaoEstrutural,
-    usuarioAtual.matricula
-  );
-  const coordenadorAvaliador =
-    papelDoGestor === "COORDENADOR" ? gestorDireto : undefined;
+  // "Coordenador" = gestor direto de nível INTERMEDIÁRIO (fato relacional da
+  // estrutura soberana). Gestor direto na raiz é o gerente responsável.
+  const coordenadorAvaliador = visaoEstrutural?.gestorTemSuperior
+    ? gestorDireto
+    : undefined;
 
   const matriculaGerente =
-    papelDoGestor === "GERENTE"
-      ? matriculaGestorSoberano
-      : papelDoGestor === "COORDENADOR" && matriculaGestorSoberano !== null
-        ? gestorSoberano(projecaoEstrutural, matriculaGestorSoberano)
-        : null;
+    visaoEstrutural === null
+      ? null
+      : visaoEstrutural.gestorTemSuperior
+        ? visaoEstrutural.superiorDoGestorMatriculaLegada
+        : visaoEstrutural.gestorMatriculaLegada;
   const gerenteAvaliador =
     matriculaGerente === null
       ? undefined

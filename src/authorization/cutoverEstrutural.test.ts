@@ -71,7 +71,15 @@ afterEach(() => {
   vi.resetModules();
 });
 
-describe("F5-08 P6 — produção: nenhuma autoridade estrutural local", () => {
+/**
+ * Os casos abaixo reimportam o grafo de módulos em contexto de produção
+ * (`resetModules` + `stubEnv`), o que é custoso; o limite explícito evita
+ * flakiness sob carga paralela da suíte completa.
+ */
+describe(
+  "F5-08 P6 — produção: nenhuma autoridade estrutural local",
+  { timeout: 20000 },
+  () => {
   it("a fixture/cadastro legado EXISTE, mas NÃO resolve o mundo (DENY com e sem mundo explícito)", async () => {
     const { politica, legado } = await carregarProducao();
     const seed = legado.getColaboradores();

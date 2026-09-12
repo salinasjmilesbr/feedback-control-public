@@ -70,42 +70,52 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
     serialização, idempotência e histórico preservado);
   - `.github/workflows/ci.yml`: o job `supabase-local` passa a executar os **três**
     validadores da F5-08 e a regressão F5-06/F5-07 (§13.7/§23.4); timeout 40 min.
-- **Blocker da auditoria RESOLVIDO (correção nesta branch):** o §19.1 do contrato
-  exige que as decisões de elegibilidade/papel de `progressoAvaliacao`,
+- **Blockers da auditoria RESOLVIDOS (correção nesta branch):** o §19.1 do
+  contrato exige que as decisões de elegibilidade/papel de `progressoAvaliacao`,
   `cicloEquipeService` e `metaStorage` usem estrutura SOBERANA — não era decisão
-  futura da F5-09. Correção aplicada sem criar fonte nova (sem migration/RPC/Edge/
-  capability):
-  - `src/services/projecaoEstruturalSoberana.ts` (novo): fronteira única — a
-    projeção SOBERANA explícita vence; fixture local só sob `simulacaoDevPermitida`;
-    fora dela `PROJECAO_ESTRUTURAL_VAZIA` (fail-closed);
-  - os três módulos + `permissaoAvaliacao.ts` + `MinhaAvaliacaoDetalhePage.tsx`
+  futura da F5-09. Duas rodadas de correção, sem criar fonte nova (sem
+  migration/RPC/Edge/capability):
+  - **1ª rodada:** `src/services/projecaoEstruturalSoberana.ts` como fronteira; os
+    três módulos + `permissaoAvaliacao.ts` + `MinhaAvaliacaoDetalhePage.tsx`
     deixaram de ler `funcao`, `gestorDiretoMatricula`,
-    `avaliadoresColegiadoMatriculas` e `getColaboradoresVisiveis`; papel, cadeia,
-    colegiado e alcance vêm da projeção;
-  - `authorization/providers/localWorld.ts`: `criarProvidersMundoLocal` virou
-    DEV-only (fora do gate ⇒ mundo vazio ⇒ DENY) — fecha a autorização de metas
-    próprias por mundo sintético;
-  - fail-closed: `progressoAvaliacao` nunca declara `completo`; abrir avaliações na
-    ativação **recusa**; painel fica vazio; pendências trazem o papel `Estrutura`;
-    ninguém aprova meta e a aprovação do coordenador é exigida;
-  - provas: `src/services/cutoverEstruturalServicos.test.ts` (8 testes, produção ×
-    DEV, com projeções que CONTRADIZEM o cadastro local) e bloco novo em
-    `src/authorization/estruturaUiSeguranca.test.ts` (guarda estática que reprova a
-    reintrodução dos caminhos);
-  - `docs/F5-08-p6-duvida-mundo-funcional.md` deixou de registrar "dúvida para
-    F5-09": agora documenta o blocker resolvido, a solução e o que resta à F5-09
-    (persistência de ciclos/metas, o PRODUTOR da projeção e a aptidão por status
-    como estreitamento) — sem autoridade estrutural local.
+    `avaliadoresColegiadoMatriculas` e `getColaboradoresVisiveis`;
+    `authorization/providers/localWorld.ts` virou DEV-only (fora do gate ⇒ mundo
+    vazio ⇒ DENY); fail-closed em todas as decisões.
+  - **2ª rodada (blockers finais):** a projeção passou a ser **UUID-first** —
+    `collaboratorId`, `gestorSoberanoPositionId`, `cadeiaDeGestaoPositionIds`,
+    `cadeiaDeGestaoCollaboratorIds`, `colegiadoSoberanoCollaboratorIds` — e o
+    modelo **não conhece matrícula**; o campo textual `papel`
+    (GERENTE/COORDENADOR/OUTRO) foi **eliminado** e substituído por fatos
+    relacionais soberanos (`temCadeiaDeGestaoSoberana`,
+    `gestorSoberanoTemSuperior`, `raizDaCadeiaSoberana`, `colegiadoSoberano`);
+  - **PRODUTOR conectado:** `src/services/estruturaSoberanaCliente.ts` carrega a
+    estrutura pelo caminho normal já existente (`lerEstrutura` RLS/P4 +
+    `listarColaboradores` F5-07), publica a projeção e mantém a **ponte de
+    compatibilidade** matrícula ↔ UUID (fronteira, nunca chave estrutural);
+    `src/pages/useEstruturaSoberanaDoCliente.ts` é acionado pelo shell
+    autenticado (`LayoutFuncional` em `src/routes/AppRoutes.tsx`) — nenhum
+    consumidor injeta projeção manualmente e a ausência de injeção deixou de ser
+    "modo DENY";
+  - provas: `projecaoEstruturalSoberana.test.ts` (8), `estruturaSoberanaCliente.test.ts`
+    (8), `cutoverEstruturalServicos.test.ts` (4) e o bloco estático
+    `estruturaUiSeguranca.test.ts` (37 no arquivo), que reprova modelo com
+    matrícula, consumidores lendo campos locais e produtor não acionado;
+  - `docs/F5-08-p6-duvida-mundo-funcional.md` documenta os dois blockers
+    resolvidos, a identidade UUID, o fail-closed e o que resta à F5-09 (apenas o
+    domínio de ciclos: persistência e estrutura POR CICLO) — sem autoridade
+    estrutural local.
 - **Residual declarado (fora do blocker, não silencioso):** `relatorioService`
   (filtros por `gestorDiretoMatricula`), `exportarAvaliacaoPdf` (identificação de
   avaliadores), `visibilidadeColaboradores` (sem chamador de produção) e
   `historicoOrganizacionalStorage` (snapshots/efetivos). Registrado na §6 do
   documento acima; exige atividade própria (relatórios/PDF).
-- **Consequência do cutover (verificada):** em produção o mundo funcional do
-  cliente fica fail-closed (DENY) até a projeção soberana alimentá-lo; a decisão
-  real permanece server-side (Edge + Policy Engine + RLS). Coberto por
-  `cutoverEstrutural.test.ts` e `cutoverEstruturalServicos.test.ts`.
-- **Validação desta rodada:** `npm test` (**106 arquivos / 1650 testes** verdes),
+- **Consequência do cutover (verificada):** em produção a estrutura de
+  ciclo/metas é obtida da leitura soberana (RLS) pelo produtor publicado no shell
+  autenticado; falha real do Supabase ⇒ fail-closed, e a decisão real de
+  autorização permanece server-side (Edge + Policy Engine + RLS). Coberto por
+  `cutoverEstrutural.test.ts`, `cutoverEstruturalServicos.test.ts`,
+  `projecaoEstruturalSoberana.test.ts` e `estruturaSoberanaCliente.test.ts`.
+- **Validação desta rodada:** `npm test` (**108 arquivos / 1664 testes** verdes),
   `npm run build`, `npm run lint`, `npx tsc -b tsconfig.app.json` e
   `git diff --check` executados localmente (todos verdes). Os **validadores SQL não
   foram executados** neste host (Docker/Supabase indisponível) — rodam no job
