@@ -111,6 +111,24 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   categoria especial dele (policy SELECT own-tenant sem grant). A migration da P1
   **não** foi alterada e nenhuma regra da F5-09/P1 foi relaxada (contagem total de
   policies segue 22: `cycle_events` não tem policy no P1).
+- **Correção pós-CI #2 (PR #190, mesma branch):** o passo
+  `Run F5-08 cutover validation (P6)` falhava com
+  `[FAIL] P6-6: funcao com advisory lock fora da chave normativa: ciclo_lock_organizacao`.
+  O P6-6 fazia uma **varredura global** de funções com `pg_advisory_xact_lock` e
+  pressupunha que toda função com lock pertencia à família estrutural da F5-08.
+  Correção **mínima e sem relaxar D24**: o P6-6 passou a ser uma **classificação
+  explícita por família** — catálogo fechado da **família estrutural** (15 RPCs da
+  F5-08 + as 4 RPCs estruturais da F5-07 alinhadas pela `20260914020000` + os 2
+  triggers anti-ciclo da F3-04/F5-08), cada uma provada **por função** como usuária
+  **exclusiva** de `position_reporting_lines:<org>` (e de nenhuma chave alheia), e
+  catálogo fechado das **demais famílias** com a sua chave normativa própria —
+  hoje `ciclo_lock_organizacao` → `evaluation_cycles:` (F5-09, família de ciclos).
+  Um **fechamento** reprova qualquer função com advisory lock fora dos dois
+  catálogos (família nova exige catalogação explícita), a proibição de
+  `SECURITY DEFINER` com lock continua global e a não vacuidade passou a exigir
+  ≥ 15 funções **estruturais** com a chave D24. `ciclo_lock_organizacao` e a
+  migration da F5-09/P1 **não** foram alteradas (a F5-09 **não** reutiliza
+  `position_reporting_lines:` nem `f5_07_estrutura:`).
 
 ### 3.6 F5-09 — desenho técnico (rodada anterior, integrada pelo PR #189)
 
