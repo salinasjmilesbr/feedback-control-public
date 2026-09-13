@@ -451,7 +451,7 @@ begin
   -- (E1) alteracao MATERIAL (descricao) invalida AMBAS as aprovacoes vigentes,
   --      atomicamente, com um evento APROVACAO_INVALIDADA por papel.
   v_res := public.meta_editar(v_g1, v_alfa, 'Meta do dono EDITADA materialmente (P3)',
-    'KPI de fixture (P3)', '100 unidades (P3)', 0, v_a1,
+    'KPI de fixture (P3)', '100 unidades (P3)', 0, 'f1c00000-0000-0000-0000-000000000003' /* dono: SELF (P4) */,
     'f1700000-0000-0000-0000-000000000131');
   if (v_res->>'version')::int <> 1 then
     raise exception '[FAIL] E1: edicao deveria levar a meta para version 1 (%)', v_res;
@@ -518,7 +518,7 @@ begin
 
   -- (E3) edicao SEM alteracao efetiva NAO invalida a aprovacao vigente.
   perform public.meta_editar(v_g1, v_alfa, 'Meta do dono EDITADA materialmente (P3)',
-    'KPI de fixture (P3)', '100 unidades (P3)', 1, v_a1,
+    'KPI de fixture (P3)', '100 unidades (P3)', 1, 'f1c00000-0000-0000-0000-000000000003' /* dono: SELF (P4) */,
     'f1700000-0000-0000-0000-000000000133');
   select count(*) into v_n from public.evaluation_goal_approvals a
    where a.organization_id = v_alfa and a.goal_id = v_g1 and a.revogado_em is null;
@@ -597,7 +597,7 @@ begin
   perform set_config('f5_10_p3.falhar', 'APROVACAO_INVALIDADA', true);
   v_ok := false;
   begin
-    perform public.meta_invalidar_aprovacoes(v_g1, v_alfa, 'probe de rollback (P3)', 2, v_a1,
+    perform public.meta_invalidar_aprovacoes(v_g1, v_alfa, 'probe de rollback (P3)', 2, 'f1c00000-0000-0000-0000-000000000003' /* dono: SELF (P4) */,
       'f1700000-0000-0000-0000-000000000162');
   exception when others then v_ok := sqlerrm like '%MUT_F5_10_P3%';
   end;
@@ -626,7 +626,7 @@ begin
   v_ok := false;
   begin
     perform public.meta_editar(v_g1, v_alfa, 'edicao que deve ser revertida (P3)',
-      'KPI revertido (P3)', '999 unidades (P3)', 2, v_a1,
+      'KPI revertido (P3)', '999 unidades (P3)', 2, 'f1c00000-0000-0000-0000-000000000003' /* dono: SELF (P4) */,
       'f1700000-0000-0000-0000-000000000163');
   exception when others then v_ok := sqlerrm like '%MUT_F5_10_P3%';
   end;
@@ -664,7 +664,7 @@ begin
   begin
     perform public.meta_invalidar_aprovacoes(
       'f1000000-0000-0000-0000-000000000003', v_alfa,
-      'probe de rollback do NO-OP (P3)', 0, v_a1,
+      'probe de rollback do NO-OP (P3)', 0, 'f1c00000-0000-0000-0000-000000000004' /* dono: SELF (P4) */,
       'f1700000-0000-0000-0000-000000000164');
   exception when others then v_ok := sqlerrm like '%MUT_F5_10_P3%';
   end;
@@ -707,7 +707,7 @@ declare
   v_n     int;
 begin
   -- (E4) progresso NAO invalida.
-  perform public.meta_atualizar_progresso(v_g1, v_alfa, 'acompanhamento (P3)', 50, 2, v_a1,
+  perform public.meta_atualizar_progresso(v_g1, v_alfa, 'acompanhamento (P3)', 50, 2, 'f1c00000-0000-0000-0000-000000000003' /* dono: SELF (P4) */,
     'f1700000-0000-0000-0000-000000000134');
   select count(*) into v_n from public.evaluation_goal_approvals a
    where a.organization_id = v_alfa and a.goal_id = v_g1 and a.revogado_em is null;
@@ -716,7 +716,7 @@ begin
   end if;
 
   -- (E5) primeira finalizacao NAO invalida.
-  perform public.meta_finalizar(v_g1, v_alfa, 'fechamento (P3)', true, 3, v_a1,
+  perform public.meta_finalizar(v_g1, v_alfa, 'fechamento (P3)', true, 3, 'f1c00000-0000-0000-0000-000000000003' /* dono: SELF (P4) */,
     'f1700000-0000-0000-0000-000000000135');
   select count(*) into v_n from public.evaluation_goal_approvals a
    where a.organization_id = v_alfa and a.goal_id = v_g1 and a.revogado_em is null;
@@ -726,7 +726,7 @@ begin
 
   -- (E6) revisao de fechamento NAO invalida.
   perform public.meta_revisar_finalizacao(v_g1, v_alfa, 'fechamento revisado (P3)', false,
-    'revisao de fechamento (P3)', 4, v_a1, 'f1700000-0000-0000-0000-000000000136');
+    'revisao de fechamento (P3)', 4, 'f1c00000-0000-0000-0000-000000000003' /* dono: SELF (P4) */, 'f1700000-0000-0000-0000-000000000136');
   select count(*) into v_n from public.evaluation_goal_approvals a
    where a.organization_id = v_alfa and a.goal_id = v_g1 and a.revogado_em is null;
   if v_n <> 1 then
@@ -750,7 +750,7 @@ begin
   -- (E8) soft delete e TERMINAL e PRESERVA os fatos historicos: G2 tem aprovacao
   --      VIGENTE do GERENTE que permanece vigente (nao vira invalidacao artificial).
   perform public.meta_excluir('f1000000-0000-0000-0000-000000000002', v_alfa,
-    'meta cancelada na fixture (P3)', 0, v_a1, 'f1700000-0000-0000-0000-000000000138');
+    'meta cancelada na fixture (P3)', 0, 'f1c00000-0000-0000-0000-000000000008' /* dono: SELF (P4) */, 'f1700000-0000-0000-0000-000000000138');
   select count(*) into v_n from public.evaluation_goal_approvals a
    where a.organization_id = v_alfa
      and a.goal_id = 'f1000000-0000-0000-0000-000000000002'
@@ -786,7 +786,7 @@ begin
   -- (F1) motivo obrigatorio => INVALID_INPUT.
   v_ok := false;
   begin
-    perform public.meta_invalidar_aprovacoes(v_g1, v_alfa, '   ', 5, v_a1,
+    perform public.meta_invalidar_aprovacoes(v_g1, v_alfa, '   ', 5, 'f1c00000-0000-0000-0000-000000000003' /* dono: SELF (P4) */,
       'f1700000-0000-0000-0000-000000000141');
   exception when others then v_ok := sqlerrm like '%F5_10_INVALID_INPUT%';
   end;
@@ -797,7 +797,7 @@ begin
   -- (F2) expected_version obsoleto => CONFLICT.
   v_ok := false;
   begin
-    perform public.meta_invalidar_aprovacoes(v_g1, v_alfa, 'stale (P3)', 3, v_a1,
+    perform public.meta_invalidar_aprovacoes(v_g1, v_alfa, 'stale (P3)', 3, 'f1c00000-0000-0000-0000-000000000003' /* dono: SELF (P4) */,
       'f1700000-0000-0000-0000-000000000142');
   exception when others then v_ok := sqlerrm like '%F5_10_CONFLICT%';
   end;
@@ -819,7 +819,7 @@ begin
   -- (F4) invalidacao EFETIVA do fato vigente de G1, sem tocar os ja revogados e
   --      sem alterar a version da META.
   v_res := public.meta_invalidar_aprovacoes(v_g1, v_alfa,
-    'invalidacao soberana explicita (P3)', 5, v_a1,
+    'invalidacao soberana explicita (P3)', 5, 'f1c00000-0000-0000-0000-000000000003' /* dono: SELF (P4) */,
     'f1700000-0000-0000-0000-000000000144');
   if (v_res->>'invalidated')::int <> 1 or v_res->>'papel' <> 'GERENTE' then
     raise exception '[FAIL] F4: invalidacao deveria atingir exatamente 1 fato (GERENTE) (%)', v_res;
@@ -844,7 +844,7 @@ begin
 
   -- (F5) replay IDENTICO devolve o MESMO resultado, sem novo evento.
   v_res2 := public.meta_invalidar_aprovacoes(v_g1, v_alfa,
-    'invalidacao soberana explicita (P3)', 5, v_a1,
+    'invalidacao soberana explicita (P3)', 5, 'f1c00000-0000-0000-0000-000000000003' /* dono: SELF (P4) */,
     'f1700000-0000-0000-0000-000000000144');
   if v_res <> v_res2 then
     raise exception '[FAIL] F5: replay da invalidacao devolveu resultado diferente (% vs %)', v_res, v_res2;
@@ -866,7 +866,7 @@ begin
   end if;
 
   v_res := public.meta_invalidar_aprovacoes(v_g1, v_alfa,
-    'segunda invalidacao sem fatos vigentes (P3)', 5, v_a1,
+    'segunda invalidacao sem fatos vigentes (P3)', 5, 'f1c00000-0000-0000-0000-000000000003' /* dono: SELF (P4) */,
     'f1700000-0000-0000-0000-000000000145');
   if (v_res->>'invalidated')::int <> 0 then
     raise exception '[FAIL] F6: sem fato vigente a invalidacao deveria ser NO-OP (%)', v_res;
@@ -890,8 +890,8 @@ begin
   if v_evento.event_type <> 'APROVACAO_INVALIDADA'
      or v_evento.goal_id <> v_g1
      or v_evento.result_entity_id is not null
-     or v_evento.actor_user_profile_id <> v_a1
-     or v_evento.actor_membership_id <> 'f1d00000-0000-0000-0000-000000000001'::uuid
+     or v_evento.actor_user_profile_id <> 'f1c00000-0000-0000-0000-000000000003'::uuid
+     or v_evento.actor_membership_id <> 'f1d00000-0000-0000-0000-000000000003'::uuid
      or v_evento.reason <> 'segunda invalidacao sem fatos vigentes (P3)'
      or v_evento.payload_hash !~ '^[0-9a-f]{64}$' then
     raise exception '[FAIL] F6: evento do NO-OP divergente (%)', v_evento;
@@ -924,7 +924,7 @@ begin
 
   -- Replay IMEDIATO do NO-OP: mesmo resultado e nenhum evento adicional.
   v_res2 := public.meta_invalidar_aprovacoes(v_g1, v_alfa,
-    'segunda invalidacao sem fatos vigentes (P3)', 5, v_a1,
+    'segunda invalidacao sem fatos vigentes (P3)', 5, 'f1c00000-0000-0000-0000-000000000003' /* dono: SELF (P4) */,
     'f1700000-0000-0000-0000-000000000145');
   if v_res <> v_res2 then
     raise exception '[FAIL] F6: replay imediato do NO-OP divergiu (% vs %)', v_res, v_res2;
@@ -962,7 +962,7 @@ begin
    where organization_id = v_alfa;
 
   v_res := public.meta_invalidar_aprovacoes(v_g1, v_alfa,
-    'segunda invalidacao sem fatos vigentes (P3)', 5, v_a1,
+    'segunda invalidacao sem fatos vigentes (P3)', 5, 'f1c00000-0000-0000-0000-000000000003' /* dono: SELF (P4) */,
     'f1700000-0000-0000-0000-000000000145');
   if (v_res->>'invalidated')::int <> 0 then
     raise exception '[FAIL] F8: replay TEMPORAL do NO-OP deveria continuar invalidated = 0 (%)', v_res;
@@ -996,7 +996,7 @@ begin
   v_ok := false; v_msg := null;
   begin
     perform public.meta_invalidar_aprovacoes(v_g1, v_alfa,
-      'payload divergente com o mesmo operation_id (P3)', 5, v_a1,
+      'payload divergente com o mesmo operation_id (P3)', 5, 'f1c00000-0000-0000-0000-000000000003' /* dono: SELF (P4) */,
       'f1700000-0000-0000-0000-000000000145');
   exception when others then v_ok := sqlerrm like '%F5_10_CONFLICT%'; v_msg := sqlerrm;
   end;
@@ -1044,7 +1044,7 @@ begin
   v_ok := false; v_msg := null;
   begin
     perform public.meta_invalidar_aprovacoes(v_g2, v_alfa, 'invalidacao em meta excluida (P3)',
-      1, v_a1, 'f1700000-0000-0000-0000-000000000152');
+      1, 'f1c00000-0000-0000-0000-000000000008' /* dono: SELF (P4) */, 'f1700000-0000-0000-0000-000000000152');
   exception when others then v_ok := sqlerrm like '%F5_10_CONFLICT%'; v_msg := sqlerrm;
   end;
   if not v_ok then
@@ -1186,7 +1186,7 @@ begin
     v_prob := v_prob || 'meta_editar sem D19 ou sem o lock normativo';
   end if;
 
-  -- (J4) anti-escopo: nenhuma RPC de meta/goal alem das 9 do contrato P2+P3.
+  -- (J4) anti-escopo: nenhuma RPC de meta/goal alem das 10 do contrato P2+P3+P4.
   select count(*) into v_n
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public'
@@ -1194,29 +1194,67 @@ begin
      and p.proname <> all (array[
        'meta_criar', 'meta_editar', 'meta_atualizar_progresso', 'meta_finalizar',
        'meta_revisar_finalizacao', 'meta_excluir', 'meta_definir_limites_do_ciclo',
-       'meta_aprovar', 'meta_invalidar_aprovacoes']);
+       'meta_aprovar', 'meta_invalidar_aprovacoes', 'meta_listar_por_escopo']);
   if v_n <> 0 then
-    v_prob := v_prob || format('%s RPC(s) de meta fora do contrato P2+P3', v_n);
+    v_prob := v_prob || format('%s RPC(s) de meta fora do contrato P2+P3+P4', v_n);
   end if;
-  foreach v_fn in array array['meta_listar_por_escopo', 'goal_listar', 'goal_aprovar',
-                              'meta_ler_por_escopo'] loop
+  foreach v_fn in array array['goal_listar', 'goal_aprovar', 'meta_ler_por_escopo'] loop
     if exists (select 1 from pg_proc p
                 where p.pronamespace = 'public'::regnamespace and p.proname = v_fn) then
       v_prob := v_prob || ('antecipacao de fase futura: ' || v_fn);
     end if;
   end loop;
 
-  -- (J5) deny-by-default e nenhum privilegio de cliente nas 4 tabelas.
+  -- (J5) RLS da P4: `evaluation_goals` e `evaluation_goal_approvals` tem
+  --      EXATAMENTE a policy de SELECT own-tenant do contrato (nome exato, role
+  --      authenticated, predicado de membership ativa do F4-08 e SEM WITH CHECK)
+  --      + SELECT minimo concedido ao cliente e NENHUMA escrita; a trilha e as
+  --      quotas seguem deny-by-default INTEGRAL (zero policy e zero privilegio
+  --      de cliente); `service_role` continua sem DELETE/TRUNCATE nas 4.
   foreach v_tab in array array[
-    'evaluation_goals', 'evaluation_goal_approvals',
+    'evaluation_goals', 'evaluation_goal_approvals'] loop
+    if not exists (
+      select 1 from pg_policies
+       where schemaname = 'public' and tablename = v_tab
+         and policyname = v_tab || '_select_same_tenant'
+         and cmd = 'SELECT'
+         and 'authenticated' = any (roles)
+         and position('user_has_active_membership(organization_id)'
+                      in coalesce(qual, '')) > 0
+         and with_check is null
+    ) then
+      v_prob := v_prob || (v_tab || ': policy SELECT own-tenant da P4 ausente ou divergente');
+    end if;
+    if (select count(*) from pg_policies
+         where schemaname = 'public' and tablename = v_tab) <> 1 then
+      v_prob := v_prob || (v_tab || ': numero de policies diferente de 1 (P4)');
+    end if;
+    if has_table_privilege('authenticated', 'public.' || v_tab, 'SELECT') is not true then
+      v_prob := v_prob || (v_tab || ': authenticated sem SELECT (leitura own-tenant da P4)');
+    end if;
+    if has_table_privilege('authenticated', 'public.' || v_tab, 'INSERT')
+       or has_table_privilege('authenticated', 'public.' || v_tab, 'UPDATE')
+       or has_table_privilege('authenticated', 'public.' || v_tab, 'DELETE')
+       or has_table_privilege('authenticated', 'public.' || v_tab, 'TRUNCATE') then
+      v_prob := v_prob || ('escrita de cliente aberta em ' || v_tab);
+    end if;
+    if has_table_privilege('anon', 'public.' || v_tab, 'SELECT') then
+      v_prob := v_prob || ('leitura de anon aberta em ' || v_tab);
+    end if;
+  end loop;
+  foreach v_tab in array array[
     'evaluation_goal_events', 'evaluation_cycle_goal_limits'] loop
     if exists (select 1 from pg_policies where schemaname = 'public' and tablename = v_tab) then
-      v_prob := v_prob || ('policy criada em ' || v_tab || ' (P4 nao antecipada)');
+      v_prob := v_prob || ('policy criada em ' || v_tab || ' (deny-by-default integral da P1/P4)');
     end if;
     if has_table_privilege('authenticated', 'public.' || v_tab, 'SELECT')
        or has_table_privilege('anon', 'public.' || v_tab, 'SELECT') then
       v_prob := v_prob || ('leitura de cliente aberta em ' || v_tab);
     end if;
+  end loop;
+  foreach v_tab in array array[
+    'evaluation_goals', 'evaluation_goal_approvals',
+    'evaluation_goal_events', 'evaluation_cycle_goal_limits'] loop
     if has_table_privilege('service_role', 'public.' || v_tab, 'DELETE')
        or has_table_privilege('service_role', 'public.' || v_tab, 'TRUNCATE') then
       v_prob := v_prob || ('service_role com DELETE/TRUNCATE em ' || v_tab);

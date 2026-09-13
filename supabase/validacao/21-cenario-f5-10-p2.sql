@@ -8,13 +8,30 @@
 -- Fixture ISOLADA (prefixo `f0`) das fixtures das fases anteriores
 -- (P1 = `ee`, P5 F5-09 = `ec`, P4 = `eb`, P9 = `ed`, F5-09 P2 = `e9`):
 --   - Alfa (`...a1`) e Beta (`...b1`) com atores proprios;
---   - a1 = ator Alfa com membership ATIVA (executa as operacoes soberanas);
+--   - a1 = ator Alfa com membership ATIVA e vinculo soberano ao colaborador
+--     `...0001` (dono das metas de fixture do ciclo ENCERRADO);
 --   - a2 = ator de OUTRO tenant (Beta) — prova de isolamento;
 --   - a3 = ator Alfa com membership DISABLED — prova fail-closed;
 --   - a4 = ator Alfa com perfil DISABLED (membership ativa) — prova que o PERFIL
 --     ativo e exigido, nao apenas a membership (o CHECK da tabela so admite
 --     `active`/`disabled`);
+--   - a5 = ator Alfa ADICIONADO na adaptacao ao gate da P4: membership ATIVA e
+--     vinculo soberano ao colaborador `...0002` (dono da meta viva de fixture
+--     `...0008`). A partir da F5-10 P4 toda operacao de escrita exige `goal.write`
+--     + SELF, e SELF e o vinculo UNICO ator -> colaborador DONO da meta (D9): por
+--     isso as criacoes/mutacoes da meta do colaborador `...0002` sao executadas
+--     por a5 no validador 22 (a1 so tem vinculo com `...0001`);
 --   - 3 colaboradores SOBERANOS (2 em Alfa, 1 em Beta);
+--   - VINCULOS soberanos (F5-02, `membership_collaborator_links`, status ativo)
+--     exigidos pelo gate funcional da P4: a1 -> c1 (`...0001`), a5 -> c2
+--     (`...0002`) e o ator de Beta -> colaborador de Beta (`...b1`). a3
+--     (membership disabled) e a4 (perfil disabled) NAO recebem vinculo: o ator
+--     soberano ja e recusado ANTES do gate (`evaluation_ator_valido`);
+--   - AUTORIZACAO da fixture (P4/D6/D7): roles customizadas por tenant com
+--     capabilities JA EXISTENTES do catalogo (`goal.read`, `goal.write` e
+--     `cycle.manage` — nenhuma capability nova) e atribuicoes DIRETAS (dado da
+--     fixture, mesmo padrao de `03-cenario-f5-09-p2.sql`; nenhuma RPC de
+--     autorizacao e chamada aqui);
 --   - Alfa tem DOIS ciclos: um `ATIVO` (operacoes mutaveis) e um `ENCERRADO`
 --     (prova que criar/editar/progredir/finalizar exigem ciclo ATIVO, enquanto
 --     revisar/excluir sao historicas e NAO o exigem — matriz do §10/D12);
@@ -75,13 +92,18 @@ values
    '{}'::jsonb, '{}'::jsonb, now(), now()),
   ('f0c00000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000000',
    'authenticated', 'authenticated', 'perfil.disabled.f5-10-p2@example.invalid', 'x', now(),
+   '{}'::jsonb, '{}'::jsonb, now(), now()),
+  -- a5 (adaptacao P4): ator Alfa com vinculo soberano ao colaborador `...0002`.
+  ('f0c00000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-000000000000',
+   'authenticated', 'authenticated', 'dono.c2.f5-10-p2@example.invalid', 'x', now(),
    '{}'::jsonb, '{}'::jsonb, now(), now());
 
 insert into public.user_profiles (id, status) values
   ('f0c00000-0000-0000-0000-000000000001', 'active'),
   ('f0c00000-0000-0000-0000-000000000002', 'active'),
   ('f0c00000-0000-0000-0000-000000000003', 'active'),
-  ('f0c00000-0000-0000-0000-000000000004', 'disabled');
+  ('f0c00000-0000-0000-0000-000000000004', 'disabled'),
+  ('f0c00000-0000-0000-0000-000000000005', 'active');
 
 insert into public.user_organization_memberships
   (id, user_profile_id, organization_id, status)
@@ -93,6 +115,8 @@ values
   ('f0d00000-0000-0000-0000-000000000003', 'f0c00000-0000-0000-0000-000000000003',
    'f0a00000-0000-0000-0000-0000000000a1', 'disabled'),
   ('f0d00000-0000-0000-0000-000000000004', 'f0c00000-0000-0000-0000-000000000004',
+   'f0a00000-0000-0000-0000-0000000000a1', 'active'),
+  ('f0d00000-0000-0000-0000-000000000005', 'f0c00000-0000-0000-0000-000000000005',
    'f0a00000-0000-0000-0000-0000000000a1', 'active');
 
 -- ----------------------------------------------------------------------------
@@ -102,6 +126,75 @@ insert into public.collaborators (id, organization_id) values
   ('f0b00000-0000-0000-0000-000000000001', 'f0a00000-0000-0000-0000-0000000000a1'),
   ('f0b00000-0000-0000-0000-000000000002', 'f0a00000-0000-0000-0000-0000000000a1'),
   ('f0b00000-0000-0000-0000-0000000000b1', 'f0a00000-0000-0000-0000-0000000000b1');
+
+-- ----------------------------------------------------------------------------
+-- 3-bis) VINCULOS soberanos membro x colaborador (F5-02) — exigidos pelo gate
+--        funcional da P4 (`f5_10_vinculo_meta_do_ator`: 0 ou >1 vinculo => DENY).
+--        Cada ator de escrita tem EXATAMENTE UM vinculo ativo, apontando o
+--        colaborador DONO das metas que aquele ator manipula (SELF, D9).
+--        a3 (membership disabled) e a4 (perfil disabled) ficam SEM vinculo: sao
+--        recusados por `evaluation_ator_valido` ANTES do gate.
+-- ----------------------------------------------------------------------------
+insert into public.membership_collaborator_links
+  (id, membership_id, organization_id, collaborator_id, status) values
+  -- a1 -> c1 (dono das metas de fixture do ciclo ENCERRADO).
+  ('f0e00000-0000-0000-0000-000000000001', 'f0d00000-0000-0000-0000-000000000001',
+   'f0a00000-0000-0000-0000-0000000000a1', 'f0b00000-0000-0000-0000-000000000001', 'active'),
+  -- ator de Beta -> colaborador de Beta (tenant proprio).
+  ('f0e00000-0000-0000-0000-0000000000b1', 'f0d00000-0000-0000-0000-000000000002',
+   'f0a00000-0000-0000-0000-0000000000b1', 'f0b00000-0000-0000-0000-0000000000b1', 'active'),
+  -- a5 (novo) -> c2 (dono da meta viva de fixture `...0008`).
+  ('f0e00000-0000-0000-0000-000000000005', 'f0d00000-0000-0000-0000-000000000005',
+   'f0a00000-0000-0000-0000-0000000000a1', 'f0b00000-0000-0000-0000-000000000002', 'active');
+
+-- ----------------------------------------------------------------------------
+-- 3-ter) AUTORIZACAO da fixture (P4/D6/D7): roles customizadas por tenant com
+--        capabilities JA EXISTENTES do catalogo (`goal.read`, `goal.write`,
+--        `cycle.manage` — nenhuma capability nova). Insercao DIRETA (dado da
+--        fixture, sem RPC), no mesmo padrao de `03-cenario-f5-09-p2.sql`.
+--          - `metas-dono-p2-alfa`: goal.read + goal.write, atribuida a a1 e a5;
+--          - `metas-dono-p2-beta`: idem, atribuida ao ator de Beta (a integridade
+--            cross-tenant da F4-01 exige role do MESMO tenant da membership);
+--          - `ciclo-admin-p2-alfa`: cycle.manage (D21: `meta_definir_limites_do_
+--            ciclo` continua operacao ADMINISTRATIVA de ciclo), atribuida a a1.
+--        Nenhuma role e atribuida a a3/a4: o ator ja e recusado antes do gate.
+-- ----------------------------------------------------------------------------
+insert into public.access_roles (id, name, status, is_system, organization_id) values
+  ('f0a50000-0000-0000-0000-0000000000a1', 'metas-dono-p2-alfa', 'active', false,
+   'f0a00000-0000-0000-0000-0000000000a1'),
+  ('f0a50000-0000-0000-0000-0000000000a2', 'ciclo-admin-p2-alfa', 'active', false,
+   'f0a00000-0000-0000-0000-0000000000a1'),
+  ('f0a50000-0000-0000-0000-0000000000b1', 'metas-dono-p2-beta', 'active', false,
+   'f0a00000-0000-0000-0000-0000000000b1');
+
+insert into public.access_role_capabilities (access_role_id, capability_id)
+select ar.id, c.id
+  from public.access_roles ar
+  cross join public.capabilities c
+ where ar.id in ('f0a50000-0000-0000-0000-0000000000a1',
+                 'f0a50000-0000-0000-0000-0000000000b1')
+   and c.code in ('goal.read', 'goal.write')
+union all
+select ar.id, c.id
+  from public.access_roles ar
+  cross join public.capabilities c
+ where ar.id = 'f0a50000-0000-0000-0000-0000000000a2'
+   and c.code = 'cycle.manage';
+
+insert into public.membership_access_role_assignments
+  (id, membership_id, organization_id, access_role_id, status, created_by) values
+  ('f0a60000-0000-0000-0000-000000000001', 'f0d00000-0000-0000-0000-000000000001',
+   'f0a00000-0000-0000-0000-0000000000a1', 'f0a50000-0000-0000-0000-0000000000a1',
+   'active', 'f0c00000-0000-0000-0000-000000000001'),
+  ('f0a60000-0000-0000-0000-000000000005', 'f0d00000-0000-0000-0000-000000000005',
+   'f0a00000-0000-0000-0000-0000000000a1', 'f0a50000-0000-0000-0000-0000000000a1',
+   'active', 'f0c00000-0000-0000-0000-000000000001'),
+  ('f0a60000-0000-0000-0000-0000000000b1', 'f0d00000-0000-0000-0000-000000000002',
+   'f0a00000-0000-0000-0000-0000000000b1', 'f0a50000-0000-0000-0000-0000000000b1',
+   'active', 'f0c00000-0000-0000-0000-000000000002'),
+  ('f0a60000-0000-0000-0000-0000000000a2', 'f0d00000-0000-0000-0000-000000000001',
+   'f0a00000-0000-0000-0000-0000000000a1', 'f0a50000-0000-0000-0000-0000000000a2',
+   'active', 'f0c00000-0000-0000-0000-000000000001');
 
 -- ----------------------------------------------------------------------------
 -- 4) Ciclos soberanos: um ATIVO e um ENCERRADO em Alfa; um ATIVO em Beta
@@ -180,6 +273,14 @@ declare
   v_metas    int;
   v_aprov    int;
   v_eventos  int;
+  v_links    int;
+  v_roles    int;
+  v_assign   int;
+  v_cap_a1w  int;
+  v_cap_a1c  int;
+  v_cap_a5w  int;
+  v_cap_abw  int;
+  v_cap_a3w  int;
 begin
   select count(*) into v_orgs from public.organizations
    where id in ('f0a00000-0000-0000-0000-0000000000a1',
@@ -204,17 +305,64 @@ begin
   select count(*) into v_eventos from public.evaluation_goal_events
    where organization_id in ('f0a00000-0000-0000-0000-0000000000a1',
                              'f0a00000-0000-0000-0000-0000000000b1');
+  -- Vinculos e autorizacao da adaptacao P4 (aditivos; a guarda NAO conta nada
+  -- que o validador 22 altere — metas/eventos sao contados separadamente).
+  select count(*) into v_links from public.membership_collaborator_links
+   where id::text like 'f0e00000%' and status = 'active';
+  select count(*) into v_roles from public.access_roles
+   where id::text like 'f0a50000%';
+  select count(*) into v_assign from public.membership_access_role_assignments
+   where id::text like 'f0a60000%' and status = 'active';
 
-  if v_orgs <> 2 or v_atores <> 4 or v_memb <> 4 or v_ativos <> 3
+  if v_orgs <> 2 or v_atores <> 5 or v_memb <> 5 or v_ativos <> 4
      or v_colabs <> 3 or v_ciclos <> 3 or v_quota <> 4 or v_metas <> 2
-     or v_aprov <> 0 or v_eventos <> 1 then
+     or v_aprov <> 0 or v_eventos <> 1
+     or v_links <> 3 or v_roles <> 3 or v_assign <> 4 then
     raise exception
-      '[FAIL] cenario F5-10 P2 incompleto (orgs=%, atores=%, memberships=%, ativas=%, colabs=%, ciclos=%, quotas=%, metas=%, aprovacoes=%, eventos=%)',
+      '[FAIL] cenario F5-10 P2 incompleto (orgs=%, atores=%, memberships=%, ativas=%, colabs=%, ciclos=%, quotas=%, metas=%, aprovacoes=%, eventos=%, vinculos=%, roles=%, atribuicoes=%)',
       v_orgs, v_atores, v_memb, v_ativos, v_colabs, v_ciclos, v_quota,
-      v_metas, v_aprov, v_eventos;
+      v_metas, v_aprov, v_eventos, v_links, v_roles, v_assign;
   end if;
 
-  raise notice '[PASS] cenario F5-10 P2: 2 orgs, 4 atores (1 ativo, 1 de outro tenant, 1 membership disabled, 1 perfil disabled), 3 colaboradores, 3 ciclos (Alfa ATIVO + ENCERRADO, Beta ATIVO), 4 quotas, 2 metas de fixture e 1 evento — ZERO aprovacoes';
+  -- O gate da P4 exige CAPABILITY EFETIVA por tenant: a fixture prova que ela
+  -- resolve exatamente para os atores designados (nenhum ator ganha goal.write
+  -- por cargo/vinculo implicito).
+  select count(*) into v_cap_a1w from public.resolver_capabilities_efetivas(
+    'f0c00000-0000-0000-0000-000000000001', 'f0a00000-0000-0000-0000-0000000000a1')
+   where capability_code = 'goal.write';
+  select count(*) into v_cap_a1c from public.resolver_capabilities_efetivas(
+    'f0c00000-0000-0000-0000-000000000001', 'f0a00000-0000-0000-0000-0000000000a1')
+   where capability_code = 'cycle.manage';
+  select count(*) into v_cap_a5w from public.resolver_capabilities_efetivas(
+    'f0c00000-0000-0000-0000-000000000005', 'f0a00000-0000-0000-0000-0000000000a1')
+   where capability_code = 'goal.write';
+  select count(*) into v_cap_abw from public.resolver_capabilities_efetivas(
+    'f0c00000-0000-0000-0000-000000000002', 'f0a00000-0000-0000-0000-0000000000b1')
+   where capability_code = 'goal.write';
+  select count(*) into v_cap_a3w from public.resolver_capabilities_efetivas(
+    'f0c00000-0000-0000-0000-000000000003', 'f0a00000-0000-0000-0000-0000000000a1')
+   where capability_code = 'goal.write';
+  if v_cap_a1w <> 1 or v_cap_a1c <> 1 or v_cap_a5w <> 1
+     or v_cap_abw <> 1 or v_cap_a3w <> 0 then
+    raise exception '[FAIL] cenario F5-10 P2: fixture de autorizacao incorreta (a1 goal.write=%, a1 cycle.manage=%, a5 goal.write=%, beta goal.write=%, a3 membership disabled goal.write=%)',
+      v_cap_a1w, v_cap_a1c, v_cap_a5w, v_cap_abw, v_cap_a3w;
+  end if;
+
+  -- Cada ator de escrita tem EXATAMENTE um vinculo soberano, apontando o
+  -- colaborador dono das metas que ele manipula no validador 22 (SELF).
+  if public.f5_10_vinculo_meta_do_ator(
+       'f0c00000-0000-0000-0000-000000000001', 'f0a00000-0000-0000-0000-0000000000a1')
+       is distinct from 'f0b00000-0000-0000-0000-000000000001'::uuid
+     or public.f5_10_vinculo_meta_do_ator(
+       'f0c00000-0000-0000-0000-000000000005', 'f0a00000-0000-0000-0000-0000000000a1')
+       is distinct from 'f0b00000-0000-0000-0000-000000000002'::uuid
+     or public.f5_10_vinculo_meta_do_ator(
+       'f0c00000-0000-0000-0000-000000000002', 'f0a00000-0000-0000-0000-0000000000b1')
+       is distinct from 'f0b00000-0000-0000-0000-0000000000b1'::uuid then
+    raise exception '[FAIL] cenario F5-10 P2: vinculo soberano UNICO nao resolve o colaborador dono esperado para os atores de escrita da fixture';
+  end if;
+
+  raise notice '[PASS] cenario F5-10 P2: 2 orgs, 5 atores (a1 e a5 ativos com vinculo soberano unico, 1 de outro tenant, 1 membership disabled, 1 perfil disabled), 3 colaboradores, 3 vinculos, 3 roles com capabilities existentes do catalogo (goal.read/goal.write/cycle.manage), 3 ciclos (Alfa ATIVO + ENCERRADO, Beta ATIVO), 4 quotas, 2 metas de fixture e 1 evento — ZERO aprovacoes';
 end $$;
 
 -- ----------------------------------------------------------------------------

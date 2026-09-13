@@ -20,8 +20,9 @@
 --   G  exclusao logica (linha preservada) e meta excluida sem mutacao;
 --   I  a quota continua autoridade do BANCO (trigger da P1) alem da RPC;
 --   J  ACL/anti-escopo: 7 RPCs INVOKER com lock normativo, EXECUTE so
---      service_role, zero policy, DELETE fisico negado e P3/P4/P5 nao
---      antecipadas;
+--      service_role, RLS own-tenant do P4 (1 policy SELECT por tabela legivel,
+--      escrita de cliente fechada), trilha/limites deny-by-default,
+--      DELETE fisico negado e P5 nao antecipada;
 --   K  nenhuma aprovacao criada incidentalmente (P3 nao antecipada);
 --   L  estado final deterministico (nenhum residuo dos testes negativos);
 --   M  D21 — limites do ciclo: alteracao valida com version do CICLO +1 e evento
@@ -30,6 +31,16 @@
 --      cross-tenant, perfil/membership invalidos, quantidade fora de 0..3,
 --      reducao ate/abaixo das metas vivas, invariante do banco, ROLLBACK por
 --      falha injetada na trilha do ciclo e ZERO vazamento para a trilha de metas.
+--
+-- ADAPTACAO F5-10 P4 (Issue #216): as 9 RPCs `meta_*` passaram a chamar o gate
+-- funcional `f5_10_exigir_autorizacao_meta` (capability EFETIVA + relacao) entre a
+-- revalidacao de ator/tenant e a idempotencia. Neste validador os atores foram
+-- REDIRECIONADOS para quem satisfaz o gate, sempre preservando o MESMO desfecho
+-- esperado: `meta_criar`/`meta_editar`/`meta_progresso`/`meta_finalizar`/
+-- `meta_revisar`/`meta_excluir` exigem `goal.write` + SELF (o ator e o DONO da
+-- meta) e `meta_definir_limites_do_ciclo` exige `cycle.manage`. As recusas de
+-- ator/tenant (membership/perfil desabilitados, cross-tenant) continuam com a
+-- MESMA mensagem `F5_10_FORBIDDEN` da revalidacao de ator.
 --
 -- Saida deterministica: um `[PASS]` por bloco; qualquer falha aborta.
 -- Asserts negativos rodam em subtransacao (a excecao esperada reverte apenas a
@@ -71,6 +82,13 @@ end $$;
 
 -- ============================================================================
 -- 1) A) Recusas de criacao SEM efeito (ator/tenant/ciclo/quota/tipo/texto)
+-- ----------------------------------------------------------------------------
+-- Adaptacao P4: os probes A4/A5/A6 usam o ator a1, que SATISFAZ o gate funcional
+-- (`goal.write` + SELF sobre o colaborador `...0001`, o alvo do corpo). Assim o
+-- desfecho observado continua sendo o da PRE-CONDICAO original (ciclo/colaborador
+-- de outro tenant => NOT_FOUND; ciclo ENCERRADO => CONFLICT) — o gate nao troca
+-- nem enfraquece esses invariantes. A1/A2/A3 sao recusados por
+-- `evaluation_ator_valido` (ator/tenant) ANTES do gate, com a mesma mensagem.
 -- ============================================================================
 do $$
 declare
@@ -230,7 +248,7 @@ begin
     raise exception '[FAIL] A: tentativa recusada criou estado (metas+eventos=%, esperado 2+1)', v_n;
   end if;
 
-  raise notice '[PASS] A: 10 recusas sem efeito (membership disabled, perfil inativo, cross-tenant de ator/ciclo/colaborador, ciclo ENCERRADO, quota zero, tipo, textos e operation_id)';
+  raise notice '[PASS] A: 10 recusas sem efeito (membership disabled, perfil inativo, cross-tenant de ator/ciclo/colaborador, ciclo ENCERRADO, quota zero, tipo, textos e operation_id) — os probes que alcancam as pre-condicoes passam pelo gate da P4 com ator legitimo (goal.write + SELF), preservando o desfecho original';
 end $$;
 
 -- ============================================================================
@@ -338,6 +356,13 @@ drop function public._mut_f5_10_p2_falhar_trilha();
 
 -- ============================================================================
 -- 3) B) Criacao valida: UUID soberano, version 0 e evento CRIADA
+-- ----------------------------------------------------------------------------
+-- Adaptacao P4: `meta_criar` exige `goal.write` + SELF, isto e, o ator tem de ser
+-- o UNICO colaborador vinculado (D9) E esse colaborador tem de ser o alvo da
+-- criacao. Por isso a meta de negocio do colaborador `...0002` (B2) e criada pelo
+-- NOVO ator a5 (vinculado a `...0002`); as metas do colaborador `...0001`
+-- continuam com a1. As expectativas (quota, unicidade, autoria resolvida no
+-- banco) sao as MESMAS.
 -- ============================================================================
 do $$
 declare
@@ -349,6 +374,7 @@ declare
   v_col2   uuid := 'f0b00000-0000-0000-0000-000000000002';
   v_colb   uuid := 'f0b00000-0000-0000-0000-0000000000b1';
   v_a1     uuid := 'f0c00000-0000-0000-0000-000000000001';
+  v_a5     uuid := 'f0c00000-0000-0000-0000-000000000005';
   v_abeta  uuid := 'f0c00000-0000-0000-0000-000000000002';
   v_res    jsonb;
   v_id     uuid;
@@ -432,9 +458,12 @@ begin
   end if;
 
   -- (B2) segunda meta de negocio (colaborador 2) fecha a quota 2 do tipo.
+  --      Gate da P4: o ator a5 e o vinculo UNICO do colaborador `...0002` (SELF),
+  --      por isso e ele quem cria esta meta; a a1 (vinculo com `...0001`) o gate
+  --      negaria (`goal.write` apenas sobre a propria meta).
   v_res := public.meta_criar(v_alfa, v_ciclo, v_col2, 'NEGOCIO_PROJETO',
     'Segunda meta de negocio (P2)', 'KPI de negocio (P2)', '50 unidades (P2)',
-    v_a1, 'f0700000-0000-0000-0000-000000000031');
+    v_a5, 'f0700000-0000-0000-0000-000000000031');
   if (v_res->>'goal_id')::uuid is null then
     raise exception '[FAIL] B2: segunda meta nao criada';
   end if;
@@ -478,7 +507,7 @@ begin
     raise exception '[FAIL] B5: a recusa por quota alterou o estado (vivas=%)', v_qtd;
   end if;
 
-  raise notice '[PASS] B: 4 criacoes validas (UUID do banco, version 0, vinculos soberanos, evento CRIADA com autoria resolvida no servidor) e quota excedida recusada sem efeito';
+  raise notice '[PASS] B: 4 criacoes validas (UUID do banco, version 0, vinculos soberanos, evento CRIADA com autoria resolvida no servidor) — as metas do colaborador `...0002` foram criadas pelo ator a5 (gate P4: goal.write + SELF) — e quota excedida recusada sem efeito';
 end $$;
 
 -- ============================================================================
@@ -678,6 +707,7 @@ declare
   v_ciclo uuid := 'f0d10000-0000-0000-0000-0000000000a1';
   v_col1  uuid := 'f0b00000-0000-0000-0000-000000000001';
   v_a1    uuid := 'f0c00000-0000-0000-0000-000000000001';
+  v_a5    uuid := 'f0c00000-0000-0000-0000-000000000005';
   v_fixv  uuid := 'f0900000-0000-0000-0000-000000000008';
   v_g1    uuid;
   v_res   jsonb;
@@ -729,10 +759,12 @@ begin
   end if;
 
   -- (D3) ciclo NAO-ATIVO => CONFLICT (matriz D12: so ciclo ATIVO permite editar).
+  --      Gate da P4: `v_fixv` pertence ao colaborador `...0002`, logo o ator tem de
+  --      ser a5 (SELF). A recusa observada continua sendo a do CICLO ENCERRADO.
   v_ok := false;
   begin
     perform public.meta_editar(v_fixv, v_alfa, 'edicao em ciclo encerrado',
-      'kpi de probe', 'alvo de probe', 0, v_a1,
+      'kpi de probe', 'alvo de probe', 0, v_a5,
       'f0700000-0000-0000-0000-000000000052');
   exception when others then v_ok := sqlerrm like '%F5_10_CONFLICT%';
   end;
@@ -773,11 +805,16 @@ begin
     raise exception '[FAIL] D5: intencao divergente no mesmo operation_id deveria ser CONFLICT';
   end if;
 
-  raise notice '[PASS] D: edicao valida da definicao (version+1, before/after) e recusas sem efeito (version obsoleta, ciclo ENCERRADO, texto em branco e intencao divergente)';
+  raise notice '[PASS] D: edicao valida da definicao (version+1, before/after) e recusas sem efeito (version obsoleta, ciclo ENCERRADO — probe sobre a meta do colaborador `...0002` executado pelo ator dono a5, gate P4 —, texto em branco e intencao divergente)';
 end $$;
 
 -- ============================================================================
 -- 7) E) Finalizacao coerente (1a finalizacao explicita; sem aprovacao)
+-- ----------------------------------------------------------------------------
+-- Adaptacao P4: `v_g2` e a meta do colaborador `...0002`, logo TODA mutacao sobre
+-- ela (E1..E4) e executada pelo ator a5, dono desse colaborador (SELF). E1/E2 sao
+-- recusas de FORMA (payload), que precedem o gate em qualquer ordem; E3/E4 sao
+-- mutacoes reais. `v_g1` (colaborador `...0001`) continua com a1.
 -- ============================================================================
 do $$
 declare
@@ -786,6 +823,7 @@ declare
   v_col1  uuid := 'f0b00000-0000-0000-0000-000000000001';
   v_col2  uuid := 'f0b00000-0000-0000-0000-000000000002';
   v_a1    uuid := 'f0c00000-0000-0000-0000-000000000001';
+  v_a5    uuid := 'f0c00000-0000-0000-0000-000000000005';
   v_g1    uuid;
   v_g2    uuid;
   v_res   jsonb;
@@ -804,7 +842,7 @@ begin
   -- (E1) fechamento INCOERENTE: resultado_final em branco => INVALID_INPUT.
   v_ok := false;
   begin
-    perform public.meta_finalizar(v_g2, v_alfa, '   ', true, 0, v_a1,
+    perform public.meta_finalizar(v_g2, v_alfa, '   ', true, 0, v_a5,
       'f0700000-0000-0000-0000-000000000060');
   exception when others then v_ok := sqlerrm like '%F5_10_INVALID_INPUT%';
   end;
@@ -815,7 +853,7 @@ begin
   -- (E2) fechamento INCOERENTE: atingida ausente => INVALID_INPUT.
   v_ok := false;
   begin
-    perform public.meta_finalizar(v_g2, v_alfa, 'fechamento sem atingida', null, 0, v_a1,
+    perform public.meta_finalizar(v_g2, v_alfa, 'fechamento sem atingida', null, 0, v_a5,
       'f0700000-0000-0000-0000-000000000061');
   exception when others then v_ok := sqlerrm like '%F5_10_INVALID_INPUT%';
   end;
@@ -831,7 +869,7 @@ begin
 
   -- (E3) finalizacao NAO_ATINGIDA coerente (version 0 -> 1).
   v_res := public.meta_finalizar(v_g2, v_alfa, 'meta nao atingida no periodo (P2)',
-    false, 0, v_a1, 'f0700000-0000-0000-0000-000000000062');
+    false, 0, v_a5, 'f0700000-0000-0000-0000-000000000062');
   if v_res->>'status' <> 'NAO_ATINGIDA' or (v_res->>'version')::int <> 1 then
     raise exception '[FAIL] E3: finalizacao NAO_ATINGIDA divergente (%)', v_res;
   end if;
@@ -846,7 +884,7 @@ begin
   -- (E4) re-finalizacao SILENCIOSA nao existe => CONFLICT (use a revisao).
   v_ok := false;
   begin
-    perform public.meta_finalizar(v_g2, v_alfa, 'segunda finalizacao', true, 1, v_a1,
+    perform public.meta_finalizar(v_g2, v_alfa, 'segunda finalizacao', true, 1, v_a5,
       'f0700000-0000-0000-0000-000000000063');
   exception when others then v_ok := sqlerrm like '%F5_10_CONFLICT%';
   end;
@@ -899,11 +937,16 @@ begin
     raise exception '[FAIL] E7: finalizacao criou aprovacao incidentalmente (%)', v_aprov;
   end if;
 
-  raise notice '[PASS] E: fechamento incoerente recusado; ATINGIDA e NAO_ATINGIDA coerentes aceitos; re-finalizacao silenciosa inexistente; editar/progredir meta finalizada negados; NENHUMA aprovacao envolvida';
+  raise notice '[PASS] E: fechamento incoerente recusado; ATINGIDA e NAO_ATINGIDA coerentes aceitos (mutacoes da meta do colaborador `...0002` pelo ator dono a5, gate P4: goal.write + SELF); re-finalizacao silenciosa inexistente; editar/progredir meta finalizada negados; NENHUMA aprovacao envolvida';
 end $$;
 
 -- ============================================================================
 -- 8) F) Revisao de fechamento (fechamento anterior recuperavel na trilha)
+-- ----------------------------------------------------------------------------
+-- Adaptacao P4: `meta_revisar_finalizacao` exige `goal.write` + SELF; as revisoes
+-- da meta do colaborador `...0002` (F1/F2) passam a usar o ator dono a5. As da
+-- meta de fixture `...0009` (colaborador `...0001`) e da meta individual do
+-- colaborador `...0001` continuam com a1. Expectativas IDENTICAS.
 -- ============================================================================
 do $$
 declare
@@ -912,6 +955,7 @@ declare
   v_col1  uuid := 'f0b00000-0000-0000-0000-000000000001';
   v_col2  uuid := 'f0b00000-0000-0000-0000-000000000002';
   v_a1    uuid := 'f0c00000-0000-0000-0000-000000000001';
+  v_a5    uuid := 'f0c00000-0000-0000-0000-000000000005';
   v_fixf  uuid := 'f0900000-0000-0000-0000-000000000009';
   v_g2    uuid;
   v_g3    uuid;
@@ -930,7 +974,7 @@ begin
   -- (F1) revisao VALIDA de NAO_ATINGIDA para ATINGIDA (version 1 -> 2).
   v_res := public.meta_revisar_finalizacao(v_g2, v_alfa,
     'fechamento revisado: meta atingida (P2)', true, 'revisao de fechamento (P2)', 1,
-    v_a1, 'f0700000-0000-0000-0000-000000000070');
+    v_a5, 'f0700000-0000-0000-0000-000000000070');
   if v_res->>'status' <> 'ATINGIDA' or (v_res->>'version')::int <> 2 then
     raise exception '[FAIL] F1: revisao deveria devolver ATINGIDA/version 2 (recebido %)', v_res;
   end if;
@@ -962,7 +1006,7 @@ begin
   v_ok := false;
   begin
     perform public.meta_revisar_finalizacao(v_g2, v_alfa, 'revisao com versao obsoleta',
-      false, 'probe de versao', 1, v_a1, 'f0700000-0000-0000-0000-000000000071');
+      false, 'probe de versao', 1, v_a5, 'f0700000-0000-0000-0000-000000000071');
   exception when others then v_ok := sqlerrm like '%F5_10_CONFLICT%';
   end;
   if not v_ok then
@@ -1004,11 +1048,16 @@ begin
     raise exception '[FAIL] F5: a recusa por texto alterou o fechamento revisado';
   end if;
 
-  raise notice '[PASS] F: revisao de fechamento explicita com fechamento anterior recuperavel na trilha; EM_ANDAMENTO, versao obsoleta e texto em branco negados; revisar nao exige ciclo ATIVO';
+  raise notice '[PASS] F: revisao de fechamento explicita com fechamento anterior recuperavel na trilha (meta do colaborador `...0002` revisada pelo ator dono a5, gate P4: goal.write + SELF); EM_ANDAMENTO, versao obsoleta e texto em branco negados; revisar nao exige ciclo ATIVO';
 end $$;
 
 -- ============================================================================
 -- 9) G) Exclusao LOGICA (linha preservada) e meta excluida sem mutacao
+-- ----------------------------------------------------------------------------
+-- Adaptacao P4: `meta_excluir` exige `goal.write` + SELF. G1/G2/G5 operam a meta
+-- INDIVIDUAL do colaborador `...0001` (ator a1). G3 opera a meta viva de fixture
+-- `...0008`, do colaborador `...0002` => ator a5. G4 opera a meta de Beta pelo
+-- ator de Beta (dono do colaborador de Beta). Nenhuma expectativa muda.
 -- ============================================================================
 do $$
 declare
@@ -1019,6 +1068,7 @@ declare
   v_col1  uuid := 'f0b00000-0000-0000-0000-000000000001';
   v_colb  uuid := 'f0b00000-0000-0000-0000-0000000000b1';
   v_a1    uuid := 'f0c00000-0000-0000-0000-000000000001';
+  v_a5    uuid := 'f0c00000-0000-0000-0000-000000000005';
   v_abeta uuid := 'f0c00000-0000-0000-0000-000000000002';
   v_fixv  uuid := 'f0900000-0000-0000-0000-000000000008';
   v_g3    uuid;
@@ -1067,7 +1117,8 @@ begin
   end if;
 
   -- (G3) excluir NAO exige ciclo ATIVO: a meta de fixture esta em ciclo ENCERRADO.
-  perform public.meta_excluir(v_fixv, v_alfa, 'meta viva de ciclo encerrado (P2)', 0, v_a1,
+  --      Gate da P4: a meta `...0008` pertence ao colaborador `...0002` (ator a5).
+  perform public.meta_excluir(v_fixv, v_alfa, 'meta viva de ciclo encerrado (P2)', 0, v_a5,
     'f0700000-0000-0000-0000-000000000082');
   select g.excluida, g.data_exclusao, g.version into v_meta
     from public.evaluation_goals g where g.id = v_fixv;
@@ -1155,7 +1206,7 @@ begin
       v_meta.version, v_n, v_rec;
   end if;
 
-  raise notice '[PASS] G: exclusao logica (linha preservada, um evento EXCLUIDA) e meta excluida recusando editar/progredir/finalizar/revisar/re-excluir sem nenhum efeito';
+  raise notice '[PASS] G: exclusao logica (linha preservada, um evento EXCLUIDA; a meta de fixture do colaborador `...0002` foi excluida pelo ator dono a5, gate P4: goal.write + SELF) e meta excluida recusando editar/progredir/finalizar/revisar/re-excluir sem nenhum efeito';
 end $$;
 
 -- ============================================================================
@@ -1224,7 +1275,8 @@ begin
 end $$;
 
 -- ============================================================================
--- 11) J) ACL, lock normativo e anti-escopo (P3/P4/P5/D21 nao antecipadas)
+-- 11) J) ACL, lock normativo e anti-escopo (P3/P4 implementadas; P5/D21 nao
+--     antecipadas) — RLS own-tenant do P4 nas duas tabelas legiveis
 -- ============================================================================
 do $$
 declare
@@ -1282,10 +1334,11 @@ begin
   end loop;
 
   -- (J2) anti-escopo: NENHUMA outra RPC de meta/goal (nem de fase futura).
-  --      D21 (`meta_definir_limites_do_ciclo`, P2) e as operacoes de aprovacao
-  --      (`meta_aprovar`/`meta_invalidar_aprovacoes`, P3) sao contrato das fases
-  --      ja implementadas e por isso estao na LISTA FECHADA; leitura com gate,
-  --      Policy Engine e RLS funcional seguem proibidas.
+  --      D21 (`meta_definir_limites_do_ciclo`, P2), as operacoes de aprovacao
+  --      (`meta_aprovar`/`meta_invalidar_aprovacoes`, P3) e a LEITURA com gate da
+  --      P4 (`meta_listar_por_escopo`) sao contrato das fases ja implementadas e
+  --      por isso estao na LISTA FECHADA de 10 RPCs; `goal_listar`/`goal_aprovar`
+  --      (fases futuras) seguem proibidas.
   select count(*) into v_n
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public'
@@ -1293,12 +1346,12 @@ begin
      and p.proname <> all (array[
        'meta_criar', 'meta_editar', 'meta_atualizar_progresso', 'meta_finalizar',
        'meta_revisar_finalizacao', 'meta_excluir', 'meta_definir_limites_do_ciclo',
-       'meta_aprovar', 'meta_invalidar_aprovacoes']);
+       'meta_aprovar', 'meta_invalidar_aprovacoes', 'meta_listar_por_escopo']);
   if v_n <> 0 then
-    v_prob := v_prob || format('%s RPC(s) de meta fora do contrato das P2/P3', v_n);
+    v_prob := v_prob || format('%s RPC(s) de meta fora do contrato das P2/P3/P4', v_n);
   end if;
   foreach v_fn in array array[
-    'meta_listar_por_escopo', 'goal_listar', 'goal_aprovar'] loop
+    'goal_listar', 'goal_aprovar'] loop
     if exists (
       select 1 from pg_proc p
        where p.pronamespace = 'public'::regnamespace and p.proname = v_fn
@@ -1307,19 +1360,66 @@ begin
     end if;
   end loop;
 
-  -- (J3) deny-by-default: nenhuma policy e nenhum privilegio de cliente.
+  -- (J3) RLS do P4: as duas tabelas LEGIVEIS tem EXATAMENTE a policy de SELECT
+  --      own-tenant do contrato (nome exato, role authenticated, predicado de
+  --      membership ativa do F4-08 e SEM WITH CHECK) + SELECT minimo concedido ao
+  --      cliente e NENHUM privilegio de escrita. `evaluation_goal_events` e
+  --      `evaluation_cycle_goal_limits` seguem deny-by-default INTEGRAL.
   foreach v_tab in array array[
-    'evaluation_goals', 'evaluation_goal_approvals',
+    'evaluation_goals', 'evaluation_goal_approvals'] loop
+    select count(*) into v_n from pg_policies
+     where schemaname = 'public' and tablename = v_tab;
+    if v_n <> 1 then
+      v_prob := v_prob || format('%s: %s policies (esperado 1 SELECT own-tenant do P4)', v_tab, v_n);
+    else
+      select * into v_rec from pg_policies
+       where schemaname = 'public' and tablename = v_tab;
+      if v_rec.policyname::text <> (v_tab || '_select_same_tenant') then
+        v_prob := v_prob || format('%s: policy %s (esperado %s)', v_tab, v_rec.policyname, v_tab || '_select_same_tenant');
+      end if;
+      if v_rec.cmd <> 'SELECT' then
+        v_prob := v_prob || format('%s: policy com cmd %s (esperado SELECT)', v_tab, v_rec.cmd);
+      end if;
+      if not ('authenticated' = any (v_rec.roles)) then
+        v_prob := v_prob || format('%s: policy sem a role authenticated', v_tab);
+      end if;
+      if position('user_has_active_membership(organization_id)'
+                  in coalesce(v_rec.qual, '')) = 0 then
+        v_prob := v_prob || format('%s: policy sem o predicado de membership ativa do tenant', v_tab);
+      end if;
+      if v_rec.with_check is not null then
+        v_prob := v_prob || format('%s: policy de SELECT com WITH CHECK', v_tab);
+      end if;
+    end if;
+    if has_table_privilege('authenticated', 'public.' || v_tab, 'SELECT') is not true then
+      v_prob := v_prob || format('%s: authenticated sem SELECT (leitura own-tenant do P4)', v_tab);
+    end if;
+    if has_table_privilege('authenticated', 'public.' || v_tab, 'INSERT')
+       or has_table_privilege('authenticated', 'public.' || v_tab, 'UPDATE')
+       or has_table_privilege('authenticated', 'public.' || v_tab, 'DELETE')
+       or has_table_privilege('authenticated', 'public.' || v_tab, 'TRUNCATE')
+       or has_table_privilege('anon', 'public.' || v_tab, 'SELECT') then
+      v_prob := v_prob || ('privilegio de escrita/anon em ' || v_tab
+        || ' (a P4 concede SOMENTE SELECT a authenticated)');
+    end if;
+    if has_table_privilege('service_role', 'public.' || v_tab, 'DELETE')
+       or has_table_privilege('service_role', 'public.' || v_tab, 'TRUNCATE') then
+      v_prob := v_prob || ('service_role com DELETE/TRUNCATE em ' || v_tab);
+    end if;
+  end loop;
+
+  foreach v_tab in array array[
     'evaluation_goal_events', 'evaluation_cycle_goal_limits'] loop
     if exists (select 1 from pg_policies where schemaname = 'public' and tablename = v_tab) then
-      v_prob := v_prob || ('policy criada em ' || v_tab || ' (P4 nao antecipada)');
+      v_prob := v_prob || ('policy indevida em ' || v_tab
+        || ' (trilha/limites seguem deny-by-default integral no P4)');
     end if;
     if has_table_privilege('authenticated', 'public.' || v_tab, 'SELECT')
        or has_table_privilege('authenticated', 'public.' || v_tab, 'INSERT')
        or has_table_privilege('authenticated', 'public.' || v_tab, 'UPDATE')
        or has_table_privilege('authenticated', 'public.' || v_tab, 'DELETE')
        or has_table_privilege('anon', 'public.' || v_tab, 'SELECT') then
-      v_prob := v_prob || ('privilegio de cliente em ' || v_tab);
+      v_prob := v_prob || ('privilegio de cliente em ' || v_tab || ' (deveria ser zero)');
     end if;
     if has_table_privilege('service_role', 'public.' || v_tab, 'DELETE')
        or has_table_privilege('service_role', 'public.' || v_tab, 'TRUNCATE') then
@@ -1380,7 +1480,7 @@ begin
     raise exception '[FAIL] J6: capabilities de metas/observacoes = % (esperado 8)', v_n;
   end if;
 
-  raise notice '[PASS] J: 7 RPCs INVOKER com lock normativo unico, EXECUTE so service_role, zero policy/privilegio de cliente, DELETE fisico negado no banco e nenhuma fase futura antecipada';
+  raise notice '[PASS] J: 7 RPCs INVOKER com lock normativo unico, EXECUTE so service_role, RLS own-tenant do P4 (exatamente 1 policy de SELECT por tabela legivel, nome/predicado do contrato, nenhum privilegio de escrita de cliente), trilha/limites deny-by-default integral, DELETE fisico negado no banco, lista FECHADA de 10 RPCs de meta e nenhuma fase futura antecipada';
 end $$;
 
 -- ============================================================================
@@ -2018,6 +2118,6 @@ end $$;
 do $$
 begin
   raise notice '============================================================';
-  raise notice 'F5-10 P2: operacoes soberanas de metas validadas — criar, editar, progresso, finalizar, revisar fechamento, excluir logicamente e definir limites do ciclo (D21, evento em cycle_events), com UUID canonico, tenant revalidado, expected_version, idempotencia por operation_id, evento append-only, autoria resolvida no banco, lock normativo unico, quota do banco, atomicidade e zero DELETE fisico.';
+  raise notice 'F5-10 P2 (adaptado ao gate funcional da P4): operacoes soberanas de metas validadas — criar, editar, progresso, finalizar, revisar fechamento, excluir logicamente e definir limites do ciclo (D21, evento em cycle_events), com UUID canonico, tenant revalidado, gate de capability/relacao (goal.write + SELF; cycle.manage para limites), expected_version, idempotencia por operation_id, evento append-only, autoria resolvida no banco, lock normativo unico, quota do banco, atomicidade, RLS own-tenant do P4 e zero DELETE fisico.';
   raise notice '============================================================';
 end $$;

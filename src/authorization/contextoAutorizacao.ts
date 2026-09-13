@@ -12,6 +12,7 @@ import {
   estadoDominioCriacaoAvaliacao,
 } from "./estadoDominioAvaliacao.ts";
 import { estadoDominioCiclo } from "./estadoDominioCiclo.ts";
+import { estadoDominioMeta } from "./estadoDominioMeta.ts";
 import type {
   AuthorizationDecision,
   AuthorizationRequest,
@@ -28,6 +29,7 @@ import {
   ehTipoRecursoSoberano,
   montarResourceContextSoberano,
   motivoAlvoNaoAutorizavel,
+  type AprovadoresCongeladosMeta,
   type RecursoSoberanoCarregado,
   type ResourceContext,
 } from "./resourceContextReal.ts";
@@ -59,6 +61,14 @@ import {
  * (`recurso.status`), nunca de estado declarado pelo chamador, e o alvo exige o
  * UUID canônico — alvo sintético (`{type:"cycle", id:"global"}`) ou rótulo
  * inválido é recusado antes de qualquer decisão (D19/D22).
+ *
+ * F5-10 P4 (§9.1/§10, D8/D9/D14/D25): a META também é recurso SOBERANO
+ * (`evaluation_goals`). O `domainState` do alvo `goal` vem da LINHA soberana
+ * (`status`, `excluida` e o status do CICLO da meta) via `estadoDominioMeta`, e
+ * as relações de aprovação são **CONGELADAS** — resolvidas na fronteira
+ * confiável a partir da avaliação ORIGINAL do dono e propagadas ao provider pelo
+ * bloco `meta` do `ResourceContext`. Nenhuma estrutura viva participa da
+ * autorização de meta.
  */
 
 function negar(reason: DenialReason): AuthorizationDecision {
@@ -244,6 +254,22 @@ export interface DepsContextoAutorizacao {
     readonly target: TargetRef;
     readonly cycleId?: string;
   }): Promise<DadosAssignedSoberanos | null>;
+  /**
+   * F5-10 P4 (§9.1, D14/D25): resolve os **aprovadores CONGELADOS** da meta a
+   * partir da avaliação **ORIGINAL** do dono (`evaluation_participants`:
+   * `GESTAO_CADEIA` = gerente; `GESTAO_DIRETA`, quando distinta = coordenador).
+   * Espelha `resolverAssigned`: é resolvido POR OPERAÇÃO, com o vínculo do ator,
+   * o tenant validado e o alvo já conhecidos server-side — nunca do cliente.
+   * `null` ⇒ nenhum papel reconhecido (o provider nega as relações de
+   * aprovação — fail-closed). Estrutura VIVA nunca é consultada para a meta.
+   */
+  resolverAprovadorCongelado?(entrada: {
+    readonly authUserId: string;
+    readonly collaboratorId: string | null;
+    readonly organizationId: string;
+    readonly target: TargetRef;
+    readonly cycleId?: string;
+  }): Promise<AprovadoresCongeladosMeta | null>;
   /** Origens independentes (D11). */
   readonly temporary?: TemporaryProvider;
   readonly exceptional?: ExceptionalProvider;
@@ -335,16 +361,21 @@ export async function avaliarOperacaoAutorizacao(
   });
   if (!recurso) return negar("TARGET_INVALID");
 
-  // 7.1) ESTADO DE DOMÍNIO derivado server-side: avaliação/criação (F5-06 §8.1)
-  // e CICLO (F5-09 P6 §8).
+  // 7.1) ESTADO DE DOMÍNIO derivado server-side: avaliação/criação (F5-06 §8.1),
+  // CICLO (F5-09 P6 §8) e META (F5-10 P4 §10).
   //
   // P6: para o alvo `cycle` o probe vem SEMPRE da LINHA SOBERANA carregada em
   // (7) — `evaluation_cycles.status`. Um estado declarado pelo chamador
   // (`entrada.domainState`) é IGNORADO nesse alvo: o browser nunca declara o
   // estado do ciclo e o ciclo legado não pode suplantar o caminho soberano.
+  // F5-10 P4: o mesmo vale para o alvo `goal` — o probe vem de
+  // `evaluation_goals.status`/`excluida` e do status do CICLO da meta; o
+  // `domainState` declarado pelo cliente NUNCA é autoridade.
   // Ausência de status na linha ⇒ probe nega tudo (fail-closed).
   const contextoAvaliacao =
-    deps.carregarContextoAvaliacao && entrada.alvo.type !== "cycle"
+    deps.carregarContextoAvaliacao &&
+    entrada.alvo.type !== "cycle" &&
+    entrada.alvo.type !== "goal"
       ? await deps.carregarContextoAvaliacao({
           target: entrada.alvo,
           organizationId: atorComVinculo.actorContext.organizationId,
@@ -352,21 +383,27 @@ export async function avaliarOperacaoAutorizacao(
       : null;
 
   const domainState =
-    entrada.alvo.type === "cycle"
-      ? estadoDominioCiclo({ status: recurso.status ?? "" })
-      : contextoAvaliacao
-        ? entrada.alvo.type === "evaluation"
-          ? estadoDominioAvaliacao({
-              status: contextoAvaliacao.status,
-              ...(contextoAvaliacao.encerradaComPendencias === undefined
-                ? {}
-                : { encerradaComPendencias: contextoAvaliacao.encerradaComPendencias }),
-            })
-          : estadoDominioCriacaoAvaliacao({
-              cicloPermiteNovaAvaliacao: contextoAvaliacao.cicloPermiteNovaAvaliacao === true,
-              avaliadoApto: contextoAvaliacao.avaliadoApto === true,
-            })
-        : entrada.domainState;
+    entrada.alvo.type === "goal"
+      ? estadoDominioMeta({
+          status: recurso.status ?? "",
+          excluida: recurso.excluida === true,
+          cicloStatus: recurso.cicloStatus ?? "",
+        })
+      : entrada.alvo.type === "cycle"
+        ? estadoDominioCiclo({ status: recurso.status ?? "" })
+        : contextoAvaliacao
+          ? entrada.alvo.type === "evaluation"
+            ? estadoDominioAvaliacao({
+                status: contextoAvaliacao.status,
+                ...(contextoAvaliacao.encerradaComPendencias === undefined
+                  ? {}
+                  : { encerradaComPendencias: contextoAvaliacao.encerradaComPendencias }),
+              })
+            : estadoDominioCriacaoAvaliacao({
+                cicloPermiteNovaAvaliacao: contextoAvaliacao.cicloPermiteNovaAvaliacao === true,
+                avaliadoApto: contextoAvaliacao.avaliadoApto === true,
+              })
+          : entrada.domainState;
 
   const recursoContexto = montarResourceContextSoberano({
     recurso,
@@ -379,6 +416,36 @@ export async function avaliarOperacaoAutorizacao(
       : negar("TARGET_INVALID");
   }
 
+  // 7.1.1) aprovadores CONGELADOS da meta (F5-10 P4, §9.1/D14/D25): resolvidos
+  // somente para o alvo `goal` e SOMENTE depois do identificador/tenant da linha
+  // validados (mesma ordem de `resolverAssigned`). O resultado entra no
+  // `ResourceContext` (bloco `meta`) — único caminho pelo qual o provider
+  // conhece as relações de aprovação; ele NUNCA consulta estrutura viva.
+  // `null` ⇒ sem papel reconhecido (fail-closed nas relações de aprovação).
+  const aprovadoresCongelados =
+    deps.resolverAprovadorCongelado && entrada.alvo.type === "goal"
+      ? await deps.resolverAprovadorCongelado({
+          authUserId: entrada.authUserId,
+          collaboratorId: atorComVinculo.actorContext.collaboratorId,
+          organizationId: atorComVinculo.actorContext.organizationId,
+          target: entrada.alvo,
+          ...(recursoContexto.resourceContext.cycleId
+            ? { cycleId: recursoContexto.resourceContext.cycleId }
+            : {}),
+        })
+      : null;
+
+  const resourceContext: ResourceContext =
+    aprovadoresCongelados && recursoContexto.resourceContext.meta
+      ? {
+          ...recursoContexto.resourceContext,
+          meta: {
+            ...recursoContexto.resourceContext.meta,
+            aprovadoresCongelados,
+          },
+        }
+      : recursoContexto.resourceContext;
+
   // 7.2) ASSIGNED soberano POR OPERAÇÃO (F5-06, F3-08/F3-09): resolvido somente
   // depois de conhecidos o vínculo do ator, o tenant validado e o CICLO do
   // recurso. `null` ⇒ sem ASSIGNED (o provider nega o alcance — fail-closed).
@@ -388,9 +455,7 @@ export async function avaliarOperacaoAutorizacao(
         collaboratorId: atorComVinculo.actorContext.collaboratorId,
         organizationId: atorComVinculo.actorContext.organizationId,
         target: entrada.alvo,
-        ...(recursoContexto.resourceContext.cycleId
-          ? { cycleId: recursoContexto.resourceContext.cycleId }
-          : {}),
+        ...(resourceContext.cycleId ? { cycleId: resourceContext.cycleId } : {}),
       })
     : null;
 
@@ -437,12 +502,17 @@ export async function avaliarOperacaoAutorizacao(
     membershipAtiva: atorComVinculo.actorContext.membership.status === "active",
     capabilities,
     escoposResolvidos,
-    alvo: recursoContexto.resourceContext.target,
-    tenantDoAlvo: recursoContexto.resourceContext.organizationId,
-    // F5-06: dono do recurso de avaliação (colaborador avaliado), quando houver.
-    ...(recursoContexto.resourceContext.ownerCollaboratorId
-      ? { avaliadoDoAlvo: recursoContexto.resourceContext.ownerCollaboratorId }
+    alvo: resourceContext.target,
+    tenantDoAlvo: resourceContext.organizationId,
+    // F5-06/F5-10 P4: DONO do recurso (colaborador avaliado na avaliação;
+    // titular da meta em `evaluation_goals.collaborator_id`), quando houver.
+    ...(resourceContext.ownerCollaboratorId
+      ? { donoDoAlvo: resourceContext.ownerCollaboratorId }
       : {}),
+    // F5-10 P4 (§9.1): bloco soberano da META — o provider conhece as relações
+    // de aprovação EXCLUSIVAMENTE pelos ids congelados daqui (nunca de
+    // estrutura viva).
+    ...(resourceContext.meta ? { metaDoAlvo: resourceContext.meta } : {}),
     ...(deps.assigned ? { assigned: deps.assigned } : {}),
     // ASSIGNED resolvido POR OPERAÇÃO (F5-06): tem precedência sobre um valor
     // estático injetado, porque reflete o ator/ciclo/alvo reais desta decisão.
@@ -455,7 +525,7 @@ export async function avaliarOperacaoAutorizacao(
   // 10) requisição do engine (contrato F4-03 inalterado) + decisão
   const request = montarRequisicaoAutorizacao({
     actorContext: atorComVinculo.actorContext,
-    resourceContext: recursoContexto.resourceContext,
+    resourceContext,
     capability: entrada.capability,
     instanteSoberano,
   });

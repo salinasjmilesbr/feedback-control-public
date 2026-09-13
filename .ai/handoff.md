@@ -34,6 +34,60 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
+### 3.17 F5-10 P4 — guardas/CI/harness/documentação (em andamento; implementação paralela)
+
+- **Atividade:** F5-10 — **P4 (AUTORIZAÇÃO/RLS de metas)** — recorte de
+  **guardas de validação, CI, harness local e documentação**. Contrato:
+  `docs/F5-10-desenho-tecnico.md`. **Sem PR e sem merge**.
+- **Escopo desta rodada (arquivos exclusivos):**
+  `supabase/validacao/02-validar-f4-08.sql`,
+  `supabase/validacao/02-validar-f5-06.sql`,
+  `supabase/validacao/15-validar-f5-09-p9.sql`,
+  `supabase/validacao/20-validar-f5-10-p1.sql`,
+  `.github/workflows/ci.yml`, `.git/dsh-p9-sql.ps1`,
+  `supabase/migrations/README.md` e este arquivo. A migration
+  `supabase/migrations/20260925000000_f5_10_p4_authorization_rls.sql`, o cenário
+  `25-cenario-f5-10-p4.sql`, o validador `26-validar-f5-10-p4.sql` e os ajustes de
+  `22-validar-f5-10-p2.sql`/`24-validar-f5-10-p3.sql` pertencem a outro agente.
+- **Fatos congelados refletidos nas guardas:** **2** policies RLS novas em
+  `public` (total **23 → 25**) — `evaluation_goals_select_same_tenant` e
+  `evaluation_goal_approvals_select_same_tenant`, ambas
+  `for select to authenticated using (public.user_has_active_membership(organization_id))`,
+  criadas **antes** do `grant select ... to authenticated`; `evaluation_goal_events`
+  e `evaluation_cycle_goal_limits` permanecem **deny-by-default integral** (zero
+  policy, zero privilégio de cliente); `service_role` inalterado; **10** RPCs
+  `meta_*` (a nova `meta_listar_por_escopo` com gate `goal.read` + relação) e **3**
+  helpers `f5_10_*` de autorização; **nenhuma** capability nova (**31**; `goal.%` +
+  `observation.%` = **8**), **nenhum** bundle novo (`admin` = 9), **nenhuma**
+  tabela nova (49) e `SECURITY DEFINER` ainda exatamente **4**.
+- **Alterações por arquivo:** `02-validar-f4-08.sql` — goals/approvals saem de
+  "fechada" e entram em `v_readable` (19 → 21), tabelas fechadas 26 → 24 e
+  invisíveis 22 → 23, policies **23 → 25**, novo bloco explícito de nome/predicado
+  das 2 policies do contrato. `02-validar-f5-06.sql` — a varredura
+  `tablename like 'evaluation%'` passa a admitir **explicitamente** as 3 policies
+  own-tenant (ciclos + metas), sem afrouxar nenhuma outra.
+  `15-validar-f5-09-p9.sql` — lista fechada de metas ampliada para 18 nomes
+  (10 RPCs + 3 helpers P4 + 5 de integridade), contadores de capability
+  intocados. `20-validar-f5-10-p1.sql` — blocos A/J invertidos apenas para
+  goals/approvals (exatamente 1 policy SELECT own-tenant cada, `SELECT` concedido,
+  **nenhuma** escrita/`anon`; events/limits seguem exigindo zero policy e leitura
+  negada por permissão 42501) e K com as 10 RPCs. `ci.yml` — 2 passos novos
+  (`name` citado) imediatamente após a validação P3. `dsh-p9-sql.ps1` — 2 entradas
+  novas após `24-validar-f5-10-p3.sql` (41 entradas no total).
+- **Gates reais desta rodada:** db reset + bateria SQL completa na ordem do CI (**41/41 entradas, falhas=0**) + `npm test`/`npm run build`/`npm run lint` verdes + `git diff --check` exit 0. Elevações de acesso nesta rodada:
+  1 (batch unico: geracao da migration, bateria SQL e gates npm).
+- **Divergência registrada:** o reconhecimento `.git/p4-recon/C-validacao.md`
+  supunha 4 policies novas; o contrato congelado da P4 fixa **2** (as guardas
+  seguem o contrato). Os ajustes de `22-validar-f5-10-p2.sql` e
+  `24-validar-f5-10-p3.sql` (lista fechada com **10** RPCs, remoção de
+  `meta_listar_por_escopo` das listas de antecipação proibida, inversão das
+  guardas de policy/SELECT para `evaluation_goals`/`evaluation_goal_approvals` e
+  troca do ator das mutações pelo **DONO** da meta — SELF) foram feitos na mesma
+  rodada de implementação, junto com as fixtures 21/23 (vínculos soberanos,
+  roles por tenant e capabilities **existentes** do catálogo).
+- **Não feito (por contrato):** P5 (Edge/adapter), P6 (frontend/cutover/backfill),
+  P7 (bateria integrada e concorrência real), F5-11, PR e merge.
+
 ### 3.16 F5-10 P3 (implementada; aguardando auditoria independente)
 
 - **Atividade:** F5-10 — **P3 (APROVAÇÕES e INVALIDAÇÃO de metas)** — Issue

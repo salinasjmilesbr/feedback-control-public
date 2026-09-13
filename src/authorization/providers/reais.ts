@@ -8,6 +8,7 @@ import type {
   TargetRef,
   TemporaryProvider,
 } from "../policyEngine/types.ts";
+import type { MetaRecursoContext } from "../resourceContextReal.ts";
 import {
   isCollegiateAssigned,
   isEvaluationAssigned,
@@ -33,6 +34,12 @@ import type {
  *
  * As origens B (temporária), C (excepcional) e D (pilot) permanecem INDEPENDENTES
  * e são apenas repassadas quando injetadas pelo caminho server-side (D11).
+ *
+ * F5-10 P4 (§9.1/§10, D8/D9/D14/D25): o alvo `goal` tem relações PRÓPRIAS —
+ * SELF pelo **dono** da meta e DESCENDANTS/DIRECT_REPORTS pelos **aprovadores
+ * CONGELADOS** da avaliação original do dono (recebidos em `metaDoAlvo`).
+ * Estrutura/hierarquia viva NUNCA é consultada para meta, e `goal.approve` não
+ * implica `goal.write` (capabilities distintas ⇒ alcances distintos).
  */
 
 export interface CapabilityComEscopos {
@@ -83,11 +90,18 @@ export interface DadosProvidersReais {
   /** ASSIGNED: fontes soberanas F3-08/09 quando carregadas. */
   readonly assigned?: DadosAssignedSoberanos;
   /**
-   * F5-06: colaborador AVALIADO quando o alvo é um recurso de avaliação
-   * (`ownerCollaboratorId` do ResourceContext real). `null`/ausente ⇒ a
-   * relação SELF/DIRECT_REPORTS/DESCENDANTS/UNIT não é satisfeita por avaliação.
+   * F5-06/F5-10 P4: colaborador DONO do recurso alvo — o AVALIADO quando o alvo
+   * é uma avaliação (`evaluations.evaluated_collaborator_id`) e o TITULAR quando
+   * o alvo é uma meta (`evaluation_goals.collaborator_id`).
+   * `null`/ausente ⇒ a relação SELF do dono NÃO é satisfeita.
    */
-  readonly avaliadoDoAlvo?: string | null;
+  readonly donoDoAlvo?: string | null;
+  /**
+   * F5-10 P4 (§9.1, D14/D25): bloco SOBERANO da meta — aprovadores CONGELADOS
+   * da avaliação ORIGINAL do dono. Ausente ⇒ nenhuma relação de aprovação é
+   * satisfeita (fail-closed). NUNCA se lê estrutura viva para o alvo meta.
+   */
+  readonly metaDoAlvo?: MetaRecursoContext;
   /** Origens independentes (D11) — repassadas sem alteração. */
   readonly temporary?: TemporaryProvider;
   readonly exceptional?: ExceptionalProvider;
@@ -118,14 +132,86 @@ function alvoEscopoCorresponde(alvo: AlvoEscopoResolvido, target: TargetRef): bo
 function alvoAvaliacaoCorresponde(
   alvo: AlvoEscopoResolvido,
   target: TargetRef,
-  avaliadoDoAlvo: string | null
+  donoDoAlvo: string | null
 ): boolean {
   if (target.type !== "evaluation") return false;
   return (
-    avaliadoDoAlvo !== null &&
+    donoDoAlvo !== null &&
     alvo.collaboratorId !== null &&
-    alvo.collaboratorId === avaliadoDoAlvo
+    alvo.collaboratorId === donoDoAlvo
   );
+}
+
+/**
+ * F5-10 P4 (§10, D8/D9): a META é autorizável pelo alvo `{ type: "goal", id }`,
+ * mas a relação SELF é definida sobre o TITULAR da meta
+ * (`evaluation_goals.collaborator_id`, dono derivado da linha real) — o id da
+ * meta nunca define relação. Mesmo padrão de `alvoAvaliacaoCorresponde`.
+ */
+function alvoMetaCorresponde(
+  alvo: AlvoEscopoResolvido,
+  target: TargetRef,
+  donoDoAlvo: string | null
+): boolean {
+  if (target.type !== "goal") return false;
+  return (
+    donoDoAlvo !== null &&
+    alvo.collaboratorId !== null &&
+    alvo.collaboratorId === donoDoAlvo
+  );
+}
+
+/** Alvos pré-resolvidos de um scope (vazio ⇒ relação não satisfeita). */
+function alvosDoEscopo(
+  dados: DadosProvidersReais,
+  scope: ScopeType
+): readonly AlvoEscopoResolvido[] {
+  return dados.escoposResolvidos.find((item) => item.scope === scope)?.alvos ?? [];
+}
+
+/** Id de colaborador congelado válido (não vazio) — fail-closed no resto. */
+function idCongeladoValido(valor: string | undefined): valor is string {
+  return typeof valor === "string" && valor.trim().length > 0;
+}
+
+/**
+ * F5-10 P4 (§9.1, D14/D25) — relações do alvo META, TODAS sobre a
+ * materialização **CONGELADA** da avaliação do dono (nunca hierarquia viva):
+ *   - `SELF` ⇒ o colaborador vinculado ao ator é o **DONO** da meta;
+ *   - `DESCENDANTS` ⇒ é o **GERENTE** congelado (`GESTAO_CADEIA` da ocorrência
+ *     original da avaliação do dono);
+ *   - `DIRECT_REPORTS` ⇒ é o **COORDENADOR** congelado (`GESTAO_DIRETA`
+ *     original e distinta da cadeia);
+ *   - `ASSIGNED` e os demais escopos ⇒ `false` (fail-closed): aprovar meta não
+ *     decorre de delegação avaliativa, de alcance de unidade nem de tenant.
+ */
+function metaNoEscopoDoAtor(
+  scope: ScopeType,
+  target: TargetRef,
+  dados: DadosProvidersReais
+): boolean {
+  if (scope === "SELF") {
+    const dono = dados.donoDoAlvo ?? null;
+    if (dono === null) return false;
+    return alvosDoEscopo(dados, scope).some((alvo) =>
+      alvoMetaCorresponde(alvo, target, dono)
+    );
+  }
+
+  if (scope === "DESCENDANTS" || scope === "DIRECT_REPORTS") {
+    const colaboradorDoAtor = dados.collaboratorId;
+    if (!colaboradorDoAtor) return false;
+    const congelados = dados.metaDoAlvo?.aprovadoresCongelados;
+    if (!congelados) return false;
+    const aprovadorCongelado =
+      scope === "DESCENDANTS" ? congelados.gerente : congelados.coordenador;
+    return (
+      idCongeladoValido(aprovadorCongelado) &&
+      aprovadorCongelado === colaboradorDoAtor
+    );
+  }
+
+  return false;
 }
 
 /**
@@ -171,6 +257,14 @@ export function criarProvidersReais(dados: DadosProvidersReais): PolicyEnginePro
       isTargetInScope: (_id, org, scope, target, _date, cycleId) => {
         if (org !== organizationId) return false;
 
+        // F5-10 P4 (§9.1/D14/D25): o alvo META tem relações PRÓPRIAS,
+        // materializadas de forma CONGELADA na avaliação original do dono.
+        // Estrutura viva NUNCA é consultada — inclusive `ORGANIZATION` e
+        // `ASSIGNED` são negados para meta (fail-closed).
+        if (target.type === "goal") {
+          return metaNoEscopoDoAtor(scope, target, dados);
+        }
+
         if (scope === "ORGANIZATION") {
           // Alcance do tenant: o engine já validou o tenant do alvo (passo 4).
           return dados.tenantDoAlvo === organizationId;
@@ -212,7 +306,7 @@ export function criarProvidersReais(dados: DadosProvidersReais): PolicyEnginePro
         return escopo.alvos.some(
           (alvo) =>
             alvoEscopoCorresponde(alvo, target) ||
-            alvoAvaliacaoCorresponde(alvo, target, dados.avaliadoDoAlvo ?? null)
+            alvoAvaliacaoCorresponde(alvo, target, dados.donoDoAlvo ?? null)
         );
       },
     },

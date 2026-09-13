@@ -38,13 +38,22 @@ interface CapabilityRule {
   scope: ScopeType;
 }
 
+/**
+ * F5-10 P4 — INVERSÃO (D14/D25, `docs/F5-10-desenho-tecnico.md` §9.1): esta
+ * allowlist NÃO concede `goal.approve` nem `goal.view.admin`. A legitimidade de
+ * aprovação de META é **CONGELADA**: deriva exclusivamente dos participantes
+ * `GESTAO_CADEIA`/`GESTAO_DIRETA` da avaliação ORIGINAL do dono
+ * (`evaluation_participants`), logo a estrutura temporária VIVA não é fonte de
+ * legitimidade de meta e não pode transferir aprovação por substituição. As
+ * capacidades de meta seguem no catálogo canônico (`goal.read`/`goal.write`/
+ * `goal.approve`) com escopo relacional soberano, decididas pelos providers
+ * reais — nunca por esta origem temporária.
+ */
 const OPERATIONAL_RULES: readonly CapabilityRule[] = [
   { capability: "collaborator.list", scope: "DESCENDANTS" },
   { capability: "observation.create", scope: "DESCENDANTS" },
   { capability: "observation.edit", scope: "DESCENDANTS" },
   { capability: "observation.delete", scope: "DESCENDANTS" },
-  { capability: "goal.approve", scope: "DESCENDANTS" },
-  { capability: "goal.view.admin", scope: "DESCENDANTS" },
   { capability: "report.view", scope: "DESCENDANTS" },
 ];
 

@@ -18,6 +18,19 @@ import type { Occupant, PositionEdge } from "./structure";
 import { createStructuralRelationProvider } from "./structuralRelation";
 import * as temporaryModule from "./temporary";
 
+/**
+ * F4-05 — contrato da origem TEMPORÁRIA (F3-06 × capability × scope).
+ *
+ * F5-10 P4 — INVERSÃO (D14/D25, `docs/F5-10-desenho-tecnico.md` §9.1):
+ * `goal.approve`/`goal.view.admin` foram REMOVIDOS da allowlist operacional
+ * (`providers/temporary.ts`) porque a legitimidade de aprovação de META é
+ * CONGELADA (participantes da avaliação original do dono) — a estrutura viva
+ * temporária não transfere aprovação. Os cenários abaixo usam
+ * `collaborator.list` (capability operacional remanescente, escopo
+ * `DESCENDANTS`, alvo exclusivamente `collaborator`) como ESPÉCIME, preservando
+ * a intenção original de cada asserção.
+ */
+
 const ORG = "org-a";
 const OTHER = "org-b";
 
@@ -157,7 +170,7 @@ describe("F4-05 — vigência (por data, sem cache)", () => {
     const providers = makeProviders({
       temporary: makeTemporary([respOperational]),
     });
-    const decision = decidir(req("goal.approve", "c_an1"), providers);
+    const decision = decidir(req("collaborator.list", "c_an1"), providers);
     expect(decision.allowed).toBe(true);
     expect(decision.diagnostics?.temporaryOrigins).toEqual(["temporary:r1"]);
   });
@@ -169,7 +182,7 @@ describe("F4-05 — vigência (por data, sem cache)", () => {
       validTo: new Date("2026-05-01T00:00:00Z"),
     };
     const providers = makeProviders({ temporary: makeTemporary([futura]) });
-    const decision = decidir(req("goal.approve", "c_an1"), providers);
+    const decision = decidir(req("collaborator.list", "c_an1"), providers);
     expect(decision.allowed).toBe(false);
     expect(decision.denial?.reason).toBe("CAPABILITY_MISSING");
   });
@@ -181,7 +194,7 @@ describe("F4-05 — vigência (por data, sem cache)", () => {
       validTo: new Date("2026-01-15T00:00:00Z"),
     };
     const providers = makeProviders({ temporary: makeTemporary([expirada]) });
-    const decision = decidir(req("goal.approve", "c_an1"), providers);
+    const decision = decidir(req("collaborator.list", "c_an1"), providers);
     expect(decision.allowed).toBe(false);
     expect(decision.denial?.reason).toBe("CAPABILITY_MISSING");
   });
@@ -194,7 +207,7 @@ describe("F4-05 — vigência (por data, sem cache)", () => {
       validTo: new Date("2026-01-15T00:00:00Z"),
     };
     const providers = makeProviders({ temporary: makeTemporary([encerrada]) });
-    expect(decidir(req("goal.approve", "c_an1"), providers).allowed).toBe(false);
+    expect(decidir(req("collaborator.list", "c_an1"), providers).allowed).toBe(false);
   });
 
   it("atividade por data respeita [valid_from, valid_to)", () => {
@@ -216,11 +229,17 @@ describe("F4-05 — contrato responsibility_type × capability (fechado)", () =>
     expect(decision.denial?.reason).toBe("CAPABILITY_MISSING");
   });
 
-  it("6. substituto não herda capability não prevista (goal.write próprio)", () => {
+  it("6. substituto não herda capability não prevista (goal.write/goal.approve)", () => {
     const providers = makeProviders({ temporary: makeTemporary([respOperational]) });
     const decision = decidir(req("goal.write", "c_an1"), providers);
     expect(decision.allowed).toBe(false);
     expect(decision.denial?.reason).toBe("CAPABILITY_MISSING");
+
+    // F5-10 P4 (D14/D25): a origem B não concede aprovação de meta — a
+    // legitimidade é CONGELADA nos participantes da avaliação original.
+    const aprovacao = decidir(req("goal.approve", "c_an1"), providers);
+    expect(aprovacao.allowed).toBe(false);
+    expect(aprovacao.denial?.reason).toBe("CAPABILITY_MISSING");
   });
 
   it("7. substituto não herda scopes/capabilities do titular", () => {
@@ -248,13 +267,15 @@ describe("F4-05 — contrato responsibility_type × capability (fechado)", () =>
     expect(substituto.denial?.reason).toBe("CAPABILITY_MISSING");
   });
 
-  it("allowlist fechada: operational = 7 capabilities (DESCENDANTS)", () => {
+  it("allowlist fechada: operational = 5 capabilities (DESCENDANTS)", () => {
+    // F5-10 P4 — INVERSÃO (D14/D25, docs/F5-10-desenho-tecnico.md §9.1):
+    // `goal.approve`/`goal.view.admin` foram REMOVIDOS desta allowlist porque a
+    // legitimidade de aprovação de meta é CONGELADA (participantes da avaliação
+    // original do dono) — estrutura temporária viva não transfere aprovação.
     const rules = TEMPORARY_RESPONSIBILITY_CAPABILITIES.operational;
     expect(rules.map((r) => r.capability).sort()).toEqual(
       [
         "collaborator.list",
-        "goal.approve",
-        "goal.view.admin",
         "observation.create",
         "observation.delete",
         "observation.edit",
@@ -262,6 +283,8 @@ describe("F4-05 — contrato responsibility_type × capability (fechado)", () =>
       ].sort()
     );
     expect(rules.every((r) => r.scope === "DESCENDANTS")).toBe(true);
+    // Prova da inversão (F5-10 P4): nenhuma capacidade de meta tem origem B.
+    expect(rules.some((r) => r.capability.startsWith("goal."))).toBe(false);
   });
 
   it("allowlist fechada: evaluative = 3 capabilities (ASSIGNED)", () => {
@@ -294,7 +317,7 @@ describe("F4-05 — contrato responsibility_type × capability (fechado)", () =>
       getEligibleTemporaryCapabilities("c_sub", ORG, D, [desconhecido])
     ).toEqual([]);
     const providers = makeProviders({ temporary: makeTemporary([desconhecido]) });
-    expect(decidir(req("goal.approve", "c_an1"), providers).allowed).toBe(false);
+    expect(decidir(req("collaborator.list", "c_an1"), providers).allowed).toBe(false);
   });
 });
 
@@ -312,7 +335,7 @@ describe("F4-05 — titular × substituto e exclusividade", () => {
     return makeProviders({
       capabilities: {
         hasCapability: (actorId, _org, cap) =>
-          actorId === "c_titular" && cap === "goal.approve",
+          actorId === "c_titular" && cap === "collaborator.list",
       },
       scopes: { getActiveScopes: () => ["DESCENDANTS"] },
       relations: membershipRelations,
@@ -323,14 +346,14 @@ describe("F4-05 — titular × substituto e exclusividade", () => {
   it("8. titular mantém autorização própria durante a substituição", () => {
     const providers = providersComTitular();
     const titular = decidir(
-      req("goal.approve", "c_an1", {
+      req("collaborator.list", "c_an1", {
         actor: { actorId: "c_titular", organizationId: ORG },
       }),
       providers
     );
     expect(titular.allowed).toBe(true);
     // o substituto também permanece autorizado, simultaneamente.
-    const substituto = decidir(req("goal.approve", "c_an1"), providers);
+    const substituto = decidir(req("collaborator.list", "c_an1"), providers);
     expect(substituto.allowed).toBe(true);
     expect(substituto.diagnostics?.temporaryOrigins).toEqual(["temporary:r1"]);
   });
@@ -341,25 +364,25 @@ describe("F4-05 — titular × substituto e exclusividade", () => {
     // Ambos autorizados: o engine não arbitra "titular vs substituto".
     expect(
       decidir(
-        req("goal.approve", "c_an1", {
+        req("collaborator.list", "c_an1", {
           actor: { actorId: "c_titular", organizationId: ORG },
         }),
         providers
       ).allowed
     ).toBe(true);
-    expect(decidir(req("goal.approve", "c_an1"), providers).allowed).toBe(true);
+    expect(decidir(req("collaborator.list", "c_an1"), providers).allowed).toBe(true);
 
     // Exclusividade é expressa pelo estado do domínio (probe), não pelo engine.
     const exclusivo = { allows: () => false };
     const titularNegado = decidir(
-      req("goal.approve", "c_an1", {
+      req("collaborator.list", "c_an1", {
         actor: { actorId: "c_titular", organizationId: ORG },
         domainState: exclusivo,
       }),
       providers
     );
     const substitutoNegado = decidir(
-      req("goal.approve", "c_an1", { domainState: exclusivo }),
+      req("collaborator.list", "c_an1", { domainState: exclusivo }),
       providers
     );
     expect(titularNegado.denial?.reason).toBe("DOMAIN_STATE_INVALID");
@@ -376,22 +399,22 @@ describe("F4-05 — raiz do grant temporário (position substituída)", () => {
 
   it("12. DESCENDANTS correto pela position substituída", () => {
     const providers = makeProviders({ temporary: makeTemporary([respOperational]) });
-    expect(decidir(req("goal.approve", "c_an1"), providers).allowed).toBe(true);
-    expect(decidir(req("goal.approve", "c_an2"), providers).allowed).toBe(true);
+    expect(decidir(req("collaborator.list", "c_an1"), providers).allowed).toBe(true);
+    expect(decidir(req("collaborator.list", "c_an2"), providers).allowed).toBe(true);
     // c_other está sob p4 (position própria do substituto), fora de p1.
-    expect(decidir(req("goal.approve", "c_other"), providers).allowed).toBe(false);
+    expect(decidir(req("collaborator.list", "c_other"), providers).allowed).toBe(false);
   });
 
   it("13. posição vaga intermediária não quebra descendants", () => {
     const providers = makeProviders({ temporary: makeTemporary([respOperational]) });
-    expect(decidir(req("goal.approve", "c_deep"), providers).allowed).toBe(true);
+    expect(decidir(req("collaborator.list", "c_deep"), providers).allowed).toBe(true);
   });
 
   it("10/14. occupations próprias do substituto NÃO ampliam o grant temporário", () => {
     const providers = makeProviders({ temporary: makeTemporary([respOperational]) });
     // c_sub ocupa p4 normalmente; o grant temporário enraíza em p1 (substituída),
     // nunca em p4. Logo c_other (sob p4) NÃO é alcançado pela substitution.
-    const decision = decidir(req("goal.approve", "c_other"), providers);
+    const decision = decidir(req("collaborator.list", "c_other"), providers);
     expect(decision.allowed).toBe(false);
     expect(decision.denial?.reason).toBe("SCOPE_INSUFFICIENT");
   });
@@ -411,7 +434,7 @@ describe("F4-05 — autorizações próprias × temporárias (independentes)", (
     return makeProviders({
       capabilities: {
         hasCapability: (actorId, _org, cap) =>
-          actorId === "c_sub" && cap === "goal.approve",
+          actorId === "c_sub" && cap === "collaborator.list",
       },
       scopes: { getActiveScopes: () => ["DESCENDANTS"] },
       relations: membershipRelations,
@@ -422,12 +445,12 @@ describe("F4-05 — autorizações próprias × temporárias (independentes)", (
   it("15. autorizações próprias continuam válidas e independentes", () => {
     const providers = providersComProprios();
     // Próprio grant (DESCENDANTS de p4) cobre c_other.
-    const proprio = decidir(req("goal.approve", "c_other"), providers);
+    const proprio = decidir(req("collaborator.list", "c_other"), providers);
     expect(proprio.allowed).toBe(true);
     expect(proprio.diagnostics?.matchedScope).toBe("DESCENDANTS");
 
     // Grant temporário (DESCENDANTS de p1) cobre c_an1.
-    const temporario = decidir(req("goal.approve", "c_an1"), providers);
+    const temporario = decidir(req("collaborator.list", "c_an1"), providers);
     expect(temporario.allowed).toBe(true);
     expect(temporario.diagnostics?.temporaryOrigins).toEqual(["temporary:r1"]);
   });
@@ -435,7 +458,7 @@ describe("F4-05 — autorizações próprias × temporárias (independentes)", (
   it("16. múltiplas origens válidas produzem união deduplicada (origem preservada)", () => {
     const providers = providersComProprios();
     // Mesmo alvo coberto por ambas as origens: decisão única ALLOW, sem duplicar.
-    const decision = decidir(req("goal.approve", "c_an1"), providers);
+    const decision = decidir(req("collaborator.list", "c_an1"), providers);
     expect(decision.allowed).toBe(true);
     expect(decision.diagnostics?.temporaryOrigins).toEqual(["temporary:r1"]);
     // A origem temporária não é duplicada e convive com a membership.
@@ -446,9 +469,9 @@ describe("F4-05 — autorizações próprias × temporárias (independentes)", (
     const providers = makeProviders({
       temporary: makeTemporary([respOperational, respSecond]),
     });
-    expect(decidir(req("goal.approve", "c_an1"), providers).allowed).toBe(true);
-    expect(decidir(req("goal.approve", "c_y"), providers).allowed).toBe(true);
-    expect(decidir(req("goal.approve", "c_other"), providers).allowed).toBe(false);
+    expect(decidir(req("collaborator.list", "c_an1"), providers).allowed).toBe(true);
+    expect(decidir(req("collaborator.list", "c_y"), providers).allowed).toBe(true);
+    expect(decidir(req("collaborator.list", "c_other"), providers).allowed).toBe(false);
   });
 
   it("18/19. caller não escolhe position nem responsibility convenientes", () => {
@@ -457,14 +480,14 @@ describe("F4-05 — autorizações próprias × temporárias (independentes)", (
     });
     // O request não tem campo de position/responsibility; a raiz é derivada dos
     // dados. c_an1 só é alcançável por r1 (p1), nunca "escolhendo" p4/p8.
-    const viaResp1 = decidir(req("goal.approve", "c_an1"), providers);
+    const viaResp1 = decidir(req("collaborator.list", "c_an1"), providers);
     expect(viaResp1.diagnostics?.temporaryOrigins).toEqual(["temporary:r1"]);
 
-    const viaResp2 = decidir(req("goal.approve", "c_y"), providers);
+    const viaResp2 = decidir(req("collaborator.list", "c_y"), providers);
     expect(viaResp2.diagnostics?.temporaryOrigins).toEqual(["temporary:r2"]);
 
     // A position própria do substituto (p4) não autoriza c_other via temporary.
-    expect(decidir(req("goal.approve", "c_other"), providers).allowed).toBe(false);
+    expect(decidir(req("collaborator.list", "c_other"), providers).allowed).toBe(false);
   });
 });
 
@@ -519,9 +542,9 @@ describe("F4-05 — tenant, identidade e fail-closed", () => {
       temporary: makeTemporary([responsabilidadeOutraOrg]),
     });
     // Responsabilidade de outra organização não gera grant no tenant do ator.
-    expect(decidir(req("goal.approve", "c_an1"), providers).allowed).toBe(false);
+    expect(decidir(req("collaborator.list", "c_an1"), providers).allowed).toBe(false);
     // Alvo de outro tenant também é negado (passo 4 do engine).
-    const alvoCross = decidir(req("goal.approve", "cross"), providers);
+    const alvoCross = decidir(req("collaborator.list", "cross"), providers);
     expect(alvoCross.denial?.reason).toBe("CROSS_TENANT");
   });
 
@@ -530,7 +553,7 @@ describe("F4-05 — tenant, identidade e fail-closed", () => {
       identity: { isProfileActive: () => true, isMembershipActive: () => false },
       temporary: makeTemporary([respOperational]),
     });
-    expect(decidir(req("goal.approve", "c_an1"), providers).denial?.reason).toBe(
+    expect(decidir(req("collaborator.list", "c_an1"), providers).denial?.reason).toBe(
       "MEMBERSHIP_INVALID"
     );
   });
@@ -540,7 +563,7 @@ describe("F4-05 — tenant, identidade e fail-closed", () => {
       identity: { isProfileActive: () => false, isMembershipActive: () => true },
       temporary: makeTemporary([respOperational]),
     });
-    expect(decidir(req("goal.approve", "c_an1"), providers).denial?.reason).toBe(
+    expect(decidir(req("collaborator.list", "c_an1"), providers).denial?.reason).toBe(
       "PROFILE_DISABLED"
     );
   });
@@ -548,7 +571,7 @@ describe("F4-05 — tenant, identidade e fail-closed", () => {
   it("24. capability × target incompatível = DENY (TARGET_INCOMPATIBLE)", () => {
     const providers = makeProviders({ temporary: makeTemporary([respOperational]) });
     const decision = decidir(
-      req("goal.approve", "c_an1", { target: { type: "cycle", id: "c1" } }),
+      req("collaborator.list", "c_an1", { target: { type: "cycle", id: "c1" } }),
       providers
     );
     expect(decision.allowed).toBe(false);
@@ -566,7 +589,7 @@ describe("F4-05 — listAllowedTargets e ausência de cargo", () => {
     const permitidos = listAllowedTargets(
       {
         actor: { actorId: "c_sub", organizationId: ORG },
-        capability: "goal.approve",
+        capability: "collaborator.list",
         context: { date: D, cycleId: "c1" },
         domainState: { allows: () => true },
       },
@@ -576,7 +599,7 @@ describe("F4-05 — listAllowedTargets e ausência de cargo", () => {
     expect(permitidos).toEqual([{ type: "collaborator", id: "c_an1" }]);
     // "Estar na lista" não autoriza: authorize nega o alvo fora do alcance.
     expect(() =>
-      authorize(req("goal.approve", "c_other"), providers)
+      authorize(req("collaborator.list", "c_other"), providers)
     ).toThrow(ForbiddenError);
   });
 
@@ -584,7 +607,7 @@ describe("F4-05 — listAllowedTargets e ausência de cargo", () => {
     // O request e o TemporaryProvider não possuem campo de cargo/função; a
     // decisão é idêntica para qualquer ator com as mesmas responsabilidades.
     const providers = makeProviders({ temporary: makeTemporary([respOperational]) });
-    const decision = decidir(req("goal.approve", "c_an1"), providers);
+    const decision = decidir(req("collaborator.list", "c_an1"), providers);
     expect(decision.allowed).toBe(true);
 
     // A superfície do módulo temporário não expõe símbolo de cargo/função.

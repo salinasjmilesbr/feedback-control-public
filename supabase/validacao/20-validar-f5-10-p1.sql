@@ -8,7 +8,9 @@
 --   3) este arquivo             (asserts `[PASS]`/`[FAIL]`)
 --
 -- Contrato coberto (docs/F5-10-desenho-tecnico.md D1-D25):
---   A  pre-condicoes: fixture, 4 tabelas, RLS ligada, ZERO policy (deny-by-default);
+--   A  pre-condicoes: fixture, 4 tabelas, RLS ligada; goals/approvals LEGIVEIS
+--      own-tenant (1 policy SELECT cada — F5-10 P4) e events/limits
+--      deny-by-default integral (ZERO policy);
 --   B  shape das tabelas (colunas do contrato, defaults, `version`, timestamps);
 --   C  isolamento cross-tenant ESTRUTURAL (FKs compostas) - 4 probes negativos;
 --   D  constraints de dominio (progresso 0..100, tipo, status, fechamento
@@ -23,8 +25,10 @@
 --   G  soft delete NAO e DELETE fisico (ACL nega DELETE; a linha permanece);
 --   H  trilha APPEND-ONLY: UPDATE/DELETE/TRUNCATE negados inclusive ao owner;
 --   I  payload_hash/event_type/entity_type e FK composta da trilha - negativos;
---   J  RLS/ACL: nenhum privilegio a authenticated/anon, service_role sem
---      DELETE/TRUNCATE, e SELECT do cliente NEGADO por permissao;
+--   J  RLS/ACL: goals/approvals LEGIVEIS own-tenant (policy do contrato + grant
+--      minimo de SELECT; sem escrita), events/limits deny-by-default, nenhum
+--      privilegio de escrita a authenticated/anon, service_role sem
+--      DELETE/TRUNCATE, e leitura do cliente sem identidade soberana = 0 linhas;
 --   K  anti-escopo da P1: nenhuma RPC `meta_*`/`goal_*` e nenhuma capability nova;
 --   L  estado final coerente (nenhum residuo dos testes negativos).
 --
@@ -59,15 +63,33 @@ begin
     end if;
   end loop;
 
+  -- F5-10 P4: goals/approvals passaram a ser LEGIVEIS own-tenant (UMA policy de
+  -- SELECT cada, criada ANTES do grant de SELECT); events/limits continuam
+  -- deny-by-default integral.
   select count(*) into v_n from pg_policies p
    where p.schemaname = 'public'
-     and p.tablename in ('evaluation_goals', 'evaluation_goal_approvals',
-                         'evaluation_goal_events', 'evaluation_cycle_goal_limits');
+     and p.tablename in ('evaluation_goal_events', 'evaluation_cycle_goal_limits');
   if v_n <> 0 then
-    raise exception '[FAIL] pre-condicao: P1 exige ZERO policy nas tabelas de metas (encontradas %)', v_n;
+    raise exception '[FAIL] pre-condicao: events/limits das metas exigem ZERO policy (encontradas %)', v_n;
+  end if;
+  select count(*) into v_n from pg_policies p
+   where p.schemaname = 'public' and p.tablename = 'evaluation_goals'
+     and p.policyname = 'evaluation_goals_select_same_tenant'
+     and p.cmd = 'SELECT' and p.roles = array['authenticated']::name[]
+     and p.qual like '%user_has_active_membership%';
+  if v_n <> 1 then
+    raise exception '[FAIL] pre-condicao: evaluation_goals exige a policy SELECT own-tenant da F5-10 P4 (encontradas %)', v_n;
+  end if;
+  select count(*) into v_n from pg_policies p
+   where p.schemaname = 'public' and p.tablename = 'evaluation_goal_approvals'
+     and p.policyname = 'evaluation_goal_approvals_select_same_tenant'
+     and p.cmd = 'SELECT' and p.roles = array['authenticated']::name[]
+     and p.qual like '%user_has_active_membership%';
+  if v_n <> 1 then
+    raise exception '[FAIL] pre-condicao: evaluation_goal_approvals exige a policy SELECT own-tenant da F5-10 P4 (encontradas %)', v_n;
   end if;
 
-  raise notice '[PASS] A: fixture presente, 4 tabelas com RLS ligada e ZERO policy (deny-by-default integral)';
+  raise notice '[PASS] A: fixture presente, 4 tabelas com RLS ligada, goals/approvals com a policy SELECT own-tenant da F5-10 P4 e events/limits com ZERO policy (deny-by-default integral)';
 end $$;
 
 -- ----------------------------------------------------------------------------
@@ -966,56 +988,130 @@ begin
 end $$;
 
 -- ----------------------------------------------------------------------------
--- J) RLS e ACL (deny-by-default; service_role executor tecnico)
+-- J) RLS e ACL (F5-10 P4: goals/approvals LEGIVEIS own-tenant; events/limits
+--    deny-by-default; service_role executor tecnico)
 -- ----------------------------------------------------------------------------
 do $$
 declare
   v_tab text;
   v_ok  boolean;
   v_st  text;
+  v_n   int;
 begin
+  -- (J1) Privilégios por tabela. F5-10 P4: `evaluation_goals` e
+  -- `evaluation_goal_approvals` recebem SOMENTE SELECT (a escrita segue exclusiva
+  -- da operacao soberana executada por service_role); `evaluation_goal_events` e
+  -- `evaluation_cycle_goal_limits` continuam sem NENHUM privilegio de cliente.
   foreach v_tab in array array[
-    'evaluation_goals', 'evaluation_goal_approvals',
     'evaluation_goal_events', 'evaluation_cycle_goal_limits'] loop
     if has_table_privilege('authenticated', format('public.%I', v_tab), 'SELECT')
        or has_table_privilege('authenticated', format('public.%I', v_tab), 'INSERT')
        or has_table_privilege('authenticated', format('public.%I', v_tab), 'UPDATE')
        or has_table_privilege('authenticated', format('public.%I', v_tab), 'DELETE')
+       or has_table_privilege('authenticated', format('public.%I', v_tab), 'TRUNCATE')
+       or has_table_privilege('authenticated', format('public.%I', v_tab), 'REFERENCES')
+       or has_table_privilege('authenticated', format('public.%I', v_tab), 'TRIGGER')
        or has_table_privilege('anon', format('public.%I', v_tab), 'SELECT') then
-      raise exception '[FAIL] J1: % concede privilegio a authenticated/anon', v_tab;
+      raise exception '[FAIL] J1: % (deny-by-default) concede privilegio a authenticated/anon', v_tab;
     end if;
+  end loop;
+
+  foreach v_tab in array array[
+    'evaluation_goals', 'evaluation_goal_approvals'] loop
+    if not has_table_privilege('authenticated', format('public.%I', v_tab), 'SELECT') then
+      raise exception '[FAIL] J1: % deveria conceder SELECT a authenticated (leitura own-tenant da F5-10 P4)', v_tab;
+    end if;
+    if has_table_privilege('authenticated', format('public.%I', v_tab), 'INSERT')
+       or has_table_privilege('authenticated', format('public.%I', v_tab), 'UPDATE')
+       or has_table_privilege('authenticated', format('public.%I', v_tab), 'DELETE')
+       or has_table_privilege('authenticated', format('public.%I', v_tab), 'TRUNCATE')
+       or has_table_privilege('authenticated', format('public.%I', v_tab), 'REFERENCES')
+       or has_table_privilege('authenticated', format('public.%I', v_tab), 'TRIGGER')
+       or has_table_privilege('anon', format('public.%I', v_tab), 'SELECT') then
+      raise exception '[FAIL] J1: % concede escrita/anon (a F5-10 P4 concede SOMENTE SELECT a authenticated)', v_tab;
+    end if;
+  end loop;
+
+  foreach v_tab in array array[
+    'evaluation_goals', 'evaluation_goal_approvals',
+    'evaluation_goal_events', 'evaluation_cycle_goal_limits'] loop
     if has_table_privilege('service_role', format('public.%I', v_tab), 'DELETE')
        or has_table_privilege('service_role', format('public.%I', v_tab), 'TRUNCATE') then
       raise exception '[FAIL] J1: % concede DELETE/TRUNCATE a service_role', v_tab;
     end if;
   end loop;
 
-  -- (J2) cliente autenticado tentando ler metas: NEGADO por permissao (nao "zero linhas").
-  v_ok := false;
+  -- (J2) As MESMAS 4 tabelas tem EXATAMENTE 1 policy nas legiveis e ZERO nas
+  -- fechadas — a leitura do cliente e own-tenant por policy EXPLICITA, nunca por
+  -- ausencia de RLS.
+  select count(*) into v_n from pg_policies p
+   where p.schemaname = 'public'
+     and p.tablename in ('evaluation_goal_events', 'evaluation_cycle_goal_limits');
+  if v_n <> 0 then
+    raise exception '[FAIL] J2: events/limits das metas exigem ZERO policy (encontradas %)', v_n;
+  end if;
+  select count(*) into v_n from pg_policies p
+   where p.schemaname = 'public'
+     and p.tablename in ('evaluation_goals', 'evaluation_goal_approvals');
+  if v_n <> 2 then
+    raise exception '[FAIL] J2: goals/approvals exigem UMA policy SELECT own-tenant cada (encontradas %)', v_n;
+  end if;
+
+  -- (J3) Cliente autenticado LENDO metas legiveis SEM identidade soberana
+  -- (`auth.uid()` nulo => helper falso): a policy own-tenant nao entrega NENHUMA
+  -- linha — leitura PERMITIDA pela ACL, mas VAZIA pela RLS. Ja a leitura das
+  -- tabelas fechadas continua NEGADA por permissao (42501), nao "zero linhas".
   set role authenticated;
   begin
     perform count(*) from public.evaluation_goals;
   exception when insufficient_privilege then v_ok := true; v_st := sqlstate;
             when others then v_st := sqlstate;
   end;
-  reset role;
-  if not v_ok then
-    raise exception '[FAIL] J2: SELECT de authenticated em evaluation_goals deveria ser NEGADO (%), veio %', '42501', v_st;
+  if v_ok then
+    raise exception '[FAIL] J3: SELECT de authenticated em evaluation_goals deveria ser PERMITIDO pela ACL (F5-10 P4), mas foi NEGADO por permissao (%)', v_st;
   end if;
+  v_ok := false;
+  begin
+    perform count(*) from public.evaluation_goal_approvals;
+  exception when insufficient_privilege then v_ok := true; v_st := sqlstate;
+            when others then v_st := sqlstate;
+  end;
+  if v_ok then
+    raise exception '[FAIL] J3: SELECT de authenticated em evaluation_goal_approvals deveria ser PERMITIDO pela ACL (F5-10 P4), mas foi NEGADO por permissao (%)', v_st;
+  end if;
+  v_ok := false;
+  begin
+    perform count(*) from public.evaluation_goal_events;
+  exception when insufficient_privilege then v_ok := true; v_st := sqlstate;
+            when others then v_st := sqlstate;
+  end;
+  if not v_ok or v_st <> '42501' then
+    raise exception '[FAIL] J3: SELECT de authenticated em evaluation_goal_events deveria ser NEGADO por permissao (%), veio %', '42501', v_st;
+  end if;
+  v_ok := false;
+  begin
+    perform count(*) from public.evaluation_cycle_goal_limits;
+  exception when insufficient_privilege then v_ok := true; v_st := sqlstate;
+            when others then v_st := sqlstate;
+  end;
+  if not v_ok or v_st <> '42501' then
+    raise exception '[FAIL] J3: SELECT de authenticated em evaluation_cycle_goal_limits deveria ser NEGADO por permissao (%), veio %', '42501', v_st;
+  end if;
+  reset role;
 
-  raise notice '[PASS] J: RLS deny-by-default — nenhum privilegio a authenticated/anon, service_role sem DELETE/TRUNCATE e leitura do cliente NEGADA por permissao';
+  raise notice '[PASS] J: goals/approvals LEGIVEIS own-tenant (policy do contrato + SELECT minimo, sem escrita), events/limits deny-by-default, nenhum privilegio de escrita a authenticated/anon, service_role sem DELETE/TRUNCATE e leitura de cliente sem identidade soberana = 0 linhas (nunca vazamento)';
 end $$;
 
 -- ----------------------------------------------------------------------------
 -- K) Anti-escopo da P1 (nenhuma RPC funcional ALEM do contrato das fases, nenhuma
 --    capability nova)
 -- ----------------------------------------------------------------------------
--- CORRECAO DE REGRESSAO (Issues #212 e #214, F5-10 P2/P3): a P1 nao implementa
--- NENHUMA RPC funcional de meta; as P2 e P3 rodam no MESMO `db reset` e
--- introduzem EXATAMENTE as 9 RPCs soberanas do contrato (§13/§19 P2 + P3,
--- incluindo D21). A guarda NAO foi enfraquecida: virou LISTA FECHADA — qualquer
--- outra funcao `meta_*`/`goal_*` (inclusive de fase futura: leitura com gate)
--- continua reprovando.
+-- CORRECAO DE REGRESSAO (Issues #212, #214 e F5-10 P4): a P1 nao implementa
+-- NENHUMA RPC funcional de meta; as P2, P3 e P4 rodam no MESMO `db reset` e
+-- introduzem EXATAMENTE as 10 RPCs soberanas do contrato (§13/§19 P2 + P3 +
+-- P4/leitura por escopo, incluindo D21). A guarda NAO foi enfraquecida: virou
+-- LISTA FECHADA — qualquer outra funcao `meta_*`/`goal_*` (inclusive de fase
+-- futura: Edge/adapter) continua reprovando.
 do $$
 declare
   v_n int;
@@ -1023,7 +1119,9 @@ declare
   v_rpcs text[] := array[
     'meta_criar', 'meta_editar', 'meta_atualizar_progresso', 'meta_finalizar',
     'meta_revisar_finalizacao', 'meta_excluir', 'meta_definir_limites_do_ciclo',
-    'meta_aprovar', 'meta_invalidar_aprovacoes'];
+    'meta_aprovar', 'meta_invalidar_aprovacoes',
+    -- F5-10 P4: 10a RPC — leitura por escopo com gate `goal.read` + relacao.
+    'meta_listar_por_escopo'];
 begin
   select count(*) into v_n
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -1031,15 +1129,15 @@ begin
      and (p.proname like 'meta\_%' or p.proname like 'goal\_%')
      and p.proname <> all (v_rpcs);
   if v_n <> 0 then
-    raise exception '[FAIL] K1: RPC funcional de meta FORA do contrato das fases P1/P2/P3 (encontradas %)', v_n;
+    raise exception '[FAIL] K1: RPC funcional de meta FORA do contrato das fases P1/P2/P3/P4 (encontradas %)', v_n;
   end if;
 
-  -- As 9 RPCs da P2+P3 existem de fato (a lista nao pode passar por vacuidade).
+  -- As 10 RPCs das P2+P3+P4 existem de fato (a lista nao pode passar por vacuidade).
   select count(*) into v_n
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.proname = any (v_rpcs);
-  if v_n <> 9 then
-    raise exception '[FAIL] K1: as 9 RPCs soberanas da P2/P3 deveriam existir (encontradas %)', v_n;
+  if v_n <> 10 then
+    raise exception '[FAIL] K1: as 10 RPCs soberanas das P2/P3/P4 deveriam existir (encontradas %)', v_n;
   end if;
 
   select count(*) into v_caps from public.capabilities
@@ -1060,7 +1158,7 @@ begin
     raise exception '[FAIL] K3: funcoes de integridade da P1 ausentes (encontradas %)', v_n;
   end if;
 
-  raise notice '[PASS] K: anti-escopo respeitado — superficie de RPC de meta restrita a lista FECHADA das 9 operacoes das P2/P3 (incluindo D21/limites do ciclo e aprovacao/invalidacao), nenhuma capability nova e as 5 funcoes da P1 apenas de integridade/append-only';
+  raise notice '[PASS] K: anti-escopo respeitado — superficie de RPC de meta restrita a lista FECHADA das 10 operacoes das P2/P3/P4 (incluindo D21/limites do ciclo, aprovacao/invalidacao e a leitura por escopo com gate goal.read), nenhuma capability nova e as 5 funcoes da P1 apenas de integridade/append-only';
 end $$;
 
 -- ----------------------------------------------------------------------------
@@ -1097,6 +1195,6 @@ end $$;
 do $$
 begin
   raise notice '============================================================';
-  raise notice 'F5-10 P1: schema/integridade/limites validados — identidade UUID, FKs compostas cross-tenant, dominio de progresso/tipo/status/fechamento, quota soberana (limite, reducao, DELETE, reativacao), unicidade parcial e idempotencia, soft delete sem DELETE fisico, trilha append-only e RLS deny-by-default.';
+  raise notice 'F5-10 P1: schema/integridade/limites validados — identidade UUID, FKs compostas cross-tenant, dominio de progresso/tipo/status/fechamento, quota soberana (limite, reducao, DELETE, reativacao), unicidade parcial e idempotencia, soft delete sem DELETE fisico, trilha append-only e RLS (goals/approvals legiveis own-tenant na F5-10 P4; events/limits deny-by-default).';
   raise notice '============================================================';
 end $$;

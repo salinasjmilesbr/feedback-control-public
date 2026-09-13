@@ -277,18 +277,20 @@ describe("F5-05 — spoofing e fronteira do cliente", () => {
     expect(decisao.denial?.reason).toBe("CAPABILITY_MISSING");
   });
 
-  it("alvo global/sintético e domínio legado ⇒ TARGET_INVALID (D19/D22)", async () => {
+  it("alvo global/sintético e rótulo não canônico ⇒ TARGET_INVALID (D19/D22/D8)", async () => {
     const global = await avaliarOperacaoAutorizacao(
       entrada({ alvo: { type: "cycle", id: "global" } }),
       deps()
     );
     expect(global.denial?.reason).toBe("TARGET_INVALID");
 
-    const legado = await avaliarOperacaoAutorizacao(
+    // F5-10 P4: `goal` é soberano, mas exige o UUID canônico — `"g-1"` não é
+    // identidade de meta ⇒ recusado ANTES de carregar o recurso.
+    const rotuloNaoCanonico = await avaliarOperacaoAutorizacao(
       entrada({ capability: "goal.write", alvo: { type: "goal", id: "g-1" } }),
       deps()
     );
-    expect(legado.denial?.reason).toBe("TARGET_INVALID");
+    expect(rotuloNaoCanonico.denial?.reason).toBe("TARGET_INVALID");
   });
 });
 
