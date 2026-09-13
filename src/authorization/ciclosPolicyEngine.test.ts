@@ -164,9 +164,13 @@ describe("F5-09 P6 — guardas estáticos da autorização de ciclo", () => {
     expect(usos).toHaveLength(1);
   });
 
-  it("o ciclo é recurso SOBERANO e meta/observação permanecem fora do limite", () => {
-    expect(recursoFonte).toMatch(/TIPOS_RECURSO_SOBERANOS[\s\S]*?"cycle",\s*\] as const/);
-    expect(recursoFonte).toContain('TIPOS_RECURSO_NAO_SOBERANOS = ["goal", "observation"] as const');
+  it("o ciclo é recurso SOBERANO e a observação permanece fora do limite", () => {
+    // F5-10 P4: `goal` passou a SOBERANO **antes** de `cycle` (a F5-09 P6 exige
+    // `"cycle",` imediatamente antes de `] as const`).
+    expect(recursoFonte).toMatch(
+      /TIPOS_RECURSO_SOBERANOS[\s\S]*?"goal",\s*"cycle",\s*\] as const/
+    );
+    expect(recursoFonte).toContain('TIPOS_RECURSO_NAO_SOBERANOS = ["observation"] as const');
   });
 });
 

@@ -95,6 +95,9 @@ values
   ('f1c00000-0000-0000-0000-000000000007', '00000000-0000-0000-0000-000000000000',
    'authenticated', 'authenticated', 'perfil.disabled.f5-10-p3@example.invalid', 'x', now(),
    '{}'::jsonb, '{}'::jsonb, now(), now()),
+  ('f1c00000-0000-0000-0000-000000000008', '00000000-0000-0000-0000-000000000000',
+   'authenticated', 'authenticated', 'owner.c4.f5-10-p3@example.invalid', 'x', now(),
+   '{}'::jsonb, '{}'::jsonb, now(), now()),
   ('f1c00000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-000000000000',
    'authenticated', 'authenticated', 'ator.beta.f5-10-p3@example.invalid', 'x', now(),
    '{}'::jsonb, '{}'::jsonb, now(), now());
@@ -107,6 +110,7 @@ insert into public.user_profiles (id, status) values
   ('f1c00000-0000-0000-0000-000000000005', 'active'),
   ('f1c00000-0000-0000-0000-000000000006', 'active'),
   ('f1c00000-0000-0000-0000-000000000007', 'disabled'),
+  ('f1c00000-0000-0000-0000-000000000008', 'active'),
   ('f1c00000-0000-0000-0000-0000000000b1', 'active');
 
 insert into public.user_organization_memberships
@@ -125,6 +129,8 @@ values
   ('f1d00000-0000-0000-0000-000000000006', 'f1c00000-0000-0000-0000-000000000006',
    'f1a00000-0000-0000-0000-0000000000a1', 'disabled'),
   ('f1d00000-0000-0000-0000-000000000007', 'f1c00000-0000-0000-0000-000000000007',
+   'f1a00000-0000-0000-0000-0000000000a1', 'active'),
+  ('f1d00000-0000-0000-0000-000000000008', 'f1c00000-0000-0000-0000-000000000008',
    'f1a00000-0000-0000-0000-0000000000a1', 'active'),
   ('f1d00000-0000-0000-0000-0000000000b1', 'f1c00000-0000-0000-0000-0000000000b1',
    'f1a00000-0000-0000-0000-0000000000b1', 'active');
@@ -163,7 +169,97 @@ insert into public.membership_collaborator_links
   ('f1e00000-0000-0000-0000-000000000004', 'f1d00000-0000-0000-0000-000000000004',
    'f1a00000-0000-0000-0000-0000000000a1', 'f1b00000-0000-0000-0000-000000000005', 'active'),
   ('f1e00000-0000-0000-0000-0000000000b1', 'f1d00000-0000-0000-0000-0000000000b1',
-   'f1a00000-0000-0000-0000-0000000000b1', 'f1b00000-0000-0000-0000-0000000000b1', 'active');
+   'f1a00000-0000-0000-0000-0000000000b1', 'f1b00000-0000-0000-0000-0000000000b1', 'active'),
+  -- a8 (novo, F5-10 P4) -> colaborador `...0004`: e o DONO da meta
+  -- `f1000000-...0002`, que o validador 24 muta; sem este vinculo UNICO o gate
+  -- funcional da P4 negaria a operacao (SELF).
+  ('f1e00000-0000-0000-0000-000000000008', 'f1d00000-0000-0000-0000-000000000008',
+   'f1a00000-0000-0000-0000-0000000000a1', 'f1b00000-0000-0000-0000-000000000004', 'active');
+
+-- ----------------------------------------------------------------------------
+-- 3-bis) AUTORIZACAO da fixture (F5-10 P4 / D6/D7): roles customizadas por
+--        tenant com capabilities JA EXISTENTES do catalogo (`goal.read`,
+--        `goal.write`, `goal.approve`, `cycle.manage`) — nenhuma capability
+--        nova. Insercao DIRETA (dado da fixture, sem RPC), no mesmo padrao da
+--        fixture da P2 (o gate funcional da P4 exige a concessao EXPLICITA):
+--          - `metas-dono-p3-alfa`: goal.read + goal.write -> DONOS das metas que
+--            o validador muta (a3 -> colaborador `...0002`, a4 -> `...0005`,
+--            a8 -> `...0004`);
+--          - `metas-dono-p3-beta`: goal.read + goal.write -> ator de Beta (a
+--            integridade cross-tenant da F4-01 exige role do MESMO tenant);
+--          - `metas-aprovador-p3`: goal.read + goal.approve -> a1 (GERENTE
+--            congelado) e a2 (COORDENADOR congelado) e TAMBEM a3/a5, que sao os
+--            atores dos testes NEGATIVOS de aprovacao: sem a capability o gate
+--            da P4 negaria ANTES da resolucao do papel congelado e a mensagem
+--            provada deixaria de ser a da relacao/vínculo;
+--          - `ciclo-admin-p3`: cycle.manage -> a1 (D21: `meta_definir_limites_do_
+--            ciclo` continua operacao ADMINISTRATIVA de ciclo).
+-- ----------------------------------------------------------------------------
+insert into public.access_roles (id, name, status, is_system, organization_id) values
+  ('f1c90000-0000-0000-0000-0000000000a1', 'metas-dono-p3-alfa', 'active', false,
+   'f1a00000-0000-0000-0000-0000000000a1'),
+  ('f1c90000-0000-0000-0000-0000000000a2', 'metas-aprovador-p3', 'active', false,
+   'f1a00000-0000-0000-0000-0000000000a1'),
+  ('f1c90000-0000-0000-0000-0000000000a3', 'ciclo-admin-p3', 'active', false,
+   'f1a00000-0000-0000-0000-0000000000a1'),
+  ('f1c90000-0000-0000-0000-0000000000b1', 'metas-dono-p3-beta', 'active', false,
+   'f1a00000-0000-0000-0000-0000000000b1');
+
+insert into public.access_role_capabilities (access_role_id, capability_id)
+select ar.id, c.id
+  from public.access_roles ar
+  cross join public.capabilities c
+ where ar.id in ('f1c90000-0000-0000-0000-0000000000a1',
+                 'f1c90000-0000-0000-0000-0000000000b1')
+   and c.code in ('goal.read', 'goal.write')
+union all
+select ar.id, c.id
+  from public.access_roles ar
+  cross join public.capabilities c
+ where ar.id = 'f1c90000-0000-0000-0000-0000000000a2'
+   and c.code in ('goal.read', 'goal.approve')
+union all
+select ar.id, c.id
+  from public.access_roles ar
+  cross join public.capabilities c
+ where ar.id = 'f1c90000-0000-0000-0000-0000000000a3'
+   and c.code = 'cycle.manage';
+
+insert into public.membership_access_role_assignments
+  (id, membership_id, organization_id, access_role_id, status, created_by) values
+  ('f1ca0000-0000-0000-0000-000000000003', 'f1d00000-0000-0000-0000-000000000003',
+   'f1a00000-0000-0000-0000-0000000000a1', 'f1c90000-0000-0000-0000-0000000000a1',
+   'active', 'f1c00000-0000-0000-0000-000000000003'),
+  ('f1ca0000-0000-0000-0000-000000000004', 'f1d00000-0000-0000-0000-000000000004',
+   'f1a00000-0000-0000-0000-0000000000a1', 'f1c90000-0000-0000-0000-0000000000a1',
+   'active', 'f1c00000-0000-0000-0000-000000000003'),
+  ('f1ca0000-0000-0000-0000-000000000008', 'f1d00000-0000-0000-0000-000000000008',
+   'f1a00000-0000-0000-0000-0000000000a1', 'f1c90000-0000-0000-0000-0000000000a1',
+   'active', 'f1c00000-0000-0000-0000-000000000003'),
+  ('f1ca0000-0000-0000-0000-0000000000b1', 'f1d00000-0000-0000-0000-0000000000b1',
+   'f1a00000-0000-0000-0000-0000000000b1', 'f1c90000-0000-0000-0000-0000000000b1',
+   'active', 'f1c00000-0000-0000-0000-0000000000b1'),
+  ('f1ca0000-0000-0000-0000-000000000001', 'f1d00000-0000-0000-0000-000000000001',
+   'f1a00000-0000-0000-0000-0000000000a1', 'f1c90000-0000-0000-0000-0000000000a2',
+   'active', 'f1c00000-0000-0000-0000-000000000003'),
+  ('f1ca0000-0000-0000-0000-000000000002', 'f1d00000-0000-0000-0000-000000000002',
+   'f1a00000-0000-0000-0000-0000000000a1', 'f1c90000-0000-0000-0000-0000000000a2',
+   'active', 'f1c00000-0000-0000-0000-000000000003'),
+  ('f1ca0000-0000-0000-0000-000000000013', 'f1d00000-0000-0000-0000-000000000003',
+   'f1a00000-0000-0000-0000-0000000000a1', 'f1c90000-0000-0000-0000-0000000000a2',
+   'active', 'f1c00000-0000-0000-0000-000000000003'),
+  -- a4 (OVERLAY POSTERIOR de GESTAO_CADEIA em M6) tambem recebe `goal.approve`:
+  -- assim o teste NEGATIVO do bloco I do validador 24 prova a recusa pela
+  -- RELACAO CONGELADA (`F5_10_CONFLICT`) e nao pela ausencia de capability.
+  ('f1ca0000-0000-0000-0000-000000000014', 'f1d00000-0000-0000-0000-000000000004',
+   'f1a00000-0000-0000-0000-0000000000a1', 'f1c90000-0000-0000-0000-0000000000a2',
+   'active', 'f1c00000-0000-0000-0000-000000000003'),
+  ('f1ca0000-0000-0000-0000-000000000015', 'f1d00000-0000-0000-0000-000000000005',
+   'f1a00000-0000-0000-0000-0000000000a1', 'f1c90000-0000-0000-0000-0000000000a2',
+   'active', 'f1c00000-0000-0000-0000-000000000003'),
+  ('f1ca0000-0000-0000-0000-000000000021', 'f1d00000-0000-0000-0000-000000000001',
+   'f1a00000-0000-0000-0000-0000000000a1', 'f1c90000-0000-0000-0000-0000000000a3',
+   'active', 'f1c00000-0000-0000-0000-000000000003');
 
 -- ----------------------------------------------------------------------------
 -- 4) Configuracao baseline versionada (F5-06 D5) + ciclos ATIVOS
@@ -312,6 +408,9 @@ declare
   v_eventos  int;
   v_aprov    int;
   v_links    int;
+  v_roles    int;
+  v_assign   int;
+  v_vinculo  uuid;
 begin
   select count(*) into v_orgs from public.organizations
    where id::text like 'f1a00000%';
@@ -321,6 +420,9 @@ begin
   select count(*) into v_colabs from public.collaborators where id::text like 'f1b00000%';
   select count(*) into v_links from public.membership_collaborator_links
    where id::text like 'f1e00000%' and status = 'active';
+  select count(*) into v_roles from public.access_roles where id::text like 'f1c90000%';
+  select count(*) into v_assign from public.membership_access_role_assignments
+   where id::text like 'f1ca0000%' and status = 'active';
   select count(*) into v_ciclos from public.evaluation_cycles where id::text like 'f1f00000%';
   select count(*) into v_quota from public.evaluation_cycle_goal_limits
    where id::text like 'f1500000%';
@@ -335,7 +437,27 @@ begin
    where organization_id in ('f1a00000-0000-0000-0000-0000000000a1',
                              'f1a00000-0000-0000-0000-0000000000b1');
 
-  if v_orgs <> 2 or v_atores <> 8 or v_memb <> 8 or v_colabs <> 7 or v_links <> 5
+  -- O gate da P4 (F5-10 P4 §10) exige CAPABILITY EFETIVA + relacao SELF: a
+  -- fixture prova que os atores de MUTACAO resolvem o dono da meta manipulada.
+  if public.f5_10_vinculo_meta_do_ator(
+       'f1c00000-0000-0000-0000-000000000003', 'f1a00000-0000-0000-0000-0000000000a1')
+       is distinct from 'f1b00000-0000-0000-0000-000000000002'::uuid
+     or public.f5_10_vinculo_meta_do_ator(
+       'f1c00000-0000-0000-0000-000000000008', 'f1a00000-0000-0000-0000-0000000000a1')
+       is distinct from 'f1b00000-0000-0000-0000-000000000004'::uuid then
+    raise exception '[FAIL] cenario F5-10 P3: vinculo soberano UNICO nao resolve o dono esperado (a3 -> ...0002; a8 -> ...0004)';
+  end if;
+  if not public.f5_10_ator_valido_meta(
+       'f1c00000-0000-0000-0000-000000000001', 'f1a00000-0000-0000-0000-0000000000a1',
+       'goal.approve')
+     or not public.f5_10_ator_valido_meta(
+       'f1c00000-0000-0000-0000-000000000003', 'f1a00000-0000-0000-0000-0000000000a1',
+       'goal.write') then
+    raise exception '[FAIL] cenario F5-10 P3: capability efetiva ausente (a1 goal.approve / a3 goal.write)';
+  end if;
+
+  if v_orgs <> 2 or v_atores <> 9 or v_memb <> 9 or v_colabs <> 7 or v_links <> 6
+     or v_roles <> 4 or v_assign <> 10
      or v_ciclos <> 2 or v_quota <> 3 or v_metas <> 5 or v_avaliac <> 4
      or v_partic <> 4 or v_eventos <> 5 or v_aprov <> 0 then
     raise exception
@@ -344,7 +466,7 @@ begin
       v_avaliac, v_partic, v_eventos, v_aprov;
   end if;
 
-  raise notice '[PASS] cenario F5-10 P3: 2 orgs, 8 atores, 7 colaboradores, 5 vinculos, 2 ciclos ATIVO, 3 quotas (Alfa 3 negocio + 1 individual, Beta 1), 5 metas, 4 avaliacoes (1 CANCELADA, 1 sem participantes), 4 participantes congelados (2 papeis + 1 overlay), 5 eventos de criacao e ZERO aprovacoes';
+  raise notice '[PASS] cenario F5-10 P3: 2 orgs, 9 atores (a8 novo: dono do colaborador ...0004), 7 colaboradores, 6 vinculos, 4 roles com capabilities EXISTENTES (goal.read/write/approve + cycle.manage) e 9 atribuicoes, 2 ciclos ATIVO, 3 quotas (Alfa 3 negocio + 1 individual, Beta 1), 5 metas, 4 avaliacoes (1 CANCELADA, 1 sem participantes), 4 participantes congelados (2 papeis + 1 overlay), 5 eventos de criacao e ZERO aprovacoes';
 end $$;
 
 \endif

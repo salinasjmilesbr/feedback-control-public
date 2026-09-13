@@ -1930,12 +1930,13 @@ declare
   v_cycle_ct  int;
   v_n         int;
   v_cols      text[];
-  -- F5-10 P1/P2/P3 (Issues #210, #212 e #214): objetos de METAS legitimados pelas
-  -- fases implementadas. A guarda de "nao antecipar F5-10" NAO foi enfraquecida:
-  -- passou a LISTA FECHADA (tabelas + funcoes de integridade/trilha + as 9 RPCs
-  -- soberanas das P2/P3). Qualquer objeto de METAS fora dela continua reprovando,
-  -- e as fases seguintes (leitura com gate, Edge, cliente, RLS funcional) e F5-11
-  -- seguem integralmente proibidas.
+  -- F5-10 P1/P2/P3/P4 (Issues #210, #212, #214 e P4): objetos de METAS
+  -- legitimados pelas fases implementadas. A guarda de "nao antecipar F5-10" NAO
+  -- foi enfraquecida: passou a LISTA FECHADA (tabelas + funcoes de
+  -- integridade/trilha + as 10 RPCs soberanas das P2/P3/P4 + os 3 helpers de
+  -- autorizacao da P4). Qualquer objeto de METAS fora dela continua reprovando, e
+  -- as fases seguintes (Edge, cliente, cutover) e F5-11 seguem integralmente
+  -- proibidas.
   v_tabelas_metas_p1 text[] := array[
     'evaluation_goals','evaluation_goal_approvals','evaluation_goal_events',
     'evaluation_cycle_goal_limits'];
@@ -1943,9 +1944,15 @@ declare
     'enforce_evaluation_goal_events_append_only','f5_10_validar_quota_da_meta',
     'f5_10_validar_quota_do_limite','f5_10_proteger_limite_do_ciclo',
     'f5_10_validar_autoria_da_aprovacao',
+    -- F5-10 P4: helpers de autorizacao/relacao (SECURITY INVOKER, sem prefixo
+    -- `meta_`, EXECUTE so service_role) que sustentam o gate das RPCs.
+    'f5_10_ator_valido_meta','f5_10_exigir_autorizacao_meta',
+    'f5_10_vinculo_meta_do_ator',
     'meta_criar','meta_editar','meta_atualizar_progresso','meta_finalizar',
     'meta_revisar_finalizacao','meta_excluir','meta_definir_limites_do_ciclo',
-    'meta_aprovar','meta_invalidar_aprovacoes'];
+    'meta_aprovar','meta_invalidar_aprovacoes',
+    -- F5-10 P4: 10a RPC `meta_*` — leitura por escopo com gate `goal.read`.
+    'meta_listar_por_escopo'];
 begin
   -- (a) I5, I6 e I3 (P1/F5-06) presentes.
   if not exists (

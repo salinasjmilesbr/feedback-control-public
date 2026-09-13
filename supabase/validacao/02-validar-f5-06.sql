@@ -9,8 +9,9 @@
 \set ON_ERROR_STOP on
 
 -- ============================================================================
--- 1) Schema: 13 tabelas, RLS habilitado, deny-by-default (unica excecao: a
---    policy de SELECT own-tenant de `evaluation_cycles`, criada no F5-09 P5)
+-- 1) Schema: 13 tabelas, RLS habilitado, deny-by-default (excecoes: as policies
+--    de SELECT own-tenant de `evaluation_cycles` — F5-09 P5 — e de
+--    `evaluation_goals`/`evaluation_goal_approvals` — F5-10 P4)
 -- ============================================================================
 do $$
 declare
@@ -54,8 +55,14 @@ end $$;
 -- A partir do F5-09 P5 (migration 20260919000000) `evaluation_cycles` deixa de ser
 -- deny-by-default para LEITURA: passa a ter UMA policy de SELECT own-tenant para
 -- `authenticated` (predicado `user_has_active_membership(organization_id)`).
--- Essa e a UNICA excecao admitida aqui; qualquer outra policy nas tabelas F5-06
--- (inclusive de escrita) continua sendo falha.
+-- A F5-10 P4 (migration 20260925000000) faz o MESMO movimento em DUAS tabelas do
+-- dominio de metas, que tambem casam com `evaluation%`:
+-- `evaluation_goals_select_same_tenant` e
+-- `evaluation_goal_approvals_select_same_tenant`.
+-- Essas TRES policies sao as UNICAS excecoes admitidas aqui; qualquer outra policy
+-- nas tabelas que casam com `evaluation%` (inclusive de escrita) continua falha.
+-- `evaluation_goal_events` e `evaluation_cycle_goal_limits` continuam
+-- deny-by-default (zero policy).
 -- ----------------------------------------------------------------------------
 do $$
 declare
@@ -66,18 +73,28 @@ begin
    where p.schemaname = 'public'
      and p.tablename like 'evaluation%'
      and not (
-       p.tablename = 'evaluation_cycles'
-       and p.policyname = 'evaluation_cycles_select_same_tenant'
-       and p.cmd = 'SELECT'
-       and p.roles = array['authenticated']::name[]
-       and p.qual like '%user_has_active_membership%'
+       (p.tablename = 'evaluation_cycles'
+        and p.policyname = 'evaluation_cycles_select_same_tenant'
+        and p.cmd = 'SELECT'
+        and p.roles = array['authenticated']::name[]
+        and p.qual like '%user_has_active_membership%')
+       or (p.tablename = 'evaluation_goals'
+        and p.policyname = 'evaluation_goals_select_same_tenant'
+        and p.cmd = 'SELECT'
+        and p.roles = array['authenticated']::name[]
+        and p.qual like '%user_has_active_membership%')
+       or (p.tablename = 'evaluation_goal_approvals'
+        and p.policyname = 'evaluation_goal_approvals_select_same_tenant'
+        and p.cmd = 'SELECT'
+        and p.roles = array['authenticated']::name[]
+        and p.qual like '%user_has_active_membership%')
      );
 
   if v_indevidas > 0 then
-    raise exception '[FAIL] policy indevida nas tabelas F5-06 (deny-by-default violado): %', v_indevidas;
+    raise exception '[FAIL] policy indevida nas tabelas que casam com evaluation%% (deny-by-default violado): %', v_indevidas;
   end if;
 
-  raise notice '[PASS] nenhuma policy indevida nas tabelas F5-06 (excecao unica e conforme: SELECT own-tenant de evaluation_cycles — F5-09 P5)';
+  raise notice '[PASS] nenhuma policy indevida nas tabelas evaluation%% (excecoes conformes e explicitas: SELECT own-tenant de evaluation_cycles — F5-09 P5 —, evaluation_goals e evaluation_goal_approvals — F5-10 P4)';
 end $$;
 
 -- ============================================================================

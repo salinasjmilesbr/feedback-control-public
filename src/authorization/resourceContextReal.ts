@@ -1,7 +1,8 @@
 import type { DomainStateProbe, TargetRef } from "./policyEngine/types.ts";
 
 /**
- * F5-05 (D6, D8, D19, D22) — ResourceContext real (+ F5-09 P6 para CICLO).
+ * F5-05 (D6, D8, D19, D22) — ResourceContext real
+ * (+ F5-09 P6 para CICLO, + F5-10 P4 para META).
  *
  * Representa o RECURSO CARREGADO de fonte soberana server-side, com tenant
  * derivado do próprio recurso (nunca do caller) e os atributos necessários à
@@ -10,27 +11,31 @@ import type { DomainStateProbe, TargetRef } from "./policyEngine/types.ts";
  * Limite do mundo híbrido (D19): só existem tipos de recurso SOBERANOS — os que
  * possuem persistência server-side com `organization_id`. Depois da F5-06 a
  * AVALIAÇÃO passou a ser recurso soberano (`evaluations` no PostgreSQL — D10/
- * §8.1) e depois da **F5-09 P5 o CICLO passou a ser recurso soberano**
- * (`evaluation_cycles`: schema P1, RLS own-tenant/leitura em P5): o tenant é
- * derivado da LINHA REAL carregada na fronteira confiável e o `domainState`
- * reflete o estado real do recurso. Domínios ainda mantidos apenas em
- * `localStorage` (meta/observação) NÃO produzem ResourceContext soberano e são
- * recusados aqui (fail-closed), assim como alvos sintéticos globais (D22).
+ * §8.1), depois da **F5-09 P5 o CICLO** (`evaluation_cycles`: schema P1, RLS
+ * own-tenant/leitura em P5) e depois da **F5-10 P4 a META**
+ * (`evaluation_goals`: schema P1, RPCs P2/P3): o tenant é derivado da LINHA REAL
+ * carregada na fronteira confiável e o `domainState` reflete o estado real do
+ * recurso. Domínios ainda mantidos apenas em `localStorage` (observação) NÃO
+ * produzem ResourceContext soberano e são recusados aqui (fail-closed), assim
+ * como alvos sintéticos globais (D22).
  */
 
-/** Tipos de recurso com fonte soberana server-side (F3 + F5-06 + F5-09 P5). */
+/** Tipos de recurso com fonte soberana server-side (F3 + F5-06 + F5-09 P5 + F5-10 P4). */
 export const TIPOS_RECURSO_SOBERANOS = [
   "collaborator",
   "position",
   "organizational_unit",
   "evaluation",
+  // F5-10 P4 (D8): `goal` é soberano ANTES de `cycle` — o gate estático da
+  // F5-09 P6 exige `"cycle",` imediatamente antes de `] as const`.
+  "goal",
   "cycle",
 ] as const;
 
 export type TipoRecursoSoberano = (typeof TIPOS_RECURSO_SOBERANOS)[number];
 
 /** Alvos NÃO autorizáveis pelo Policy Engine (legado/transitório ou global). */
-export const TIPOS_RECURSO_NAO_SOBERANOS = ["goal", "observation"] as const;
+export const TIPOS_RECURSO_NAO_SOBERANOS = ["observation"] as const;
 
 export interface ResourceStructure {
   readonly collaboratorId: string | null;
@@ -48,6 +53,35 @@ export interface ResourceContext {
   readonly structure: ResourceStructure;
   readonly domainState: DomainStateProbe;
   readonly cycleId?: string;
+  /**
+   * F5-10 P4: bloco soberano do recurso META (dono, ciclo, estado e ids
+   * CONGELADOS de aprovador). É o único caminho pelo qual os providers reais
+   * conhecem as relações de aprovação da meta — nunca estrutura viva.
+   */
+  readonly meta?: MetaRecursoContext;
+}
+
+/**
+ * F5-10 P4 (§9.1, D14/D25) — ids CONGELADOS dos aprovadores da meta.
+ *
+ * Derivados da avaliação **ORIGINAL** do dono (`evaluation_participants`:
+ * `GESTAO_CADEIA` = GERENTE; `GESTAO_DIRETA`, quando distinta da cadeia =
+ * COORDENADOR), resolvidos server-side na fronteira confiável. Nunca são lidos
+ * de estrutura/hierarquia viva.
+ */
+export interface AprovadoresCongeladosMeta {
+  readonly gerente?: string;
+  readonly coordenador?: string;
+}
+
+/** F5-10 P4: materialização SOBERANA do recurso META (pré-contexto). */
+export interface MetaRecursoContext {
+  readonly status: string | null;
+  /** Excluída (soft delete) ⇒ somente leitura histórica (§10). */
+  readonly excluida: boolean;
+  /** Status da LINHA soberana do ciclo da meta (mutação exige `ATIVO`). */
+  readonly cicloStatus: string | null;
+  readonly aprovadoresCongelados?: AprovadoresCongeladosMeta;
 }
 
 /** Recurso carregado de fonte soberana server-side (pré-contexto). */
@@ -63,6 +97,12 @@ export interface RecursoSoberanoCarregado {
   readonly status?: string;
   /** F5-06: colaborador AVALIADO (dono do recurso de avaliação). */
   readonly evaluatedCollaboratorId?: string | null;
+  /** F5-10 P4: a meta foi excluída (soft delete) — leitura histórica apenas. */
+  readonly excluida?: boolean;
+  /** F5-10 P4: status da linha SOBERANA do ciclo da meta. */
+  readonly cicloStatus?: string;
+  /** F5-10 P4: ids congelados dos aprovadores (§9.1/D14). */
+  readonly aprovadoresCongelados?: AprovadoresCongeladosMeta;
 }
 
 export type MotivoRecursoInvalido =
@@ -113,9 +153,10 @@ export function ehAlvoCicloCanonico(target: TargetRef): boolean {
 /**
  * Probe de domínio dos recursos ESTRUTURAIS: a estrutura F3 não define
  * predicado de lifecycle para leitura/edição de colaborador (matriz F4-09).
- * Recursos de domínio com estado declaram o PRÓPRIO probe: avaliação (F5-06) e
- * ciclo (F5-09 P6, `estadoDominioCiclo`); meta/observação seguem fora do limite
- * soberano (D19) e não chegam a montar contexto aqui.
+ * Recursos de domínio com estado declaram o PRÓPRIO probe: avaliação (F5-06),
+ * ciclo (F5-09 P6, `estadoDominioCiclo`) e meta (F5-10 P4, `estadoDominioMeta`);
+ * observação segue fora do limite soberano (D19) e não chega a montar contexto
+ * aqui.
  */
 export const domainStateEstrutural: DomainStateProbe = { allows: () => true };
 
@@ -135,7 +176,8 @@ function normalizarOpcional(valor: unknown): string | null {
  * Fail-closed:
  * - alvo de tipo não soberano (legado/global) ⇒ `TARGET_NAO_SOBERANO`;
  * - id ausente ⇒ `IDENTIFICADOR_AUSENTE`;
- * - id de CICLO fora do formato canônico ⇒ `IDENTIFICADOR_INVALIDO` (P6);
+ * - id de CICLO ou de META fora do formato canônico ⇒ `IDENTIFICADOR_INVALIDO`
+ *   (P6/D8);
  * - tenant ausente ⇒ `TENANT_AUSENTE`;
  * - tenant divergente da organização validada do ator ⇒ `TENANT_DIVERGENTE`.
  */
@@ -155,9 +197,13 @@ export function montarResourceContextSoberano(entrada: {
     return { ok: false, motivo: "IDENTIFICADOR_AUSENTE" };
   }
 
-  // F5-09 P6: o ciclo tem identidade UUID canônica; qualquer outro rótulo
-  // (ano/numero, "global", id sintético) é recusado ANTES da decisão.
-  if (recurso.kind === "cycle" && !ehIdentificadorCanonico(id)) {
+  // F5-09 P6 + F5-10 P4: o CICLO e a META têm identidade UUID canônica
+  // (`evaluation_cycles.id` / `evaluation_goals.id`); qualquer outro rótulo
+  // (ano/numero, "global", id sintético, `g-1`) é recusado ANTES da decisão.
+  if (
+    (recurso.kind === "cycle" || recurso.kind === "goal") &&
+    !ehIdentificadorCanonico(id)
+  ) {
     return { ok: false, motivo: "IDENTIFICADOR_INVALIDO" };
   }
 
@@ -173,19 +219,35 @@ export function montarResourceContextSoberano(entrada: {
 
   const target: TargetRef = { type: recurso.kind, id };
 
-  // F5-06 (§8.1): para o recurso de AVALIAÇÃO o dono é o colaborador AVALIADO
-  // (`evaluations.evaluated_collaborator_id`), nunca o caller. É esse vínculo
-  // que permite ao engine resolver SELF/DIRECT_REPORTS/DESCENDANTS/ASSIGNED
-  // sobre o alvo `{ type: "evaluation" }`.
+  // F5-06 (§8.1) + F5-10 P4 (§10): o dono do recurso é o colaborador AVALIADO
+  // (`evaluations.evaluated_collaborator_id`) ou o TITULAR da meta
+  // (`evaluation_goals.collaborator_id`), nunca o caller. É esse vínculo que
+  // permite ao engine resolver SELF/DIRECT_REPORTS/DESCENDANTS/ASSIGNED sobre o
+  // alvo `{ type: "evaluation" }` / `{ type: "goal" }`.
   const ownerCollaboratorId =
     normalizarOpcional(recurso.ownerCollaboratorId) ??
     (recurso.kind === "evaluation"
       ? normalizarOpcional(recurso.evaluatedCollaboratorId)
       : null);
 
-  // F5-09 P6: para o recurso CICLO, o ciclo do contexto é o PRÓPRIO ciclo.
+  // F5-09 P6: para o recurso CICLO, o ciclo do contexto é o PRÓPRIO ciclo;
+  // F5-10 P4: para a META, é o `cycle_id` da LINHA soberana da meta.
   const cycleId =
     normalizarOpcional(recurso.cycleId) ?? (recurso.kind === "cycle" ? id : null);
+
+  // F5-10 P4 (§10): bloco SOBERANO da meta — estado real, exclusão e os ids
+  // CONGELADOS de aprovador (D14/D25). Nada aqui é declarado pelo cliente.
+  const meta: MetaRecursoContext | null =
+    recurso.kind === "goal"
+      ? {
+          status: normalizarOpcional(recurso.status),
+          excluida: recurso.excluida === true,
+          cicloStatus: normalizarOpcional(recurso.cicloStatus),
+          ...(recurso.aprovadoresCongelados
+            ? { aprovadoresCongelados: recurso.aprovadoresCongelados }
+            : {}),
+        }
+      : null;
 
   return {
     ok: true,
@@ -201,19 +263,24 @@ export function montarResourceContextSoberano(entrada: {
       },
       domainState: entrada.domainState ?? domainStateEstrutural,
       ...(cycleId ? { cycleId } : {}),
+      ...(meta ? { meta } : {}),
     },
   };
 }
 
 /**
  * Recusa alvos não autorizáveis pelo engine (global/legado/inválido). Usado pelo
- * enforcement antes de qualquer montagem (D19/D22 + F5-09 P6 §8).
+ * enforcement antes de qualquer montagem (D19/D22 + F5-09 P6 §8 + F5-10 P4 D8).
  */
 export function motivoAlvoNaoAutorizavel(target: TargetRef): MotivoRecursoInvalido | null {
   if (ehAlvoSinteticoGlobal(target)) return "TARGET_NAO_SOBERANO";
   if (!ehTipoRecursoSoberano(target.type)) return "TARGET_NAO_SOBERANO";
-  // P6: ciclo só é autorizável com o UUID canônico (nunca ano/numero/rótulo).
-  if (target.type === "cycle" && !ehIdentificadorCanonico(target.id)) {
+  // P6/F5-10 P4: ciclo e meta só são autorizáveis com o UUID canônico (nunca
+  // ano/numero/rotulo nem `g-1`).
+  if (
+    (target.type === "cycle" || target.type === "goal") &&
+    !ehIdentificadorCanonico(target.id)
+  ) {
     return "TARGET_NAO_SOBERANO";
   }
   return null;

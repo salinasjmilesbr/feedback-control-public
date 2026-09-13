@@ -15,6 +15,8 @@ import { montarRequisicaoAutorizacao } from "./contextoAutorizacao";
 
 /** UUID canônico de ciclo (F5-09 P6): identidade é `evaluation_cycles.id`. */
 const CICLO_UUID = "55555555-5555-4555-8555-555555555555";
+/** UUID canônico de meta (F5-10 P4/D8): identidade é `evaluation_goals.id`. */
+const META_UUID = "99999999-9999-4999-8999-999999999999";
 
 function identidadeValida(overrides?: Partial<AuthIdentity>): AuthIdentity {
   return {
@@ -170,8 +172,18 @@ describe("F5-05 — ResourceContext real (D6, D8, D19, D22)", () => {
   it("alvos globais/sintéticos e domínios legados não são autorizáveis (D19/D22)", () => {
     expect(ehAlvoSinteticoGlobal({ type: "cycle", id: "global" })).toBe(true);
     expect(motivoAlvoNaoAutorizavel({ type: "cycle", id: "global" })).toBe("TARGET_NAO_SOBERANO");
-    expect(motivoAlvoNaoAutorizavel({ type: "goal", id: "g-1" })).toBe("TARGET_NAO_SOBERANO");
+    // Domínio ainda mantido em `localStorage` (F5-10 P4 tornou `goal` soberano).
+    expect(motivoAlvoNaoAutorizavel({ type: "observation", id: "o-1" })).toBe(
+      "TARGET_NAO_SOBERANO"
+    );
     expect(motivoAlvoNaoAutorizavel({ type: "collaborator", id: "col-1" })).toBeNull();
+  });
+
+  it("F5-10 P4: a META é soberana e exige o UUID canônico (D8)", () => {
+    expect(ehTipoRecursoSoberano("goal")).toBe(true);
+    expect(motivoAlvoNaoAutorizavel({ type: "goal", id: META_UUID })).toBeNull();
+    // Rótulo NÃO canônico (nunca identidade de meta) segue recusado.
+    expect(motivoAlvoNaoAutorizavel({ type: "goal", id: "g-1" })).toBe("TARGET_NAO_SOBERANO");
   });
 
   it("F5-09 P6: o CICLO é soberano e exige o UUID canônico (nunca ano/numero)", () => {

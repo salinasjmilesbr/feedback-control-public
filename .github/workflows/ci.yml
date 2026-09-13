@@ -322,7 +322,8 @@ jobs:
       # fixture isolada (`ee`) + validador com testes NEGATIVOS obrigatorios
       # (FKs compostas cross-tenant, dominio de progresso/tipo/status/fechamento,
       # quota soberana, unicidade parcial, soft delete sem DELETE fisico, trilha
-      # append-only e RLS deny-by-default). Roda depois das fases F5-09 e ANTES
+      # append-only e RLS — pos-F5-10 P4, goals/approvals sao LEGIVEIS own-tenant e
+      # events/limits seguem deny-by-default). Roda depois das fases F5-09 e ANTES
       # das regressoes, como as demais atividades correntes.
       # ----------------------------------------------------------------------
       - name: "Seed F5-10 P1 scenario (metas: schema/integridade/limites)"
@@ -331,7 +332,7 @@ jobs:
             psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
             < supabase/validacao/19-cenario-f5-10-p1.sql
 
-      - name: Run F5-10 P1 validation (schema, integridade, limites e RLS deny-by-default)
+      - name: Run F5-10 P1 validation (schema, integridade, limites e RLS de metas)
         run: |
           docker exec -i supabase_db_feedback-control \
             psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
@@ -376,6 +377,27 @@ jobs:
           docker exec -i supabase_db_feedback-control \
             psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
             < supabase/validacao/24-validar-f5-10-p3.sql
+
+      # ----------------------------------------------------------------------
+      # F5-10 (P4) — AUTORIZACAO/RLS DE METAS (Issue #216): fixture isolada
+      # (prefixo `f2`) + validador com positivos e NEGATIVOS obrigatorios
+      # (gate funcional goal.read + relacao SELF/aprovador congelado na leitura
+      # por escopo, RLS own-tenant de evaluation_goals/evaluation_goal_approvals
+      # com a policy ANTES do grant, events/limits deny-by-default, ausencia de
+      # escrita de cliente e de capability/bundle novo). Roda depois da P3 e
+      # ANTES das regressoes.
+      # ----------------------------------------------------------------------
+      - name: "Seed F5-10 P4 scenario (autorizacao e RLS de metas)"
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/25-cenario-f5-10-p4.sql
+
+      - name: "Run F5-10 P4 validation (goal.read + RLS own-tenant de metas)"
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/26-validar-f5-10-p4.sql
 
       # ----------------------------------------------------------------------
       # Regressão F5-06/F5-07 (§23.4): cenários independentes, com prefixos de
