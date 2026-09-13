@@ -1,134 +1,51 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { can } from "../authorization/authorizationPolicy";
 import { useAuth } from "../auth/AuthContext";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
+/**
+ * Único símbolo aproveitado do módulo legado: formatação PURA de período para
+ * apresentação (função de string/Data — não lê storage, não decide e não
+ * persiste). Toda autoridade de ciclo nesta página vem do controlador soberano.
+ */
+import { formatarPeriodoCiclo } from "../services/cicloAvaliacaoStorage";
 import {
-  criarCiclo,
-  encerrarCiclo,
-  excluirCiclo,
-  getCiclosAdministrativos,
-  getCiclosAvaliacao,
-  atualizarConfiguracaoMetasCiclo,
-  atualizarPeriodoCiclo,
-  atualizarStatusCiclo,
-  formatarPeriodoCiclo,
-} from "../services/cicloAvaliacaoStorage";
-import {
-  analisarPendenciasDoCiclo,
-  concluirAvaliacoesNoEncerramentoDoCiclo,
-  criarAvaliacoesDoCicloAtivado,
-  excluirAvaliacoesVaziasDoCiclo,
-  type DependenciasCicloEquipe,
-} from "../services/cicloEquipeService";
-import { confirmarExclusaoCiclo } from "./confirmarExclusaoCiclo";
-import { cancelarCiclo } from "../services/cancelamentoCicloService";
-import { reabrirCiclo } from "../services/reaberturaCicloService";
-import {
-  analisarImpactoCorrecaoPeriodoCicloAtivo,
-  corrigirPeriodoCicloAtivo,
-} from "../services/correcaoPeriodoCicloService";
-import { confirmarCorrecaoPeriodoComImpacto } from "./confirmarCorrecaoPeriodoCiclo";
+  criarControladorGestaoCiclos,
+  type ControladorGestaoCiclos,
+} from "../services/ciclosSoberanos/controladorGestaoCiclos";
 import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import "../styles/ciclos.css";
 
 type CiclosAvaliacaoPageProps = {
   mostrarCanceladosInicial?: boolean;
+  /** Injeção do controlador soberano (testes). Em produção é criado pela página. */
+  controlador?: ControladorGestaoCiclos;
 };
 
-type EventoHistoricoCiclo =
-  | {
-      tipo: "encerramento";
-      data: string;
-      encerradoComPendencias: boolean;
-      quantidadePendencias: number;
-    }
-  | {
-      tipo: "reabertura";
-      data: string;
-      motivo: string;
-      autorNome: string;
-      autorMatricula: number;
-    }
-  | {
-      tipo: "cancelamento";
-      data: string;
-      motivo: string;
-      autorNome: string;
-      autorMatricula: number;
-    }
-  | {
-      tipo: "correcao-periodo";
-      data: string;
-      justificativa: string;
-      autorNome: string;
-      autorMatricula: number;
-      periodoAnterior: { dataInicio?: string; dataFim?: string };
-      novoPeriodo: { dataInicio: string; dataFim: string };
-      impacto: NonNullable<CicloAvaliacao["correcoesPeriodo"]>[number]["impacto"];
-    };
-
-function getEventosHistoricoCiclo(
-  ciclo: CicloAvaliacao
-): EventoHistoricoCiclo[] {
-  const encerramentos =
-    ciclo.encerramentos ??
-    (ciclo.dataEncerramento
-      ? [
-          {
-            data: ciclo.dataEncerramento,
-            encerradoComPendencias: Boolean(ciclo.encerradoComPendencias),
-            quantidadePendencias: ciclo.quantidadePendencias ?? 0,
-          },
-        ]
-      : []);
-
-  return [
-    ...encerramentos.map((evento) => ({
-      tipo: "encerramento" as const,
-      ...evento,
-    })),
-    ...(ciclo.reaberturas ?? []).map((evento) => ({
-      tipo: "reabertura" as const,
-      ...evento,
-    })),
-    ...(ciclo.cancelamento
-      ? [{ tipo: "cancelamento" as const, ...ciclo.cancelamento }]
-      : []),
-    ...(ciclo.correcoesPeriodo ?? []).map((evento) => ({
-      tipo: "correcao-periodo" as const,
-      ...evento,
-    })),
-  ].sort((a, b) => {
-    const diferencaData = Date.parse(b.data) - Date.parse(a.data);
-    if (diferencaData !== 0) return diferencaData;
-    return a.tipo.localeCompare(b.tipo);
-  });
-}
-
-function formatarDataHoraHistorico(data: string): string {
-  return new Date(data).toLocaleString("pt-BR", {
-    dateStyle: "short",
-    timeStyle: "short",
-  });
-}
+/**
+ * F5-09 P8 (Bloco 3) — HISTÓRICO: a página NÃO constrói mais trilha a partir do
+ * modelo legado. `cycle_events` permanece deny-by-default (sem RLS nova e sem
+ * RPC de leitura), então a trilha detalhada é apresentada como indisponível —
+ * nunca como lista vazia "real" nem misturada com dado local.
+ */
 
 function CiclosAvaliacaoPage({
   mostrarCanceladosInicial = false,
+  controlador: controladorInjetado,
 }: CiclosAvaliacaoPageProps = {}) {
   const navigate = useNavigate();
   const { usuarioAtual } = useUsuarioAtual();
   const { organizacaoAtivaId } = useAuth();
-  const [versao, setVersao] = useState(0);
+  /**
+   * F5-09 P8 (Bloco 3): estados sem função foram removidos — `versao/setVersao`
+   * (contador artificial de rerender; o estado agora vem do controlador),
+   * `ativarAgora` (ativava ciclo na criação: virou operação soberana separada) e
+   * os estados de metas (F5-10).
+   */
   const [ano, setAno] = useState(new Date().getFullYear());
   const [ciclo, setCiclo] = useState<1 | 2 | 3>(1);
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
-  const [quantidadeMetasNegocio, setQuantidadeMetasNegocio] =
-    useState<0 | 1 | 2 | 3>(0);
-  const [quantidadeMetasIndividuais, setQuantidadeMetasIndividuais] =
-    useState<0 | 1 | 2 | 3>(0);
-  const [ativarAgora, setAtivarAgora] = useState(false);
   const [mostrarCancelados, setMostrarCancelados] = useState(
     mostrarCanceladosInicial
   );
@@ -139,12 +56,41 @@ function CiclosAvaliacaoPage({
   const [periodoInicioCorrecao, setPeriodoInicioCorrecao] = useState("");
   const [periodoFimCorrecao, setPeriodoFimCorrecao] = useState("");
   const [justificativaCorrecao, setJustificativaCorrecao] = useState("");
-  const [editandoMetasId, setEditandoMetasId] = useState<string | null>(null);
-  const [metasNegocioEdicao, setMetasNegocioEdicao] =
-    useState<0 | 1 | 2 | 3>(0);
-  const [metasIndividuaisEdicao, setMetasIndividuaisEdicao] =
-    useState<0 | 1 | 2 | 3>(0);
   const [erro, setErro] = useState("");
+
+  /**
+   * F5-09 P8 (Bloco 1) — LEITURA SOBERANA: o controlador puro é a ÚNICA fonte da
+   * lista exibida. Nada de `getCiclosAdministrativos`/`getCiclosAvaliacao`/
+   * `localStorage` para listar ciclos; sem fallback local em erro.
+   */
+  const controlador = useMemo(
+    () => controladorInjetado ?? criarControladorGestaoCiclos(),
+    [controladorInjetado]
+  );
+  const [estado, setEstado] = useState(controlador.estado());
+
+  // Carga ao entrar/trocar de organização (o controlador invalida a geração
+  // anterior, então resposta antiga não substitui o contexto novo).
+  useEffect(() => {
+    let ativo = true;
+    void (async () => {
+      await controlador.carregar(organizacaoAtivaId ?? null, {
+        incluirCancelados: mostrarCancelados,
+      });
+      if (ativo) setEstado(controlador.estado());
+    })();
+    return () => {
+      ativo = false;
+    };
+  }, [controlador, organizacaoAtivaId, mostrarCancelados]);
+
+  // Unmount/logout descartam respostas em voo.
+  useEffect(
+    () => () => {
+      controlador.descartar();
+    },
+    [controlador]
+  );
   const podeGerenciarCiclos = usuarioAtual
     ? can(
         {
@@ -158,8 +104,6 @@ function CiclosAvaliacaoPage({
         { kind: "global" }
       )
     : false;
-
-  void versao;
 
   if (!usuarioAtual || !podeGerenciarCiclos) {
     return (
@@ -175,254 +119,141 @@ function CiclosAvaliacaoPage({
     );
   }
 
-  const ciclos = getCiclosAdministrativos(mostrarCancelados);
+  const ciclos = estado.ciclos;
 
   const totalAtivos = ciclos.filter((item) => item.status === "ATIVO").length;
   const totalPlanejados = ciclos.filter((item) => item.status === "PLANEJADO").length;
   const totalEncerrados = ciclos.filter((item) => item.status === "ENCERRADO").length;
 
   /**
-   * Dependências das operações soberanas de avaliação do ciclo. A organização
-   * ativa é apenas INTENÇÃO enviada à fronteira confiável, que a revalida contra
-   * a membership do ator autenticado. Sem caminho novo configurado a operação é
-   * recusada (fail-closed) e reportada na tela — nunca há escrita local.
+   * F5-09 P8 (Bloco 2) — MUTATIONS SOBERANAS.
+   *
+   * Todas as operações de lifecycle passam pelo controlador (→ gestão → Edge P7
+   * → RPC soberana). O controlador publica o estado após SUCESSO (com reload
+   * soberano) e preserva o último estado válido em FALHA; aqui apenas espelhamos
+   * `controlador.estado()` no React e exibimos o erro público. Nenhuma mutação
+   * local de ciclo permanece — nem rollback, nem compensação, nem `.rpc(`.
    */
-  const dependenciasCiclo: DependenciasCicloEquipe = {
-    organizationId: organizacaoAtivaId ?? "",
-  };
+  async function publicar(
+    resultado: { readonly ok: boolean; readonly error?: { readonly message: string } },
+    falhaPadrao: string
+  ): Promise<boolean> {
+    setEstado(controlador.estado());
+    if (resultado.ok) {
+      setErro("");
+      return true;
+    }
+    setErro(resultado.error?.message ?? falhaPadrao);
+    return false;
+  }
 
   async function criar() {
     setErro("");
-    try {
-      const novoCiclo = criarCiclo(
+    const ok = await publicar(
+      await controlador.criar({
         ano,
-        ciclo,
+        numero: ciclo,
         dataInicio,
         dataFim,
-        quantidadeMetasNegocio,
-        quantidadeMetasIndividuais,
-        ativarAgora
-      );
+      }),
+      "Não foi possível criar o ciclo."
+    );
+    if (!ok) return;
 
-      if (ativarAgora) {
-        const resultado = await criarAvaliacoesDoCicloAtivado(
-          novoCiclo,
-          dependenciasCiclo
-        );
-        if (resultado.bloqueadas > 0) {
-          setErro(
-            `Ciclo criado, mas ${resultado.bloqueadas} avaliação(ões) não puderam ser abertas no servidor e não foram criadas localmente.`
-          );
-        }
-      }
-
-      setDataInicio("");
-      setDataFim("");
-      setQuantidadeMetasNegocio(0);
-      setQuantidadeMetasIndividuais(0);
-      setVersao((valor) => valor + 1);
-    } catch (error) {
-      setErro(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível criar o ciclo."
-      );
-    }
+    setDataInicio("");
+    setDataFim("");
   }
 
-  /**
-   * Encerramento do ciclo. As avaliações NOVAS são concluídas no SERVIDOR (ele
-   * decide completude e materializa a nota — D13/D18); o frontend não recalcula
-   * nada oficialmente nem converte avaliação incompleta em concluída. As recusas
-   * do servidor são reportadas e o ciclo é encerrado com o marcador de pendências
-   * do próprio domínio de ciclos.
-   */
-  async function encerrarComValidacao(
-    item: ReturnType<typeof getCiclosAvaliacao>[number]
-  ) {
+  async function encerrarComValidacao(item: CicloAvaliacao) {
     setErro("");
-
-    const pendencias = analisarPendenciasDoCiclo(item);
-    const totalPendencias = pendencias.reduce(
-      (soma, pendencia) => soma + pendencia.quantidade,
-      0
-    );
-
-    if (pendencias.length > 0) {
-      const resumo = pendencias
-        .map((pendencia) => {
-          // F5-08 P6: pendência de ESTRUTURA = fail-closed do cutover — a
-          // estrutura não pôde ser resolvida no PostgreSQL e NADA é presumido
-          // a partir de dados locais.
-          if (pendencia.papel === "Estrutura") {
-            return `${pendencia.colaboradorNome}: ${
-              pendencia.detalhes?.join(" ") ??
-              "estrutura organizacional indisponível"
-            }`;
-          }
-          if (pendencia.papel === "Metas") {
-            return `${pendencia.colaboradorNome} — Metas: ${pendencia.quantidade} meta${
-              pendencia.quantidade === 1 ? "" : "s"
-            } sem fechamento${
-              pendencia.detalhes?.length
-                ? ` (${pendencia.detalhes.join(", ")})`
-                : ""
-            }`;
-          }
-          return `${pendencia.colaboradorNome} — ${pendencia.papel}: ${
-            pendencia.quantidade
-          } nota${pendencia.quantidade === 1 ? "" : "s"} pendente${
-            pendencia.quantidade === 1 ? "" : "s"
-          }`;
-        })
-        .join("\n");
-
-      const confirmar = window.confirm(
-        `Este ciclo possui pendências:\n\n${resumo}\n\nDeseja encerrar mesmo assim? As médias usarão somente as notas recebidas, avaliações incompletas serão marcadas como parciais e metas sem fechamento permanecerão registradas como pendências do ciclo.`
-      );
-
-      if (!confirmar) return;
-
-      await concluirAvaliacoesNoEncerramentoDoCiclo(item, dependenciasCiclo);
-      encerrarCiclo(item.id, totalPendencias);
-      setVersao((valor) => valor + 1);
+    const motivo = window.prompt("Informe o motivo do encerramento do ciclo:");
+    if (motivo === null) return;
+    if (!motivo.trim()) {
+      setErro("Informe o motivo do encerramento do ciclo.");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Encerrar ${item.ano} • Ciclo ${item.ciclo}? As avaliações incompletas serão marcadas como pendências permanentes pela operação soberana.`
+      )
+    ) {
       return;
     }
 
-    const confirmar = window.confirm(
-      "Todas as avaliações estão completas. Deseja encerrar este ciclo?"
+    const ok = await publicar(
+      await controlador.encerrar(item.id, motivo.trim()),
+      "Não foi possível encerrar o ciclo."
     );
-
-    if (!confirmar) return;
-
-    const resultado = await concluirAvaliacoesNoEncerramentoDoCiclo(
-      item,
-      dependenciasCiclo
-    );
-    encerrarCiclo(item.id, 0);
-    if (resultado.bloqueadas > 0) {
-      setErro(
-        `Ciclo encerrado, mas ${resultado.bloqueadas} avaliação(ões) não puderam ser concluídas pelo servidor.`
-      );
-    }
-    setVersao((valor) => valor + 1);
+    if (!ok) return;
   }
 
-  async function ativarComValidacao(
-    item: ReturnType<typeof getCiclosAvaliacao>[number]
-  ) {
-    try {
-      atualizarStatusCiclo(item.id, "ATIVO");
-      const cicloAtivado = getCiclosAvaliacao().find(
-        (cicloAtual) => cicloAtual.id === item.id
-      );
+  async function ativarComValidacao(item: CicloAvaliacao) {
+    setErro("");
+    if (!window.confirm(`Ativar ${item.ano} • Ciclo ${item.ciclo}?`)) return;
 
-      if (!cicloAtivado) {
-        setErro("");
-        setVersao((valor) => valor + 1);
-        return;
-      }
-
-      const resultado = await criarAvaliacoesDoCicloAtivado(
-        cicloAtivado,
-        dependenciasCiclo
-      );
-
-      setErro(
-        resultado.bloqueadas > 0
-          ? `Ciclo ativado, mas ${resultado.bloqueadas} avaliação(ões) não puderam ser abertas no servidor e não foram criadas localmente.`
-          : ""
-      );
-      setVersao((valor) => valor + 1);
-    } catch (error) {
-      setErro(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível atualizar o status."
-      );
-    }
+    // A ativação materializa colegiado e responsabilidades NA RPC soberana.
+    const ok = await publicar(
+      await controlador.ativar(item.id),
+      "Não foi possível ativar o ciclo."
+    );
+    if (!ok) return;
   }
 
-  function cancelarComMotivo(
-    item: ReturnType<typeof getCiclosAvaliacao>[number]
-  ) {
+  async function cancelarComMotivo(item: CicloAvaliacao) {
+    setErro("");
     const motivo = window.prompt("Informe o motivo do cancelamento do ciclo:");
     if (motivo === null) return;
-
-    try {
-      cancelarCiclo(item.id, motivo, usuarioAtual!);
-      setErro("");
-      setVersao((valor) => valor + 1);
-    } catch (error) {
-      setErro(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível cancelar o ciclo."
-      );
+    if (!motivo.trim()) {
+      setErro("Informe o motivo do cancelamento do ciclo.");
+      return;
     }
+
+    // PLANEJADO e ATIVO são aceitos pelo contrato soberano (P4/P6).
+    const ok = await publicar(
+      await controlador.cancelar(item.id, motivo.trim()),
+      "Não foi possível cancelar o ciclo."
+    );
+    if (!ok) return;
   }
 
-  function reabrirComMotivo(
-    item: ReturnType<typeof getCiclosAvaliacao>[number]
-  ) {
+  async function reabrirComMotivo(item: CicloAvaliacao) {
+    setErro("");
     const motivo = window.prompt("Informe o motivo da reabertura do ciclo:");
     if (motivo === null) return;
     if (!motivo.trim()) {
       setErro("Informe o motivo da reabertura do ciclo.");
       return;
     }
-    const confirmar = window.confirm(
-      `Reabrir ${item.ano} • Ciclo ${item.ciclo}? As avaliações permanecerão com seus estados atuais.`
-    );
-    if (!confirmar) return;
+    if (!window.confirm(`Reabrir ${item.ano} • Ciclo ${item.ciclo}?`)) return;
 
-    try {
-      reabrirCiclo(item.id, motivo, usuarioAtual!);
-      setErro("");
-      setVersao((valor) => valor + 1);
-    } catch (error) {
-      setErro(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível reabrir o ciclo."
-      );
-    }
+    const ok = await publicar(
+      await controlador.reabrir(item.id, motivo.trim()),
+      "Não foi possível reabrir o ciclo."
+    );
+    if (!ok) return;
   }
 
-  function corrigirPeriodoComAuditoria(
-    item: ReturnType<typeof getCiclosAvaliacao>[number]
-  ) {
+  async function corrigirPeriodoComAuditoria(item: CicloAvaliacao) {
     setErro("");
     if (!justificativaCorrecao.trim()) {
       setErro("Informe a justificativa da correção do período.");
       return;
     }
 
-    try {
-      const impacto = analisarImpactoCorrecaoPeriodoCicloAtivo(
-        item.id,
-        periodoInicioCorrecao,
-        periodoFimCorrecao
-      );
-      if (!confirmarCorrecaoPeriodoComImpacto(impacto)) return;
+    // O impacto é calculado server-side pela operação soberana.
+    const ok = await publicar(
+      await controlador.corrigirPeriodo({
+        cicloId: item.id,
+        dataInicio: periodoInicioCorrecao,
+        dataFim: periodoFimCorrecao,
+        justificativa: justificativaCorrecao.trim(),
+      }),
+      "Não foi possível corrigir o período."
+    );
+    if (!ok) return;
 
-      corrigirPeriodoCicloAtivo(
-        item.id,
-        periodoInicioCorrecao,
-        periodoFimCorrecao,
-        justificativaCorrecao,
-        usuarioAtual!
-      );
-      setCorrigindoPeriodoId(null);
-      setJustificativaCorrecao("");
-      setVersao((valor) => valor + 1);
-    } catch (error) {
-      setErro(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível corrigir o período."
-      );
-    }
+    setCorrigindoPeriodoId(null);
+    setJustificativaCorrecao("");
   }
 
   return (
@@ -509,54 +340,19 @@ function CiclosAvaliacaoPage({
           </label>
         </div>
 
-        <div className="cycle-form-grid cycle-form-grid--two">
-          <label className="cycle-field">
-            <span>Metas de Negócio / Projetos</span>
-            <select
-              value={quantidadeMetasNegocio}
-              onChange={(event) =>
-                setQuantidadeMetasNegocio(
-                  Number(event.target.value) as 0 | 1 | 2 | 3
-                )
-              }
-            >
-              <option value={0}>0 metas</option>
-              <option value={1}>1 meta</option>
-              <option value={2}>2 metas</option>
-              <option value={3}>3 metas</option>
-            </select>
-          </label>
-
-          <label className="cycle-field">
-            <span>Metas Individuais</span>
-            <select
-              value={quantidadeMetasIndividuais}
-              onChange={(event) =>
-                setQuantidadeMetasIndividuais(
-                  Number(event.target.value) as 0 | 1 | 2 | 3
-                )
-              }
-            >
-              <option value={0}>0 metas</option>
-              <option value={1}>1 meta</option>
-              <option value={2}>2 metas</option>
-              <option value={3}>3 metas</option>
-            </select>
-          </label>
-        </div>
+        {/*
+          F5-09 P8 (Bloco 3): a criação NÃO envia metas — a Edge P7 não as aceita
+          e o PostgreSQL é a única autoridade. Nenhuma persistência temporária.
+        */}
+        <p className="cycle-helper">
+          Configuração de metas será disponibilizada na etapa F5-10. Este
+          formulário cria apenas o ciclo (ano, número e período).
+        </p>
 
         <div className="cycle-create-footer">
-          <label className="cycle-checkbox">
-            <input
-              type="checkbox"
-              checked={ativarAgora}
-              onChange={(event) => setAtivarAgora(event.target.checked)}
-            />
-            <span>
-              <strong>Ativar imediatamente</strong>
-              <small>Cria as avaliações automaticamente ao salvar.</small>
-            </span>
-          </label>
+          <span className="cycle-helper">
+            O ciclo é criado como PLANEJADO; a ativação é uma operação separada.
+          </span>
 
           <button
             className="cycle-btn cycle-btn--primary"
@@ -570,6 +366,18 @@ function CiclosAvaliacaoPage({
 
         {erro && <div className="cycle-alert cycle-alert--error">{erro}</div>}
       </section>
+
+      {(estado.fase === "ocioso" || estado.fase === "carregando") && (
+        <div className="cycle-alert" role="status">
+          Carregando ciclos…
+        </div>
+      )}
+
+      {estado.fase === "erro" && estado.erro && (
+        <div className="cycle-alert cycle-alert--error" role="alert">
+          {estado.erro.message}
+        </div>
+      )}
 
       <section className="cycle-list">
         <div className="cycle-list-heading">
@@ -594,7 +402,6 @@ function CiclosAvaliacaoPage({
           </div>
         ) : (
           ciclos.map((item) => {
-            const eventosHistorico = getEventosHistoricoCiclo(item);
             const podeCorrigirPeriodo = can(
               {
                 actor: {
@@ -652,12 +459,8 @@ function CiclosAvaliacaoPage({
                         </strong>
                       </div>
                       <div>
-                        <small>Metas de Negócio</small>
-                        <strong>{item.quantidadeMetasNegocio ?? 0}</strong>
-                      </div>
-                      <div>
-                        <small>Metas Individuais</small>
-                        <strong>{item.quantidadeMetasIndividuais ?? 0}</strong>
+                        <small>Metas</small>
+                        <strong>Configuração na etapa F5-10</strong>
                       </div>
                       {item.encerradoComPendencias && (
                         <div>
@@ -707,22 +510,20 @@ function CiclosAvaliacaoPage({
                           <button
                             className="cycle-btn cycle-btn--small cycle-btn--primary"
                             onClick={() => {
-                              try {
-                                atualizarPeriodoCiclo(
-                                  item.id,
-                                  periodoInicioEdicao,
-                                  periodoFimEdicao
+                              void (async () => {
+                                const ok = await publicar(
+                                  await controlador.editar({
+                                    cicloId: item.id,
+                                    ano: item.ano,
+                                    numero: item.ciclo,
+                                    dataInicio: periodoInicioEdicao,
+                                    dataFim: periodoFimEdicao,
+                                  }),
+                                  "Não foi possível atualizar o período."
                                 );
+                                if (!ok) return;
                                 setEditandoPeriodoId(null);
-                                setErro("");
-                                setVersao((valor) => valor + 1);
-                              } catch (error) {
-                                setErro(
-                                  error instanceof Error
-                                    ? error.message
-                                    : "Não foi possível atualizar o período."
-                                );
-                              }
+                              })();
                             }}
                           >
                             Salvar
@@ -773,7 +574,9 @@ function CiclosAvaliacaoPage({
                           <div className="cycle-inline-form">
                             <button
                               className="cycle-btn cycle-btn--small cycle-btn--primary"
-                              onClick={() => corrigirPeriodoComAuditoria(item)}
+                              onClick={() => {
+                                void corrigirPeriodoComAuditoria(item);
+                              }}
                             >
                               Confirmar correção
                             </button>
@@ -810,81 +613,9 @@ function CiclosAvaliacaoPage({
 
                   <div className="cycle-editor">
                     <span className="cycle-editor__label">Metas</span>
-                    {item.status === "PLANEJADO" ? (
-                      editandoMetasId === item.id ? (
-                        <div className="cycle-inline-form">
-                          <select
-                            value={metasNegocioEdicao}
-                            onChange={(event) =>
-                              setMetasNegocioEdicao(
-                                Number(event.target.value) as 0 | 1 | 2 | 3
-                              )
-                            }
-                          >
-                            <option value={0}>Negócio: 0</option>
-                            <option value={1}>Negócio: 1</option>
-                            <option value={2}>Negócio: 2</option>
-                            <option value={3}>Negócio: 3</option>
-                          </select>
-
-                          <select
-                            value={metasIndividuaisEdicao}
-                            onChange={(event) =>
-                              setMetasIndividuaisEdicao(
-                                Number(event.target.value) as 0 | 1 | 2 | 3
-                              )
-                            }
-                          >
-                            <option value={0}>Individual: 0</option>
-                            <option value={1}>Individual: 1</option>
-                            <option value={2}>Individual: 2</option>
-                            <option value={3}>Individual: 3</option>
-                          </select>
-
-                          <button
-                            className="cycle-btn cycle-btn--small cycle-btn--primary"
-                            onClick={() => {
-                              try {
-                                atualizarConfiguracaoMetasCiclo(
-                                  item.id,
-                                  metasNegocioEdicao,
-                                  metasIndividuaisEdicao
-                                );
-                                setEditandoMetasId(null);
-                                setErro("");
-                                setVersao((valor) => valor + 1);
-                              } catch (error) {
-                                setErro(
-                                  error instanceof Error
-                                    ? error.message
-                                    : "Não foi possível atualizar as metas."
-                                );
-                              }
-                            }}
-                          >
-                            Salvar
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          className="cycle-link-button"
-                          onClick={() => {
-                            setEditandoMetasId(item.id);
-                            setMetasNegocioEdicao(
-                              item.quantidadeMetasNegocio ?? 0
-                            );
-                            setMetasIndividuaisEdicao(
-                              item.quantidadeMetasIndividuais ?? 0
-                            );
-                            setErro("");
-                          }}
-                        >
-                          Editar metas
-                        </button>
-                      )
-                    ) : (
-                      <span className="cycle-muted">Bloqueadas após o início</span>
-                    )}
+                    <span className="cycle-muted">
+                      Configuração de metas será disponibilizada na etapa F5-10.
+                    </span>
                   </div>
 
                   <div className="cycle-editor cycle-editor--actions">
@@ -930,7 +661,9 @@ function CiclosAvaliacaoPage({
                   ) && (
                     <button
                       className="cycle-link-button"
-                      onClick={() => reabrirComMotivo(item)}
+                      onClick={() => {
+                        void reabrirComMotivo(item);
+                      }}
                     >
                       Reabrir ciclo
                     </button>
@@ -949,108 +682,35 @@ function CiclosAvaliacaoPage({
                   ) && (
                     <button
                       className="cycle-link-button cycle-link-button--danger"
-                      onClick={() => cancelarComMotivo(item)}
+                      onClick={() => {
+                        void cancelarComMotivo(item);
+                      }}
                     >
                       Cancelar ciclo
                     </button>
                   )}
 
+                  {/*
+                    F5-09 P8 (Bloco 3): a exclusão FÍSICA saiu da UI. Ela exigia
+                    apagar avaliações vazias e o ciclo no armazenamento local —
+                    nenhum dos dois é autoridade. O ciclo PLANEJADO é resolvido no
+                    domínio por "Cancelar ciclo" (soft, auditável).
+                  */}
                   {item.status === "PLANEJADO" && (
-                    <button
-                      className="cycle-link-button cycle-link-button--danger"
-                      onClick={() => {
-                        if (!confirmarExclusaoCiclo(item)) return;
-
-                        try {
-                          excluirAvaliacoesVaziasDoCiclo(item);
-                          excluirCiclo(item.id);
-                          setErro("");
-                          setVersao((valor) => valor + 1);
-                        } catch (error) {
-                          setErro(
-                            error instanceof Error
-                              ? error.message
-                              : "Não foi possível excluir o ciclo."
-                          );
-                        }
-                      }}
-                    >
-                      Excluir ciclo
-                    </button>
+                    <span className="cycle-muted">
+                      Exclusão física indisponível nesta fase: use “Cancelar ciclo”.
+                    </span>
                   )}
                 </div>
 
                 <details className="cycle-history">
                   <summary>Ver histórico</summary>
                   <div className="cycle-history__content">
-                    {eventosHistorico.length === 0 ? (
-                      <p className="cycle-muted">
-                        Nenhuma alteração auditada registrada.
-                      </p>
-                    ) : (
-                      <ol className="cycle-history__timeline">
-                        {eventosHistorico.map((evento, indice) => (
-                          <li key={`${evento.tipo}-${evento.data}-${indice}`}>
-                            <div className="cycle-history__heading">
-                              <strong>
-                                {evento.tipo === "encerramento"
-                                  ? "Encerramento"
-                                  : evento.tipo === "reabertura"
-                                  ? "Reabertura"
-                                  : evento.tipo === "cancelamento"
-                                  ? "Cancelamento"
-                                  : "Correção de período"}
-                              </strong>
-                              <time dateTime={evento.data}>
-                                {formatarDataHoraHistorico(evento.data)}
-                              </time>
-                            </div>
-
-                            {evento.tipo === "encerramento" ? (
-                              <p>
-                                {evento.encerradoComPendencias
-                                  ? `Encerrado com pendências (${evento.quantidadePendencias}).`
-                                  : `Encerrado sem pendências (${evento.quantidadePendencias}).`}
-                              </p>
-                            ) : (
-                              <>
-                                <p>
-                                  Autor: {evento.autorNome} (matrícula {evento.autorMatricula})
-                                </p>
-                                <p>
-                                  {evento.tipo === "correcao-periodo"
-                                    ? "Justificativa"
-                                    : "Motivo"}
-                                  : {evento.tipo === "correcao-periodo"
-                                    ? evento.justificativa
-                                    : evento.motivo}
-                                </p>
-                              </>
-                            )}
-
-                            {evento.tipo === "correcao-periodo" && (
-                              <>
-                                <p>
-                                  Período anterior: {formatarPeriodoCiclo(
-                                    evento.periodoAnterior.dataInicio,
-                                    evento.periodoAnterior.dataFim
-                                  )}
-                                </p>
-                                <p>
-                                  Novo período: {formatarPeriodoCiclo(
-                                    evento.novoPeriodo.dataInicio,
-                                    evento.novoPeriodo.dataFim
-                                  )}
-                                </p>
-                                <p>
-                                  Impacto: {evento.impacto.avaliacoes.quantidade} avaliação(ões), {evento.impacto.metas.quantidade} meta(s), {evento.impacto.observacoes.quantidade} observação(ões) — total {evento.impacto.total}.
-                                </p>
-                              </>
-                            )}
-                          </li>
-                        ))}
-                      </ol>
-                    )}
+                    <p className="cycle-muted">
+                      Histórico detalhado indisponível nesta fase da migração: a
+                      trilha auditada de ciclo não é lida do modelo local nem de
+                      cycle_events (deny-by-default, sem RPC de leitura).
+                    </p>
                   </div>
                 </details>
               </article>
