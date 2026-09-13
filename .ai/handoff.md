@@ -59,7 +59,7 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   perda de capability, relação ausente (vínculo desativado), outro ator com
   `goal.approve`, hierarquia viva divergente, prova estática dos 3 caminhos e
   ausência de efeitos colaterais nos DENY.
-- **Gates reais desta rodada:** db reset + bateria SQL completa na ordem do CI (**41/41 entradas, falhas=0**) + `npm test`/`npm run build`/`npm run lint` verdes + `git diff --check` exit 0. Elevações de acesso: 3 batches (1 diagnostico+correcao focado, 1 reteste focado, 1 gate completo de fechamento).
+- **Gates reais desta rodada:** db reset + bateria SQL completa na ordem do CI (**41/41 entradas, falhas=0**) + `npm test`/`npm run build`/`npm run lint` verdes + `git diff --check` exit 0. Elevações de acesso: **9 batches privilegiados** (2 geração+teste focado com defeito no meu próprio harness de geração; 1 teste focado; 3 diagnósticos/focados durante a depuração da migration de correção; 1 teste focado que ficou verde; 1 gate com erro de sintaxe no meu script; 1 gate completo de fechamento verde). Cada execução foi precedida de análise; o gate completo rodou **2** vezes (a 1ª abortou por erro de sintaxe do meu script de gate, sem executar bateria ou commit).
 - **Não feito (por contrato):** P5, P6, P7, F5-11, PR e merge.
 
 ### 3.17 F5-10 P4 — guardas/CI/harness/documentação (em andamento; implementação paralela)
