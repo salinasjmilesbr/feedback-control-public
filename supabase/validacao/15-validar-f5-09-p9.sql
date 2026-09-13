@@ -1930,12 +1930,12 @@ declare
   v_cycle_ct  int;
   v_n         int;
   v_cols      text[];
-  -- F5-10 P1/P2 (Issues #210 e #212): objetos de METAS legitimados pelas fases
-  -- implementadas. A guarda de "nao antecipar F5-10" NAO foi enfraquecida: passou
-  -- a LISTA FECHADA (tabelas + funcoes de integridade/trilha + as 6 RPCs
-  -- soberanas da P2). Qualquer objeto de METAS fora dela continua reprovando, e
-  -- as fases seguintes (aprovacao, leitura com gate, limites do ciclo, Edge,
-  -- cliente) e F5-11 seguem integralmente proibidas.
+  -- F5-10 P1/P2/P3 (Issues #210, #212 e #214): objetos de METAS legitimados pelas
+  -- fases implementadas. A guarda de "nao antecipar F5-10" NAO foi enfraquecida:
+  -- passou a LISTA FECHADA (tabelas + funcoes de integridade/trilha + as 9 RPCs
+  -- soberanas das P2/P3). Qualquer objeto de METAS fora dela continua reprovando,
+  -- e as fases seguintes (leitura com gate, Edge, cliente, RLS funcional) e F5-11
+  -- seguem integralmente proibidas.
   v_tabelas_metas_p1 text[] := array[
     'evaluation_goals','evaluation_goal_approvals','evaluation_goal_events',
     'evaluation_cycle_goal_limits'];
@@ -1944,7 +1944,8 @@ declare
     'f5_10_validar_quota_do_limite','f5_10_proteger_limite_do_ciclo',
     'f5_10_validar_autoria_da_aprovacao',
     'meta_criar','meta_editar','meta_atualizar_progresso','meta_finalizar',
-    'meta_revisar_finalizacao','meta_excluir','meta_definir_limites_do_ciclo'];
+    'meta_revisar_finalizacao','meta_excluir','meta_definir_limites_do_ciclo',
+    'meta_aprovar','meta_invalidar_aprovacoes'];
 begin
   -- (a) I5, I6 e I3 (P1/F5-06) presentes.
   if not exists (

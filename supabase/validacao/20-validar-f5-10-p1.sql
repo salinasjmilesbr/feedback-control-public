@@ -1010,19 +1010,20 @@ end $$;
 -- K) Anti-escopo da P1 (nenhuma RPC funcional ALEM do contrato das fases, nenhuma
 --    capability nova)
 -- ----------------------------------------------------------------------------
--- CORRECAO DE REGRESSAO (Issue #212, F5-10 P2): a P1 nao implementa NENHUMA RPC
--- funcional de meta; a P2 (migration `20260923000000_f5_10_p2_goals_rpc.sql`) roda
--- no MESMO `db reset` e introduz EXATAMENTE as 6 RPCs soberanas do contrato
--- (§13/§19 P2, incluindo D21). A guarda NAO foi enfraquecida: virou LISTA FECHADA
--- — qualquer outra funcao `meta_*`/`goal_*` (inclusive de fase futura: aprovacao,
--- leitura com gate) continua reprovando.
+-- CORRECAO DE REGRESSAO (Issues #212 e #214, F5-10 P2/P3): a P1 nao implementa
+-- NENHUMA RPC funcional de meta; as P2 e P3 rodam no MESMO `db reset` e
+-- introduzem EXATAMENTE as 9 RPCs soberanas do contrato (§13/§19 P2 + P3,
+-- incluindo D21). A guarda NAO foi enfraquecida: virou LISTA FECHADA — qualquer
+-- outra funcao `meta_*`/`goal_*` (inclusive de fase futura: leitura com gate)
+-- continua reprovando.
 do $$
 declare
   v_n int;
   v_caps int;
   v_rpcs text[] := array[
     'meta_criar', 'meta_editar', 'meta_atualizar_progresso', 'meta_finalizar',
-    'meta_revisar_finalizacao', 'meta_excluir', 'meta_definir_limites_do_ciclo'];
+    'meta_revisar_finalizacao', 'meta_excluir', 'meta_definir_limites_do_ciclo',
+    'meta_aprovar', 'meta_invalidar_aprovacoes'];
 begin
   select count(*) into v_n
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -1030,15 +1031,15 @@ begin
      and (p.proname like 'meta\_%' or p.proname like 'goal\_%')
      and p.proname <> all (v_rpcs);
   if v_n <> 0 then
-    raise exception '[FAIL] K1: RPC funcional de meta FORA do contrato das fases P1/P2 (encontradas %)', v_n;
+    raise exception '[FAIL] K1: RPC funcional de meta FORA do contrato das fases P1/P2/P3 (encontradas %)', v_n;
   end if;
 
-  -- As 7 RPCs da P2 existem de fato (a lista nao pode passar por vacuidade).
+  -- As 9 RPCs da P2+P3 existem de fato (a lista nao pode passar por vacuidade).
   select count(*) into v_n
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.proname = any (v_rpcs);
-  if v_n <> 7 then
-    raise exception '[FAIL] K1: as 7 RPCs soberanas da P2 deveriam existir (encontradas %)', v_n;
+  if v_n <> 9 then
+    raise exception '[FAIL] K1: as 9 RPCs soberanas da P2/P3 deveriam existir (encontradas %)', v_n;
   end if;
 
   select count(*) into v_caps from public.capabilities
@@ -1059,7 +1060,7 @@ begin
     raise exception '[FAIL] K3: funcoes de integridade da P1 ausentes (encontradas %)', v_n;
   end if;
 
-  raise notice '[PASS] K: anti-escopo respeitado — superficie de RPC de meta restrita a lista FECHADA das 7 operacoes da P2 (incluindo D21/limites do ciclo), nenhuma capability nova e as 5 funcoes da P1 apenas de integridade/append-only';
+  raise notice '[PASS] K: anti-escopo respeitado — superficie de RPC de meta restrita a lista FECHADA das 9 operacoes das P2/P3 (incluindo D21/limites do ciclo e aprovacao/invalidacao), nenhuma capability nova e as 5 funcoes da P1 apenas de integridade/append-only';
 end $$;
 
 -- ----------------------------------------------------------------------------

@@ -34,6 +34,71 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
+### 3.16 F5-10 P3 (implementada; aguardando auditoria independente)
+
+- **Atividade:** F5-10 — **P3 (APROVAÇÕES e INVALIDAÇÃO de metas)** — Issue
+  **#214**. Contrato: `docs/F5-10-desenho-tecnico.md` (D1–D25; §7, §9 e matriz
+  D19/§9.4, §10, §12, §13, §19 P3). **Sem PR e sem merge**.
+- **Base:** `main` = `6a2ade2e2d8a11815392bbc1726e08c1adf8d746` (squash da P2,
+  `feat(F5-10): operações soberanas de metas (#213)`).
+  **Branch:** `feat/f5-10-p3-aprovacoes-metas`.
+- **Entregue:** `supabase/migrations/20260924000000_f5_10_p3_approvals_rpc.sql`
+  (`meta_aprovar`, `meta_invalidar_aprovacoes`, a reconexão da **matriz D19** em
+  `meta_editar` por `create or replace` — a migration histórica da P2 **não** foi
+  editada — e 3 helpers: `f5_10_aprovador_congelado`,
+  `f5_10_invalidar_aprovacoes_vigentes`, `f5_10_derivar_operation_id`),
+  `supabase/validacao/23-cenario-`/`24-validar-f5-10-p3.sql`,
+  `.github/workflows/ci.yml` (2 passos novos, com `name` citado),
+  `supabase/migrations/README.md` e as listas fechadas de anti-antecipação
+  (`20-validar-f5-10-p1.sql`, `15-validar-f5-09-p9.sql`, `22-validar-f5-10-p2.sql`)
+  ampliadas para as **9** RPCs do contrato P2+P3.
+- **Legitimidade (fonte única CONGELADA):** avaliação não cancelada do dono da
+  meta (ausência/duplicidade ⇒ fail-closed); **GERENTE** = ocorrência **original**
+  de `GESTAO_CADEIA` (`evaluation_participants`, menor `valid_from`, empate ⇒ menor
+  `collaborator_id`); **COORDENADOR** = ocorrência original de `GESTAO_DIRETA`,
+  **somente quando existir e for distinta** da cadeia; a ocorrência escolhida
+  precisa estar **vigente** e o **ator** precisa ser o **colaborador congelado**
+  do papel (vínculo único; ausência/ambigüidade ⇒ fail-closed). Nenhuma
+  hierarquia viva, matrícula, nome ou papel declarado pelo cliente — a guarda
+  estática do SQL proíbe `position_reporting_lines`/`occupations`/
+  `organizacao_resolver_*` na decisão.
+- **Fato e histórico:** aprovação é linha em `evaluation_goal_approvals` (uma
+  vigente por `(goal_id, papel)`), **não** altera `status`/`version` da meta,
+  **não** finaliza e **não** exige finalização; invalidar preenche
+  `revogado_em`/`revogado_motivo` + `version + 1` **na própria linha** e emite
+  `APROVACAO_INVALIDADA` (um por papel); **nenhum** `DELETE`; reaprovar cria
+  **novo fato** preservando o revogado.
+- **D19 conectada:** alteração **material** (`descricao`/`kpi`/`valor_alvo`)
+  invalida atomicamente as vigentes dentro de `meta_editar`; edição não efetiva,
+  progresso, primeira finalização, revisão, quota, correção de período,
+  movimentação estrutural e **soft delete** (terminal) **não** invalidam.
+- **Idempotência/version/lock:** `expected_version` da **meta** comparado após
+  `ciclo_lock_organizacao` + `SELECT … FOR UPDATE` (desvio (a) do header);
+  `operation_id` + `payload_hash` SHA-256 server-side; sub-eventos da mesma
+  intenção usam `operation_id` **derivado determinísticamente** (desvio (e));
+  `meta_invalidar_aprovacoes` sem fato vigente é **NO-OP REGISTRADO na trilha**
+  (um evento `APROVACAO_INVALIDADA` com o `operation_id` consumido,
+  `result_entity_id` NULL, `invalidated = 0`, versão/status/motivo em before/after
+  e **nenhuma** linha de aprovação alterada) — idempotência **temporal** provada:
+  replay depois de surgir nova aprovação vigente continua devolvendo
+  `invalidated = 0` e nunca invalida o novo fato; payload divergente ⇒ CONFLICT.
+- **Gates reais (host local):** `db reset` + bateria SQL completa na ordem do CI
+  = **39/39 entradas, `falhas=0`** + `git diff --check` exit 0. `npm test`/
+  `build`/`lint`/`tsc` **não se aplicam** (nenhum arquivo JS/TS alterado).
+- **Elevações de acesso nesta rodada:** 6 (preflight obrigatório com `db reset` e
+  criação da branch; batch #1 quota 0..3; batch #2 `min(uuid)`; batch #3
+  `payload_hash` do helper; batch #4 expectativa absoluta no F6; batch #5 bloco H
+  movido para antes da finalização; batch #6 reteste verde com commit/push).
+- **Correção de auditoria (idempotência do NO-OP, mesma branch):** NO-OP de
+  `meta_invalidar_aprovacoes` passou a ser **persistente** (evento na trilha com
+  `operation_id` consumido), com teste temporal crítico (nova aprovação vigente
+  criada depois do NO-OP e replay da MESMA intenção), rollback da gravação do
+  NO-OP e documentação corrigida. Gates: `db reset` + bateria completa +
+  `git diff --check` = **db reset + bateria SQL completa na ordem do CI (**39/39 entradas, falhas=0**) + `git diff --check` exit 0**; elevações nesta correção: **2 (batch #1 â€” defeito real: `v_msg` usado no novo teste F9 sem estar declarado no bloco F, corrigido; batch #2 â€” reteste verde com commit e push)**.
+- **Não feito (por contrato):** P4 (matriz `goal.*`, Policy Engine, RLS funcional,
+  grants ao cliente, leitura por escopo), P5 (Edge/adapter), P6 (frontend/cutover/
+  backfill), P7 (bateria integrada e concorrência real), F5-11, PR e merge.
+
 ### 3.15 F5-10 P2 (implementada; aguardando auditoria independente)
 
 - **Atividade:** F5-10 — **P2 (OPERAÇÕES SOBERANAS de metas)** — Issue **#212**.
