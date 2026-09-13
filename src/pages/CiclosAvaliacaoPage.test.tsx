@@ -7,7 +7,6 @@ import { ProvedorAuthTeste } from "../test/authTeste";
 import type { Colaborador } from "../types/Colaborador";
 import type { EstadoGestaoCiclos } from "../services/ciclosSoberanos/controladorGestaoCiclos";
 import CiclosAvaliacaoPage from "./CiclosAvaliacaoPage";
-import { confirmarExclusaoCiclo } from "./confirmarExclusaoCiclo";
 
 /**
  * F5-09 P8 (Bloco 1) — `CiclosAvaliacaoPage` com LEITURA SOBERANA.
@@ -275,8 +274,10 @@ describe("F5-09 P8 Bloco 2 — mutations soberanas (C1–C15)", () => {
     ]) {
       expect(fonte, local).not.toContain(local);
     }
-    // `cicloEquipeService` permanece APENAS no resíduo da exclusão física (Bloco 3).
-    expect(fonte).toContain("excluirAvaliacoesVaziasDoCiclo(");
+    // Bloco 3: o resíduo da exclusão física saiu — `cicloEquipeService` não é
+    // mais importado pela página (nem para apagar avaliações vazias).
+    expect(fonte).not.toContain("cicloEquipeService");
+    expect(fonte).not.toContain("excluirAvaliacoesVaziasDoCiclo(");
     expect(fonte).not.toContain("criarAvaliacoesDoCicloAtivado");
   });
 
@@ -297,26 +298,61 @@ describe("F5-09 P8 Bloco 2 — mutations soberanas (C1–C15)", () => {
     expect(trecho).not.toContain("localStorage");
     expect(fonte).toContain("await publicar(");
   });
-});
+  it("C16 (Bloco 3): guarda estática de ausência — nenhuma autoridade local de ciclo", async () => {
+    const fonte = await fonteDaPagina();
+    for (const proibido of [
+      // leitura/listagem legada
+      "getCiclosAdministrativos",
+      "getCiclosAvaliacao",
+      "localCycleRepository",
+      "cicloAvaliacaoStorage.excluirCiclo",
+      // mutations locais de lifecycle
+      "criarCiclo(",
+      "encerrarCiclo(",
+      "excluirCiclo(",
+      "atualizarPeriodoCiclo(",
+      "atualizarStatusCiclo(",
+      "atualizarConfiguracaoMetasCiclo",
+      "cancelarCiclo(",
+      "reabrirCiclo(",
+      "corrigirPeriodoCicloAtivo(",
+      "criarAvaliacoesDoCicloAtivado(",
+      "concluirAvaliacoesNoEncerramentoDoCiclo(",
+      // exclusão física e utilitários extintos
+      "excluirAvaliacoesVaziasDoCiclo",
+      "confirmarExclusaoCiclo",
+      "cicloEquipeService",
+      // metas (F5-10) e ativação implícita
+      "ativarAgora",
+      "quantidadeMetasNegocio",
+      "quantidadeMetasIndividuais",
+      "editandoMetasId",
+      // histórico local / contador artificial de rerender
+      "EventoHistoricoCiclo",
+      "getEventosHistoricoCiclo",
+      "formatarDataHoraHistorico",
+      "setVersao",
+      // persistência local e acesso direto ao banco
+      "localStorage",
+      "sessionStorage",
+      ".rpc(",
+      "functions.invoke",
+    ]) {
+      expect(fonte, proibido).not.toContain(proibido);
+    }
+  });
 
-describe("F5-09 P8 — confirmação de exclusão (utilitário de UX, sem autoridade)", () => {
-  it("exige confirmação explícita antes da exclusão", () => {
-    const ciclo = {
-      id: "ciclo-confirmacao",
-      ano: 2026,
-      ciclo: 2 as const,
-      status: "PLANEJADO" as const,
-      dataCriacao: "2026-01-01T00:00:00.000Z",
-      dataUltimaAtualizacao: "2026-01-01T00:00:00.000Z",
-    };
-    let mensagem = "";
-
-    const confirmado = confirmarExclusaoCiclo(ciclo, (texto) => {
-      mensagem = texto;
-      return false;
-    });
-
-    expect(confirmado).toBe(false);
-    expect(mensagem).toContain("Excluir 2026 • Ciclo 2?");
+  it("C17 (Bloco 3): o que saiu é declarado INDISPONÍVEL, nunca simulado ou esvaziado", async () => {
+    const fonte = await fonteDaPagina();
+    expect(fonte).toContain(
+      "Configuração de metas será disponibilizada na etapa F5-10"
+    );
+    expect(fonte).toContain(
+      "Histórico detalhado indisponível nesta fase da migração"
+    );
+    expect(fonte).toContain("a ativação é uma operação separada");
+    expect(fonte).toContain("Exclusão física indisponível nesta fase");
+    // A trilha não é apresentada como lista vazia "real".
+    expect(fonte).not.toContain("Nenhuma alteração auditada registrada");
   });
 });
