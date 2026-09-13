@@ -358,6 +358,26 @@ jobs:
             < supabase/validacao/22-validar-f5-10-p2.sql
 
       # ----------------------------------------------------------------------
+      # F5-10 (P3) — APROVACOES e INVALIDACAO de metas (Issue #214): fixture
+      # isolada (prefixo `f1`) com o SNAPSHOT CONGELADO de participantes
+      # (F5-06) + validador com positivos e NEGATIVOS obrigatorios (derivacao
+      # GERENTE/COORDENADOR da estrutura congelada, fail-closed, matriz D19
+      # conectada a edicao material, idempotencia, rollback e ACL). Roda depois
+      # da P2 e ANTES das regressoes.
+      # ----------------------------------------------------------------------
+      - name: "Seed F5-10 P3 scenario (aprovacoes e invalidacao de metas)"
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/23-cenario-f5-10-p3.sql
+
+      - name: "Run F5-10 P3 validation (aprovar/invalidar + matriz D19)"
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/24-validar-f5-10-p3.sql
+
+      # ----------------------------------------------------------------------
       # Regressão F5-06/F5-07 (§23.4): cenários independentes, com prefixos de
       # UUID próprios (`d6`/`d7`), reaplicados antes de cada validação.
       # ----------------------------------------------------------------------

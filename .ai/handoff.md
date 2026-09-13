@@ -34,6 +34,58 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
+### 3.16 F5-10 P3 (implementada; aguardando auditoria independente)
+
+- **Atividade:** F5-10 — **P3 (APROVAÇÕES e INVALIDAÇÃO de metas)** — Issue
+  **#214**. Contrato: `docs/F5-10-desenho-tecnico.md` (D1–D25; §7, §9 e matriz
+  D19/§9.4, §10, §12, §13, §19 P3). **Sem PR e sem merge**.
+- **Base:** `main` = `6a2ade2e2d8a11815392bbc1726e08c1adf8d746` (squash da P2,
+  `feat(F5-10): operações soberanas de metas (#213)`).
+  **Branch:** `feat/f5-10-p3-aprovacoes-metas`.
+- **Entregue:** `supabase/migrations/20260924000000_f5_10_p3_approvals_rpc.sql`
+  (`meta_aprovar`, `meta_invalidar_aprovacoes`, a reconexão da **matriz D19** em
+  `meta_editar` por `create or replace` — a migration histórica da P2 **não** foi
+  editada — e 3 helpers: `f5_10_aprovador_congelado`,
+  `f5_10_invalidar_aprovacoes_vigentes`, `f5_10_derivar_operation_id`),
+  `supabase/validacao/23-cenario-`/`24-validar-f5-10-p3.sql`,
+  `.github/workflows/ci.yml` (2 passos novos, com `name` citado),
+  `supabase/migrations/README.md` e as listas fechadas de anti-antecipação
+  (`20-validar-f5-10-p1.sql`, `15-validar-f5-09-p9.sql`, `22-validar-f5-10-p2.sql`)
+  ampliadas para as **9** RPCs do contrato P2+P3.
+- **Legitimidade (fonte única CONGELADA):** avaliação não cancelada do dono da
+  meta (ausência/duplicidade ⇒ fail-closed); **GERENTE** = ocorrência **original**
+  de `GESTAO_CADEIA` (`evaluation_participants`, menor `valid_from`, empate ⇒ menor
+  `collaborator_id`); **COORDENADOR** = ocorrência original de `GESTAO_DIRETA`,
+  **somente quando existir e for distinta** da cadeia; a ocorrência escolhida
+  precisa estar **vigente** e o **ator** precisa ser o **colaborador congelado**
+  do papel (vínculo único; ausência/ambigüidade ⇒ fail-closed). Nenhuma
+  hierarquia viva, matrícula, nome ou papel declarado pelo cliente — a guarda
+  estática do SQL proíbe `position_reporting_lines`/`occupations`/
+  `organizacao_resolver_*` na decisão.
+- **Fato e histórico:** aprovação é linha em `evaluation_goal_approvals` (uma
+  vigente por `(goal_id, papel)`), **não** altera `status`/`version` da meta,
+  **não** finaliza e **não** exige finalização; invalidar preenche
+  `revogado_em`/`revogado_motivo` + `version + 1` **na própria linha** e emite
+  `APROVACAO_INVALIDADA` (um por papel); **nenhum** `DELETE`; reaprovar cria
+  **novo fato** preservando o revogado.
+- **D19 conectada:** alteração **material** (`descricao`/`kpi`/`valor_alvo`)
+  invalida atomicamente as vigentes dentro de `meta_editar`; edição não efetiva,
+  progresso, primeira finalização, revisão, quota, correção de período,
+  movimentação estrutural e **soft delete** (terminal) **não** invalidam.
+- **Idempotência/version/lock:** `expected_version` da **meta** comparado após
+  `ciclo_lock_organizacao` + `SELECT … FOR UPDATE` (desvio (a) do header);
+  `operation_id` + `payload_hash` SHA-256 server-side; sub-eventos da mesma
+  intenção usam `operation_id` **derivado determinísticamente** (desvio (e));
+  `meta_invalidar_aprovacoes` sem fato vigente é **NO-OP auditável** (sem evento,
+  sem re-mutação de fato revogado).
+- **Gates reais (host local):** `db reset` + bateria SQL completa na ordem do CI
+  = **db reset + bateria SQL completa na ordem do CI (**39/39 entradas, falhas=0**)** + `git diff --check` exit 0. `npm test`/`build`/`lint`/`tsc` **não
+  se aplicam** (nenhum arquivo JS/TS alterado).
+- **Elevações de acesso nesta rodada:** **6 (preflight obrigatorio com `db reset` e criacao da branch; batch #1 â€” defeito real: o CHECK de `evaluation_cycle_goal_limits.quantidade` so admite 0..3 e o fixture usava 4/5; batch #2 â€” defeito real: `min(uuid)` nao existe no PostgreSQL em 2 pontos da derivacao; batch #3 â€” defeito real de semantica: o helper de invalidacao gravava `payload_hash` proprio, divergente do hash canonico da intencao, quebrando o replay; batch #4 â€” defeito real no TESTE: expectativa absoluta de fatos revogados no F6, trocada por assercao comparativa antes/depois; batch #5 â€” defeito real no TESTE: o probe H3 editava meta ja finalizada (G1 e fechada no bloco E5), e o bloco H foi MOVIDO para antes da finalizacao; batch #6 â€” reteste com correcao, commit e push), cada reteste precedido de revisao estatica profunda da superficie ainda nao executada**.
+- **Não feito (por contrato):** P4 (matriz `goal.*`, Policy Engine, RLS funcional,
+  grants ao cliente, leitura por escopo), P5 (Edge/adapter), P6 (frontend/cutover/
+  backfill), P7 (bateria integrada e concorrência real), F5-11, PR e merge.
+
 ### 3.15 F5-10 P2 (implementada; aguardando auditoria independente)
 
 - **Atividade:** F5-10 — **P2 (OPERAÇÕES SOBERANAS de metas)** — Issue **#212**.

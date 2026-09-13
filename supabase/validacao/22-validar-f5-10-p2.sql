@@ -1282,21 +1282,23 @@ begin
   end loop;
 
   -- (J2) anti-escopo: NENHUMA outra RPC de meta/goal (nem de fase futura).
-  --      D21 (`meta_definir_limites_do_ciclo`) passou a ser contrato da P2 por
-  --      decisao de review e por isso SAIU da lista de fases futuras.
+  --      D21 (`meta_definir_limites_do_ciclo`, P2) e as operacoes de aprovacao
+  --      (`meta_aprovar`/`meta_invalidar_aprovacoes`, P3) sao contrato das fases
+  --      ja implementadas e por isso estao na LISTA FECHADA; leitura com gate,
+  --      Policy Engine e RLS funcional seguem proibidas.
   select count(*) into v_n
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public'
      and (p.proname like 'meta\_%' or p.proname like 'goal\_%')
      and p.proname <> all (array[
        'meta_criar', 'meta_editar', 'meta_atualizar_progresso', 'meta_finalizar',
-       'meta_revisar_finalizacao', 'meta_excluir', 'meta_definir_limites_do_ciclo']);
+       'meta_revisar_finalizacao', 'meta_excluir', 'meta_definir_limites_do_ciclo',
+       'meta_aprovar', 'meta_invalidar_aprovacoes']);
   if v_n <> 0 then
-    v_prob := v_prob || format('%s RPC(s) de meta fora do contrato da P2', v_n);
+    v_prob := v_prob || format('%s RPC(s) de meta fora do contrato das P2/P3', v_n);
   end if;
   foreach v_fn in array array[
-    'meta_aprovar', 'meta_invalidar_aprovacoes', 'meta_listar_por_escopo',
-    'goal_listar', 'goal_aprovar'] loop
+    'meta_listar_por_escopo', 'goal_listar', 'goal_aprovar'] loop
     if exists (
       select 1 from pg_proc p
        where p.pronamespace = 'public'::regnamespace and p.proname = v_fn
