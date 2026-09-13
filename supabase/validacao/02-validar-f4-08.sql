@@ -160,14 +160,16 @@ declare v_tab text;
     'evaluation_config_scale_bands','evaluation_config_participant_roles',
     'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
     'evaluation_events','evaluation_pendencies','evaluation_aggregates',
-    'structure_events','cycle_events'];
+    'structure_events','cycle_events',
+    'evaluation_goals','evaluation_goal_approvals','evaluation_goal_events',
+    'evaluation_cycle_goal_limits'];
 begin
   foreach v_tab in array v_closed loop
     if exists (select 1 from pg_policies p where p.schemaname='public' and p.tablename=v_tab) then
       raise exception '[FAIL] tabela fechada com policy indevida: %', v_tab;
     end if;
   end loop;
-  raise notice '[PASS] 22 tabelas fechadas permanecem sem policy';
+  raise notice '[PASS] 26 tabelas fechadas permanecem sem policy (22 historicas + 4 de metas da F5-10 P1)';
 end $$;
 
 do $$
@@ -203,7 +205,11 @@ declare
     'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
     'evaluation_events','evaluation_pendencies','evaluation_aggregates',
     'collaborator_events',
-    'structure_events','cycle_events'];
+    'structure_events','cycle_events',
+    -- F5-10 P1: tabelas de metas nascem DENY-BY-DEFAULT (RLS ligada, ZERO policy,
+    -- nenhum privilegio a anon/authenticated) — categoria fechada.
+    'evaluation_goals','evaluation_goal_approvals','evaluation_goal_events',
+    'evaluation_cycle_goal_limits'];
   v_privs text[] := array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'];
 begin
   foreach v_tab in array v_todos loop
@@ -213,7 +219,7 @@ begin
       end if;
     end loop;
   end loop;
-  raise notice '[PASS] anon sem qualquer privilegio de tabela (45 tabelas x 7 privs)';
+  raise notice '[PASS] anon sem qualquer privilegio de tabela (49 tabelas x 7 privs)';
 end $$;
 
 do $$
@@ -239,7 +245,11 @@ declare
     'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
     'evaluation_events','evaluation_pendencies','evaluation_aggregates',
     'collaborator_events',
-    'structure_events','cycle_events'];
+    'structure_events','cycle_events',
+    -- F5-10 P1: metas — o cliente NAO recebe DML (escrita so pela operacao
+    -- soberana da P2, executada por service_role).
+    'evaluation_goals','evaluation_goal_approvals','evaluation_goal_events',
+    'evaluation_cycle_goal_limits'];
 begin
   foreach v_tab in array v_todos loop
     foreach v_priv in array v_dml loop
@@ -248,7 +258,7 @@ begin
       end if;
     end loop;
   end loop;
-  raise notice '[PASS] authenticated sem INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER (45 tabelas)';
+  raise notice '[PASS] authenticated sem INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER (49 tabelas)';
 end $$;
 
 do $$
@@ -271,7 +281,10 @@ declare v_tab text;
     'evaluation_config_scale_bands','evaluation_config_participant_roles',
     'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
     'evaluation_events','evaluation_pendencies','evaluation_aggregates',
-    'structure_events','cycle_events'];
+    'structure_events','cycle_events',
+    -- F5-10 P1: as 4 tabelas de metas sao FECHADAS (deny-by-default integral).
+    'evaluation_goals','evaluation_goal_approvals','evaluation_goal_events',
+    'evaluation_cycle_goal_limits'];
   -- F5-07: log append-only — tem policy SELECT own-tenant mas NAO tem grant a
   -- `authenticated` (categoria propria; nao e "legivel" nem "fechada").
   v_policy_sem_grant text[] := array['collaborator_events'];
@@ -291,7 +304,7 @@ begin
       raise exception '[FAIL] authenticated com SELECT no log append-only public.%', v_tab;
     end if;
   end loop;
-  raise notice '[PASS] authenticated com SELECT somente nas 22 tabelas legiveis (22 fechadas + 1 log append-only sem SELECT)';
+  raise notice '[PASS] authenticated com SELECT somente nas tabelas legiveis (26 fechadas + 1 log append-only sem SELECT; +4 de metas na F5-10 P1)';
 end $$;
 
 -- ----------------------------------------------------------------------------
@@ -321,11 +334,13 @@ begin
       'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
       'evaluation_events','evaluation_pendencies','evaluation_aggregates',
       'collaborator_events',
-      'structure_events','cycle_events');
+      'structure_events','cycle_events',
+      'evaluation_goals','evaluation_goal_approvals','evaluation_goal_events',
+      'evaluation_cycle_goal_limits');
   if v_t is not null then
     raise exception '[FAIL] tabela public nao classificada (D16 — catalogacao explicita obrigatoria): %', v_t;
   end if;
-  raise notice '[PASS] todas as 45 tabelas public estao explicitamente classificadas (D16)';
+  raise notice '[PASS] todas as 49 tabelas public estao explicitamente classificadas (D16)';
 end $$;
 
 do $$

@@ -318,6 +318,26 @@ jobs:
             < supabase/validacao/18-validar-f5-09-p9-concorrencia.sql
 
       # ----------------------------------------------------------------------
+      # F5-10 (P1) — SCHEMA/INTEGRIDADE/LIMITES das metas soberanas (Issue #210):
+      # fixture isolada (`ee`) + validador com testes NEGATIVOS obrigatorios
+      # (FKs compostas cross-tenant, dominio de progresso/tipo/status/fechamento,
+      # quota soberana, unicidade parcial, soft delete sem DELETE fisico, trilha
+      # append-only e RLS deny-by-default). Roda depois das fases F5-09 e ANTES
+      # das regressoes, como as demais atividades correntes.
+      # ----------------------------------------------------------------------
+      - name: Seed F5-10 P1 scenario (metas: schema/integridade/limites)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/19-cenario-f5-10-p1.sql
+
+      - name: Run F5-10 P1 validation (schema, integridade, limites e RLS deny-by-default)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/20-validar-f5-10-p1.sql
+
+      # ----------------------------------------------------------------------
       # Regressão F5-06/F5-07 (§23.4): cenários independentes, com prefixos de
       # UUID próprios (`d6`/`d7`), reaplicados antes de cada validação.
       # ----------------------------------------------------------------------

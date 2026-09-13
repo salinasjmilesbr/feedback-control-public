@@ -1930,6 +1930,14 @@ declare
   v_cycle_ct  int;
   v_n         int;
   v_cols      text[];
+  -- F5-10 P1 (Issue #210): objetos de METAS legitimados pela P1. A guarda de
+  -- "nao antecipar F5-10" NAO foi enfraquecida: passou a LISTA FECHADA.
+  v_tabelas_metas_p1 text[] := array[
+    'evaluation_goals','evaluation_goal_approvals','evaluation_goal_events',
+    'evaluation_cycle_goal_limits'];
+  v_funcoes_metas_p1 text[] := array[
+    'enforce_evaluation_goal_events_append_only','f5_10_validar_quota_da_meta',
+    'f5_10_validar_quota_do_limite','f5_10_proteger_limite_do_ciclo'];
 begin
   -- (a) I5, I6 e I3 (P1/F5-06) presentes.
   if not exists (
@@ -2092,29 +2100,48 @@ begin
     v_problemas := v_problemas || 'role de SISTEMA com capability excepcional de ciclo';
   end if;
 
-  -- (e) NENHUMA antecipacao de F5-10 (metas) / F5-11 (observacoes).
+  -- (e) F5-10 P1: as tabelas/funcoes de METAS previstas pela P1 (schema,
+  --     integridade e limites) sao LEGITIMAS. A guarda NAO foi removida: virou
+  --     LISTA FECHADA — qualquer objeto de metas FORA dela continua reprovando,
+  --     e observacoes (F5-11) seguem integralmente proibidas.
   select count(*) into v_n from pg_class c
     join pg_namespace n on n.oid = c.relnamespace
    where n.nspname = 'public' and c.relkind = 'r'
-     and (c.relname like '%goal%' or c.relname like '%meta%'
-          or c.relname like '%observation%' or c.relname like '%observac%');
+     and (c.relname like '%goal%' or c.relname like '%meta%')
+     and c.relname <> all (v_tabelas_metas_p1);
   if v_n <> 0 then
-    v_problemas := v_problemas || format('%s tabela(s) de metas/observacoes no schema public', v_n);
+    v_problemas := v_problemas || format('%s tabela(s) de metas FORA da lista fechada da P1', v_n);
+  end if;
+  select count(*) into v_n from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relkind = 'r'
+     and (c.relname like '%observation%' or c.relname like '%observac%');
+  if v_n <> 0 then
+    v_problemas := v_problemas || format('%s tabela(s) de observacoes no schema public', v_n);
   end if;
   select count(*) into v_n from pg_proc p
    where p.pronamespace = 'public'::regnamespace
-     and (p.proname like '%meta%' or p.proname like '%goal%'
-          or p.proname like '%observa%' or p.proname like '%observation%');
+     and (p.proname like '%meta%' or p.proname like '%goal%')
+     and p.proname <> all (v_funcoes_metas_p1);
   if v_n <> 0 then
-    v_problemas := v_problemas || format('%s RPC(s) de metas/observacoes instaladas', v_n);
+    v_problemas := v_problemas || format('%s funcao(oes) de metas FORA da lista fechada da P1', v_n);
+  end if;
+  select count(*) into v_n from pg_proc p
+   where p.pronamespace = 'public'::regnamespace
+     and (p.proname like '%observa%' or p.proname like '%observation%');
+  if v_n <> 0 then
+    v_problemas := v_problemas || format('%s RPC(s) de observacoes instaladas', v_n);
   end if;
 
-  -- (f) NENHUMA coluna de metas/observacoes ligada a ciclo/avaliacao.
+  -- (f) NENHUMA coluna de metas/observacoes ligada a ciclo/avaliacao — exceto as
+  --     colunas das tabelas legitimas da P1 (nelas o vinculo `*_goal_id` e o
+  --     proprio contrato da meta, nao antecipacao em tabela de ciclo/avaliacao).
   select array_agg(c.table_name || '.' || c.column_name order by c.table_name, c.column_name)
     into v_cols
     from information_schema.columns c
    where c.table_schema = 'public'
      and (c.table_name like '%cycle%' or c.table_name like 'evaluation%')
+     and c.table_name <> all (v_tabelas_metas_p1)
      and (c.column_name like '%goal%' or c.column_name like '%meta%'
           or c.column_name like '%observation%' or c.column_name like '%observac%');
   if v_cols is not null then
