@@ -4,6 +4,7 @@ import gestaoFonte from "./gestaoCiclosSoberanos.ts?raw";
 import type { CicloSoberano, ResultadoCiclos } from "../../application/ports/CycleRepository";
 import type { EdgeCiclos, ResultadoEdgeCiclos } from "../../infrastructure/supabase/ciclos/edgeCiclos";
 import { criarControladorGestaoCiclos } from "./controladorGestaoCiclos";
+import type { ResultadoGestao } from "./gestaoCiclosSoberanos";
 
 /**
  * F5-09 P8 (Issue #204) — CONTROLADOR de UI da gestão de ciclos (opção B).
@@ -73,6 +74,18 @@ function edgeFalso(
     corrigirPeriodo: registrar("corrigirPeriodo"),
     incluirAdmissao: registrar("incluirAdmissao"),
   } as unknown as EdgeCiclos;
+}
+
+/**
+ * Estreita o union de `ResultadoGestao` (o `expect` do vitest não estreita
+ * tipos): devolve o erro público da falha e aborta se o resultado foi sucesso.
+ */
+function erroDe(resultado: ResultadoGestao<unknown>): {
+  readonly code: string;
+  readonly message: string;
+} {
+  if (resultado.ok) throw new Error("esperava um resultado de falha");
+  return resultado.error;
 }
 
 describe("F5-09 P8 — controlador: leitura assíncrona (AI/AJ/AK)", () => {
@@ -428,7 +441,7 @@ describe("F5-09 P8 — controlador: filtro preservado e geração monotônica (M
     expect(controlador.estado().operacaoEmAndamento).toBe(false);
   });
 
-  it("mutation com sucesso + FALHA no reload: nada de estado otimista nem fallback", async () => {
+  it("T6: Edge ok + FALHA no reload ⇒ `ok: false` (confirmação indisponível)", async () => {
     let chamadas = 0;
     const fonte = {
       listarCiclos: vi.fn(async (): Promise<ResultadoCiclos<readonly CicloSoberano[]>> => {
@@ -451,8 +464,11 @@ describe("F5-09 P8 — controlador: filtro preservado e geração monotônica (M
 
     const resultado = await controlador.ativar(CICLO);
 
-    // A Edge respondeu ok, mas o estado NÃO presume o novo status.
-    expect(resultado.ok).toBe(true);
+    // A Edge respondeu ok, mas a UI NÃO pode tratar a operação como confirmada.
+    expect(resultado.ok).toBe(false);
+    const erroConfirmacao = erroDe(resultado);
+    expect(erroConfirmacao.code).toBe("INTERNAL");
+    expect(erroConfirmacao.message).toContain("não pôde ser confirmado");
     expect(fonte.listarCiclos).toHaveBeenCalledTimes(2);
     expect(controlador.estado().fase).toBe("erro");
     expect(controlador.estado().erro?.code).toBe("INTERNAL");
@@ -460,6 +476,218 @@ describe("F5-09 P8 — controlador: filtro preservado e geração monotônica (M
     expect(controlador.estado().ciclos).toEqual(antes);
     expect(controlador.estado().ciclos.map((c) => c.status)).toEqual(["PLANEJADO"]);
     expect(controlador.estado().operacaoEmAndamento).toBe(false);
+  });
+});
+
+describe("F5-09 P8 — controlador: mutation stale, concorrência e confirmação (T1–T8)", () => {
+  /** Edge com respostas CONTROLÁVEIS (uma por chamada) e métodos observados. */
+  function edgeControlavel() {
+    const pendentes: {
+      resolver: (valor: ResultadoEdgeCiclos<unknown>) => void;
+    }[] = [];
+    const metodos: string[] = [];
+    const construir = (metodo: string) => async () => {
+      metodos.push(metodo);
+      return new Promise<ResultadoEdgeCiclos<unknown>>((resolver) => {
+        pendentes.push({ resolver });
+      });
+    };
+    const edge = {
+      criar: construir("criar"),
+      editar: construir("editar"),
+      ativar: construir("ativar"),
+      encerrar: construir("encerrar"),
+      cancelar: construir("cancelar"),
+      reabrir: construir("reabrir"),
+      corrigirPeriodo: construir("corrigirPeriodo"),
+      incluirAdmissao: construir("incluirAdmissao"),
+    } as unknown as EdgeCiclos;
+    return { edge, pendentes, metodos };
+  }
+
+  /** Repositório que responde por organização (ORG e ORG_B). */
+  function repositorioPorOrganizacao() {
+    return {
+      listarCiclos: vi.fn(
+        async (
+          organizationId: string
+        ): Promise<ResultadoCiclos<readonly CicloSoberano[]>> => ({
+          ok: true,
+          data:
+            organizationId === ORG_B
+              ? [soberano(CICLO, "ATIVO", 7)]
+              : [soberano(CICLO, "PLANEJADO", 3)],
+        })
+      ),
+      obterCiclo: vi.fn(async () => ({ ok: true as const, data: null })),
+      obterCicloAtivo: vi.fn(async () => ({ ok: true as const, data: null })),
+    };
+  }
+
+  it("T1: erro tardio da mutation de A não publica nada em B", async () => {
+    const fonte = repositorioPorOrganizacao();
+    const { edge, pendentes } = edgeControlavel();
+    const controlador = criarControladorGestaoCiclos({ repositorio: fonte, edge });
+
+    await controlador.carregar(ORG, { incluirCancelados: false });
+    const mutacaoA = controlador.ativar(CICLO);
+    expect(controlador.estado().operacaoEmAndamento).toBe(true);
+
+    // Contexto muda para B (invalida a geração da mutation de A).
+    await controlador.carregar(ORG_B, { incluirCancelados: false });
+    expect(controlador.estado().organizacaoId).toBe(ORG_B);
+    expect(controlador.estado().operacaoEmAndamento).toBe(false);
+
+    // A falha DEPOIS da troca: nada de A aparece no contexto B.
+    pendentes[0]!.resolver({
+      ok: false,
+      error: { code: "CONFLICT", message: "estado atual da organização A" },
+    });
+    const resultadoA = await mutacaoA;
+
+    expect(resultadoA.ok).toBe(false);
+    expect(erroDe(resultadoA).message).toContain("organização ativa mudou");
+    expect(controlador.estado().organizacaoId).toBe(ORG_B);
+    expect(controlador.estado().fase).toBe("pronto");
+    expect(controlador.estado().erro).toBeNull();
+    expect(controlador.estado().operacaoEmAndamento).toBe(false);
+  });
+
+  it("T2: sucesso tardio da mutation de A não faz reload nem publica em B", async () => {
+    const fonte = repositorioPorOrganizacao();
+    const { edge, pendentes } = edgeControlavel();
+    const controlador = criarControladorGestaoCiclos({ repositorio: fonte, edge });
+
+    await controlador.carregar(ORG, { incluirCancelados: false });
+    const mutacaoA = controlador.ativar(CICLO);
+    await controlador.carregar(ORG_B, { incluirCancelados: false });
+    expect(fonte.listarCiclos).toHaveBeenCalledTimes(2);
+
+    pendentes[0]!.resolver({ ok: true, data: { version: 4 } });
+    const resultadoA = await mutacaoA;
+
+    // Nenhum reload de A sobre B: a contagem de leituras não cresceu.
+    expect(fonte.listarCiclos).toHaveBeenCalledTimes(2);
+    expect(resultadoA.ok).toBe(false);
+    expect(controlador.estado().organizacaoId).toBe(ORG_B);
+    expect(controlador.estado().fase).toBe("pronto");
+    expect(controlador.estado().erro).toBeNull();
+    expect(controlador.estado().operacaoEmAndamento).toBe(false);
+  });
+
+  it("T3: mutation antiga não encerra a mutation mais recente (flag de B intacta)", async () => {
+    const fonte = repositorioPorOrganizacao();
+    const { edge, pendentes } = edgeControlavel();
+    const controlador = criarControladorGestaoCiclos({ repositorio: fonte, edge });
+
+    await controlador.carregar(ORG);
+    const mutacaoA = controlador.ativar(CICLO);
+    await controlador.carregar(ORG_B);
+    expect(controlador.estado().operacaoEmAndamento).toBe(false);
+
+    // Nova mutation VÁLIDA no contexto B.
+    const mutacaoB = controlador.ativar(CICLO);
+    expect(controlador.estado().operacaoEmAndamento).toBe(true);
+    expect(pendentes).toHaveLength(2);
+
+    // A resolve atrasada e NÃO pode desligar a flag de B.
+    pendentes[0]!.resolver({ ok: true, data: { version: 4 } });
+    expect((await mutacaoA).ok).toBe(false);
+    expect(controlador.estado().operacaoEmAndamento).toBe(true);
+    expect(controlador.estado().organizacaoId).toBe(ORG_B);
+
+    // B conclui: agora a flag cai e a confirmação é de B.
+    pendentes[1]!.resolver({ ok: true, data: { version: 8 } });
+    expect((await mutacaoB).ok).toBe(true);
+    expect(controlador.estado().operacaoEmAndamento).toBe(false);
+    expect(controlador.estado().organizacaoId).toBe(ORG_B);
+    expect(controlador.estado().fase).toBe("pronto");
+  });
+
+  it("T4: segunda mutation no MESMO contexto é recusada fail-closed (Edge 1×)", async () => {
+    const fonte = repositorio([soberano(CICLO, "PLANEJADO", 3)]);
+    const { edge, pendentes, metodos } = edgeControlavel();
+    const controlador = criarControladorGestaoCiclos({ repositorio: fonte, edge });
+
+    await controlador.carregar(ORG);
+    const primeira = controlador.ativar(CICLO);
+    const segunda = await controlador.ativar(CICLO);
+
+    expect(segunda.ok).toBe(false);
+    const erroSegunda = erroDe(segunda);
+    expect(erroSegunda.code).toBe("CONFLICT");
+    expect(erroSegunda.message).toContain("em andamento");
+    // A Edge foi chamada SOMENTE pela primeira mutation.
+    expect(metodos).toHaveLength(1);
+    expect(controlador.estado().operacaoEmAndamento).toBe(true);
+
+    pendentes[0]!.resolver({ ok: true, data: { version: 4 } });
+    expect((await primeira).ok).toBe(true);
+    expect(controlador.estado().operacaoEmAndamento).toBe(false);
+  });
+
+  it("T5: Edge ok + reload ok ⇒ resultado final continua `ok: true`", async () => {
+    const fonte = repositorio([soberano(CICLO, "ATIVO", 6)]);
+    const controlador = criarControladorGestaoCiclos({
+      repositorio: fonte,
+      edge: edgeFalso(),
+    });
+    await controlador.carregar(ORG);
+
+    const resultado = await controlador.ativar(CICLO);
+
+    expect(resultado.ok).toBe(true);
+    expect(fonte.listarCiclos).toHaveBeenCalledTimes(2);
+    expect(controlador.estado().fase).toBe("pronto");
+    expect(controlador.estado().operacaoEmAndamento).toBe(false);
+  });
+
+  it("T7: Edge falha ⇒ `ok: false` e estado soberano anterior preservado", async () => {
+    const fonte = repositorio([soberano(CICLO, "ATIVO", 4)]);
+    const controlador = criarControladorGestaoCiclos({
+      repositorio: fonte,
+      edge: edgeFalso({
+        ok: false,
+        error: { code: "CONFLICT", message: "estado atual" },
+      }),
+    });
+    await controlador.carregar(ORG);
+    const antes = controlador.estado().ciclos;
+
+    const resultado = await controlador.encerrar(CICLO, "Fim de ciclo");
+
+    expect(resultado.ok).toBe(false);
+    expect(erroDe(resultado).code).toBe("CONFLICT");
+    expect(controlador.estado().ciclos).toEqual(antes);
+    expect(controlador.estado().erro?.code).toBe("CONFLICT");
+    expect(controlador.estado().operacaoEmAndamento).toBe(false);
+    // Falha da Edge não dispara reload.
+    expect(fonte.listarCiclos).toHaveBeenCalledTimes(1);
+  });
+
+  it("T8: `descartar()` durante a mutation — resposta posterior não publica nada", async () => {
+    const fonte = repositorio([soberano(CICLO, "PLANEJADO", 3)]);
+    const { edge, pendentes } = edgeControlavel();
+    const controlador = criarControladorGestaoCiclos({ repositorio: fonte, edge });
+
+    await controlador.carregar(ORG);
+    const mutacao = controlador.ativar(CICLO);
+    expect(controlador.estado().operacaoEmAndamento).toBe(true);
+
+    controlador.descartar();
+    expect(controlador.estado().fase).toBe("ocioso");
+    expect(controlador.estado().operacaoEmAndamento).toBe(false);
+
+    pendentes[0]!.resolver({ ok: true, data: { version: 4 } });
+    const resultado = await mutacao;
+
+    expect(resultado.ok).toBe(false);
+    expect(controlador.estado().fase).toBe("ocioso");
+    expect(controlador.estado().organizacaoId).toBeNull();
+    expect(controlador.estado().ciclos).toEqual([]);
+    expect(controlador.estado().operacaoEmAndamento).toBe(false);
+    // Nenhum reload disparado pela mutation descartada.
+    expect(fonte.listarCiclos).toHaveBeenCalledTimes(1);
   });
 });
 

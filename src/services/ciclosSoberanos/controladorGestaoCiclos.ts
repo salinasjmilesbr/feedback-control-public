@@ -16,6 +16,14 @@
  *   fase, erro nem mapa de versões);
  * - reload pós-mutation PRESERVA o filtro ("Mostrar cancelados") da última
  *   leitura da UI — o reload pertence ao controlador, não à página;
+ * - MUTATIONS com geração/contexto PRÓPRIOS: retorno tardio de uma mutation da
+ *   organização anterior NÃO publica erro, sucesso, flag nem estado algum no
+ *   contexto novo; `descartar()` também invalida mutations em voo;
+ * - mutations CONCORRENTES no mesmo contexto são recusadas fail-closed
+ *   (`CONFLICT`, sem chamar a Edge): uma única `operacaoEmAndamento` por vez;
+ * - Edge ok + reload soberano falho ⇒ resultado final `ok: false` para a UI
+ *   (confirmação indisponível): sem presunção de estado, sem rollback, sem
+ *   fallback local e sem afirmar que a operação "não aconteceu";
  * - `operacaoEmAndamento` impede a UI de presumir sucesso antes da resposta.
  *
  * Sem `localStorage`, sem UUID de ciclo gerado no cliente, sem fallback local.
@@ -49,6 +57,13 @@ const ESTADO_INICIAL: EstadoGestaoCiclos = {
   operacaoEmAndamento: false,
 };
 
+/** Mensagens públicas ESTÁVEIS (nenhum detalhe interno, nenhuma autoridade). */
+const MSG_MUTATION_CONCORRENTE = "Já existe uma operação de ciclo em andamento.";
+const MSG_CONTEXTO_MUTATION =
+  "Operação descartada: a organização ativa mudou antes da resposta.";
+const MSG_CONFIRMACAO_INDISPONIVEL =
+  "Operação enviada, mas o novo estado soberano não pôde ser confirmado agora.";
+
 export function criarControladorGestaoCiclos(deps: DependenciasGestaoCiclos = {}) {
   const gestao = criarGestaoCiclosSoberanos(deps);
   /** Versão SOBERANA por ciclo (base de `expectedVersion`). Nunca local. */
@@ -70,6 +85,15 @@ export function criarControladorGestaoCiclos(deps: DependenciasGestaoCiclos = {}
    * existir aqui também para duas leituras da MESMA organização.
    */
   let geracaoDeLeitura = 0;
+  /**
+   * AUDITORIA CODEX — geração monotônica de MUTATION + dono da flag. Cada
+   * mutation captura a SUA geração; o retorno tardio de uma mutation antiga não
+   * publica erro, sucesso, `operacaoEmAndamento` nem qualquer estado no contexto
+   * posterior. `mutationCorrente === null` significa "nenhuma mutation em voo":
+   * uma segunda mutation concorrente é recusada SEM chamar a Edge.
+   */
+  let geracaoDeMutacao = 0;
+  let mutationCorrente: number | null = null;
 
   function publicar(parcial: Partial<EstadoGestaoCiclos>): void {
     estado = { ...estado, ...parcial };
@@ -100,12 +124,21 @@ export function criarControladorGestaoCiclos(deps: DependenciasGestaoCiclos = {}
     const trocouDeOrganizacao = estado.organizacaoId !== organizationId;
     // Troca de organização limpa a lista imediatamente (nada do tenant anterior
     // permanece visível) e invalida respostas em voo da organização antiga.
-    if (trocouDeOrganizacao) gestao.invalidar();
+    if (trocouDeOrganizacao) {
+      gestao.invalidar();
+      // Invalida MUTATIONS em voo do contexto anterior: o retorno tardio delas
+      // não publica nada aqui e a flag fica livre para o contexto novo.
+      geracaoDeMutacao++;
+      mutationCorrente = null;
+    }
     publicar({
       fase: "carregando",
       organizacaoId: organizationId,
       ciclos: trocouDeOrganizacao ? [] : estado.ciclos,
       erro: null,
+      operacaoEmAndamento: trocouDeOrganizacao
+        ? false
+        : estado.operacaoEmAndamento,
     });
 
     const resultado = await gestao.listar(organizationId, opcoesLeituraAtuais);
@@ -166,24 +199,66 @@ export function criarControladorGestaoCiclos(deps: DependenciasGestaoCiclos = {}
       return { ok: false, error: erro };
     }
 
+    // CONCORRÊNCIA (fail-closed): com uma mutation em voo, a segunda é recusada
+    // sem chamar a Edge e sem alterar a mutation em andamento. Sem fila local.
+    if (mutationCorrente !== null) {
+      return {
+        ok: false,
+        error: { code: "CONFLICT", message: MSG_MUTATION_CONCORRENTE },
+      };
+    }
+
+    // Contexto/geração desta mutation: só ela publica enquanto for a corrente.
+    const minhaGeracao = ++geracaoDeMutacao;
+    mutationCorrente = minhaGeracao;
     publicar({ operacaoEmAndamento: true, erro: null });
+
     const resultado = await operacao(organizationId);
 
+    // CONTEXTO: troca de organização/descarte invalidam esta geração. O retorno
+    // tardio NÃO publica erro, sucesso, flag nem estado no contexto novo.
+    if (mutationCorrente !== minhaGeracao) {
+      return {
+        ok: false,
+        error: { code: "CONFLICT", message: MSG_CONTEXTO_MUTATION },
+      };
+    }
+
     if (!resultado.ok) {
-      // FALHA: o estado soberano anterior permanece (nenhuma alteração local).
+      // FALHA da Edge: o estado soberano anterior permanece (nada local).
+      mutationCorrente = null;
       publicar({ operacaoEmAndamento: false, erro: resultado.error });
       return resultado;
     }
 
-    // SUCESSO: recarrega do soberano; nunca presume o novo estado localmente.
-    // O reload preserva o FILTRO da última leitura da UI (Blocker 1) e participa
-    // da mesma geração monotônica (Blocker 2): uma leitura mais recente vence e
-    // este reload não sobrescreve nada. Se a organização mudou no meio, o reload
-    // do tenant antigo não acontece (quem manda é o contexto novo).
-    if (estado.organizacaoId === organizationId) {
-      await carregar(organizationId, opcoesLeituraAtuais);
+    // SUCESSO da Edge: a confirmação vem SEMPRE do reload soberano, nunca de
+    // presunção. O reload preserva o filtro da última leitura da UI e obedece à
+    // geração de LEITURA (uma leitura mais recente vence e nada é sobrescrito).
+    const recarga = await carregar(organizationId, opcoesLeituraAtuais);
+
+    // Se o contexto/geração mudou durante o reload, esta mutation não publica.
+    if (mutationCorrente !== minhaGeracao) {
+      return {
+        ok: false,
+        error: { code: "CONFLICT", message: MSG_CONTEXTO_MUTATION },
+      };
     }
+    mutationCorrente = null;
     publicar({ operacaoEmAndamento: false });
+
+    if (!recarga.ok) {
+      // A Edge PODE ter efetivado no PostgreSQL: a UI não pode tratar como
+      // confirmada. `fase`/`erro` publicados pelo reload permanecem (falha de
+      // confirmação), o último estado soberano válido é preservado e o próximo
+      // reload reconcilia. Sem rollback client-side e sem desfazer no backend.
+      return {
+        ok: false,
+        error: {
+          code: recarga.error.code,
+          message: MSG_CONFIRMACAO_INDISPONIVEL,
+        },
+      };
+    }
     return resultado;
   }
 
@@ -295,6 +370,9 @@ export function criarControladorGestaoCiclos(deps: DependenciasGestaoCiclos = {}
     descartar(): void {
       // Invalida a geração: nada em voo publica depois do descarte.
       geracaoDeLeitura++;
+      // MUTATIONS em voo também são invalidadas (resposta tardia não publica).
+      geracaoDeMutacao++;
+      mutationCorrente = null;
       opcoesLeituraAtuais = { incluirCancelados: false };
       gestao.descartar();
       estado = ESTADO_INICIAL;
