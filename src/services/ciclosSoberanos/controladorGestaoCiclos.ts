@@ -11,6 +11,11 @@
  * - FALHA preserva o estado soberano anterior e publica erro público;
  * - organização vazia ⇒ NÃO opera (fail-closed);
  * - troca de organização invalida respostas em voo (nada de resposta obsoleta);
+ * - GERAÇÃO MONOTÔNICA de leitura: duas leituras concorrentes da MESMA
+ *   organização são resolvidas pela mais recente (a atrasada não publica lista,
+ *   fase, erro nem mapa de versões);
+ * - reload pós-mutation PRESERVA o filtro ("Mostrar cancelados") da última
+ *   leitura da UI — o reload pertence ao controlador, não à página;
  * - `operacaoEmAndamento` impede a UI de presumir sucesso antes da resposta.
  *
  * Sem `localStorage`, sem UUID de ciclo gerado no cliente, sem fallback local.
@@ -49,6 +54,22 @@ export function criarControladorGestaoCiclos(deps: DependenciasGestaoCiclos = {}
   /** Versão SOBERANA por ciclo (base de `expectedVersion`). Nunca local. */
   const versoes = new Map<string, number>();
   let estado: EstadoGestaoCiclos = ESTADO_INICIAL;
+  /**
+   * BLOCKER 1 — opções da ÚLTIMA leitura da UI. O reload disparado por mutation
+   * reusa EXATAMENTE esta intenção; sem isso, "Mostrar cancelados" desmarcado
+   * poderia ver cancelados reaparecerem depois de uma mutation (filtro perdido).
+   */
+  let opcoesLeituraAtuais: { readonly incluirCancelados: boolean } = {
+    incluirCancelados: false,
+  };
+  /**
+   * BLOCKER 2 — geração monotônica de LEITURA deste controlador. Cada `carregar`
+   * captura a sua geração e SOMENTE a geração corrente publica `fase`, `ciclos`,
+   * `erro` e o mapa de versões. A geração do P5 protege o repositório, mas
+   * `gestao.listar()` ainda DEVOLVE a resposta atrasada — a proteção precisa
+   * existir aqui também para duas leituras da MESMA organização.
+   */
+  let geracaoDeLeitura = 0;
 
   function publicar(parcial: Partial<EstadoGestaoCiclos>): void {
     estado = { ...estado, ...parcial };
@@ -59,6 +80,13 @@ export function criarControladorGestaoCiclos(deps: DependenciasGestaoCiclos = {}
     organizationId: string | null,
     opcoes: { readonly incluirCancelados?: boolean } = {}
   ): Promise<ResultadoGestao<readonly CicloAvaliacao[]>> {
+    // Toda chamada abre uma NOVA geração: a partir daqui, respostas de leituras
+    // anteriores (mesma organização ou não) estão obsoletas e não publicam nada.
+    const minhaGeracao = ++geracaoDeLeitura;
+    opcoesLeituraAtuais = {
+      incluirCancelados: opcoes.incluirCancelados ?? false,
+    };
+
     if (!organizationId) {
       const erro: FalhaGestaoCiclos = {
         code: "FORBIDDEN",
@@ -80,7 +108,10 @@ export function criarControladorGestaoCiclos(deps: DependenciasGestaoCiclos = {}
       erro: null,
     });
 
-    const resultado = await gestao.listar(organizationId, opcoes);
+    const resultado = await gestao.listar(organizationId, opcoesLeituraAtuais);
+    // Geração obsoleta (uma leitura mais recente já começou) ⇒ não publica NADA:
+    // nem lista, nem fase, nem erro, nem mapa de versões.
+    if (minhaGeracao !== geracaoDeLeitura) return resultado;
     // Resposta de uma leitura anterior (organização antiga) NUNCA publica.
     if (estado.organizacaoId !== organizationId) return resultado;
 
@@ -145,7 +176,13 @@ export function criarControladorGestaoCiclos(deps: DependenciasGestaoCiclos = {}
     }
 
     // SUCESSO: recarrega do soberano; nunca presume o novo estado localmente.
-    await carregar(organizationId, { incluirCancelados: true });
+    // O reload preserva o FILTRO da última leitura da UI (Blocker 1) e participa
+    // da mesma geração monotônica (Blocker 2): uma leitura mais recente vence e
+    // este reload não sobrescreve nada. Se a organização mudou no meio, o reload
+    // do tenant antigo não acontece (quem manda é o contexto novo).
+    if (estado.organizacaoId === organizationId) {
+      await carregar(organizationId, opcoesLeituraAtuais);
+    }
     publicar({ operacaoEmAndamento: false });
     return resultado;
   }
@@ -256,6 +293,9 @@ export function criarControladorGestaoCiclos(deps: DependenciasGestaoCiclos = {}
 
     /** Unmount/logout: descarta respostas em voo e limpa o estado publicado. */
     descartar(): void {
+      // Invalida a geração: nada em voo publica depois do descarte.
+      geracaoDeLeitura++;
+      opcoesLeituraAtuais = { incluirCancelados: false };
       gestao.descartar();
       estado = ESTADO_INICIAL;
     },

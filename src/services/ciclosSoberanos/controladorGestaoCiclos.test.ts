@@ -14,6 +14,11 @@ import { criarControladorGestaoCiclos } from "./controladorGestaoCiclos";
  * falha preservando o estado anterior (AD), botões que não presumem sucesso
  * (AL), cancelamento de PLANEJADO e ATIVO (AE/AF) — além de ausência de delete
  * físico, de metas e de autoridade local (X/Y/Z) e ausência de RPC direta (AG).
+ *
+ * Correção pós-auditoria GPT (Issue #204): filtro da última leitura preservado no
+ * reload pós-mutation (M1–M6), geração monotônica no controlador de gestão —
+ * duas leituras da MESMA organização (S1–S6) — e mutation com sucesso cujo reload
+ * falha (nada de estado otimista nem fallback local).
  */
 
 const ORG = "11111111-1111-4111-8111-111111111111";
@@ -251,6 +256,210 @@ describe("F5-09 P8 — controlador: mutações (AC/AD/AL/AE/AF)", () => {
 
     expect(resultado.ok).toBe(false);
     expect(chamadas).toEqual([]);
+  });
+});
+
+describe("F5-09 P8 — controlador: filtro preservado e geração monotônica (M/S)", () => {
+  const CANCELADO_ID = "66666666-6666-4666-8666-666666666666";
+  const SO_EM_A = "77777777-7777-4777-8777-777777777777";
+
+  /** Repositório com respostas CONTROLÁVEIS (deferred) para provar concorrência. */
+  function fonteControlavel() {
+    const pendentes: {
+      resolver: (valor: ResultadoCiclos<readonly CicloSoberano[]>) => void;
+    }[] = [];
+    const fonte = {
+      listarCiclos: vi.fn(
+        () =>
+          new Promise<ResultadoCiclos<readonly CicloSoberano[]>>((resolver) => {
+            pendentes.push({ resolver });
+          })
+      ),
+      obterCiclo: vi.fn(async () => ({ ok: true as const, data: null })),
+      obterCicloAtivo: vi.fn(async () => ({ ok: true as const, data: null })),
+    };
+    return { fonte, pendentes };
+  }
+
+  /** Libera as microtasks/timers pendentes (sem DOM). */
+  const tick = () => new Promise<void>((resolver) => setTimeout(resolver, 0));
+
+  it("M1/M2/M3: `incluirCancelados: false` é PRESERVADO no reload pós-mutation", async () => {
+    const fonte = repositorio([
+      soberano(CICLO, "ATIVO", 3),
+      soberano(CANCELADO_ID, "CANCELADO", 1),
+    ]);
+    const controlador = criarControladorGestaoCiclos({
+      repositorio: fonte,
+      edge: edgeFalso(),
+    });
+
+    // M1: leitura com o filtro DESMARCADO (cancelados fora).
+    await controlador.carregar(ORG, { incluirCancelados: false });
+    expect(controlador.estado().ciclos.map((c) => c.id)).toEqual([CICLO]);
+
+    // M2: mutation com sucesso.
+    const resultado = await controlador.ativar(CICLO);
+    expect(resultado.ok).toBe(true);
+
+    // M3: o reload reusa o filtro da última leitura (NÃO força `true`).
+    expect(fonte.listarCiclos).toHaveBeenCalledTimes(2);
+    expect(controlador.estado().ciclos.map((c) => c.id)).toEqual([CICLO]);
+    expect(controlador.estado().fase).toBe("pronto");
+  });
+
+  it("M4/M5/M6: `incluirCancelados: true` é PRESERVADO no reload pós-mutation", async () => {
+    const fonte = repositorio([
+      soberano(CICLO, "ATIVO", 3),
+      soberano(CANCELADO_ID, "CANCELADO", 1),
+    ]);
+    const controlador = criarControladorGestaoCiclos({
+      repositorio: fonte,
+      edge: edgeFalso(),
+    });
+
+    // M4: leitura com o filtro MARCADO (cancelados dentro).
+    await controlador.carregar(ORG, { incluirCancelados: true });
+    expect(controlador.estado().ciclos.map((c) => c.id)).toEqual([
+      CICLO,
+      CANCELADO_ID,
+    ]);
+
+    // M5: mutation com sucesso.
+    const resultado = await controlador.ativar(CICLO);
+    expect(resultado.ok).toBe(true);
+
+    // M6: o reload mantém o filtro marcado.
+    expect(fonte.listarCiclos).toHaveBeenCalledTimes(2);
+    expect(controlador.estado().ciclos.map((c) => c.id)).toEqual([
+      CICLO,
+      CANCELADO_ID,
+    ]);
+  });
+
+  it("S1–S5: mesma organização — resposta atrasada NÃO substitui a mais recente", async () => {
+    const { fonte, pendentes } = fonteControlavel();
+    const controlador = criarControladorGestaoCiclos({ repositorio: fonte });
+
+    // A começa com filtro DESMARCADO e fica pendente.
+    const leituraA = controlador.carregar(ORG, { incluirCancelados: false });
+    // B começa DEPOIS, com filtro diferente, na MESMA organização.
+    const leituraB = controlador.carregar(ORG, { incluirCancelados: true });
+    expect(pendentes).toHaveLength(2);
+
+    // B resolve primeiro e publica a lista B.
+    pendentes[1]!.resolver({ ok: true, data: [soberano(CICLO, "ATIVO", 9)] });
+    await leituraB;
+    expect(controlador.estado().ciclos.map((c) => c.id)).toEqual([CICLO]);
+
+    // A resolve atrasada: a lista A NÃO pode vencer.
+    pendentes[0]!.resolver({ ok: true, data: [soberano(SO_EM_A, "PLANEJADO", 1)] });
+    await leituraA;
+
+    expect(controlador.estado().ciclos.map((c) => c.id)).toEqual([CICLO]);
+    expect(controlador.estado().organizacaoId).toBe(ORG);
+    expect(controlador.estado().fase).toBe("pronto");
+    expect(controlador.estado().erro).toBeNull();
+  });
+
+  it("S6: resposta stale NÃO altera o mapa de `expectedVersion`", async () => {
+    const { fonte, pendentes } = fonteControlavel();
+    const controlador = criarControladorGestaoCiclos({ repositorio: fonte });
+
+    const leituraA = controlador.carregar(ORG);
+    const leituraB = controlador.carregar(ORG);
+    pendentes[1]!.resolver({ ok: true, data: [soberano(CICLO, "ATIVO", 9)] });
+    await leituraB;
+    expect(controlador.versaoDe(CICLO)).toBe(9);
+
+    // A traz outra versão e um ciclo que só existe nela: nada disso é registrado.
+    pendentes[0]!.resolver({
+      ok: true,
+      data: [soberano(CICLO, "PLANEJADO", 1), soberano(SO_EM_A, "ATIVO", 1)],
+    });
+    await leituraA;
+
+    expect(controlador.versaoDe(CICLO)).toBe(9);
+    expect(Number.isNaN(controlador.versaoDe(SO_EM_A))).toBe(true);
+  });
+
+  it("reload pós-mutation não sobrescreve leitura MAIS RECENTE iniciada depois", async () => {
+    const { fonte, pendentes } = fonteControlavel();
+    let liberarEdge!: (valor: ResultadoEdgeCiclos<unknown>) => void;
+    const edgePendente = new Promise<ResultadoEdgeCiclos<unknown>>((resolver) => {
+      liberarEdge = resolver;
+    });
+    const controlador = criarControladorGestaoCiclos({
+      repositorio: fonte,
+      edge: edgeFalso(edgePendente as unknown as ResultadoEdgeCiclos<unknown>),
+    });
+
+    const primeira = controlador.carregar(ORG, { incluirCancelados: false });
+    pendentes[0]!.resolver({ ok: true, data: [soberano(CICLO, "ATIVO", 3)] });
+    await primeira;
+
+    // Mutation dispara a Edge e, depois dela, o reload (leitura #2) fica pendente.
+    const mutacao = controlador.ativar(CICLO);
+    liberarEdge({ ok: true, data: { version: 4 } });
+    await tick();
+    expect(pendentes).toHaveLength(2);
+
+    // Leitura #3 começa DEPOIS do reload e resolve primeiro.
+    const maisRecente = controlador.carregar(ORG, { incluirCancelados: true });
+    pendentes[2]!.resolver({
+      ok: true,
+      data: [soberano(CICLO, "ATIVO", 5), soberano(CANCELADO_ID, "CANCELADO", 2)],
+    });
+    await maisRecente;
+    expect(controlador.estado().ciclos.map((c) => c.id)).toEqual([
+      CICLO,
+      CANCELADO_ID,
+    ]);
+
+    // O reload (geração anterior) resolve atrasado e NÃO sobrescreve.
+    pendentes[1]!.resolver({ ok: true, data: [soberano(CICLO, "ATIVO", 4)] });
+    await mutacao;
+
+    expect(controlador.estado().ciclos.map((c) => c.id)).toEqual([
+      CICLO,
+      CANCELADO_ID,
+    ]);
+    expect(controlador.versaoDe(CICLO)).toBe(5);
+    expect(controlador.estado().operacaoEmAndamento).toBe(false);
+  });
+
+  it("mutation com sucesso + FALHA no reload: nada de estado otimista nem fallback", async () => {
+    let chamadas = 0;
+    const fonte = {
+      listarCiclos: vi.fn(async (): Promise<ResultadoCiclos<readonly CicloSoberano[]>> => {
+        chamadas += 1;
+        if (chamadas === 1) return { ok: true, data: [soberano(CICLO, "PLANEJADO", 4)] };
+        return {
+          ok: false,
+          error: { code: "INTERNAL", message: "Não foi possível reler os ciclos agora." },
+        };
+      }),
+      obterCiclo: vi.fn(async () => ({ ok: true as const, data: null })),
+      obterCicloAtivo: vi.fn(async () => ({ ok: true as const, data: null })),
+    };
+    const controlador = criarControladorGestaoCiclos({
+      repositorio: fonte,
+      edge: edgeFalso(),
+    });
+    await controlador.carregar(ORG, { incluirCancelados: false });
+    const antes = controlador.estado().ciclos;
+
+    const resultado = await controlador.ativar(CICLO);
+
+    // A Edge respondeu ok, mas o estado NÃO presume o novo status.
+    expect(resultado.ok).toBe(true);
+    expect(fonte.listarCiclos).toHaveBeenCalledTimes(2);
+    expect(controlador.estado().fase).toBe("erro");
+    expect(controlador.estado().erro?.code).toBe("INTERNAL");
+    // Último estado soberano VÁLIDO preservado (nenhum fallback local).
+    expect(controlador.estado().ciclos).toEqual(antes);
+    expect(controlador.estado().ciclos.map((c) => c.status)).toEqual(["PLANEJADO"]);
+    expect(controlador.estado().operacaoEmAndamento).toBe(false);
   });
 });
 
