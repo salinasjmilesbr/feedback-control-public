@@ -5,14 +5,20 @@
 -- a gestao soberana de ciclo seja EXECUTAVEL em producao (R9) depois do cutover
 -- (P8): sem isso, ninguem teria a capability em producao.
 --
--- ADITIVO e ESTRITO:
+-- ADITIVO, ESTRITO e IDEMPOTENTE:
 --   - NENHUMA capability nova (o catalogo continua com o mesmo tamanho);
 --   - NENHUMA remocao fisica (F5-04 D14) e nenhuma alteracao de atributo de
 --     capability;
---   - SOMENTE a relacao `admin` × `cycle.manage`;
---   - `cycle.cancel`, `cycle.reopen` e `cycle.period.correct` permanecem FORA do
---     bundle (Q-F5-09-3 alternativa A) — concediveis apenas por configuracao
---     explicita de role;
+--   - SOMENTE a relacao `admin` × `cycle.manage`, provada apos o INSERT;
+--   - `cycle.cancel`, `cycle.reopen` e `cycle.period.correct` permanecem FORA
+--     dos bundles/roles DE SISTEMA (Q-F5-09-3 alternativa A / D28). Elas
+--     continuam CONCEDIVEIS por configuracao EXPLICITA em roles CUSTOMIZADAS
+--     (`is_system = false`) — as guardas desta migration restringem a proibicao
+--     as roles de sistema e NAO bloqueiam concessoes legitimas em roles
+--     customizadas;
+--   - reexecucao e SEGURA: se `admin` × `cycle.manage` ja existir, o INSERT nao
+--     adiciona nada e o bundle NAO cresce (o tamanho esperado e calculado a
+--     partir do estado anterior);
 --   - nenhuma alteracao de schema, RLS, RPC, tabela ou coluna.
 --
 -- Preflight e guarda final sao FAIL-CLOSED: qualquer divergencia de estado
@@ -25,6 +31,8 @@ declare
   v_cap uuid;
   v_catalogo_antes integer;
   v_bundle_antes integer;
+  v_ja_existia boolean;
+  v_bundle_esperado integer;
 begin
   -- (1) Preflight: role de SISTEMA `admin` presente, ativa e sem organizacao.
   if not exists (
@@ -45,21 +53,32 @@ begin
     raise exception '[FAIL] F5-09 P7 (D28): capability cycle.manage ausente/inativa/depreciada/nao concedivel';
   end if;
 
-  -- (3) Preflight: as tres excepcionais NAO podem estar em bundle/role algum.
+  -- (3) Preflight (D28): as tres capabilities EXCEPCIONAIS nao podem estar em
+  -- role/bundle DE SISTEMA. Roles CUSTOMIZADAS (`is_system = false`) sao um
+  -- caminho LEGITIMO de configuracao explicita e NAO entram nesta guarda.
   if exists (
     select 1
       from public.access_role_capabilities m
+      join public.access_roles r on r.id = m.access_role_id
       join public.capabilities c on c.id = m.capability_id
-     where c.code in ('cycle.cancel', 'cycle.reopen', 'cycle.period.correct')
+     where r.is_system = true
+       and c.code in ('cycle.cancel', 'cycle.reopen', 'cycle.period.correct')
   ) then
-    raise exception '[FAIL] F5-09 P7 (D28): capability excepcional de ciclo ja concedida a role';
+    raise exception '[FAIL] F5-09 P7 (D28): capability excepcional de ciclo concedida a role DE SISTEMA';
   end if;
 
   select count(*) into v_catalogo_antes from public.capabilities;
   select count(*) into v_bundle_antes
     from public.access_role_capabilities where access_role_id = v_role;
+  select exists (
+    select 1 from public.access_role_capabilities
+     where access_role_id = v_role and capability_id = v_cap
+  ) into v_ja_existia;
 
-  -- (4) Reconciliacao ADITIVA e idempotente: somente `admin` × `cycle.manage`.
+  -- Tamanho esperado do bundle: +1 SOMENTE se a relacao ainda nao existia.
+  v_bundle_esperado := v_bundle_antes + (case when v_ja_existia then 0 else 1 end);
+
+  -- (4) Reconciliacao ADITIVA e IDEMPOTENTE: somente `admin` × `cycle.manage`.
   insert into public.access_role_capabilities (access_role_id, capability_id)
   select v_role, v_cap
    where not exists (
@@ -73,19 +92,18 @@ begin
       v_catalogo_antes, (select count(*) from public.capabilities);
   end if;
 
-  if (select count(*) from public.access_role_capabilities where access_role_id = v_role)
-     <> v_bundle_antes + 1 then
-    raise exception '[FAIL] F5-09 P7 (D28): bundle admin deveria ganhar EXATAMENTE 1 capability (% -> %)',
-      v_bundle_antes, (select count(*) from public.access_role_capabilities where access_role_id = v_role);
+  -- A relacao existe EXATAMENTE UMA vez (a constraint UNIQUE
+  -- `uq_access_role_capabilities_role_capability` impede duplicata; aqui provamos).
+  if (select count(*) from public.access_role_capabilities
+       where access_role_id = v_role and capability_id = v_cap) <> 1 then
+    raise exception '[FAIL] F5-09 P7 (D28): relacao admin × cycle.manage ausente ou duplicada';
   end if;
 
-  if not exists (
-    select 1
-      from public.access_role_capabilities m
-      join public.capabilities c on c.id = m.capability_id
-     where m.access_role_id = v_role and c.code = 'cycle.manage'
-  ) then
-    raise exception '[FAIL] F5-09 P7 (D28): cycle.manage nao foi concedida ao bundle admin';
+  if (select count(*) from public.access_role_capabilities where access_role_id = v_role)
+     <> v_bundle_esperado then
+    raise exception '[FAIL] F5-09 P7 (D28): bundle admin com tamanho inesperado (% -> %, ja_existia=%)',
+      v_bundle_antes, (select count(*) from public.access_role_capabilities where access_role_id = v_role),
+      v_ja_existia;
   end if;
 
   -- `cycle.read` (bundle admin desde a F5-04) permanece.
@@ -98,15 +116,20 @@ begin
     raise exception '[FAIL] F5-09 P7 (D28): cycle.read saiu do bundle admin';
   end if;
 
-  -- As tres excepcionais continuam fora (nenhuma role).
+  -- As tres excepcionais continuam FORA das roles DE SISTEMA (roles
+  -- customizadas permanecem livres para recebe-las por configuracao explicita).
   if exists (
     select 1
       from public.access_role_capabilities m
+      join public.access_roles r on r.id = m.access_role_id
       join public.capabilities c on c.id = m.capability_id
-     where c.code in ('cycle.cancel', 'cycle.reopen', 'cycle.period.correct')
+     where r.is_system = true
+       and c.code in ('cycle.cancel', 'cycle.reopen', 'cycle.period.correct')
   ) then
-    raise exception '[FAIL] F5-09 P7 (D28): bundle/role passou a conceder capability excepcional de ciclo';
+    raise exception '[FAIL] F5-09 P7 (D28): role DE SISTEMA passou a conceder capability excepcional de ciclo';
   end if;
 
-  raise notice '[PASS] F5-09 P7 (D28): cycle.manage no bundle admin (+1 exato); excepcionais fora do bundle; catalogo intacto';
+  raise notice '[PASS] F5-09 P7 (D28): cycle.manage no bundle admin (ja_existia=%, bundle=% de %); excepcionais fora das roles de sistema; catalogo intacto',
+    v_ja_existia, (select count(*) from public.access_role_capabilities where access_role_id = v_role),
+    v_bundle_esperado;
 end $$;

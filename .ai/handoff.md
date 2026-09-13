@@ -98,6 +98,16 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   verificado → resposta `{ok, operacao, resultado}` com erro público.
   `service_role` **executa**, nunca decide: nenhum caminho alternativo existe e o
   JWT do usuário não é propagado.
+- **Correção pós-auditoria Codex (D28, mesma rodada):** as guardas da migration
+  `20260921000000` foram restringidas ao **tipo de role** — as três excepcionais
+  ficam proibidas apenas em roles **DE SISTEMA** (`is_system = true`) e seguem
+  **concedíveis** em roles **CUSTOMIZADAS** (contrato D28/Q-F5-09-3); a migration
+  passou a ser **realmente idempotente** (`v_ja_existia`: +1 só na primeira
+  execução, 0 na reexecução, com prova de relação única e bundle no tamanho
+  esperado). Provas automatizadas: `12-cenario/13-validar-f5-09-p7-d28.sql`
+  (A–H, incluindo role customizada aceita, role de sistema recusada pelo
+  predicado, primeira execução +1, reexecução sem duplicata e catálogo intacto) e
+  a reaplicação da migration (2×) no job `supabase-local` do CI.
 - **Operações expostas (8) e RPC de cada uma:** `cycle.criar`→`ciclo_criar`
   (plano administrativo, sem alvo sintético — D21); `cycle.editar`→`ciclo_editar`;
   `cycle.ativar`→`ciclo_ativar`; `cycle.encerrar`→`ciclo_encerrar`;

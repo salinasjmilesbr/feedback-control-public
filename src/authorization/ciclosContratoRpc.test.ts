@@ -3,6 +3,8 @@ import edgeCiclosFonte from "../../supabase/functions/ciclos/index.ts?raw";
 import edgeCoreFonte from "../../supabase/functions/ciclos/core.ts?raw";
 import migracaoD28Fonte from "../../supabase/migrations/20260921000000_f5_09_p7_catalog_admin_bundle.sql?raw";
 import validadorP7Fonte from "../../supabase/validacao/11-validar-f5-09-p7.sql?raw";
+import cenarioD28Fonte from "../../supabase/validacao/12-cenario-f5-09-p7-d28.sql?raw";
+import validadorD28Fonte from "../../supabase/validacao/13-validar-f5-09-p7-d28.sql?raw";
 import adapterFonte from "../infrastructure/supabase/ciclos/edgeCiclos.ts?raw";
 import {
   DEFINICAO_POR_OPERACAO,
@@ -393,6 +395,62 @@ describe("F5-09 P7 — D28 estrito (O) e ausência de capability nova (P)", () =
     expect(validadorP7Fonte as string).toContain("user_has_active_membership");
     expect(validadorP7Fonte as string).toContain("relrowsecurity");
     expect(validadorP7Fonte as string).toContain("cycle_events");
+  });
+});
+
+describe("F5-09 P7 — D28: guardas por TIPO de role e idempotencia (correcao Codex)", () => {
+  const marcadorExcepcionais = "('cycle.cancel', 'cycle.reopen', 'cycle.period.correct')";
+
+  it("a proibicao das tres excepcionais vale SOMENTE para roles de SISTEMA", () => {
+    const migracao = migracaoD28Fonte as string;
+    expect(migracao).toContain("join public.access_roles r on r.id = m.access_role_id");
+
+    // TODA ocorrencia da lista das tres precisa estar sob `r.is_system = true`.
+    let indice = migracao.indexOf(marcadorExcepcionais);
+    let ocorrencias = 0;
+    while (indice !== -1) {
+      ocorrencias += 1;
+      const contexto = migracao.slice(Math.max(0, indice - 400), indice);
+      expect(contexto, `ocorrencia ${ocorrencias}`).toContain("is_system = true");
+      indice = migracao.indexOf(marcadorExcepcionais, indice + 1);
+    }
+    expect(ocorrencias).toBeGreaterThanOrEqual(2); // preflight + guarda final
+
+    // Nao pode existir proibicao global (sem o tipo da role).
+    expect(migracao).not.toMatch(
+      /where\s+c\.code in \(\s*'cycle\.cancel'[\s\S]{0,220}?\)\s*\)\s*then\s+raise exception/
+    );
+  });
+
+  it("a migration e realmente IDEMPOTENTE (nao assume +1 fixo)", () => {
+    const migracao = migracaoD28Fonte as string;
+    expect(migracao).toContain("v_ja_existia");
+    expect(migracao).toContain("case when v_ja_existia then 0 else 1 end");
+    expect(migracao).toContain("v_bundle_esperado");
+    // O antigo `v_bundle_antes + 1` incondicional nao pode voltar.
+    expect(migracao).not.toContain("<> v_bundle_antes + 1");
+  });
+
+  it("o cenario e o validador D28 cobrem concessoes LEGITIMAS em role customizada", () => {
+    // Cenario: role NAO-sistema com as tres excepcionais + estado de idempotencia.
+    expect(cenarioD28Fonte as string).toContain("'d28_custom_ciclos_p7'");
+    expect(cenarioD28Fonte as string).toMatch(/false,\s*'e7a00000/); // is_system = false
+    expect(cenarioD28Fonte as string).toContain(
+      "'cycle.cancel', 'cycle.reopen', 'cycle.period.correct'"
+    );
+    expect(cenarioD28Fonte as string).toContain("delete from public.access_role_capabilities");
+
+    // Validador D28: A-H com semantica por tipo de role e idempotencia.
+    const validador = validadorD28Fonte as string;
+    expect(validador).toContain("is_system = true");
+    expect(validador).toContain("is_system = false");
+    expect(validador).toContain("EXATAMENTE uma vez");
+    expect(validador).toContain("idempotencia provada");
+    expect(validador).toContain("catalogo intacto");
+  });
+
+  it("o validador P7 (11) usa a MESMA semantica de sistema (coerencia migration/validator)", () => {
+    expect(validadorP7Fonte as string).toContain("r.is_system = true");
   });
 });
 

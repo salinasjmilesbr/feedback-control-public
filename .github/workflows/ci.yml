@@ -231,7 +231,8 @@ jobs:
 
       # ----------------------------------------------------------------------
       # F5-09 (P7): reconciliacao ADITIVA do catalogo (D28 — `cycle.manage` no
-      # bundle `admin`; as excepcionais ficam FORA) + integridade herdada de
+      # bundle `admin`; as tres excepcionais ficam fora dos bundles DE SISTEMA e
+      # seguem concediveis em roles CUSTOMIZADAS) + integridade herdada de
       # P5/P6. Nao exige cenario proprio (valida o estado do catalogo/bundle).
       # ----------------------------------------------------------------------
       - name: Run F5-09 P7 validation (D28 no bundle admin + regressoes P5/P6)
@@ -239,6 +240,35 @@ jobs:
           docker exec -i supabase_db_feedback-control \
             psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
             < supabase/validacao/11-validar-f5-09-p7.sql
+
+      # ----------------------------------------------------------------------
+      # F5-09 (P7) D28 — GUARDAS POR TIPO DE ROLE e IDEMPOTENCIA da migration:
+      # o cenario cria role CUSTOMIZADA (nao-sistema) com as tres capabilities
+      # excepcionais e prepara o estado "primeira execucao"; a migration e
+      # REAPLICADA duas vezes (adiciona exatamente 1 e depois nao duplica) e o
+      # validador 13 confere A-H. Fail-closed: qualquer guarda que dispare
+      # derruba o passo (ON_ERROR_STOP).
+      # ----------------------------------------------------------------------
+      - name: Seed F5-09 P7 D28 scenario (role customizada + estado de idempotencia)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/12-cenario-f5-09-p7-d28.sql
+
+      - name: F5-09 P7 D28 — reaplica a migration duas vezes (idempotencia)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/migrations/20260921000000_f5_09_p7_catalog_admin_bundle.sql
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/migrations/20260921000000_f5_09_p7_catalog_admin_bundle.sql
+
+      - name: Run F5-09 P7 D28 validation (guardas por tipo de role + idempotencia)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/13-validar-f5-09-p7-d28.sql
 
       # ----------------------------------------------------------------------
       # Regressão F5-06/F5-07 (§23.4): cenários independentes, com prefixos de
