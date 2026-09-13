@@ -689,6 +689,63 @@ describe("F5-09 P8 — controlador: mutation stale, concorrência e confirmaçã
     // Nenhum reload disparado pela mutation descartada.
     expect(fonte.listarCiclos).toHaveBeenCalledTimes(1);
   });
+  it("T9: mutation em A + `carregar(null)` + erro tardio não publica no contexto vazio", async () => {
+    const fonte = repositorioPorOrganizacao();
+    const { edge, pendentes } = edgeControlavel();
+    const controlador = criarControladorGestaoCiclos({ repositorio: fonte, edge });
+
+    await controlador.carregar(ORG, { incluirCancelados: false });
+    const mutacaoA = controlador.ativar(CICLO);
+    expect(controlador.estado().operacaoEmAndamento).toBe(true);
+
+    // Contexto passa a SEM organização (fail-closed), invalidando a mutation de A.
+    const semOrganizacao = await controlador.carregar(null);
+    expect(semOrganizacao.ok).toBe(false);
+    expect(controlador.estado().organizacaoId).toBeNull();
+    expect(controlador.estado().ciclos).toEqual([]);
+    expect(controlador.estado().operacaoEmAndamento).toBe(false);
+    expect(controlador.estado().erro?.code).toBe("FORBIDDEN");
+
+    // Erro tardio da mutation de A: nada substitui o contexto/erro atuais.
+    pendentes[0]!.resolver({
+      ok: false,
+      error: { code: "CONFLICT", message: "estado atual da organização A" },
+    });
+    const resultadoA = await mutacaoA;
+
+    expect(resultadoA.ok).toBe(false);
+    expect(erroDe(resultadoA).message).toContain("organização ativa mudou");
+    expect(controlador.estado().organizacaoId).toBeNull();
+    expect(controlador.estado().ciclos).toEqual([]);
+    expect(controlador.estado().fase).toBe("erro");
+    expect(controlador.estado().erro?.code).toBe("FORBIDDEN");
+    expect(controlador.estado().operacaoEmAndamento).toBe(false);
+  });
+
+  it("T10: mutation em A + `carregar(null)` + sucesso tardio não reintroduz o contexto A", async () => {
+    const fonte = repositorioPorOrganizacao();
+    const { edge, pendentes } = edgeControlavel();
+    const controlador = criarControladorGestaoCiclos({ repositorio: fonte, edge });
+
+    await controlador.carregar(ORG, { incluirCancelados: false });
+    const leiturasAposContextoA = fonte.listarCiclos.mock.calls.length;
+    const mutacaoA = controlador.ativar(CICLO);
+    await controlador.carregar(null);
+    expect(fonte.listarCiclos.mock.calls.length).toBe(leiturasAposContextoA);
+
+    pendentes[0]!.resolver({ ok: true, data: { version: 4 } });
+    const resultadoA = await mutacaoA;
+
+    // Contexto obsoleto: devolve CONFLICT e NÃO relê A.
+    expect(resultadoA.ok).toBe(false);
+    expect(erroDe(resultadoA).code).toBe("CONFLICT");
+    expect(erroDe(resultadoA).message).toContain("organização ativa mudou");
+    expect(fonte.listarCiclos.mock.calls.length).toBe(leiturasAposContextoA);
+    expect(controlador.estado().organizacaoId).toBeNull();
+    expect(controlador.estado().ciclos).toEqual([]);
+    expect(controlador.estado().fase).toBe("erro");
+    expect(controlador.estado().operacaoEmAndamento).toBe(false);
+  });
 });
 
 describe("F5-09 P8 — controlador: ausência de autoridade local (X/Y/Z/AG/AH)", () => {

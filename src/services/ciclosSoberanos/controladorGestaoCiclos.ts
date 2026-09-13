@@ -18,7 +18,8 @@
  *   leitura da UI — o reload pertence ao controlador, não à página;
  * - MUTATIONS com geração/contexto PRÓPRIOS: retorno tardio de uma mutation da
  *   organização anterior NÃO publica erro, sucesso, flag nem estado algum no
- *   contexto novo; `descartar()` também invalida mutations em voo;
+ *   contexto posterior — a invalidação vale para troca A → B, contexto SEM
+ *   organização (`carregar(null)`) e `descartar()`;
  * - mutations CONCORRENTES no mesmo contexto são recusadas fail-closed
  *   (`CONFLICT`, sem chamar a Edge): uma única `operacaoEmAndamento` por vez;
  * - Edge ok + reload soberano falho ⇒ resultado final `ok: false` para a UI
@@ -99,6 +100,17 @@ export function criarControladorGestaoCiclos(deps: DependenciasGestaoCiclos = {}
     estado = { ...estado, ...parcial };
   }
 
+  /**
+   * Invalida MUTATIONS em voo — doutrina ÚNICA para troca A → B, contexto SEM
+   * organização (`carregar(null)`) e `descartar()`: a geração avança e a flag é
+   * liberada, então o retorno tardio da mutation antiga não publica nada e não
+   * reintroduz o contexto anterior pelo reload.
+   */
+  function invalidarMutacoesEmVoo(): void {
+    geracaoDeMutacao++;
+    mutationCorrente = null;
+  }
+
   /** Lê o soberano e publica. Sem organização ⇒ não opera (fail-closed). */
   async function carregar(
     organizationId: string | null,
@@ -117,7 +129,18 @@ export function criarControladorGestaoCiclos(deps: DependenciasGestaoCiclos = {}
         message: "Organização ativa ausente.",
       };
       gestao.invalidar();
-      publicar({ fase: "erro", organizacaoId: null, ciclos: [], erro });
+      // Contexto SEM organização também invalida mutations em voo: sem isso, uma
+      // mutation da organização anterior seguiria "corrente", poderia publicar
+      // erro/flag no contexto vazio e, no sucesso, releria A e reintroduziria o
+      // contexto antigo.
+      invalidarMutacoesEmVoo();
+      publicar({
+        fase: "erro",
+        organizacaoId: null,
+        ciclos: [],
+        erro,
+        operacaoEmAndamento: false,
+      });
       return { ok: false, error: erro };
     }
 
@@ -128,8 +151,7 @@ export function criarControladorGestaoCiclos(deps: DependenciasGestaoCiclos = {}
       gestao.invalidar();
       // Invalida MUTATIONS em voo do contexto anterior: o retorno tardio delas
       // não publica nada aqui e a flag fica livre para o contexto novo.
-      geracaoDeMutacao++;
-      mutationCorrente = null;
+      invalidarMutacoesEmVoo();
     }
     publicar({
       fase: "carregando",
@@ -371,8 +393,7 @@ export function criarControladorGestaoCiclos(deps: DependenciasGestaoCiclos = {}
       // Invalida a geração: nada em voo publica depois do descarte.
       geracaoDeLeitura++;
       // MUTATIONS em voo também são invalidadas (resposta tardia não publica).
-      geracaoDeMutacao++;
-      mutationCorrente = null;
+      invalidarMutacoesEmVoo();
       opcoesLeituraAtuais = { incluirCancelados: false };
       gestao.descartar();
       estado = ESTADO_INICIAL;
