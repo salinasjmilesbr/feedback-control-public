@@ -325,7 +325,7 @@ jobs:
       # append-only e RLS deny-by-default). Roda depois das fases F5-09 e ANTES
       # das regressoes, como as demais atividades correntes.
       # ----------------------------------------------------------------------
-      - name: Seed F5-10 P1 scenario (metas: schema/integridade/limites)
+      - name: "Seed F5-10 P1 scenario (metas: schema/integridade/limites)"
         run: |
           docker exec -i supabase_db_feedback-control \
             psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
