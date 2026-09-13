@@ -250,21 +250,54 @@ nova (Q1); `expected_version` do ciclo; `operation_id`; evento append-only
 
 ## 9. Aprovações, legitimidade e invalidação
 
-### 9.1 Fonte soberana da legitimidade
+### 9.1 Fonte soberana da legitimidade — **B1 RESOLVIDO**
 
-**DECIDE (D14, Q4=A):** a legitimidade para aprovar é **exclusivamente relacional** e é derivada da
-**estrutura CONGELADA/MATERIALIZADA na ativação do ciclo** — projeção específica:
+**DECIDE (D14, Q4=A):** a legitimidade para aprovar é **exclusivamente relacional** e deriva dos
+**PARTICIPANTES CONGELADOS DA AVALIAÇÃO DO CICLO** (`evaluation_participants`) — **não** da estrutura
+viva, **não** de cargo/função textual, **não** de matrícula/nome e **não** do cliente. Regra exata:
 
-1. **cadeia superior congelada** em `collegiate_cycle_snapshot_positions`
-   (`superior_position_id`/`superior_collaborator_id` da posição do dono no snapshot do ciclo); e
-2. **responsável do colaborador no ciclo** em `cycle_evaluation_responsibilities`
-   (`snapshot_id` + responsável vigente do ciclo).
+1. **link determinístico meta → avaliação:** `evaluations` com `organization_id = meta.organization_id`,
+   `cycle_id = meta.cycle_id`, `evaluated_collaborator_id = meta.collaborator_id`,
+   `status <> 'CANCELADA'` — no máximo uma linha (índice único
+   `uq_evaluations_org_cycle_collaborator_nao_cancelada`,
+   `20260911000000_f5_06_evaluation_schema.sql:257-258`);
+2. **COORDENADOR** = participante `role_type = 'GESTAO_DIRETA'` dessa avaliação
+   (`evaluation_participants`, `:271-317`);
+3. **GERENTE** = participante `role_type = 'GESTAO_CADEIA'` dessa avaliação (topo da cadeia de gestão);
+4. **ocorrência ORIGINAL** (estabilidade sob *overlays*): entre as ocorrências do papel, escolher a de
+   **menor `valid_from`** (empate ⇒ menor `collaborator_id`), preservando a linha do tempo append-only
+   (`valid_to` fecha, nunca reescreve) — replicando a própria regra da F5-06
+   (`20260911010000_f5_06_evaluation_functions.sql:599-606`);
+5. **fail-closed:** sem avaliação, sem ocorrência do papel, ou com `status <> 'active'`/
+   `valid_to` preenchido ⇒ o papel **não** é reconhecido (nunca “aprova por falta de prova”).
 
-**Proibido** usar `funcao`/cargo textual, `gestorDiretoMatricula` do cadastro local, ou qualquer
-estado declarado pelo cliente. **Movimentação estrutural posterior NÃO rematerializa o ciclo atual**
-(contrato F5-09/D27 preservado) ⇒ os aprovadores de uma meta são **estáveis durante o ciclo**.
-**Fail-closed:** ausência de evidência congelada ⇒ o papel **não** é reconhecido (nunca “aprova por
-falta de prova”).
+**Proibido** (inalterado): `funcao`/cargo textual, `gestorDiretoMatricula` do cadastro local,
+matrícula/nome como identidade, estrutura viva atual, heurística por nome, `localStorage` e qualquer
+estado declarado pelo cliente. **Movimentação estrutural posterior NÃO rematerializa o ciclo**
+(F5-09/D27 preservado) ⇒ os aprovadores de uma meta são **estáveis durante o ciclo** (regra 4).
+
+### 9.1.1 Prova arquitetural (auditoria que resolveu B1)
+
+| Elo | Evidência |
+|---|---|
+| Resolvedor soberano de **cadeia** existe | `organizacao_resolver_cadeia(collaborator_id, timestamptz)` com `depth`/`position_id`/`responsible_collaborator_id`; uso canônico pega o **maior `depth`** = topo: `20260911010000_f5_06_evaluation_functions.sql:388-396` |
+| F5-06 **materializa** os dois papéis por avaliação | `insert into public.evaluation_participants (... 'GESTAO_CADEIA', v_cadeia, v_cadeia_origem, ...)` e `... 'GESTAO_DIRETA', v_direta, ...`, com `valid_from = coalesce(v_ref, p_instante)`: `:402-419`; `GESTAO_CADEIA` é **obrigatória** na configuração baseline (`:196`) |
+| Papéis são de **RELAÇÃO, nunca cargo** | `check (role_type in ('GESTAO_CADEIA','GESTAO_DIRETA','COLEGIADO'))` (`20260911000000_f5_06_evaluation_schema.sql:300-301`); comentário `:165-167` |
+| Congelamento e histórico | `GESTAO_CADEIA`/`GESTAO_DIRETA` derivam da mesma fonte soberana F3-07/F3-09 no instante de referência (`:368`, `:390-396`); `COLEGIADO` vem do snapshot F3-08 (`:421-431`); histórico preservado por `valid_to` (nunca reescrito) — D23 (`:324-327`) |
+| Equivalência com a regra do legado | `GESTAO_DIRETA` só é criado quando o gestor direto **difere** do responsável de cadeia (`:410-419`) ⇒ “coordenador exigido quando existir nível intermediário” = “existe ocorrência `GESTAO_DIRETA`”; `GESTAO_CADEIA` = topo ⇒ “gerente = raiz” e “sempre exigido” (obrigatório no baseline) — **D15 preservado literalmente** |
+
+**Consequência para D14 (refinamento, não contradição):** a projeção congelada que define os
+aprovadores **não** é o snapshot de posições (registra apenas o superior **imediato**:
+`20260907180000_collegiate_configuration_snapshot.sql:265-273`) nem
+`cycle_evaluation_responsibilities` (materializa o **responsável avaliativo** da posição do avaliado:
+`20260907190000:186-201`); é a **materialização de participantes da avaliação**, que já contém o
+**topo da cadeia** congelado no instante de referência. As duas estruturas anteriores permanecem como
+**defesa em profundidade** e como fonte do `GESTAO_DIRETA` original, mas **não** definem o gerente.
+
+**Impacto em P3/P4:** P3 implementa a derivação **lendo `evaluation_participants`** (não percorre a
+cadeia do snapshot); P4 define o escopo de `goal.approve` como “o ator **É** o participante
+`GESTAO_DIRETA`/`GESTAO_CADEIA` (ocorrência original) da avaliação da meta” — UUID contra UUID, sem
+cargo e sem estrutura viva. **B1 não bloqueia mais nenhuma fase.**
 
 ### 9.2 Regra funcional preservada do legado
 
@@ -448,6 +481,7 @@ mesma atividade (P6).
 | R9 | Fail-closed silencioso (estrutura não carregada) | média | o caminho soberano expõe a indisponibilidade com fase explícita |
 | R10 | Perda silenciosa do acervo legado no backfill | média | D13 (congelar/exportar + abortar em divergência) |
 | R11 | `goal.read` de leitura de terceiros exposta por RLS sem gate funcional | alta | §11 (RPC de leitura com gate) |
+| R12 | Participantes da avaliação podem receber *overlay* (substituição temporária/sucessão) **após** a ativação | média | D14 regra 4: ancorar na **ocorrência original** (`valid_from` mínimo) e nunca reescrever histórico (F5-06 D23) |
 
 ## 17. DECISÕES NORMATIVAS FECHADAS
 
@@ -466,7 +500,7 @@ mesma atividade (P6).
 | D11 | Trilha append-only + idempotência `(organization_id, operation_id)` + `payload_hash` server-side | auditoria |
 | D12 | `expected_version` obrigatório em toda mutação; `version+1`; `F5_10_CONFLICT` | auditoria |
 | D13 | Backfill só por pontes autoritativas; rejeições ⇒ quarentena; congelar/exportar; contagens; abortar em corrupção/divergência; proibido fabricar/descartar/fallback | **Q7=A** |
-| D14 | Legitimidade de aprovação é **relacional** sobre a **estrutura congelada na ativação** do ciclo; movimentação posterior não rematerializa; fail-closed | **Q4=A** |
+| D14 | Legitimidade de aprovação é **relacional**, derivada dos **participantes congelados da avaliação** (`GESTAO_CADEIA` = gerente; `GESTAO_DIRETA` = coordenador; **ocorrência original**); movimentação posterior não rematerializa; fail-closed | **Q4=A + B1 resolvido (§9.1/§9.1.1)** |
 | D15 | Regra preservada: **gerente sempre exigido**; coordenador quando há nível intermediário; fail-closed sem evidência | **Q4=A** |
 | D16 | `progresso_percentual`: inteiro informado, 0..100, validado server-side; **não** derivar de `resultadoAtual`/`valorAlvo` (texto); agregação de projeção = média aritmética simples com `Math.round`, **sem peso**, **sem** virar nota | **Q9+Q13 (consolidadas)** |
 | D17 | Finalização **independente** de aprovação; 1ª finalização é transição explícita; alteração posterior é **revisão/re-finalização explícita** com `expected_version`+`operation_id`+evento específico, fechamento anterior recuperável; **sem estado REABERTA**; nunca sobrescrever silenciosamente | **Q10** |
@@ -477,6 +511,7 @@ mesma atividade (P6).
 | D22 | RLS = isolamento/visibilidade de tenant; Policy Engine = autoridade funcional; `SELECT` own-tenant **não** concede `goal.read` funcional; leitura de terceiros com gate (§11) | revisão GPT |
 | D23 | Edge `metas` + contrato transportável único; RPCs `SECURITY INVOKER` com `EXECUTE` só `service_role`; sem `.rpc(`/`SERVICE_ROLE_KEY` no cliente | auditoria |
 | D24 | Cutover com barreira de escrita; leitura legada só para backfill; **sem fallback funcional após o cutover** | **Q7 + revisão GPT** |
+| D25 | A projeção congelada que define os aprovadores é `evaluation_participants` da avaliação do ciclo (`GESTAO_CADEIA`/`GESTAO_DIRETA`, ocorrência original); snapshot de posições e `cycle_evaluation_responsibilities` ficam como defesa em profundidade | **B1 resolvido (§9.1.1)** |
 
 **Rastreabilidade Q→D (nenhuma questão permanece aberta):** Q1→D6 · Q2→D7 · Q3→D8 · Q4→D14/D15 ·
 Q5→D4 · Q6→D10 · Q7→D13/D24 · Q8→D9 · Q9+Q13→D16 (consolidadas) · Q10→D17/D19 · Q11→D18/D19 ·
@@ -485,20 +520,23 @@ duplicidade conceitual (progresso × agregação); a rastreabilidade dos dois n�
 
 ## 18. BLOCKERS DOCUMENTAIS
 
-**B1 — Profundidade da cadeia congelada para derivar os aprovadores (afeta D14/§9.1).**
-`collegiate_cycle_snapshot_positions` registra `superior_position_id`/`superior_collaborator_id` do
-**superior imediato**; a regra de “gerente = raiz da cadeia” exige saber se o **snapshot do ciclo**
-permite reconstruir a **raiz** (ou se `cycle_evaluation_responsibilities` já a registra).
-**Não decide-se por suposição:** a P3 deve, **antes de implementar**, confirmar (somente leitura) as
-colunas/tabelas do congelamento. Se a raiz não for reconstruível a partir do congelado, a P3 deve
-propor a fonte **sem reabrir contrato da F5-09** (ex.: registrar a raiz no momento da ativação por
-evento) e trazer para ratificação. Enquanto B1 não for resolvido, a derivação do **gerente** fica
-**fail-closed** (nega) e o **coordenador** (superior imediato) já é derivável.
+**Nenhum blocker aberto.** **B1 foi RESOLVIDO** por auditoria read-only — ver §9.1 (regra) e §9.1.1
+(prova arquitetural, com evidência nas migrations F3-08/F3-09/F5-06).
 
-**Sem outros blockers.** Os pontos abaixo são **itens de implementação já decididos**, não escolhas
-abertas: substituição do invariante SQL que proíbe metas (P1); capability administrativa da quota =
-`cycle.manage` (D21 — derivável do catálogo vigente **sem** ampliar privilégio e **sem** capability
-nova); criação da RPC de leitura com gate (D22/§11).
+**Histórico do B1 (dúvida original e desfecho).** A dúvida era se a estrutura congelada permitia
+reconstruir a **cadeia até a raiz** para determinar o **gerente**. A auditoria confirmou que:
+`collegiate_cycle_snapshot_positions` registra **apenas o superior imediato** por posição ocupada
+(`20260907180000:374-409`, comentário `:265-273`) e `cycle_evaluation_responsibilities` materializa o
+**responsável avaliativo da posição do avaliado**
+(`20260907190000:186-201`) — **nenhuma das duas guarda a raiz**. Porém a raiz **já é materializada**
+por outro artefato soberano da F5-06: `evaluation_participants.role_type = 'GESTAO_CADEIA'`, derivado
+de `organizacao_resolver_cadeia` no instante de referência
+(`20260911010000:388-419`), com o coordenador em `'GESTAO_DIRETA'`. Logo **não é criada estrutura
+nova** e D14/D15 são **refinadas** (§9.1), não substituídas.
+
+**Itens de implementação já decididos (não são blockers):** substituição do invariante SQL que proíbe
+metas (P1); capability administrativa da quota = `cycle.manage` (D21 — derivável do catálogo vigente
+sem ampliar privilégio e sem capability nova); criação da RPC de leitura com gate (D22/§11).
 
 ## 19. Decomposição final (P1–P7)
 
@@ -516,7 +554,7 @@ nova); criação da RPC de leitura com gate (D22/§11).
   eventos, invalidação conforme §9.4).
 - **P3 — Aprovações e invalidação.** `meta_aprovar` + `meta_invalidar_aprovacoes`, tabela de
   aprovações, resolução relacional congelada (§9.1), regra preservada (§9.2), matriz §9.4;
-  **resolver B1** (somente leitura) antes de codificar a derivação do gerente.
+  **derivação lida de `evaluation_participants`** — B1 resolvido (§9.1.1); sem blocker.
 - **P4 — Autorização e RLS.** `goal` como tipo soberano (D8), matriz capability × estado com fonte
   única, `carregarRecurso` real de meta, escopos SELF/relacional, **concessão explícita** (D7) com
   teste de **ALLOW real em produção**, RLS own-tenant (policy antes do grant) e a **RPC de leitura
