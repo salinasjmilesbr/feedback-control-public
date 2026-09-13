@@ -34,6 +34,56 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
+### 3.13 F5-09 P9 (implementada; aguardando auditoria independente)
+
+- **Atividade:** F5-09 — **P9 (Validação Integrada de Ciclos Soberanos)
+  IMPLEMENTADA** — aguardando auditoria GPT e auditoria independente Codex.
+  Contrato: a especificação da atividade (11 blocos obrigatórios) + a matriz
+  executável em `docs/F5-09-p9-matriz-integrada.md`.
+- **Base:** `main`/`origin/main` = `a1e30a86` (F5-09 P8 integrada pelo squash do
+  PR #205). **Branch da P9:** `feat/f5-09-p9-integrated-validation` — **sem
+  merge**; o push (feito neste host) e o PR ficam com o usuário.
+- **Entregue (7 arquivos):** `supabase/validacao/14-cenario-f5-09-p9.sql` (fixture
+  isolada `ed`, insert-once), `15-validar-f5-09-p9.sql` (matriz integrada,
+  **42 `[PASS]`**), `16-sessao-a-`/`17-sessao-b-`/`18-validar-`**concorrência**,
+  `src/services/ciclosSoberanos/p9MatrizIntegrada.test.ts` (10 provas do cliente),
+  `docs/F5-09-p9-matriz-integrada.md`, `.github/workflows/ci.yml` (passos P9 após
+  o validador D28 e ANTES das regressões F5-06/F5-07) e `.ai/virtus-context.md`
+  (estava desatualizado: dizia "P2–P9 não iniciadas").
+- **Bloco 6 — concorrência REAL entre duas sessões:** sessão A (processo `psql`
+  próprio) cria o ciclo e o edita segurando `ciclo_lock_organizacao`
+  (`evaluation_cycles:<org>`) por ~8 s; sessão B espera deterministicamente a
+  marca não transacional publicada DENTRO do UPDATE e tenta a MESMA edição com o
+  MESMO `expected_version`: fica **bloqueada ~7,3 s** e termina em
+  `F5_09_CONFLICT` (versão 0 vs 1). O estado final é o de A (nenhum lost update),
+  nenhum evento da intenção perdedora e trilha `CRIADO + EDITADO` append-only.
+  É contenção **server-side**, distinta da concorrência **client-side** da P8
+  (geração monotônica do controlador).
+- **Gates reais (host local, Docker + Supabase local):** `db reset` +
+  **bateria SQL completa na ordem do CI: 33/33 entradas, `falhas=0`** (inclui
+  fixture/validador P9, concorrência em duas sessões e todas as regressões
+  F4-08/F5-04/F5-08/P1–P7/F5-06/F5-07) + focados **71** + `npm test`
+  **120 arquivos / 1860 testes** + `npm run build` + `npm run lint` +
+  `npx tsc -b tsconfig.app.json` + `git diff --check` — todos exit 0.
+- **Findings (registrados, nenhum de produção):** (a) **defeito de integração**
+  real — a checagem de ciclos sem evento `CRIADO` no §11 era GLOBAL e acusava os
+  ciclos inseridos diretamente pelas fixtures P1–P5 (que rodam antes no CI):
+  passava isolada e **falharia no job**; foi escopada às organizações do fixture
+  P9; (b) **14 defeitos de artefato de validação** encontrados por execução real
+  (I5 no setup; tabela temporária qualificada como `public.`; `RAISE` com
+  placeholders a menos; `string_agg(x, …)` sem a subquery que define `x`;
+  colisões de `operation_id` entre intenções diferentes; replay de idempotência
+  com payload divergente; precedência estado-antes-de-versão; `NOT_FOUND` ×
+  `FORBIDDEN` indistinguíveis no cross-tenant (§8); grant de `cycle.manage` não
+  restaurado após a prova de revogação; encerramento ausente entre A5→A3 (I5);
+  gatilho de rollback só na 2ª escrita; invariante I5 "no máximo um ATIVO";
+  catálogo legado de metas/observações = 8, não 7; contador de escrita não
+  transacional); (c) defeito do **harness local** (contador de falhas inflado por
+  `Write-Output` dentro de função). **Produção intocada:** nenhuma migration,
+  RPC, policy, RLS, Edge ou página foi alterada na P9.
+- **Não feito (por contrato):** merge, abertura de PR e auditorias externas.
+  **F5-10 (metas) e F5-11 (observações) permanecem pendentes.**
+
 - **Atividade (rodada atual):** F5-09 — **P7 (Edge Function `ciclos` + reconciliação
   do catálogo D28) IMPLEMENTADA** — **aguardando auditoria independente**. Issue
   **#202**. Contrato: `docs/F5-09-desenho-tecnico.md` (§8 tabela

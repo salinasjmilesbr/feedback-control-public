@@ -26,16 +26,21 @@
   soberanos no PostgreSQL (F5-06/F5-07/F5-08): `localStorage` não é fonte de
   verdade, não há dual-write e a leitura do cliente é RLS own-tenant
   (`docs/F5-08-p6-duvida-mundo-funcional.md` registra o residual de elegibilidade
-  dos domínios de ciclo/metas). **Ciclos** continuam em `localStorage` **até a
-  implementação completa da F5-09**: o desenho técnico está fechado e integrado
-  (`docs/F5-09-desenho-tecnico.md`, D1–D28, fases P1–P9; dúvidas ratificadas em
-  `docs/F5-09-duvidas.md`) e a entidade soberana é `public.evaluation_cycles`
-  (F5-06 D15). A **F5-09 P1** (integridade de schema e trilha de auditoria —
-  índice único parcial de `ATIVO`, exclusion de sobreposição de períodos,
-  proibição de exclusão física, tabela append-only `cycle_events`, helpers
-  `ciclo_ator_valido`/`ciclo_lock_organizacao`) está **implementada e aguardando
-  auditoria GPT**; as RPCs `ciclo_*` (P2+), a leitura RLS (P5) e o cutover (P8)
-  **não** foram iniciados.
+  dos domínios de ciclo/metas). **Ciclos**: o desenho técnico está fechado e
+  integrado (`docs/F5-09-desenho-tecnico.md`, D1–D28, fases P1–P9; dúvidas
+  ratificadas em `docs/F5-09-duvidas.md`) e a entidade soberana é
+  `public.evaluation_cycles` (F5-06 D15). A **F5-09 P1–P8 está implementada e
+  integrada em `main`** (P8 = squash `a1e30a86`, PR #205): integridade de schema
+  e trilha append-only `cycle_events` + helpers (P1), RPCs `ciclo_*` (P2–P4),
+  leitura RLS own-tenant (P5), Policy Engine de ciclo (P6), Edge `ciclos` +
+  reconciliação do bundle `admin` (P7) e cutover da gestão de ciclos no frontend
+  (P8 — UUID soberano como identidade, `expectedVersion` da leitura soberana,
+  sem fallback/dual-write **no fluxo de gestão**). A atividade corrente é a
+  **F5-09 P9** (validação integrada; matriz em
+  `docs/F5-09-p9-matriz-integrada.md`). O armazenamento local legado
+  (`cicloAvaliacaoStorage`/`cicloEquipeService`) permanece **apenas** em
+  consumidores ainda não migrados (painel/relatórios); **metas (F5-10) e
+  observações (F5-11) seguem pendentes**.
 - CI (`.github/workflows/ci.yml`): `npm test`, `npm run build`, `npm run lint`,
   `git diff --check` e validação Supabase local (RLS/policies) quando aplicável.
 
@@ -61,8 +66,9 @@ não existe contrato sem documento fechado correspondente.
   F5-07 (colaboradores e histórico organizacional soberanos) e F5-08 (estrutura e
   catálogos soberanos). F5-09 (ciclos soberanos) tem **desenho técnico fechado e
   integrado** (`docs/F5-09-desenho-tecnico.md`, D1–D28, fases P1–P9; ratificações
-  em `docs/F5-09-duvidas.md`) com a **P1 implementada** (integridade de schema e
-  trilha de auditoria) e as fases **P2–P9 não iniciadas**.
+  em `docs/F5-09-duvidas.md`) com **P1–P8 implementadas e integradas em `main`**
+  e a **P9 (validação integrada) em andamento**; metas (F5-10) e observações
+  (F5-11) permanecem pendentes.
   As atividades seguintes da fase seguem o roadmap do GitHub.
 - **F6+** — hardening geral e trabalhos futuros (fora de escopo das fases
   anteriores).
