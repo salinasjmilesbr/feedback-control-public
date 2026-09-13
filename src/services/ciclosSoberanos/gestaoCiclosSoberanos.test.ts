@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CicloSoberano, ResultadoCiclos } from "../../application/ports/CycleRepository";
 import type { EdgeCiclos, ResultadoEdgeCiclos } from "../../infrastructure/supabase/ciclos/edgeCiclos";
 import {
@@ -299,5 +300,146 @@ describe("F5-09 P8 — chave de idempotência (não é identidade de ciclo)", ()
     const b = novoOperationId();
     expect(a).not.toBe(b);
     expect(a).toMatch(/^[0-9a-f-]{36}$/);
+  });
+});
+
+/** Linha de BANCO (snake_case) — o adapter P5 projeta a partir dela. */
+function linhaCiclo(id: string): Record<string, unknown> {
+  return {
+    id,
+    organization_id: ORG,
+    ano: 2035,
+    numero: 1,
+    status: "ATIVO",
+    data_inicio: "2035-01-01",
+    data_fim: "2035-03-31",
+    data_ativacao: "2035-01-02T00:00:00.000Z",
+    data_encerramento: null,
+    encerrado_com_pendencias: false,
+    quantidade_pendencias: 0,
+    version: 3,
+    created_at: "2035-01-01T00:00:00.000Z",
+    updated_at: "2035-01-02T00:00:00.000Z",
+  };
+}
+
+/** Cliente Supabase falso: serve LEITURA (PostgREST/RLS) e MUTAÇÃO (Edge). */
+function clienteComposto(linhas: readonly Record<string, unknown>[]) {
+  const registro = {
+    leituras: 0,
+    invocacoes: [] as { funcao: string; corpo: Record<string, unknown> }[],
+  };
+  const construtor: Record<string, unknown> = {};
+  Object.assign(construtor, {
+    select: () => construtor,
+    eq: () => construtor,
+    order: () => construtor,
+    maybeSingle: () => Promise.resolve({ data: linhas[0] ?? null, error: null }),
+    then: (resolver: (valor: unknown) => unknown) => {
+      registro.leituras += 1;
+      return Promise.resolve(resolver({ data: [...linhas], error: null }));
+    },
+  });
+  const cliente = {
+    auth: { getSession: async () => ({ data: { session: { access_token: "jwt" } } }) },
+    from: () => construtor,
+    functions: {
+      invoke: async (funcao: string, opcoes: { body: Record<string, unknown> }) => {
+        registro.invocacoes.push({ funcao, corpo: opcoes.body });
+        return { data: { ok: true, resultado: { version: 1 } }, error: null };
+      },
+    },
+  };
+  return { cliente: cliente as unknown as SupabaseClient, registro };
+}
+
+describe("F5-09 P8 — composição (U/V) e controlador persistente (W)", () => {
+  it("U: composição com cliente único serve LEITURA e EDGE no MESMO cliente", async () => {
+    const { cliente, registro } = clienteComposto([linhaCiclo(CICLO)]);
+    const gestao = criarGestaoCiclosSoberanos({ cliente });
+
+    expect(gestao.cliente()).toBe(cliente);
+    expect(gestao.edgeResolvida()).not.toBeNull();
+
+    const lista = await gestao.listar(ORG);
+    const mutacao = await gestao.ativar({ organizationId: ORG, cycleId: CICLO, expectedVersion: 1 });
+
+    expect(lista.ok && lista.data.map((i) => i.id)).toEqual([CICLO]);
+    expect(mutacao.ok).toBe(true);
+    // A leitura foi pelo PostgREST do cliente e a mutação pela Edge do MESMO cliente.
+    expect(registro.leituras).toBe(1);
+    expect(registro.invocacoes).toHaveLength(1);
+    expect(registro.invocacoes[0]!.funcao).toBe("ciclos");
+    expect(registro.invocacoes[0]!.corpo.operacao).toBe("cycle.ativar");
+    expect(registro.invocacoes[0]!.corpo.cycle_id).toBe(CICLO);
+  });
+
+  it("U/V: sem caminho soberano configurado, leitura E mutações falham fechado", async () => {
+    const gestao = criarGestaoCiclosSoberanos({ cliente: null });
+
+    expect(gestao.cliente()).toBeNull();
+    expect(gestao.edgeResolvida()).toBeNull();
+
+    const leitura = await gestao.listar(ORG);
+    const mutacao = await gestao.criar({
+      organizationId: ORG,
+      ano: 2035,
+      numero: 1,
+      dataInicio: "2035-01-01",
+      dataFim: "2035-01-31",
+    });
+
+    expect(leitura.ok).toBe(false);
+    expect(mutacao.ok).toBe(false);
+    if (leitura.ok || mutacao.ok) return;
+    expect(leitura.error.code).toBe("INTERNAL");
+    expect(mutacao.error.code).toBe("INTERNAL");
+  });
+
+  it("V: o adapter injetado continua valendo sem cliente (testes) e falha fechado sem ele", async () => {
+    const espiao: Espiao = { chamadas: [] };
+    const gestao = criarGestaoCiclosSoberanos({ cliente: null, edge: edgeFalso(undefined, espiao) });
+
+    const resultado = await gestao.ativar({ organizationId: ORG, cycleId: CICLO, expectedVersion: 2 });
+
+    expect(resultado.ok).toBe(true);
+    expect(espiao.chamadas.map((c) => c.metodo)).toEqual(["ativar"]);
+    // Leitura sem repositório continua fail-closed (nenhum fallback local).
+    const leitura = await gestao.listar(ORG);
+    expect(leitura.ok).toBe(false);
+  });
+
+  it("W: o controlador é a MESMA instância — resposta atrasada não vence o contexto novo", async () => {
+    let resolverAtrasada!: (valor: ResultadoCiclos<readonly CicloSoberano[]>) => void;
+    const pendenteA = new Promise<ResultadoCiclos<readonly CicloSoberano[]>>((resolve) => {
+      resolverAtrasada = resolve;
+    });
+    let chamadas = 0;
+    const repositorio = {
+      listarCiclos: vi.fn((org: string) => {
+        chamadas += 1;
+        if (chamadas === 1) return pendenteA;
+        return Promise.resolve({ ok: true as const, data: [ciclo(org === "org-b" ? CICLO_B : CICLO)] });
+      }),
+      obterCiclo: vi.fn(async () => ({ ok: true as const, data: null })),
+      obterCicloAtivo: vi.fn(async () => ({ ok: true as const, data: null })),
+    };
+    // UMA gestão: antes da correção cada `listar` criava um controlador novo e a
+    // resposta atrasada de A publicaria por cima de B.
+    const gestao = criarGestaoCiclosSoberanos({ repositorio });
+    expect(gestao.controlador()).toBe(gestao.controlador());
+
+    const requestA = gestao.listar("org-a");
+    const requestB = gestao.listar("org-b");
+    await requestB;
+    resolverAtrasada({ ok: true, data: [ciclo(CICLO)] });
+    await requestA;
+
+    expect(gestao.estado().organizacaoId).toBe("org-b");
+    expect(gestao.estado().ciclos.map((c) => c.id)).toEqual([CICLO_B]);
+
+    // `invalidar`/`estado` operam na MESMA instância (mesma geração monotônica).
+    gestao.invalidar();
+    expect(gestao.estado().fase).toBe("ocioso");
   });
 });
