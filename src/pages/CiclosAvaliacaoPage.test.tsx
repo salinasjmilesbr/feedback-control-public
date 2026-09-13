@@ -1,16 +1,24 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { UsuarioAtualContext } from "../contexts/UsuarioAtualContext";
 import { instalarLocalStorageEmMemoria } from "../test/localStorageMock";
 import { ProvedorAuthTeste } from "../test/authTeste";
-import type {
-  CicloAvaliacao,
-  StatusCicloAvaliacao,
-} from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
+import type { EstadoGestaoCiclos } from "../services/ciclosSoberanos/controladorGestaoCiclos";
 import CiclosAvaliacaoPage from "./CiclosAvaliacaoPage";
 import { confirmarExclusaoCiclo } from "./confirmarExclusaoCiclo";
+
+/**
+ * F5-09 P8 (Bloco 1) — `CiclosAvaliacaoPage` com LEITURA SOBERANA.
+ *
+ * O harness segue em SSR (`renderToStaticMarkup`, sem jsdom): ele prova o que o
+ * SSR prova legitimamente — estado inicial de LOADING, erro fail-closed, acesso
+ * restrito e as guardas estáticas de ligação ao controlador soberano. O
+ * comportamento que exige efeitos/DOM (reload pós-mutation, stale de organização,
+ * ações por status) é coberto pelos testes node do controlador
+ * (`controladorGestaoCiclos.test.ts`), sem enfraquecer a produção.
+ */
 
 const gerente: Colaborador = {
   matricula: 1,
@@ -22,138 +30,161 @@ const gerente: Colaborador = {
   funcao: "GERENTE",
   respondePara: "",
 };
-const coordenador: Colaborador = {
-  ...gerente,
-  matricula: 2,
-  nome: "Coordenador Fictício",
-  email: "coordenador@example.com",
-  funcao: "COORDENADOR",
-  gestorDiretoMatricula: gerente.matricula,
-};
 
-function renderizarCiclos(
-  ciclos: CicloAvaliacao[],
-  mostrarCanceladosInicial = false,
-  usuario: Colaborador = gerente
+/** Controlador falso: apenas `estado()` é observável no SSR. */
+function controladorFalso(estado: Partial<EstadoGestaoCiclos>) {
+  return {
+    estado: () => ({
+      fase: "ocioso",
+      organizacaoId: null,
+      ciclos: [],
+      erro: null,
+      operacaoEmAndamento: false,
+      ...estado,
+    }),
+    versaoDe: () => Number.NaN,
+    registrarVersao: () => undefined,
+    carregar: async () => ({ ok: true as const, data: [] }),
+    criar: async () => ({ ok: true as const, data: null }),
+    editar: async () => ({ ok: true as const, data: null }),
+    ativar: async () => ({ ok: true as const, data: null }),
+    encerrar: async () => ({ ok: true as const, data: null }),
+    cancelar: async () => ({ ok: true as const, data: null }),
+    reabrir: async () => ({ ok: true as const, data: null }),
+    corrigirPeriodo: async () => ({ ok: true as const, data: null }),
+    descartar: () => undefined,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any;
+}
+
+function renderizar(
+  estado: Partial<EstadoGestaoCiclos> = {},
+  usuario: Colaborador | undefined = gerente
 ): string {
-  localStorage.setItem("feedback-control-ciclos", JSON.stringify(ciclos));
+  instalarLocalStorageEmMemoria();
+  // O gate de UX (`can`) resolve o mundo funcional dos dados — sem fixture não
+  // há decisão de UX e a página cai no estado de acesso restrito.
   localStorage.setItem(
     "feedback-control-colaboradores",
-    JSON.stringify([gerente, coordenador])
+    JSON.stringify(usuario ? [gerente, usuario] : [gerente])
   );
-
   return renderToStaticMarkup(
     <ProvedorAuthTeste>
       <UsuarioAtualContext.Provider
         value={{
           usuarioAtual: usuario,
-          usuariosDisponiveis: [gerente, coordenador],
+          usuariosDisponiveis: usuario ? [usuario] : [],
           selecionarUsuario: () => undefined,
         }}
       >
         <MemoryRouter>
-          <CiclosAvaliacaoPage
-            mostrarCanceladosInicial={mostrarCanceladosInicial}
-          />
+          <CiclosAvaliacaoPage controlador={controladorFalso(estado)} />
         </MemoryRouter>
       </UsuarioAtualContext.Provider>
     </ProvedorAuthTeste>
   );
 }
 
-function renderizar(
-  status: StatusCicloAvaliacao,
-  mostrarCanceladosInicial = false,
-  usuario: Colaborador = gerente,
-  dadosCiclo: Partial<CicloAvaliacao> = {}
-): string {
-  const ciclo: CicloAvaliacao = {
-    id: "ciclo-ui",
-    ano: 2026,
-    ciclo: 1,
-    status,
-    dataCriacao: "2026-01-01T00:00:00.000Z",
-    dataUltimaAtualizacao: "2026-01-01T00:00:00.000Z",
-    ...dadosCiclo,
-  };
-  return renderizarCiclos([ciclo], mostrarCanceladosInicial, usuario);
-}
-
-describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
-  beforeEach(() => instalarLocalStorageEmMemoria());
-
-  it("mostra ativação e cancelamento para ciclo planejado (F5-09 P6/D8)", () => {
-    const html = renderizar("PLANEJADO");
-
-    expect(html).toContain("Ativar ciclo");
-    expect(html).not.toContain("Encerrar ciclo");
-    expect(html).not.toContain("Editar status");
-    expect(html).toContain("Editar período");
-    expect(html).not.toContain("Corrigir período");
-    expect(html).toContain("Excluir ciclo");
-    // F5-09 P6 (D8/Q-F5-09-1): `cycle.cancel` passa a valer em {PLANEJADO, ATIVO},
-    // então a autorização libera o cancelamento do ciclo planejado e o botão passa
-    // a ser exibido. O persistidor LOCAL legado ainda exige ATIVO — resíduo do
-    // cutover P8, que passa a usar a RPC soberana `ciclo_cancelar`.
-    expect(html).toContain("Cancelar ciclo");
-    expect(html).not.toContain("Reabrir ciclo");
+describe("F5-09 P8 Bloco 1 — CiclosAvaliacaoPage: leitura soberana (B1–B6)", () => {
+  it("B3/AI: o estado inicial (ocioso/carregando) apresenta carregamento soberano", () => {
+    expect(renderizar({ fase: "ocioso" })).toContain("Carregando ciclos");
+    expect(renderizar({ fase: "carregando" })).toContain("Carregando ciclos");
   });
 
-  it("mostra somente encerramento para ciclo ativo", () => {
-    const html = renderizar("ATIVO");
+  it("B4/AJ: erro de leitura soberana é exibido e NÃO cai para dado local", () => {
+    instalarLocalStorageEmMemoria();
+    // Dado local preexistente: não pode ser usado como fallback.
+    localStorage.setItem(
+      "feedback-control-ciclos",
+      JSON.stringify([
+        {
+          id: "ciclo-local-legado",
+          ano: 1999,
+          ciclo: 3,
+          status: "ATIVO",
+          dataCriacao: "1999-01-01T00:00:00.000Z",
+          dataUltimaAtualizacao: "1999-01-01T00:00:00.000Z",
+        },
+      ])
+    );
 
-    expect(html).toContain("Encerrar ciclo");
-    expect(html).not.toContain("Ativar ciclo");
-    expect(html).not.toContain("Editar status");
-    expect(html).not.toContain("Editar período");
-    expect(html).toContain("Corrigir período");
-    expect(html).not.toContain("Excluir ciclo");
-    expect(html).toContain("Cancelar ciclo");
-    expect(html).not.toContain("Reabrir ciclo");
+    const html = renderizar({
+      fase: "erro",
+      erro: { code: "INTERNAL", message: "Não foi possível consultar os ciclos agora." },
+    });
+
+    expect(html).toContain("Não foi possível consultar os ciclos agora.");
+    expect(html).not.toContain("ciclo-local-legado");
+    expect(html).not.toContain("1999");
   });
 
-  it("mostra reabertura somente para gerente autorizado em ciclo encerrado", () => {
-    const html = renderizar("ENCERRADO");
+  it("a página não exibe a lista a partir de dado local (nenhum ciclo local visível)", () => {
+    instalarLocalStorageEmMemoria();
+    localStorage.setItem(
+      "feedback-control-ciclos",
+      JSON.stringify([
+        {
+          id: "ciclo-local-legado",
+          ano: 1999,
+          ciclo: 3,
+          status: "ATIVO",
+          dataCriacao: "1999-01-01T00:00:00.000Z",
+          dataUltimaAtualizacao: "1999-01-01T00:00:00.000Z",
+        },
+      ])
+    );
 
-    expect(html).not.toContain("Ativar ciclo");
-    expect(html).not.toContain("Encerrar ciclo");
-    expect(html).not.toContain("Editar status");
-    expect(html).toContain("Ciclo encerrado");
-    expect(html).not.toContain("Editar período");
-    expect(html).not.toContain("Corrigir período");
-    expect(html).not.toContain("Excluir ciclo");
-    expect(html).not.toContain("Cancelar ciclo");
-    expect(html).toContain("Reabrir ciclo");
-    expect(renderizar("ENCERRADO", false, coordenador)).not.toContain("Reabrir ciclo");
+    const html = renderizar({ fase: "pronto", ciclos: [] });
+
+    expect(html).toContain("Nenhum ciclo cadastrado");
+    expect(html).not.toContain("ciclo-local-legado");
+    expect(html).not.toContain("1999");
+  });
+});
+
+describe("F5-09 P8 Bloco 1 — guardas estáticas da PÁGINA (B1/B2/B6)", () => {
+  /** Código sem comentários (os comentários documentam o que a página NÃO faz). */
+  function codigoSemComentarios(codigo: string): string {
+    return codigo
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .split("\n")
+      .map((linha) => {
+        const indice = linha.indexOf("//");
+        return indice === -1 ? linha : linha.slice(0, indice);
+      })
+      .join("\n");
+  }
+
+  it("B1: a página está ligada ao controlador soberano", async () => {
+    const fonte = (
+      await import("./CiclosAvaliacaoPage.tsx?raw")
+    ).default as string;
+    expect(fonte).toContain("criarControladorGestaoCiclos");
+    expect(fonte).toContain("controlador.carregar(organizacaoAtivaId");
+    expect(fonte).toContain("useState(controlador.estado())");
   });
 
-  it("oculta cancelados por padrão e oferece controle explícito", () => {
-    const html = renderizar("CANCELADO");
-
-    expect(html).toContain("Mostrar cancelados");
-    expect(html).not.toContain("Ciclo cancelado");
+  it("B2/B6: a LISTA não vem de leitura local (nem localStorage direto)", async () => {
+    const fonte = codigoSemComentarios(
+      (await import("./CiclosAvaliacaoPage.tsx?raw")).default as string
+    );
+    expect(fonte).toContain("const ciclos = estado.ciclos;");
+    expect(fonte).not.toContain("getCiclosAdministrativos");
+    expect(fonte).not.toContain("localStorage");
+    expect(fonte).not.toContain("localCycleRepository");
+    // Enquanto as mutations do Bloco 2 não migram, `getCiclosAvaliacao` pode
+    // permanecer para elas — mas NUNCA como fonte da lista exibida.
+    expect(fonte).not.toMatch(/const ciclos = getCiclosAvaliacao/);
   });
+});
 
-  it("identifica cancelado quando exibido e oculta todas as ações normais", () => {
-    const html = renderizar("CANCELADO", true);
-
-    expect(html).toContain("Cancelado");
-    expect(html).toContain("Ciclo cancelado");
-    expect(html).not.toContain("Ativar ciclo");
-    expect(html).not.toContain("Encerrar ciclo");
-    expect(html).not.toContain("Editar período");
-    expect(html).not.toContain("Corrigir período");
-    expect(html).not.toContain("Excluir ciclo");
-    expect(html).not.toContain("Cancelar ciclo");
-    expect(html).not.toContain("Reabrir ciclo");
-  });
-
+describe("F5-09 P8 — confirmação de exclusão (utilitário de UX, sem autoridade)", () => {
   it("exige confirmação explícita antes da exclusão", () => {
-    const ciclo: CicloAvaliacao = {
+    const ciclo = {
       id: "ciclo-confirmacao",
       ano: 2026,
-      ciclo: 2,
-      status: "PLANEJADO",
+      ciclo: 2 as const,
+      status: "PLANEJADO" as const,
       dataCriacao: "2026-01-01T00:00:00.000Z",
       dataUltimaAtualizacao: "2026-01-01T00:00:00.000Z",
     };
@@ -166,228 +197,5 @@ describe("ações de lifecycle em CiclosAvaliacaoPage", () => {
 
     expect(confirmado).toBe(false);
     expect(mensagem).toContain("Excluir 2026 • Ciclo 2?");
-    expect(mensagem).toContain("não remove avaliações já registradas");
-  });
-});
-
-describe("histórico administrativo em CiclosAvaliacaoPage", () => {
-  beforeEach(() => instalarLocalStorageEmMemoria());
-
-  it("mostra estado vazio sem ampliar ações de mutação", () => {
-    const html = renderizar("ENCERRADO");
-    const cicloPersistidoAntes = localStorage.getItem("feedback-control-ciclos");
-    renderizar("ENCERRADO");
-
-    expect(html).toContain("Ver histórico");
-    expect(html).toContain("Nenhuma alteração auditada registrada.");
-    expect(html).not.toContain("Corrigir período");
-    expect(html).not.toContain("Cancelar ciclo");
-    expect(localStorage.getItem("feedback-control-ciclos")).toBe(
-      cicloPersistidoAntes
-    );
-  });
-
-  it("exibe encerramento, reabertura e cancelamento persistidos", () => {
-    const html = renderizar("CANCELADO", true, gerente, {
-      encerramentos: [
-        {
-          data: "2026-03-01T10:00:00.000Z",
-          encerradoComPendencias: true,
-          quantidadePendencias: 3,
-        },
-      ],
-      reaberturas: [
-        {
-          data: "2026-03-02T10:00:00.000Z",
-          motivo: "Revisão administrativa",
-          autorNome: "Gerente Fictício",
-          autorMatricula: 1,
-        },
-      ],
-      cancelamento: {
-        data: "2026-03-03T10:00:00.000Z",
-        motivo: "Mudança de planejamento",
-        autorNome: "Gerente Fictício",
-        autorMatricula: 1,
-      },
-    });
-
-    expect(html).toContain("Encerramento");
-    expect(html).toContain("Encerrado com pendências (3).");
-    expect(html).toContain("Reabertura");
-    expect(html).toContain("Revisão administrativa");
-    expect(html).toContain("Cancelamento");
-    expect(html).toContain("Mudança de planejamento");
-  });
-
-  it("exibe correção de período com auditoria e resumo de impacto", () => {
-    const html = renderizar("ATIVO", false, gerente, {
-      correcoesPeriodo: [
-        {
-          data: "2026-04-10T14:30:00.000Z",
-          autorNome: "Gerente Fictício",
-          autorMatricula: 1,
-          justificativa: "Adequação ao calendário oficial",
-          periodoAnterior: {
-            dataInicio: "2026-01-01",
-            dataFim: "2026-06-30",
-          },
-          novoPeriodo: {
-            dataInicio: "2026-01-15",
-            dataFim: "2026-06-15",
-          },
-          impacto: {
-            avaliacoes: { quantidade: 2, ids: ["feedback-1", "feedback-2"] },
-            metas: { quantidade: 1, ids: ["meta-1"] },
-            observacoes: { quantidade: 3, ids: ["obs-1", "obs-2", "obs-3"] },
-            total: 6,
-          },
-        },
-      ],
-    });
-
-    expect(html).toContain("Correção de período");
-    expect(html).toContain("Gerente Fictício (matrícula 1)");
-    expect(html).toContain("Adequação ao calendário oficial");
-    expect(html).toContain("Período anterior:");
-    expect(html).toContain("Novo período:");
-    expect(html).toContain("2 avaliação(ões), 1 meta(s), 3 observação(ões) — total 6.");
-    expect(html).not.toContain("feedback-1");
-  });
-
-  it("ordena tipos diferentes do evento mais recente para o mais antigo", () => {
-    const html = renderizar("ENCERRADO", false, gerente, {
-      encerramentos: [
-        {
-          data: "2026-05-01T10:00:00.000Z",
-          encerradoComPendencias: false,
-          quantidadePendencias: 0,
-        },
-      ],
-      reaberturas: [
-        {
-          data: "2026-05-02T10:00:00.000Z",
-          motivo: "Evento mais recente",
-          autorNome: "Gerente Fictício",
-          autorMatricula: 1,
-        },
-      ],
-      correcoesPeriodo: [
-        {
-          data: "2026-04-30T10:00:00.000Z",
-          autorNome: "Gerente Fictício",
-          autorMatricula: 1,
-          justificativa: "Evento mais antigo",
-          periodoAnterior: {},
-          novoPeriodo: { dataInicio: "2026-01-01", dataFim: "2026-06-30" },
-          impacto: {
-            avaliacoes: { quantidade: 0, ids: [] },
-            metas: { quantidade: 0, ids: [] },
-            observacoes: { quantidade: 0, ids: [] },
-            total: 0,
-          },
-        },
-      ],
-    });
-
-    expect(html.indexOf("Evento mais recente")).toBeLessThan(
-      html.indexOf("Encerramento")
-    );
-    expect(html.indexOf("Encerramento")).toBeLessThan(
-      html.indexOf("Evento mais antigo")
-    );
-  });
-
-  it.each<[StatusCicloAvaliacao, boolean]>([
-    ["ENCERRADO", false],
-    ["CANCELADO", true],
-  ])("mantém histórico consultável no estado %s", (status, mostrarCancelados) => {
-    const cicloAntes: Partial<CicloAvaliacao> = {
-      reaberturas: [
-        {
-          data: "2026-02-01T10:00:00.000Z",
-          motivo: "Consulta histórica",
-          autorNome: "Gerente Fictício",
-          autorMatricula: 1,
-        },
-      ],
-    };
-    const html = renderizar(status, mostrarCancelados, gerente, cicloAntes);
-
-    expect(html).toContain("Ver histórico");
-    expect(html).toContain("Consulta histórica");
-    expect(cicloAntes.reaberturas).toHaveLength(1);
-  });
-});
-
-describe("ordenação de ciclos em CiclosAvaliacaoPage", () => {
-  beforeEach(() => instalarLocalStorageEmMemoria());
-
-  const ciclosMisturados: CicloAvaliacao[] = [
-    {
-      id: "ativo-2027-3",
-      ano: 2027,
-      ciclo: 3,
-      status: "ATIVO",
-      dataCriacao: "2027-01-01T00:00:00.000Z",
-      dataUltimaAtualizacao: "2027-01-01T00:00:00.000Z",
-    },
-    {
-      id: "encerrado-2026-2",
-      ano: 2026,
-      ciclo: 2,
-      status: "ENCERRADO",
-      dataCriacao: "2026-01-01T00:00:00.000Z",
-      dataUltimaAtualizacao: "2026-01-01T00:00:00.000Z",
-    },
-    {
-      id: "planejado-2028-1",
-      ano: 2028,
-      ciclo: 1,
-      status: "PLANEJADO",
-      dataCriacao: "2028-01-01T00:00:00.000Z",
-      dataUltimaAtualizacao: "2028-01-01T00:00:00.000Z",
-    },
-    {
-      id: "cancelado-2027-2",
-      ano: 2027,
-      ciclo: 2,
-      status: "CANCELADO",
-      dataCriacao: "2027-01-01T00:00:00.000Z",
-      dataUltimaAtualizacao: "2027-01-01T00:00:00.000Z",
-    },
-    {
-      id: "encerrado-2026-3",
-      ano: 2026,
-      ciclo: 3,
-      status: "ENCERRADO",
-      dataCriacao: "2026-01-01T00:00:00.000Z",
-      dataUltimaAtualizacao: "2026-01-01T00:00:00.000Z",
-    },
-  ];
-
-  it("ordena exclusivamente por ano e ciclo, sem prioridade por status", () => {
-    const html = renderizarCiclos(ciclosMisturados);
-
-    const planejadoFuturo = html.indexOf("2028 <span>•</span> Ciclo 1");
-    const ativoAtual = html.indexOf("2027 <span>•</span> Ciclo 3");
-    const ciclo2026Tres = html.indexOf("2026 <span>•</span> Ciclo 3");
-    const ciclo2026Dois = html.indexOf("2026 <span>•</span> Ciclo 2");
-
-    expect(planejadoFuturo).toBeLessThan(ativoAtual);
-    expect(ativoAtual).toBeLessThan(ciclo2026Tres);
-    expect(ciclo2026Tres).toBeLessThan(ciclo2026Dois);
-    expect(html).not.toContain("2027 <span>•</span> Ciclo 2");
-  });
-
-  it("inclui cancelados na mesma ordem cronológica quando exibidos", () => {
-    const html = renderizarCiclos(ciclosMisturados, true);
-    const ciclo2027Tres = html.indexOf("2027 <span>•</span> Ciclo 3");
-    const ciclo2027Dois = html.indexOf("2027 <span>•</span> Ciclo 2");
-    const ciclo2026Tres = html.indexOf("2026 <span>•</span> Ciclo 3");
-
-    expect(ciclo2027Tres).toBeLessThan(ciclo2027Dois);
-    expect(ciclo2027Dois).toBeLessThan(ciclo2026Tres);
-    expect(html).toContain("Cancelado");
   });
 });

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { can } from "../authorization/authorizationPolicy";
 import { useAuth } from "../auth/AuthContext";
@@ -7,13 +7,16 @@ import {
   criarCiclo,
   encerrarCiclo,
   excluirCiclo,
-  getCiclosAdministrativos,
   getCiclosAvaliacao,
   atualizarConfiguracaoMetasCiclo,
   atualizarPeriodoCiclo,
   atualizarStatusCiclo,
   formatarPeriodoCiclo,
 } from "../services/cicloAvaliacaoStorage";
+import {
+  criarControladorGestaoCiclos,
+  type ControladorGestaoCiclos,
+} from "../services/ciclosSoberanos/controladorGestaoCiclos";
 import {
   analisarPendenciasDoCiclo,
   concluirAvaliacoesNoEncerramentoDoCiclo,
@@ -34,6 +37,8 @@ import "../styles/ciclos.css";
 
 type CiclosAvaliacaoPageProps = {
   mostrarCanceladosInicial?: boolean;
+  /** Injeção do controlador soberano (testes). Em produção é criado pela página. */
+  controlador?: ControladorGestaoCiclos;
 };
 
 type EventoHistoricoCiclo =
@@ -115,6 +120,7 @@ function formatarDataHoraHistorico(data: string): string {
 
 function CiclosAvaliacaoPage({
   mostrarCanceladosInicial = false,
+  controlador: controladorInjetado,
 }: CiclosAvaliacaoPageProps = {}) {
   const navigate = useNavigate();
   const { usuarioAtual } = useUsuarioAtual();
@@ -145,6 +151,40 @@ function CiclosAvaliacaoPage({
   const [metasIndividuaisEdicao, setMetasIndividuaisEdicao] =
     useState<0 | 1 | 2 | 3>(0);
   const [erro, setErro] = useState("");
+
+  /**
+   * F5-09 P8 (Bloco 1) — LEITURA SOBERANA: o controlador puro é a ÚNICA fonte da
+   * lista exibida. Nada de `getCiclosAdministrativos`/`getCiclosAvaliacao`/
+   * `localStorage` para listar ciclos; sem fallback local em erro.
+   */
+  const controlador = useMemo(
+    () => controladorInjetado ?? criarControladorGestaoCiclos(),
+    [controladorInjetado]
+  );
+  const [estado, setEstado] = useState(controlador.estado());
+
+  // Carga ao entrar/trocar de organização (o controlador invalida a geração
+  // anterior, então resposta antiga não substitui o contexto novo).
+  useEffect(() => {
+    let ativo = true;
+    void (async () => {
+      await controlador.carregar(organizacaoAtivaId ?? null, {
+        incluirCancelados: mostrarCancelados,
+      });
+      if (ativo) setEstado(controlador.estado());
+    })();
+    return () => {
+      ativo = false;
+    };
+  }, [controlador, organizacaoAtivaId, mostrarCancelados]);
+
+  // Unmount/logout descartam respostas em voo.
+  useEffect(
+    () => () => {
+      controlador.descartar();
+    },
+    [controlador]
+  );
   const podeGerenciarCiclos = usuarioAtual
     ? can(
         {
@@ -175,7 +215,7 @@ function CiclosAvaliacaoPage({
     );
   }
 
-  const ciclos = getCiclosAdministrativos(mostrarCancelados);
+  const ciclos = estado.ciclos;
 
   const totalAtivos = ciclos.filter((item) => item.status === "ATIVO").length;
   const totalPlanejados = ciclos.filter((item) => item.status === "PLANEJADO").length;
@@ -570,6 +610,18 @@ function CiclosAvaliacaoPage({
 
         {erro && <div className="cycle-alert cycle-alert--error">{erro}</div>}
       </section>
+
+      {(estado.fase === "ocioso" || estado.fase === "carregando") && (
+        <div className="cycle-alert" role="status">
+          Carregando ciclos…
+        </div>
+      )}
+
+      {estado.fase === "erro" && estado.erro && (
+        <div className="cycle-alert cycle-alert--error" role="alert">
+          {estado.erro.message}
+        </div>
+      )}
 
       <section className="cycle-list">
         <div className="cycle-list-heading">
