@@ -174,7 +174,7 @@ do $$
 declare
   v_codes text[];
   v_esperado text[] := array[
-    'collaborator.create','collaborator.edit','collaborator.read','cycle.read',
+    'collaborator.create','collaborator.edit','collaborator.read','cycle.manage','cycle.read',
     'membership.read','org.catalog.manage','org.structure.manage','settings.manage'
   ]::text[];
 begin
@@ -183,9 +183,13 @@ begin
   join public.capabilities c on c.id = rc.capability_id
   where rc.access_role_id = 'c0000000-0000-4000-8000-0000000000f1';
   if v_codes is distinct from v_esperado then
-    raise exception '[FAIL] bundle admin divergente (F5-04 D15)';
+    raise exception '[FAIL] bundle admin divergente (F5-04 D15 + D28)';
   end if;
-  raise notice '[PASS] bundle admin = 8 capabilities FUNCIONAIS (sem controle, sem deprecado, sem confidencial)';
+  -- F5-09 P7 (D28): `cycle.manage` entra ADITIVAMENTE no bundle administrativo
+  -- (a gestao de ciclo precisa ser executavel em producao); as tres excepcionais
+  -- (`cycle.cancel`/`cycle.reopen`/`cycle.period.correct`) permanecem FORA e sao
+  -- validadas em `11-validar-f5-09-p7.sql`.
+  raise notice '[PASS] bundle admin = 9 capabilities FUNCIONAIS (F5-04 D15 + D28: cycle.manage aditivo; sem controle, sem deprecado, sem confidencial)';
 end $$;
 
 -- ============================================================================
@@ -232,7 +236,7 @@ do $$
 declare
   v_codes text[];
   v_esperado text[] := array[
-    'collaborator.create','collaborator.edit','collaborator.read','cycle.read',
+    'collaborator.create','collaborator.edit','collaborator.read','cycle.manage','cycle.read',
     'membership.read','org.catalog.manage','org.structure.manage','settings.manage'
   ]::text[];
 begin
@@ -242,9 +246,11 @@ begin
     'd5a00000-0000-0000-0000-0000000000a1'
   );
   if v_codes is distinct from v_esperado then
-    raise exception '[FAIL] resolver ADMIN_A/Alfa divergente';
+    raise exception '[FAIL] resolver ADMIN_A/Alfa divergente (F5-04 D15 + F5-09 P7 D28)';
   end if;
-  raise notice '[PASS] ADMIN_A (sem collaborator) resolve 8 capabilities funcionais em Alfa';
+  -- F5-09 P7 (D28): o bundle `admin` ganhou `cycle.manage` aditivamente, então a
+  -- resolução efetiva do ADMIN passou de 8 para 9 capabilities funcionais.
+  raise notice '[PASS] ADMIN_A (sem collaborator) resolve 9 capabilities funcionais em Alfa (D28: cycle.manage aditivo)';
 end $$;
 
 do $$

@@ -230,6 +230,17 @@ jobs:
             < supabase/validacao/10-validar-f5-09-p5.sql
 
       # ----------------------------------------------------------------------
+      # F5-09 (P7): reconciliacao ADITIVA do catalogo (D28 — `cycle.manage` no
+      # bundle `admin`; as excepcionais ficam FORA) + integridade herdada de
+      # P5/P6. Nao exige cenario proprio (valida o estado do catalogo/bundle).
+      # ----------------------------------------------------------------------
+      - name: Run F5-09 P7 validation (D28 no bundle admin + regressoes P5/P6)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/11-validar-f5-09-p7.sql
+
+      # ----------------------------------------------------------------------
       # Regressão F5-06/F5-07 (§23.4): cenários independentes, com prefixos de
       # UUID próprios (`d6`/`d7`), reaplicados antes de cada validação.
       # ----------------------------------------------------------------------
