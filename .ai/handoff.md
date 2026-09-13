@@ -75,7 +75,12 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   (`name` citado) imediatamente após a validação P3. `dsh-p9-sql.ps1` — 2 entradas
   novas após `24-validar-f5-10-p3.sql` (41 entradas no total).
 - **Gates reais desta rodada:** db reset + bateria SQL completa na ordem do CI (**41/41 entradas, falhas=0**) + `npm test`/`npm run build`/`npm run lint` verdes + `git diff --check` exit 0. Elevações de acesso nesta rodada:
-  1 (batch unico: geracao da migration, bateria SQL e gates npm).
+   **9 batches privilegiados** nesta fase: 1 preflight obrigatório (`db reset`) + 8
+   execuções do fluxo de fechamento/depuração — cada rodada revelou **1 defeito real**
+   no validador novo da P4 (encoding do gerador, literal de array sem cast, ator de
+   mutação, colisão de fixture, contagens/autoria da guarda final), e o gate é
+   fail-closed (aborta sem commitar). Registro honesto: não houve elevação "extra"
+   por conveniência; houve reteste após correção em cada rodada.
 - **Divergência registrada:** o reconhecimento `.git/p4-recon/C-validacao.md`
   supunha 4 policies novas; o contrato congelado da P4 fixa **2** (as guardas
   seguem o contrato). Os ajustes de `22-validar-f5-10-p2.sql` e
