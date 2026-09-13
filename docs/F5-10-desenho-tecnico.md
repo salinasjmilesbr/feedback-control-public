@@ -1,627 +1,560 @@
-# F5-10 — Metas soberanas no PostgreSQL (desenho técnico)
+# F5-10 — Metas soberanas no PostgreSQL (contrato normativo)
 
-> **Atividade:** F5-10 — auditoria arquitetural/read-only + desenho técnico.
-> **Issue:** #208. **Base:** `main` = `285b2dd` (squash da F5-09/P9, integrada).
+> **Atividade:** F5-10 — Issue **#208**. **Base:** `main` = `285b2dd` (squash da F5-09/P9).
 > **Branch:** `docs/f5-10-metas-soberanas-desenho`.
-> **Natureza:** documento de contrato. **Nenhum código funcional foi alterado** nesta atividade.
-> **Convenção de referência:** `docs/F5-09-desenho-tecnico.md` (seções 1–20) e
-> `docs/F5-09-duvidas.md` (Q-F5-09-1..3 ratificadas).
+> **Natureza:** documento **normativo** — fecha o contrato para implementação. **Nenhum código funcional foi alterado.**
+> **Histórico:** `98549b3` (auditoria + desenho inicial), `f259c08` (achados do 3º relatório),
+> esta revisão (fechamento de Q1–Q14 conforme revisão GPT sobre `f259c08`).
+> **Regras de leitura:** onde este documento diz **DECIDE**, a decisão está fechada e não pode ser
+> reinterpretada na implementação. O que não pôde ser fechado aparece em **§18 BLOCKERS DOCUMENTAIS**,
+> nunca como escolha deixada ao implementador.
 
 ## 1. Objetivo
 
-Definir o contrato **soberano** do domínio de Metas: identidade canônica,
-lifecycle, limites por ciclo, aprovações, progresso/finalização, trilha de
-auditoria append-only, autorização (Policy Engine + capabilities + scopes),
-RLS own-tenant, RPCs/Edge, cutover do frontend e eliminação do `localStorage`
-como fonte funcional.
+Substituir a autoridade funcional de metas (hoje `localStorage`) por **autoridade soberana no
+PostgreSQL**, com identidade UUID, lifecycle explícito, aprovações como fatos auditáveis, limites
+invariantes no banco, autorização pelo Policy Engine, RLS fail-closed, Edge própria e cutover sem
+fallback.
 
 ## 2. Escopo / não escopo
 
-**Escopo:** o domínio de metas de ciclo (negócio/projeto e individuais), seus
-limites por ciclo, aprovações de coordenador e gerente, progresso, finalização,
-histórico e a substituição do acervo local por autoridade no PostgreSQL.
+**Escopo:** metas de ciclo (`NEGOCIO_PROJETO` e `INDIVIDUAL`), limites por ciclo, aprovações de
+coordenador e gerente, progresso, finalização/revisão, histórico, e a eliminação do `localStorage`
+como fonte funcional.
 
-**Não escopo (dívidas de outros domínios — não tratar aqui):**
-
-- **F5-11 (observações)**: `observation.*` segue como está; nada neste desenho
-  cria tabela/RPC/Edge de observação.
-- **F5-07**: histórico do colaborador e a pendência
-  `ciclo_listar_colaborador_por_ciclo` (§13.6 do desenho da F5-09).
-- **F5-08**: estrutura organizacional e catálogos (apenas consumidos).
-- **F5-09**: ciclo, sua trilha e suas RPCs (apenas consumidos/reusados).
-- Reescrita do modelo de avaliação (F5-06): metas **não** compõem nota hoje —
-  “Cumprimento de metas e compromissos” é apenas texto de subcritério
-  (`src/data/modeloAvaliacao.ts:62`); nenhuma dependência de nota foi encontrada.
+**Não escopo:** F5-11 (observações; `observation.*` intocado), F5-07 (histórico organizacional e a
+pendência `ciclo_listar_colaborador_por_ciclo`), F5-08 (estrutura/catálogos — apenas consumidos),
+F5-09 (ciclo/trilha/RPCs — apenas consumidos), nota de avaliação (F5-06; **não há** vínculo entre
+meta e nota — “Cumprimento de metas e compromissos” é texto de subcritério).
 
 ## 3. Inventário auditado (base `285b2dd`)
 
-### 3.1 Modelo de dados atual — `src/types/Meta.ts` (lido integralmente)
+### 3.1 Modelo atual — `src/types/Meta.ts` (81 linhas, lido integralmente)
 
-| Campo | Tipo | Observação |
-|---|---|---|
-| `id` | `string` | gerado **no browser** (`crypto.randomUUID()` em `metaStorage`) |
-| `colaboradorMatricula` / `colaboradorNome` | `number` / `string` | vínculo por **matrícula** + nome desnormalizado |
-| `cicloId` | `string` | UUID de ciclo **gerado no browser** por `cicloAvaliacaoStorage` |
-| `ano`, `ciclo` | `number`, `1\|2\|3` | `(ano, numero)` copiado **denormalizado** |
-| `tipo` | `NEGOCIO_PROJETO \| INDIVIDUAL` | dois tipos; **não existe** meta de equipe |
-| `descricao`, `kpi`, `valorAlvo` | `string` | conteúdo |
-| `status` | `EM_ANDAMENTO \| ATINGIDA \| NAO_ATINGIDA` | `Meta.ts:5-8` |
-| `aprovacaoCoordenador` / `aprovacaoGerente` | `{ matricula, nome, data }?` | **estado autorizativo no próprio objeto** (`:61-62`) |
-| `resultadoAtual`, `progressoPercentual`, `dataUltimoAcompanhamento` | `string?`, `number?`, `string?` | acompanhamento |
-| `resultadoFinal`, `atingida`, `dataFechamento` | `string?`, `boolean?`, `string?` | fechamento |
-| `dataCriacao` / `dataUltimaAtualizacao` | `string` | ISO local |
-| `excluida` / `dataExclusao` | `boolean`, `string?` | **exclusão lógica** (não física) |
-| `historico` | `HistoricoMeta[]` | trilha **dentro do objeto**, com `autorMatricula`/`autorNome` |
+`Meta` (`:42-81`): `id` **UUID do browser** (`metaStorage.ts:281`); `colaboradorMatricula`+`colaboradorNome`
+(vínculo por matrícula, `:44-45`); `cicloId` **UUID de ciclo fabricado no browser**
+(`cicloAvaliacaoStorage.ts:54,69,142`) **e** `ano`/`ciclo` denormalizados (`:48-49`); `tipo`
+(`:1-3`); `descricao`/`kpi`/`valorAlvo` (texto livre); `status` ∈ `EM_ANDAMENTO|ATINGIDA|NAO_ATINGIDA`
+(`:5-8`); `aprovacaoCoordenador?`/`aprovacaoGerente?` = `{matricula,nome,data}` (`:20-24`) —
+**estado autorizativo no objeto**; `resultadoAtual?`, `progressoPercentual?` (0..100 digitado),
+`dataUltimoAcompanhamento?`; `resultadoFinal?`, `atingida?`, `dataFechamento?`; `dataCriacao`/
+`dataUltimaAtualizacao` (relógio do browser); `excluida`/`dataExclusao?` (soft delete);
+`historico: HistoricoMeta[]` (`:26-40`, com `autorMatricula`/`autorNome`).
+`AcaoHistoricoMeta` (`:10-18`) já enumera 8 ações. **Não há** `version`, `motivo`/`justificativa`
+nem schema-version local.
 
-`AcaoHistoricoMeta` (`Meta.ts:10-18`) já enumera as ações desejadas:
-`CRIACAO`, `EDICAO`, `ATUALIZACAO_PROGRESSO`, `FINALIZACAO`, `EXCLUSAO`,
-`APROVACAO_COORDENADOR`, `APROVACAO_GERENTE`, `INVALIDACAO_APROVACOES`.
+### 3.2 Persistência
 
-### 3.2 Persistência hoje
+- **Único** acervo: `localStorage["feedback-control-metas"]` (`metaStorage.ts:24,27,37`); toda
+  mutação regrava o **array inteiro** (`:304,343,456,492,543,604,658`).
+- **Fallback silencioso com perda de dado:** JSON corrompido ⇒ `catch { return [] }` (`:31-33`).
+- **Segundo produtor da mesma chave:** `src/services/geradorDadosTeste.ts:525-532` (DEV-gated).
+- **Não existe** tabela, RPC, Edge, repositório, porta ou policy de metas; o CI **proíbe** meta no
+  schema hoje (`supabase/validacao/15-validar-f5-09-p9.sql:2095-2132` — guarda a substituir em P1).
+- **Não há** dual-write: existe o inverso — acervo local **sem contraparte remota** (cutover =
+  backfill + construção).
 
-- **Único** acervo: `localStorage["feedback-control-metas"]`
-  (`src/services/metaStorage.ts:24,27,37`). Não existe tabela, RPC, Edge,
-  repositório ou policy de meta (três buscas independentes: `create table` com
-  `goal|meta` ⇒ nenhum; `supabase/migrations` só tem os 3 códigos de catálogo;
-  nenhum arquivo em `src/infrastructure/supabase/**` cita meta).
-- O CI **proíbe** meta no schema hoje: `supabase/validacao/15-validar-f5-09-p9.sql`
-  (≈`:2095-2132`) falha se existir tabela/RPC/coluna com `%goal%`/`%meta%`/
-  `%observac%`. **Consequência:** a F5-10 terá de ajustar esse validador na
-  própria atividade (é um guarda de “não antecipar F5-10”, não um contrato de
-  produto).
-- `getMetasDoColaboradorNoCiclo(colaboradorMatricula, cicloId)`,
-  `getMetasDoCiclo(cicloId)`, `contarMetasPorTipo(...)` — todas leem o blob e
-  filtram em memória (`metaStorage.ts:40-81`).
-- **Fallback silencioso com perda de dado:** JSON corrompido ⇒ `catch { return [] }`
-  (`metaStorage.ts:31-33`) e a escrita seguinte persiste apenas o array novo — o
-  acervo anterior desaparece **sem erro visível**.
-- **Segundo produtor da mesma chave:** `src/services/geradorDadosTeste.ts:525-532`
-  grava metas direto na chave `feedback-control-metas` (fixture, DEV-gated) —
-  o serviço dono não é o único autor do blob.
+### 3.3 Lifecycle real
 
-### 3.3 Lifecycle real (implementado)
+| Transição | Como ocorre hoje |
+|---|---|
+| criar | `criarMeta` (`:249-306`), valida ciclo `ATIVO` **lido do `localStorage`** (`:89-98`) e limite do tipo (`:259-272`) |
+| editar | `atualizarMeta` (`:308-390`); invalida aprovações se `alteracaoRelevante` (compara **só** `descricao`/`kpi`/`valorAlvo`, `:337-340`, `:379-384`) |
+| progresso | `atualizarAcompanhamentoMeta` (`:570-629`); **não** invalida aprovação |
+| finalizar | `finalizarMeta` (`:631-684`); **não checa o status atual** ⇒ re-finalização **silenciosa** (a UI oferece “Revisar fechamento”, `MinhasMetasPage.tsx:521`) |
+| reabrir | **não existe** |
+| excluir | `excluirMeta` (`:523-568`), lógica |
+| aprovar | `aprovarMeta` (`:392-521`), `domainState: dominioPermite(true)` **hardcoded** (`:421`), idempotência por *early-return* (`:454`, `:490`) |
 
-| Operação | Onde | Como decide hoje |
-|---|---|---|
-| Criação/edição | `metaStorage.ts` (criar/atualizar) | valida ciclo ATIVO **lido do `localStorage`** (`validarCicloAtivo`, `:89-98`), aplica limite do tipo (`limiteDoTipo`, `:83-87`) e chama `authorize("goal.write")` com **mundo sintético** (`:106-127`) |
-| Limite por tipo | `metaStorage.ts:83-87`, `:259-272` **e** UI (`MinhasMetasPage.tsx:124-128`) | duplicado em duas camadas |
-| Aprovação | `metaStorage.ts:418-423` (autorização) e `:427-438`, `:454`, `:490` (regra) | `domainState: dominioPermite(true)` **hardcoded**; idempotência por *early-return* local; relação resolvida por `gestorMatriculaLegada`/`getGerenteResponsavelNoCiclo` |
-| Exigência de aprovação do coordenador | `metaExigeAprovacaoCoordenador` (`:171-199`) | “coordenador = nível **intermediário**” (`gestorTemSuperior`), **fail-closed** sem evidência estrutural |
-| Progresso/finalização | `metaStorage.ts` (acompanhamento/finalização) | grava campos no objeto e empurra um `HistoricoMeta` no array |
-| Exclusão | `metaStorage.ts` | lógica (`excluida = true`), nunca física |
-| Histórico | `Meta.historico[]` | array **mutável** dentro do objeto |
+**Regras de aprovação vigentes (preservar a semântica):**
+`metaExigeAprovacaoCoordenador` (`:171-199`) = “coordenador = nível **intermediário**” (`gestorTemSuperior`),
+**fail-closed** sem evidência estrutural; `podeAprovarMetaNoCiclo` (`:220-247`) = gestor direto
+(coordenador) **ou** raiz da cadeia (gerente); `metaEstaAprovada` (`:201-218`) =
+`(!exigeCoordenador || aprovacaoCoordenador) && aprovacaoGerente` ⇒ **o gerente é sempre exigido**.
+Quota: `quantidadeMetasNegocio/Individuais` no ciclo legado, `0|1|2|3`, alterável **só em
+`PLANEJADO`** (`cicloAvaliacaoStorage.ts:327-359`) — e o caminho soberano **não a transporta**
+(F5-09 D24). Agregação atual: média aritmética simples com `Math.round`
+(`MinhasMetasPage.tsx:660`, `AcompanhamentoMetasPage.tsx:137-144`). **Não há** peso, nota nem
+agregação por ciclo.
 
-Estados: apenas `EM_ANDAMENTO` → `ATINGIDA`/`NAO_ATINGIDA`; **não há** transição
-para “cancelada”, nem estado de aprovação separado do conteúdo.
+### 3.4 Autorização atual
 
-### 3.4 Autorização atual (auditada)
+`goal.read`/`goal.write`/`goal.approve` existem no catálogo desde a F4-01
+(`20260908000001_authorization_system_catalog.sql:53-58`) e **nenhuma role/bundle os concede**.
+`authorizationPolicy.ts:174-212` tem `case "goal"` com alvo `{type:"collaborator"}` e `domainState`
+**declarado pelo cliente**; `resourceContextReal.ts:33` mantém `goal` em
+`TIPOS_RECURSO_NAO_SOBERANOS` (⇒ `TARGET_NAO_SOBERANO` no enforcement). Em HOMOLOG/PROD o mundo
+sintético devolve vazio (`providers/localWorld.ts:30-37`) ⇒ **o domínio é integralmente negado**;
+em DEV é concedido por fixture (`:59-70`). `AcompanhamentoMetasPage.tsx:80-107` decide acesso por
+`funcao` textual + `can()` (UX, não autorização).
 
-- Catálogo: `goal.read` / `goal.write` / `goal.approve` existem desde a F4-01
-  (`supabase/migrations/20260908000001_authorization_system_catalog.sql:53-58`),
-  **sem nenhuma implementação** e **sem nenhuma role/bundle que os conceda**.
-- `authorizationPolicy.ts:174-212`: existe `case "goal"`, mas o alvo é
-  `{ type:"collaborator", id:<dono> }` e o `domainState` é **declarado pelo
-  chamador** (`cycle.status` lido do `localStorage`).
-- `resourceContextReal.ts:33`: `TIPOS_RECURSO_NAO_SOBERANOS = ["goal","observation"]`
-  ⇒ no caminho de enforcement, meta é `TARGET_NAO_SOBERANO`/`TARGET_INVALID`
-  (`contextoAutorizacao.test.ts:287-291`, `actorContext.test.ts:173`).
-  Ou seja: **meta não é tipo soberano** e não passa pelo enforcement; o fluxo
-  real só funciona porque endereça `collaborator`.
-- Em produção o `goal.*` é **indecidível como ALLOW** pelo caminho
-  role→capability: o mundo sintético de DEV devolve vazio fora de `DEV`
-  (`providers/localWorld.ts:30-37`, `config/ambiente.ts:117-118`) ⇒ DENY total.
-- `AcompanhamentoMetasPage.tsx:80-107` monta `AuthorizationContext` com o campo
-  **textual** `funcao` e usa `can("goal.approve.*"/"goal.view.admin")` para
-  decidir acesso e botões — `can()` é UX, não autorização.
+### 3.5 Consumidores e acoplamentos
 
-### 3.5 Consumidores (mapa completo no relatório de auditoria da rodada)
+Diretos: `MinhasMetasPage`, `AcompanhamentoMetasPage` (maior esforço de cutover), `PainelCicloPage`,
+`MinhaAvaliacaoPage`, `PainelCiclosCoordenadorPage`. De arrasto: `NovoFeedbackPage`/`EditarFeedbackPage`
+(aviso de meta sem aprovação — **não bloqueia**), `MinhaAvaliacaoDetalhePage`, `exportarAvaliacaoPdf.ts`
+(“Metas do Ciclo”), `cicloEquipeService.ts` (pendência `papel:"Metas"`),
+`correcaoPeriodoCicloService.ts`/`impactoCorrecaoPeriodoCiclo.ts` — **inconsistência factual**:
+avaliações/observações por `(ano,ciclo)` (`:42`,`:59-61`) e metas por `cicloId` (`:52`).
+`PainelCicloPage.tsx:102,137-167` decide KPI por `funcao`/`gestorDiretoMatricula` local.
+Colisão de identidade já observável: a gestão navega com UUID soberano (`CiclosAvaliacaoPage.tsx:122,484`)
+e `PainelCicloPage.tsx:77`/`AcompanhamentoMetasPage.tsx:55` resolvem o mesmo `:cicloId` contra o ciclo
+local ⇒ “Metas não encontradas”.
 
-**Metas diretas:** `MinhasMetasPage` (ALTO esforço de cutover),
-`AcompanhamentoMetasPage` (ALTO), `PainelCicloPage`, `MinhaAvaliacaoPage`,
-`PainelCiclosCoordenadorPage`.
+### 3.6 Testes existentes
 
-**Arrastam metas junto:** `NovoFeedbackPage` (aviso de “metas sem aprovação
-formal”, não bloqueia), `EditarFeedbackPage` (idem), `MinhaAvaliacaoDetalhePage`
-(exibição), `exportarAvaliacaoPdf.ts` (seção “Metas do Ciclo”), `cicloEquipeService.ts`
-(pendência `papel:"Metas"` no fechamento), `correcaoPeriodoCicloService.ts` +
-`impactoCorrecaoPeriodoCiclo.ts` (impacto da correção de período).
-
-**Inconsistência factual encontrada:** no impacto da correção de período,
-avaliações/observações são filtradas por `(ano, ciclo)` e metas por `cicloId`
-(`impactoCorrecaoPeriodoCiclo.ts:42` vs `:52` vs `:59-61`) — dois universos de
-identidade no mesmo cálculo.
-
-### 3.6 Testes existentes que tocam metas
-
-`metaStorage.test.ts`, `AcompanhamentoMetasPage.test.tsx`,
-`authorizationPolicy.test.ts` (paridade `goal.approve` × `podeAprovarMetaNoCiclo`
-em `:909-919`), `estruturaSoberanaCliente.test.ts`, `cutoverEstruturalServicos.test.ts`,
+`metaStorage.test.ts` (**5 casos**, nenhum cobre criação com sucesso, limite excedido, invalidação,
+progresso fora de 0..100, re-finalização ou soft delete), `AcompanhamentoMetasPage.test.tsx` (3),
+`authorizationPolicy.test.ts` (paridade `goal.approve` × `podeAprovarMetaNoCiclo`, ~`:909-916`),
+`estruturaSoberanaCliente.test.ts`, `cutoverEstruturalServicos.test.ts`,
 `cancelamentoCicloService.test.ts`, `reaberturaCicloService.test.ts`,
-`correcaoPeriodoCicloService.test.ts`, `cicloEquipeService.test.ts`,
-`PainelCicloPage.test.tsx`, `estruturaUiSeguranca.test.ts` (listas de exceção
-`:391-411`), `resetBaseDesenvolvimento.test.ts` e — **importante** —
-`p9MatrizIntegrada.test.ts:145-158` + `15-validar-f5-09-p9.sql`: invariantes de
-“nenhuma antecipação de F5-10” que a F5-10 **inverte por contrato**.
+`correcaoPeriodoCicloService.test.ts`, `impactoCorrecaoPeriodoCiclo.test.ts`,
+`cicloEquipeService.test.ts`, `estruturaUiSeguranca.test.ts` (guardas `:504-509`, `:516-525`,
+`:527-538`, `:553-579`), `controladorGestaoCiclos.test.ts:775-791`, `p9MatrizIntegrada.test.ts:145-158`
+e o invariante SQL `15-validar-f5-09-p9.sql:2095-2132`.
 
 ### 3.7 O que **não existe** (declarado)
 
-Tabela/RPC/Edge/RLS de meta; `MetaProgresso` e `aprovacaoMeta` como tipos
-(zero ocorrências em `src/`); **peso** de meta (o único `peso` em testes é peso
-de colegiado na avaliação); meta de equipe; bridge `(ano,numero)` ↔ UUID de ciclo
-para metas; qualquer `expectedVersion`, `operationId` ou trilha append-only.
+Tabela/RPC/Edge/porta/RLS de meta · `MetaProgresso`/`aprovacaoMeta` como tipos · **peso** de meta ·
+nota de meta · meta de equipe · bridge `(ano,numero)`↔UUID **para metas** · `version`/`expectedVersion` ·
+`motivo` · reabertura · versionamento de schema local · sincronização multi-aba/lock.
 
 ## 4. Mapas exigidos
 
 | # | Item | Situação |
 |---|---|---|
-| a | modelo de dados | §3.1 — blob único, matrícula+nome, `cicloId` fabricado, `(ano,numero)` denormalizado, histórico embutido |
-| b | lifecycle | §3.3 — 3 estados, sem cancelamento, aprovação fora do estado |
-| c | regras de negócio | ciclo ATIVO; limite por tipo (negócio/individuais); coordenador = nível intermediário; gerente = raiz da cadeia; fail-closed sem estrutura |
+| a | modelo | §3.1 — um blob, matrícula+nome, `cicloId` fabricado, `(ano,numero)` denormalizado, histórico embutido |
+| b | lifecycle | §3.3 — 3 estados, aprovação ortogonal, re-finalização silenciosa, sem reabertura |
+| c | regras | ciclo `ATIVO`; limite por tipo; coordenador=intermediário; gerente=raiz; fail-closed; gerente sempre exigido; agregação por média |
 | d | autorização | §3.4 — 3 capabilities sem concessão; alvo `collaborator`; meta não soberana; estado declarado pelo cliente |
-| e | dependências legadas | `localStorage` (blob único), UUID de ciclo no browser, matrícula/nome, `localWorld` DEV |
-| f | riscos de concorrência | last-write-wins no blob; sem versão; duas abas sobrescrevem; retry duplica histórico |
-| g | riscos de multiusuário | aprovação e progresso concorrentes; decisões por `funcao` textual; auditoria sem autoria soberana |
-| h | dual-read/dual-write/fallback | **dual-write não existe** (é o inverso: acervo local **sem** contraparte remota); fallback silencioso existe via `localWorld` em DEV |
-| i | contratos a reutilizar | §10 (padrões da F5-09: UUID, trilha append-only, `expected_version`, idempotência, lock por organização, RLS policy-antes-do-grant, Edge `index/core/contrato`, adapter fail-closed) |
-| j | dívidas fora do escopo | §2 — F5-11, F5-07 §13.6, F5-08, nota de avaliação, `RelatoriosPage` |
+| e | legado | `localStorage` (blob), UUID de ciclo no browser, matrícula/nome, mundo sintético DEV, quota no ciclo legado |
+| f | concorrência | last-write-wins do array; TOCTOU na quota e na aprovação; sem versão/lock; multi-aba sem sincronização |
+| g | multiusuário | aprovações concorrentes se sobrescrevem; decisões por `funcao` textual; autoria não soberana |
+| h | dual-read/write/fallback | **sem dual-write**; fallback silencioso (JSON corrompido ⇒ `[]`); fallback de mundo DEV |
+| i | contratos a reutilizar | §13 e §17 (padrões F5-09: UUID, trilha append-only, `expected_version`, idempotência, lock, RLS policy-antes-do-grant, Edge `index/core/contrato`, adapter fail-closed) |
+| j | dívidas fora do escopo | §2 |
 
-## 5. Problemas e resíduos a resolver pela F5-10
+## 5. Problemas e resíduos
 
-1. **Construção, não troca de fonte:** não há backend; será preciso **construir +
-   backfill** de um acervo sem tenant, sem autoria confiável e com ids fabricados.
-2. **Duas identidades de ciclo incompatíveis:** `Meta.cicloId` (UUID local)
-   ≠ `evaluation_cycles.id` (UUID soberano), **sem bridge**; `cicloAvaliacaoStorage`
-   ainda **fabrica** ciclos no caminho de leitura ⇒ metas órfãs por construção.
-3. **Autorização inoperante em produção:** `goal.*` sem concessão e mundo
-   sintético ⇒ DENY; em DEV concede `goal.write`+SELF a qualquer ativo.
-4. **Estado autorizativo dentro do objeto mutável do cliente** (aprovações +
-   histórico), com idempotência por *early-return* local — **duas aprovações
-   concorrentes (coordenador e gerente) se sobrescrevem**, porque cada
-   `persistir` regrava o array inteiro a partir da própria cópia
-   (`metaStorage.ts:401-456`, `:490-492`).
-5. **Decisão estrutural assíncrona lida de forma síncrona:** o serviço chama
-   `estruturaSoberanaEfetiva()` sincronamente (`metaStorage.ts:158`, `:233`,
-   `:427-433`) enquanto a projeção estrutural é carregada de forma assíncrona
-   pelo shell (`src/pages/useEstruturaSoberanaDoCliente.ts:59`); se a decisão
-   ocorrer antes de “pronta” (ou em `indisponivel`), o resultado é
-   `ESTRUTURA_SOBERANA_VAZIA` ⇒ fail-closed **silencioso** (a tela de metas não
-   sinaliza a indisponibilidade).
-5. **Regra de negócio duplicada** (limite em serviço e UI; relação de aprovação
-   no serviço e no engine; assimetria entre os dois ramos de
-   `metaStorage.aprovarMeta` — o ramo do gerente recomputa a estrutura, o do
-   coordenador recebe pronta).
-6. **Consumidores arrastam metas** com resoluções de ciclo diferentes (`(ano,numero)`,
-   `cicloId` local, `id` de URL).
+1. **Construção + backfill**, não troca de fonte (não há backend).
+2. **Duas identidades de ciclo incompatíveis, sem bridge**; `cicloAvaliacaoStorage` **fabrica** ciclos
+   no caminho de leitura ⇒ metas órfãs por construção.
+3. **Autorização inoperante em produção** (`goal.*` sem concessão + mundo sintético ⇒ DENY).
+4. **Estado autorizativo dentro do objeto mutável** do cliente; idempotência por *early-return*;
+   **aprovações concorrentes se sobrescrevem** (array inteiro regravado: `:401-456`, `:490-492`).
+5. **Decisão estrutural síncrona sobre projeção assíncrona** ⇒ fail-closed **silencioso**
+   (`useEstruturaSoberanaDoCliente.ts:59`).
+6. **Consumidores de arrasto** com três chaves de ciclo diferentes (inclui a divergência dentro de
+   `impactoCorrecaoPeriodoCiclo`).
 
-## 6. Modelo soberano proposto
+---
+
+# CONTRATO NORMATIVO
+
+## 6. Modelo soberano
 
 ### 6.1 Identidade
 
-- **`evaluation_goals.id` (uuid, PK)** é a identidade canônica da meta.
-- `(ano, numero)` e `colaboradorMatricula`/`nome` passam a **rótulos/projeção**,
-  nunca identidade, chave de leitura ou autorização.
-- Vínculos por **UUID**: `organization_id`, `cycle_id` (FK para
-  `evaluation_cycles`), `collaborator_id` (FK para `collaborators`).
-- A identidade **nunca** é gerada pelo cliente: quem cria é a RPC/Edge
-  (D22/F5-09 §5 é o precedente).
+**DECIDE (D1):** a identidade canônica da meta é **`evaluation_goals.id` (uuid, PK)**, atribuída
+pelo banco. `ano`/`numero` e matrícula/nome são **rótulos de projeção**, nunca identidade, chave de
+leitura ou autorização. Vínculos por UUID: `organization_id` (tenant da linha), `cycle_id`
+(fk para `evaluation_cycles`) e `collaborator_id` (fk para `collaborators`).
+**Nenhum id de meta nasce no cliente** (modelo: `gestaoCiclosSoberanos.ts:97-103`).
 
-### 6.2 Tabelas propostas (aditivas; nenhum objeto da F5-09 alterado)
+### 6.2 Tabelas (aditivas; nenhum objeto da F5-09 alterado)
 
 ```
 public.evaluation_goals
-  id uuid pk
-  organization_id uuid not null            -- tenant da LINHA (autoridade)
-  cycle_id uuid not null                   -- FK composta com organization_id
-  collaborator_id uuid not null            -- dono da meta (FK composta)
-  tipo text not null                       -- NEGOCIO_PROJETO | INDIVIDUAL
-  descricao text not null, kpi text not null, valor_alvo text not null
-  status text not null default 'EM_ANDAMENTO'   -- EM_ANDAMENTO | ATINGIDA | NAO_ATINGIDA
-  resultado_atual text, progresso_percentual numeric(5,2),
+  id uuid pk, organization_id uuid not null,
+  cycle_id uuid not null, collaborator_id uuid not null,
+  tipo text not null check (tipo in ('NEGOCIO_PROJETO','INDIVIDUAL')),
+  descricao text not null, kpi text not null, valor_alvo text not null,
+  status text not null default 'EM_ANDAMENTO'
+    check (status in ('EM_ANDAMENTO','ATINGIDA','NAO_ATINGIDA')),
+  resultado_atual text, progresso_percentual integer
+    check (progresso_percentual is null or progresso_percentual between 0 and 100),
   data_ultimo_acompanhamento timestamptz,
   resultado_final text, atingida boolean, data_fechamento timestamptz,
   excluida boolean not null default false, data_exclusao timestamptz,
   version integer not null default 0,
   created_at timestamptz not null default now(), updated_at timestamptz not null default now()
+  -- FK COMPOSTAS de tenant (modelo cycle_events):
+  --   (cycle_id, organization_id) -> evaluation_cycles(id, organization_id)
+  --   (collaborator_id, organization_id) -> collaborators(id, organization_id)
 
-public.evaluation_goal_approvals         -- aprovação como FATO, não como campo do objeto
+public.evaluation_goal_approvals
   id uuid pk, organization_id uuid not null, goal_id uuid not null,
-  papel text not null,                     -- COORDENADOR | GERENTE
-  actor_membership_id uuid not null,       -- autoria soberana (FK composta)
+  papel text not null check (papel in ('COORDENADOR','GERENTE')),
+  actor_membership_id uuid not null,          -- autoria SOBERANA (fk composta)
   decidido_em timestamptz not null default now(), motivo text,
   revogado_em timestamptz, revogado_motivo text
+  -- único vigente: unique (goal_id, papel) where revogado_em is null
 
 public.evaluation_goal_events            -- trilha append-only (mesmo desenho de cycle_events)
   id uuid pk, organization_id uuid not null, goal_id uuid not null,
-  event_type text not null check (in ('CRIADA','EDITADA','PROGRESSO_ATUALIZADO',
-    'FINALIZADA','EXCLUIDA','APROVACAO_COORDENADOR','APROVACAO_GERENTE','APROVACOES_INVALIDADAS')),
-  actor_membership_id uuid not null, reason text,
-  operation_id uuid not null, payload_hash text not null,
-  before_value jsonb, after_value jsonb, created_at timestamptz not null default now(),
+  event_type text not null check (event_type in
+    ('CRIADA','EDITADA','PROGRESSO_ATUALIZADO','FINALIZADA','REVISAO_FINALIZACAO',
+     'EXCLUIDA','APROVACAO_COORDENADOR','APROVACAO_GERENTE','APROVACAO_INVALIDADA',
+     'LIMITES_DO_CICLO_ALTERADOS')),
+  actor_user_profile_id uuid not null, actor_membership_id uuid not null,
+  reason text, operation_id uuid not null, payload_hash text not null
+    check (payload_hash ~ '^[0-9a-f]{64}$'),
+  before_value jsonb, after_value jsonb, result_entity_id uuid,
+  created_at timestamptz not null default now(),
   unique (organization_id, operation_id)
 
-public.evaluation_cycle_goal_limits      -- limites por ciclo (substitui campos locais do ciclo)
+public.evaluation_cycle_goal_limits      -- DECIDE (D4, Q5=A)
   id uuid pk, organization_id uuid not null, cycle_id uuid not null,
-  tipo text not null, quantidade integer not null check (quantidade >= 0),
+  tipo text not null check (tipo in ('NEGOCIO_PROJETO','INDIVIDUAL')),
+  quantidade integer not null check (quantidade >= 0 and quantidade <= 3),
   unique (cycle_id, tipo)
 ```
 
-**Notas de integridade (padrões da F5-09 que se aplicam):**
+**DECIDE (D3):** `status` **não** representa aprovação; “aprovada” é **derivado** de
+`evaluation_goal_approvals` vigente.
+**DECIDE (D5):** exclusão é **apenas lógica**; `DELETE`/`TRUNCATE` revogados (D9 da F5-09 preservado).
+**DECIDE (D20, Q12):** a quota é **invariante server-side** — o banco **bloqueia** criação acima do
+limite (função de guarda chamada pela RPC de criação); a UI apenas antecipa/projeta a informação.
 
-- **Unicidade parcial proposta:** `unique (organization_id, cycle_id, collaborator_id, tipo)
-  where excluida = false` — uma meta viva por (ciclo, dono, tipo), espelhando
-  `uq_evaluation_cycles_org_ativo`.
-- **Limite verificado no banco, não no cliente:** uma função de guarda
-  (`goal_limite_disponivel(...)`) ou `CHECK` via trigger na inserção/reativação;
-  a UI continua consultando para UX.
-- **Exclusão nunca física:** `DELETE`/`TRUNCATE` revogados (D9 é precedente).
-- **FKs compostas com `organization_id`** em todas as tabelas, para o tenant do
-  evento/aprovação nunca divergir do tenant da meta.
+## 7. Lifecycle (normativo)
 
-## 7. Lifecycle soberano proposto
+**DECIDE (D17, Q10):** **finalização e aprovação são dimensões independentes**. Finalizar **não**
+exige aprovação prévia; o `status` funcional **não** codifica aprovação.
 
-| Transição | Origem | Capability | Pré-condições |
+| Operação | Origem | Capability | Pré-condições | Evento |
+|---|---|---|---|---|
+| criar | — | `goal.write` + SELF (D9) | ciclo `ATIVO` (**da linha soberana**); quota disponível (invariante no banco); unicidade parcial | `CRIADA` |
+| editar definição | viva | `goal.write` + SELF | `expected_version`; sujeita à matriz §9.4 | `EDITADA` |
+| atualizar progresso | viva | `goal.write` + SELF | `expected_version`; inteiro 0..100 | `PROGRESSO_ATUALIZADO` |
+| finalizar (1ª vez) | `EM_ANDAMENTO` | `goal.write` + SELF | `expected_version`; `resultado_final`+`atingida` | `FINALIZADA` |
+| **revisar/re-finalizar** | já finalizada | `goal.write` + SELF | `expected_version` + `operation_id`; **operação explícita** | `REVISAO_FINALIZACAO` com `before_value` = fechamento anterior (**recuperável na trilha**) |
+| excluir | viva ou finalizada | `goal.write` + SELF | `expected_version`; motivo | `EXCLUIDA` |
+| aprovar | viva, ciclo `ATIVO` | `goal.approve` + escopo relacional (§9) | não é o dono; relação congelada (§9.1); sem aprovação vigente do mesmo papel | `APROVACAO_*` |
+| invalidar aprovações | disparado por mutação material (§9.4) | sistema (na RPC da mutação) | registra `APROVACAO_INVALIDADA` por papel; **nunca apaga** o fato anterior | `APROVACAO_INVALIDADA` |
+
+**DECIDE (D17):** **não** é criado estado `REABERTA`/reabertura — a revisão de fechamento é a
+operação explícita acima, e o fechamento anterior permanece integralmente na trilha.
+**Nunca** sobrescrever silenciosamente (a re-finalização silenciosa do legado **não** é preservada).
+
+## 8. Limites / configuração por ciclo
+
+**DECIDE (D4, Q5=A):** limites exclusivamente em `evaluation_cycle_goal_limits`; **proibido** adicionar
+colunas de metas ao contrato funcional de `evaluation_cycles`.
+**DECIDE (D21, Q14):** a quota **pode** ser alterada durante o ciclo `ATIVO`, por **operação
+soberana explícita** (`meta_definir_limites_do_ciclo`), com: autorização **administrativa** derivada
+do catálogo vigente — **`cycle.manage` no plano administrativo (D19/D21 da F5-09)**, sem capability
+nova (Q1); `expected_version` do ciclo; `operation_id`; evento append-only
+`LIMITES_DO_CICLO_ALTERADOS`; **lock organizacional normativo**; e a regra
+**`quantidade` nunca pode ser reduzida abaixo do total de metas não excluídas daquele tipo**
+(violação ⇒ `F5_10_CONFLICT`, nunca exclusão de meta). Nenhuma alteração silenciosa ou local pelo cliente.
+
+## 9. Aprovações, legitimidade e invalidação
+
+### 9.1 Fonte soberana da legitimidade
+
+**DECIDE (D14, Q4=A):** a legitimidade para aprovar é **exclusivamente relacional** e é derivada da
+**estrutura CONGELADA/MATERIALIZADA na ativação do ciclo** — projeção específica:
+
+1. **cadeia superior congelada** em `collegiate_cycle_snapshot_positions`
+   (`superior_position_id`/`superior_collaborator_id` da posição do dono no snapshot do ciclo); e
+2. **responsável do colaborador no ciclo** em `cycle_evaluation_responsibilities`
+   (`snapshot_id` + responsável vigente do ciclo).
+
+**Proibido** usar `funcao`/cargo textual, `gestorDiretoMatricula` do cadastro local, ou qualquer
+estado declarado pelo cliente. **Movimentação estrutural posterior NÃO rematerializa o ciclo atual**
+(contrato F5-09/D27 preservado) ⇒ os aprovadores de uma meta são **estáveis durante o ciclo**.
+**Fail-closed:** ausência de evidência congelada ⇒ o papel **não** é reconhecido (nunca “aprova por
+falta de prova”).
+
+### 9.2 Regra funcional preservada do legado
+
+**DECIDE (D15):** preservar a semântica vigente:
+- **aprovação do gerente é sempre exigida** (`metaEstaAprovada`, `metaStorage.ts:201-218`);
+- **aprovação do coordenador é exigida quando existir o nível intermediário aplicável**
+  (`metaExigeAprovacaoCoordenador`, `:171-199`: coordenador = nível **intermediário** da cadeia);
+- ausência de evidência estrutural ⇒ **fail-closed**.
+
+### 9.3 Aprovação como fato
+
+**DECIDE (D2):** aprovação é **linha em `evaluation_goal_approvals`** + evento append-only
+(`APROVACAO_COORDENADOR`/`APROVACAO_GERENTE`), com autoria **soberana**
+(`actor_user_profile_id`+`actor_membership_id`), **nunca** `autorMatricula`/`autorNome` do cliente.
+Revogação/invalidação = `revogado_em` + `APROVACAO_INVALIDADA`; os fatos antigos **permanecem**.
+Uma segunda aprovação vigente do mesmo papel é recusada (unique parcial).
+
+### 9.4 MATRIZ NORMATIVA DE INVALIDAÇÃO (D19, Q11)
+
+> **Objeto aprovado** = a **definição** da meta: `tipo`, `descricao`, `kpi`, `valor_alvo`.
+> Aprovação só é invalidada por **mutação material do objeto/condição aprovada**.
+
+| Mutação | Invalida aprovação de COORDENADOR | Invalida aprovação de GERENTE | Observação |
 |---|---|---|---|
-| criar | — | `goal.write` (SELF) ou administrativo (ver Q3) | ciclo `ATIVO` **da linha**; limite do tipo disponível; sem sobreposição de unicidade parcial |
-| editar (conteúdo) | `EM_ANDAMENTO` | `goal.write` (SELF) | `expected_version`; **invalida aprovações** (evento `APROVACOES_INVALIDADAS`) |
-| atualizar progresso | `EM_ANDAMENTO` | `goal.write` (SELF) | `expected_version` |
-| finalizar | `EM_ANDAMENTO` | `goal.write` (SELF) + aprovações exigidas | `expected_version`; `resultadoFinal`/`atingida` |
-| re-finalizar (“Revisar fechamento”) | **qualquer** status final | `goal.write` (SELF) | hoje `finalizarMeta` **sobrescreve** `resultadoFinal`/`atingida`/`status`/`dataFechamento` **sem checar o estado atual** (`metaStorage.ts:631-684`; a UI oferece o botão em `MinhasMetasPage.tsx:521`) — o único vestígio é outro evento `FINALIZACAO` com `*Anterior`. O desenho exige transição explícita (Q10) |
-| reabrir meta | — | — | **não existe** reabertura hoje (não há função em `metaStorage.ts`); não é proposta uma (Q10) |
+| `descricao` | **SIM** | **SIM** | mutação material |
+| `kpi` | **SIM** | **SIM** | mutação material |
+| `valor_alvo` | **SIM** | **SIM** | mutação material |
+| `tipo` | **SIM** | **SIM** | muda a categoria aprovada; sujeita novamente à quota |
+| `resultado_atual` / `progresso_percentual` | NÃO | NÃO | acompanhamento, não altera o objeto aprovado |
+| primeira finalização | NÃO | NÃO | finalizar **não** exige aprovação (§7) |
+| revisão/re-finalização | NÃO | NÃO | revisa o **fechamento**, não a definição; fica na trilha |
+| alteração de quota do ciclo | NÃO | NÃO | configuração do ciclo; não pode reduzir abaixo do existente (§8) |
+| correção de período do ciclo | **NÃO** | **NÃO** | **DECIDE (D18, Q11):** corrigir datas não altera cycle UUID, goal UUID, estrutura materializada nem o conteúdo aprovado |
+| movimentação estrutural após a ativação | NÃO | NÃO | D27: o ciclo não é rematerializado (§9.1) |
+| exclusão (soft) da meta | — | — | terminal; aprovações permanecem na trilha como fato histórico |
 
-**Regra de aprovação vigente** (`metaEstaAprovada`, `metaStorage.ts:201-218`):
-`(!exigeCoordenador || aprovacaoCoordenador) && aprovacaoGerente` — a aprovação
-do **gerente é sempre exigida**, mesmo quando a do coordenador não é. O desenho
-preserva essa assimetria como ponto de partida e a expõe em Q10.
+## 10. Autorização (normativo)
 
-**Quota imutável durante o ciclo `ATIVO`:** `atualizarConfiguracaoMetasCiclo` só
-aceita ciclo `PLANEJADO` (`cicloAvaliacaoStorage.ts:327-359`) — a quota não pode
-ser ajustada exatamente quando as metas são criadas.
+**DECIDE (D6, Q1=A):** **somente** `goal.read`, `goal.write` e `goal.approve`. **Nenhuma capability
+nova** na F5-10; o catálogo permanece com 31 códigos.
 
-**Agregação hoje (o que o modelo soberano precisa substituir):** média
-aritmética simples do `progressoPercentual` do array retornado, com `Math.round`
-e guarda de divisão por zero (`MinhasMetasPage.tsx:660`,
-`AcompanhamentoMetasPage.tsx:137-144`); “Aguardando aprovação” =
-`totalCadastrado - aprovadas`. **Não há** peso de meta, nota de meta, nem
-agregação por ciclo no domínio de metas.
-| excluir (soft) | `EM_ANDAMENTO`/finalizada | `goal.write` (SELF) ou administrativo | `expected_version`; motivo; nunca físico |
-| aprovar (coordenador) | meta viva, ciclo `ATIVO` | `goal.approve` + relação soberana | não é o dono; é o nível **intermediário** da cadeia (Q4) |
-| aprovar (gerente) | idem | `goal.approve` + relação soberana | é a **raiz** da cadeia do dono no ciclo (Q4) |
-| invalidar aprovações | disparado por edição relevante, mudança de estrutura do dono no ciclo ou correção de período | sistema (RPC) | registra evento, nunca apaga a aprovação anterior |
+**DECIDE (D7, Q2=B):**
+- **dono da meta:** `goal.read` + `goal.write` **por SELF** (escopo SELF; alvo = a própria meta);
+- **ator legitimado à aprovação:** `goal.read` + `goal.approve` **pelo escopo relacional aplicável**
+  (§9.1);
+- **`goal.approve` NÃO implica `goal.write`** — aprovar não autoriza editar, progredir, finalizar,
+  re-finalizar nem excluir;
+- **concessões/configuração explícitas e testáveis em produção** (via role/atribuição de escopo no
+  catálogo vigente);
+- **nenhuma autorização pode depender de `localWorld`/DEV** — proibido `criarProvidersMundoLocal` no
+  caminho funcional de metas; o teste de ALLOW deve exercitar o caminho de produção.
 
-**Regras de estado derivadas (proposta):** o `status` **não** guarda aprovação.
-“Aprovada” = existência de aprovação vigente (não revogada) por papel, derivada
-da tabela de aprovações; isso elimina o estado autorizativo dentro do objeto.
+**DECIDE (D8, Q3=A):** `goal` é **recurso soberano**: `{type:"goal", id:<UUID canônico>}`; tenant,
+dono e estado derivam do **recurso real** (`carregarRecurso` da linha em `evaluation_goals`),
+registrado em `TIPOS_RECURSO_SOBERANOS` e em `resolveTargetTenant`.
 
-## 8. Limites/configuração por ciclo
+**DECIDE (D9, Q8):** **escrita é SELF**. Gestor/coordenador legitimado **pode ler e aprovar**, e
+**não** recebe `goal.write` sobre meta de liderado ⇒ **não** pode criar, editar, atualizar progresso,
+finalizar, re-finalizar nem excluir meta de terceiro. Ampliar isso exige decisão nova.
 
-- Hoje: `CicloAvaliacao.quantidadeMetasNegocio/quantidadeMetasIndividuais` no
-  acervo local; o P8 removeu esses campos da tela de ciclos ✓.
-- Proposta: tabela `evaluation_cycle_goal_limits` (§6.2), escrita pelo mesmo
-  caminho administrativo do ciclo (`cycle.manage`/D19) e **lida** por metas.
-- **Alternativa (Q5):** manter a configuração dentro do ciclo soberano (colunas
-  em `evaluation_cycles` ou `evaluation_config_versions`) — exigiria migration
-  sobre objeto da F5-09; a tabela nova é estritamente aditiva.
+**DECIDE (D12):** `expected_version` obrigatório em **toda** mutação; comparação **após** o lock e o
+`select for update`; divergência ⇒ `F5_10_CONFLICT`.
+**DECIDE (matriz capability × estado):** matriz com **fonte única** consumida pelo Policy Engine
+(modelo `estadoDominioCiclo.ts`): `EM_ANDAMENTO` ⇒ criar/editar/progredir/finalizar/excluir/aprovar;
+`ATINGIDA`/`NAO_ATINGIDA` ⇒ ler, aprovar, revisar, excluir; excluída ⇒ somente leitura histórica.
+**Estado do ciclo** também participa: só ciclo `ATIVO` permite mutação
+(criar/editar/progredir/finalizar/aprovar), lido **da linha soberana** do ciclo.
 
-## 9. Aprovações e invalidação
+## 11. RLS × Policy Engine (fronteira sem ambiguidade — D22)
 
-- Aprovação é **fato auditável**: linha em `evaluation_goal_approvals` + evento
-  append-only na trilha, com autoria **soberana** (membership do ator
-  verificado) — nunca `autorMatricula`/`autorNome` do cliente.
-- **Revogação** = `revogado_em` + evento de invalidação; histórico preservado.
-- **Quando invalidar (proposta):** edição de conteúdo relevante (descrição, KPI,
-  valor alvo, tipo), mudança de dono/estrutura vigente do dono no ciclo, e
-  correção de período do ciclo. Mudança de progresso **não** invalida.
-- **Quem é “coordenador”/“gerente”:** resolução **relacional** na data do ciclo
-  (F3-09/F5-08 — `organizacao_resolver_gestor_direto`/responsável vigente);
-  proibido decidir por `funcao`/cargo textual. A regra do nível intermediário
-  (`metaExigeAprovacaoCoordenador`) é preservada como **semântica**, mas
-  resolvida no servidor.
-- **Fail-closed:** sem evidência estrutural, a aprovação do coordenador é
-  **exigida** (preserva o comportamento atual) e a do gerente é negada.
+**RLS** é **barreira de isolamento/visibilidade de tenant**: `evaluation_goals` e
+`evaluation_goal_approvals` com `enable row level security`, **uma policy de SELECT own-tenant**
+(`public.user_has_active_membership(organization_id)`) **criada antes do grant**, `grant select`
+mínimo a `authenticated`, **nenhuma** policy de escrita; `evaluation_goal_events` **deny-by-default
+integral** com 3 triggers de imutabilidade e `service_role` apenas `SELECT`/`INSERT`.
 
-## 10. Autorização proposta
+**Policy Engine** é a **autoridade funcional**: decide se **o ator** pode executar **a operação**
+sobre **o recurso** (capability + escopo/relação + estado).
 
-- **Capabilities:** reutilizar `goal.read`, `goal.write`, `goal.approve`
-  (nenhuma capability nova — D20 é precedente). Mapeamento proposto:
-  criar/editar/progresso/finalizar/excluir ⇒ `goal.write`; aprovar ⇒ `goal.approve`;
-  ler ⇒ `goal.read`. **Alternativa e risco** se o produto exigir granularidade
-  (Q1): novos códigos quebrariam os espelhos `Capability.ts`,
-  `catalogoCapabilities.ts`, `capabilityTarget.ts` e o contador do validador P9.
-- **Concessão em produção** é decisão explícita (Q2): sem role/bundle que
-  conceda `goal.*`, a F5-10 nasceria inacessível; conceder ao bundle `admin`
-  daria leitura de metas de terceiros a ADMIN (contra
-  `.ai/architecture-rules.md` §2). Proposta: **metas próprias** por vínculo
-  (SELF) + `goal.approve` por **configuração explícita** (como
-  `cycle.cancel`/`reopen`/`period.correct` ficaram fora do bundle na F5-09).
-- **Alvo autorizável:** promover `goal` a **tipo soberano** (Q3): registrar em
-  `TIPOS_RECURSO_SOBERANOS`, exigir **UUID canônico**, adicionar `goal` em
-  `resolveTargetTenant` e um `carregarRecurso` real de meta (linha com
-  `organization_id` + `status`) — é o mecanismo já usado para `cycle`.
-- **`domainState`:** derivado **da linha soberana** (status da meta + status do
-  ciclo lido do banco), com fonte única compartilhada entre adaptador e
-  enforcement (precedente: `estadoDominioCiclo.ts` + `contextoAutorizacao.ts`).
-- **Scopes:** SELF para o dono; hierarquia (unidade/descendentes) para
-  aprovação, conforme a estrutura vigente no ciclo.
-
-## 11. RLS e fronteira
-
-- `evaluation_goals`: RLS habilitada; **policy de SELECT own-tenant** via
-  `public.user_has_active_membership(organization_id)` **antes** do grant;
-  `grant select` mínimo a `authenticated`; **nenhuma** policy de escrita;
-  `service_role` sem `DELETE`/`TRUNCATE`.
-- `evaluation_goal_approvals` e `evaluation_goal_limits`: mesma doutrina
-  (leitura own-tenant para aprovações/limites; escrita só pelo executor).
-- `evaluation_goal_events`: **deny-by-default integral** (sem policy), `revoke all`
-  e apenas `select, insert` para `service_role`, com os **3 triggers** de
-  imutabilidade (UPDATE/DELETE/TRUNCATE), inclusive contra owner/`service_role`.
-- Cross-tenant: FK composta com `organization_id` + RLS + revalidação na RPC
-  (defesa em profundidade; a RLS é a barreira).
+**DECIDE:** `SELECT` own-tenant **NÃO** significa que qualquer membro do tenant possui `goal.read`
+funcional sobre qualquer meta. Portanto o **caminho de leitura apresentado ao produto respeita os
+dois contratos**:
+- **leitura própria** (`MinhasMetasPage`): leitura direta sob RLS com filtro SELF
+  (`collaborator_id = ator`);
+- **leitura de terceiros** (acompanhamento/aprovação): **RPC de leitura com gate funcional**
+  (`meta_listar_por_escopo`) que aplica `goal.read` + escopo relacional (§9.1) **antes** de devolver
+  linhas; a RLS continua como defesa em profundidade.
+  > **Mudança declarada:** o rascunho anterior propunha “nenhuma RPC de leitura” (espelhando a
+  > pendência da F5-09). A separação exigida (RLS ≠ autorização funcional) **obriga** este caminho
+  > com gate; a decisão está fechada aqui e a criação dessa RPC é escopo da P4/P5.
 
 ## 12. Concorrência, versão e idempotência
 
-- `version integer` em `evaluation_goals` + `p_expected_version` em toda
-  mutação ⇒ `F5_10_CONFLICT` sem overwrite silencioso.
-- **Lock por organização:** a família de metas precisa de chave normativa. Duas
-  opções (Q6): (a) **reusar** `evaluation_cycles:<org>` (uma chave para os dois
-  domínios do ciclo, evita deadlock entre RPC de ciclo e de meta); (b) criar
-  `evaluation_goals:<org>` — exigiria catalogação explícita na guarda P6-6 da
-  F5-08. **Recomendação: (a)**.
-- **Idempotência:** `unique (organization_id, operation_id)` na trilha +
-  `payload_hash` SHA-256 **derivado server-side** (desvio de `p_payload_hash`
-  já ratificado em P2–P4). `operationId` é **chave de idempotência**, nunca
-  identidade funcional.
-- **Aprovações concorrentes:** a unicidade parcial `(goal_id, papel) where
-  revogado_em is null` garante um único aprovador vigente por papel; segunda
-  aprovação ⇒ CONFLICT.
+**DECIDE (D10, Q6=A):** reutilizar a **mesma família normativa de advisory lock organizacional dos
+ciclos**, com a **chave exata**:
+
+```sql
+pg_advisory_xact_lock(hashtext('evaluation_cycles:' || p_organization_id::text))
+```
+
+Regras: (a) **uma única** chave para a família ciclo+metas; (b) adquirida **no início** de toda RPC
+que muta meta, limite ou aprovação; (c) **proibido** criar lock independente
+(`evaluation_goals:<org>`) ou adquirir locks em ordem incompatível (deadlock) — a guarda de
+catalogação de locks (padrão P6-6 da F5-08) deve registrar a família de metas sob a **mesma** chave.
+
+**DECIDE (D11):** idempotência por `unique (organization_id, operation_id)` na trilha +
+`payload_hash` SHA-256 **derivado server-side** (desvio já ratificado em P2–P4);
+`operation_id` é **chave de idempotência**, nunca identidade funcional. Replay com a mesma intenção
+devolve o mesmo resultado; intenção divergente ⇒ `F5_10_CONFLICT`.
+**DECIDE:** `version = version + 1` em toda mutação efetiva; nenhum overwrite silencioso.
 
 ## 13. Contrato Edge/RPC
 
-- **RPCs propostas** (todas `SECURITY INVOKER`, `search_path = public`, `EXECUTE`
-  só `service_role`, com preflight e guarda final fail-closed — modelo
-  `20260916000000_f5_09_cycle_rpc.sql`):
-  `meta_criar`, `meta_editar`, `meta_atualizar_progresso`, `meta_finalizar`,
-  `meta_excluir`, `meta_aprovar` (papel derivado do ator), `meta_invalidar_aprovacoes`,
-  `meta_definir_limites_do_ciclo`.
-- **Edge nova** `supabase/functions/metas` (D25: uma Edge por domínio) com a
-  ordem `método → JWT (auth.getUser) → forma com allowlist estrita → tenant
-  revalidado → gate por operação (sem default) → execução com service_role e
-  ator verificado → resposta/erro público`, reusando o trio
-  `index`/`core`/`contrato` e o **contrato transportável único** compartilhado
-  com o cliente (`src/infrastructure/supabase/ciclos/contrato.ts` é o modelo).
-- **Adapter de cliente fail-closed** (modelo `edgeCiclos.ts`): transporte,
-  `error` no corpo, 2xx fora do contrato e código desconhecido **nunca** viram
-  sucesso.
-- **Leitura** continua por **RLS/PostgREST** (não criar RPC de leitura, salvo
-  necessidade provada — a F5-09 declarou essa mesma pendência).
-- Guardas novas: contrato Edge→RPC (nomes/args exatos) e grafo de imports da Edge.
+**RPCs** (todas `SECURITY INVOKER`, `search_path = public`, `EXECUTE` **só** `service_role`,
+preflight + guarda final fail-closed — modelo `20260916000000_f5_09_cycle_rpc.sql`):
+`meta_criar`, `meta_editar`, `meta_atualizar_progresso`, `meta_finalizar`, `meta_revisar_finalizacao`,
+`meta_excluir`, `meta_aprovar`, `meta_invalidar_aprovacoes` (interna às mutações),
+`meta_definir_limites_do_ciclo`, `meta_listar_por_escopo` (leitura com gate, §11).
 
-## 14. Cutover do frontend e eliminação do `localStorage`
+**DECIDE (D23):** Edge própria `supabase/functions/metas` (D25 da F5-09: uma Edge por domínio), com
+a ordem `método → JWT (auth.getUser) → forma com allowlist estrita → tenant revalidado → gate por
+operação (sem default) → execução com service_role e ator verificado → resposta/erro público`, reuso
+do trio `index`/`core`/`contrato` e **contrato transportável único** compartilhado com o cliente
+(modelo `src/infrastructure/supabase/ciclos/contrato.ts`). `service_role` **executa, nunca decide**.
+Cliente: adapter fail-closed (modelo `edgeCiclos.ts`); **proibido** `.rpc(` no browser e
+**proibida** `SERVICE_ROLE_KEY` no cliente (guardas já existentes em
+`src/authorization/estruturaUiSeguranca.test.ts:527-538`).
 
-1. **Leitura**: `MinhasMetasPage` e `AcompanhamentoMetasPage` passam a ler de
-   porta soberana (repositório RLS), com `ciclo_id` **da URL/estado soberano**,
-   nunca `getCicloAtivo()` local.
-2. **Mutação**: tudo pelo controlador soberano → Edge `metas` → RPC; nenhuma
-   escrita em `localStorage` (o `metaStorage` deixa de ser autoridade).
-3. **Backfill (Q7)** — o ponto mais delicado: as metas locais apontam para
-   `cicloId` **fabricado no browser**, sem bridge. Proposta:
-   - mapear por `(organization_id, ano, numero)` para o `evaluation_cycles.id`
-     soberano **quando o ciclo existir** (o `(ano,numero)` já está denormalizado
-     na meta);
-   - metas cujo ciclo **não** existir no soberano entram em **relatório de
-     quarentena** (não migrar, não inventar ciclo, não gravar em `localStorage`);
-   - `colaboradorMatricula` → `collaborators.id` por `collaborator_identifiers`
-     (business code) com **falha explícita** quando não resolver;
-   - executar **uma vez**, com `operation_id` determinístico por meta e
-     evidência de contagem antes/depois; sem dual-write permanente.
-   - **pontes autoritativas a reusar (não heurísticas):**
-     `evaluation_resolver_ciclo(org, ano, numero, actor)` — recusa 0, >1 e
-     `CANCELADO` (`supabase/migrations/20260911020000_f5_06_cutover_leitura_e_ciclo.sql:33-79`);
-     `mapearCiclosPorAnoNumero` (`supabase/functions/avaliacoes/assignedSupabase.ts:90-95`);
-     matrícula→UUID por `ponteMatricula` (**recusa ambiguidade**,
-     `src/infrastructure/supabase/avaliacoes/ponteMatricula.ts:49-66`) e
-     `ponteColaborador` server-side (`supabase/functions/avaliacoes/ponteColaborador.ts:40-56`);
-   - **barreira de escrita no serviço legado:** o modelo a copiar é
-     `src/services/colaboradorStorage.ts:53-62` — a **leitura** legada é
-     preservada e as funções de **escrita** passam a `throw` apontando a porta
-     soberana única (mesma doutrina usada no cutover da F5-07).
-4. **Legado**: `metaStorage` vira LEITURA transitória para o backfill e depois é
-   removido do caminho funcional; nenhum fallback é mantido.
-5. **Consumidores de arrasto** (feedback, PDF, fechamento, impacto da correção)
-   passam a resolver ciclo por UUID soberano — o mesmo caminho do P8.
+## 14. Cutover, backfill e legado
 
-## 15. Estratégia de testes e validação integrada
+**DECIDE (D13, Q7=A):** backfill **somente** por pontes autoritativas e resolução inequívoca:
+`evaluation_resolver_ciclo(org, ano, numero, actor)` (recusa 0, >1 e `CANCELADO`),
+`mapearCiclosPorAnoNumero`, `ponteMatricula` (recusa ambiguidade) e `ponteColaborador`.
+**Rejeitar** (⇒ **QUARENTENA**): zero correspondências, múltiplas correspondências, ciclo `CANCELADO`,
+colaborador ambíguo. **Proibido:** fabricar ciclo, fabricar collaborator, descartar silenciosamente,
+manter fallback funcional.
+**Antes do backfill:** (1) **congelar/exportar** o acervo legado; (2) registrar **contagem de
+entrada**; (3) **abortar** diante de JSON corrompido ou divergência inesperada; (4) registrar
+**contagem migrada e quarentenada**. Considerar explicitamente o **segundo produtor da chave**
+(`geradorDadosTeste.ts:525-532`) — o congelamento deve registrar quem escreveu por último.
 
-- **SQL (job `supabase-local`)**: cenário isolado insert-once + validador com
-  `[PASS]`/`[FAIL]` e preflight/guarda final; cobrindo limites, unicidade
-  parcial, trilha append-only (UPDATE/DELETE/TRUNCATE negados), aprovações e
-  invalidação, cross-tenant/IDOR por UUID, stale `expected_version`,
-  idempotência, rollback de operação multi-escrita e RLS/ACL.
-- **Concorrência real entre duas sessões** (padrão da F5-10/P9 — arquivos
-  16/17/18): duas sessões editando a mesma meta; a perdedora deve terminar em
-  `F5_10_CONFLICT` depois de **esperar o lock**.
-- **TS/node**: Policy Engine (matriz capability × status × relação), fronteira
-  soberana (UUID canônico, tenant divergente, membership revogada), porta do
-  cliente (fail-closed) e guardas estáticas anti-`localStorage`/anti-UUID-no-browser.
-- **Ajuste obrigatório de testes existentes**: os invariantes de “nenhuma
-  antecipação de F5-10” (`p9MatrizIntegrada.test.ts`, `15-validar-f5-09-p9.sql`)
-  são **invertidos** pela F5-10 e devem ser atualizados na atividade, de forma
-  explícita, junto com `metaStorage.test.ts`, `AcompanhamentoMetasPage.test.tsx`,
-  `estruturaUiSeguranca.test.ts` (listas de exceção) e o teste de paridade de
-  `authorizationPolicy.test.ts:909-919`.
+**DECIDE (D24):** cutover com o modelo de **barreira de escrita** identificado no legado
+(`colaboradorStorage.ts:53-62`): leitura legada transitória **somente** enquanto estritamente
+necessária ao backfill; **escrita local bloqueada** (`throw` apontando a porta soberana); **após o
+cutover, nenhuma leitura funcional de fallback**. Guardas preservadas: frontend não chama RPC
+diretamente, mutações via Edge/`functions.invoke`, `metaStorage` sai do caminho funcional.
+**Consumidores de arrasto** (feedback/detalhe/PDF/fechamento/impacto da correção) passam a resolver
+ciclo pelo **UUID soberano**; a divergência de chave em `impactoCorrecaoPeriodoCiclo` é corrigida na
+mesma atividade (P6).
+
+## 15. Testes e validação integrada
+
+- **SQL (job `supabase-local`)**: cenário isolado insert-once + validador `[PASS]`/`[FAIL]` com
+  preflight/guarda final cobrindo limites (invariante), unicidade parcial, trilha append-only
+  (UPDATE/DELETE/TRUNCATE negados), aprovações e **matriz §9.4**, cross-tenant/IDOR por UUID,
+  stale `expected_version`, idempotência, rollback multi-escrita, RLS/ACL.
+- **Concorrência real entre duas sessões** (padrão da P9, arquivos 16/17/18): duas sessões editando a
+  mesma meta e duas aprovando papéis distintos; a perdedora termina em `F5_10_CONFLICT` **depois de
+  esperar o lock**.
+- **TS/node**: Policy Engine (capability × estado × relação), fronteira soberana (UUID canônico,
+  tenant divergente, membership revogada, `goal.approve` sem `goal.write`), porta do cliente
+  (fail-closed), guardas anti-`localStorage`/anti-UUID-no-browser e anti-`localWorld` no caminho de metas.
+- **Ajustes obrigatórios**: substituir o invariante SQL que **proíbe** metas
+  (`15-validar-f5-09-p9.sql:2095-2132`) e o guarda de “não antecipar F5-10”
+  (`p9MatrizIntegrada.test.ts:145-158`, se afetado); atualizar `metaStorage.test.ts` (cobrir criação,
+  limite, invalidação, progresso inválido, revisão e soft delete), `estruturaUiSeguranca.test.ts`
+  (listas de exceção) e o teste de paridade `goal.approve` (`authorizationPolicy.test.ts:909-916`).
 
 ## 16. Riscos
 
-| # | Risco | Severidade | Mitigação proposta |
+| # | Risco | Sev. | Mitigação (normativa) |
 |---|---|---|---|
-| R1 | Backfill sem bridge de ciclo ⇒ metas órfãs | **alta** | mapear por `(org, ano, numero)`; quarentena explícita; nunca fabricar ciclo |
-| R2 | `goal.*` inacessível em produção (DENY) | **alta** | decidir concessão (Q2) antes da P4; teste de ALLOW real no CI |
-| R3 | Estado autorizativo no cliente virar “verdade” no cutover | **alta** | aprovações como fato no banco + invalidação auditada |
-| R4 | Regra de negócio duplicada (limite/aprovação) | média | fonte única no banco + projeção para UX |
-| R5 | Consumidores de arrasto com identidade de ciclo heterogênea | média | cutover por UUID soberano; corrigir `impactoCorrecaoPeriodoCiclo` na mesma atividade |
-| R6 | Lock novo causando deadlock com RPCs de ciclo | média | reusar a chave `evaluation_cycles:<org>` (Q6) |
-| R7 | Guardas de “não antecipar F5-10” quebrarem o CI | baixa | atualizar os validadores na própria atividade (declarado) |
-| R8 | Escopo crescer para observações (F5-11) | média | `observation.*` intocado; nenhuma tabela de observação |
-| R9 | **Fail-closed silencioso** por estrutura soberana ainda não carregada (decisão síncrona sobre projeção assíncrona) | média | o caminho soberano de metas deve expor a indisponibilidade na UI (fase explícita), nunca tratar “sem estrutura” como “sem direito” sem sinalizar |
-| R10 | **Perda silenciosa do acervo legado** (JSON corrompido ⇒ `[]` ⇒ próxima escrita regrava só o novo) durante o backfill | média | o backfill deve **exportar/congelar** o acervo antes de qualquer escrita e abortar em contagem divergente |
+| R1 | Backfill sem bridge ⇒ metas órfãs | alta | D13 (pontes autoritativas + quarentena) |
+| R2 | `goal.*` inacessível em produção | alta | D7 (concessão explícita) + teste de ALLOW real em P4 |
+| R3 | Estado autorizativo do cliente virar verdade | alta | D2/D3 (aprovação como fato; status não representa aprovação) |
+| R4 | Regra duplicada (limite/aprovação) | média | D4/D20 (invariante no banco) + §9.1 (fonte única) |
+| R5 | Consumidores com identidades de ciclo heterogêneas | média | D24 + correção em `impactoCorrecaoPeriodoCiclo` (P6) |
+| R6 | Deadlock entre RPC de ciclo e de meta | média | D10 (chave única e ordem única) |
+| R7 | Guardas de “não antecipar F5-10” quebrarem o CI | baixa | atualização declarada em P1/P7 |
+| R8 | Escopo vazar para F5-11 | média | `observation.*` intocado |
+| R9 | Fail-closed silencioso (estrutura não carregada) | média | o caminho soberano expõe a indisponibilidade com fase explícita |
+| R10 | Perda silenciosa do acervo legado no backfill | média | D13 (congelar/exportar + abortar em divergência) |
+| R11 | `goal.read` de leitura de terceiros exposta por RLS sem gate funcional | alta | §11 (RPC de leitura com gate) |
 
-## 17. Decisões propostas (para ratificação)
+## 17. DECISÕES NORMATIVAS FECHADAS
 
-- **D1** — identidade canônica = `evaluation_goals.id` (uuid); `(ano,numero)` e
-  matrícula são rótulos.
-- **D2** — aprovação é **fato auditável em tabela própria**, nunca campo do
-  objeto nem status.
-- **D3** — `status` da meta não representa aprovação; “aprovada” é derivado.
-- **D4** — limites por ciclo em tabela aditiva própria.
-- **D5** — exclusão apenas lógica (D9 da F5-09 preservado).
-- **D6** — reuso das 3 capabilities existentes (`goal.read/write/approve`), sem
-  capability nova.
-- **D7** — `goal` promovido a tipo soberano (UUID canônico, `carregarRecurso`).
-- **D8** — trilha append-only `evaluation_goal_events` com `operation_id` único
-  por organização e `payload_hash` server-side.
-- **D9** — `expected_version` em toda mutação.
-- **D10** — lock por organização **reusando** a chave da família de ciclos
-  (pendente Q6).
-- **D11** — Edge própria `metas` (D25), com contrato transportável único.
-- **D12** — leitura por RLS/PostgREST; nenhuma RPC de leitura nova.
-- **D13** — autoria soberana (membership do ator verificado) em toda trilha.
-- **D14** — legitimidade de aprovação resolvida por **hierarquia relacional**
-  vigente no ciclo (F3-09); proibido `funcao`/cargo textual.
-- **D15** — sem dual-write permanente e sem fallback funcional para `localStorage`.
+| # | Decisão | Origem |
+|---|---|---|
+| D1 | Identidade canônica = `evaluation_goals.id` (uuid, do banco); `(ano,numero)`/matrícula = rótulos | auditoria |
+| D2 | Aprovação é **fato** em tabela própria + evento; nunca campo do objeto nem status | auditoria |
+| D3 | `status` não representa aprovação; “aprovada” é derivado | auditoria |
+| D4 | Limites em `evaluation_cycle_goal_limits` (aditiva); proibido colunizar metas no ciclo | **Q5=A** |
+| D5 | Exclusão apenas lógica (D9 da F5-09 preservado) | auditoria |
+| D6 | Capabilities: **somente** `goal.read`/`goal.write`/`goal.approve`; nenhuma nova | **Q1=A** |
+| D7 | Concessão: dono = read+write por SELF; aprovador = read+approve por escopo relacional; `goal.approve` **não** implica `goal.write`; concessões explícitas e testáveis em produção; **nenhuma** dependência de `localWorld`/DEV | **Q2=B** |
+| D8 | `goal` é recurso soberano `{type:"goal", id:UUID}`; tenant/dono/estado do recurso real | **Q3=A** |
+| D9 | Escrita é SELF; gestor/coordenador lê e aprova, **não** escreve meta de terceiro | **Q8** |
+| D10 | Lock: **mesma** família dos ciclos, chave exata `hashtext('evaluation_cycles:' \|\| org)`; proibido lock independente/ordem incompatível | **Q6=A** |
+| D11 | Trilha append-only + idempotência `(organization_id, operation_id)` + `payload_hash` server-side | auditoria |
+| D12 | `expected_version` obrigatório em toda mutação; `version+1`; `F5_10_CONFLICT` | auditoria |
+| D13 | Backfill só por pontes autoritativas; rejeições ⇒ quarentena; congelar/exportar; contagens; abortar em corrupção/divergência; proibido fabricar/descartar/fallback | **Q7=A** |
+| D14 | Legitimidade de aprovação é **relacional** sobre a **estrutura congelada na ativação** do ciclo; movimentação posterior não rematerializa; fail-closed | **Q4=A** |
+| D15 | Regra preservada: **gerente sempre exigido**; coordenador quando há nível intermediário; fail-closed sem evidência | **Q4=A** |
+| D16 | `progresso_percentual`: inteiro informado, 0..100, validado server-side; **não** derivar de `resultadoAtual`/`valorAlvo` (texto); agregação de projeção = média aritmética simples com `Math.round`, **sem peso**, **sem** virar nota | **Q9+Q13 (consolidadas)** |
+| D17 | Finalização **independente** de aprovação; 1ª finalização é transição explícita; alteração posterior é **revisão/re-finalização explícita** com `expected_version`+`operation_id`+evento específico, fechamento anterior recuperável; **sem estado REABERTA**; nunca sobrescrever silenciosamente | **Q10** |
+| D18 | Correção do período do ciclo **não** invalida aprovação | **Q11** |
+| D19 | Matriz normativa de invalidação (§9.4) | **Q10/Q11** |
+| D20 | Quota é **invariante server-side**; banco bloqueia acima do limite; UI só projeta | **Q12** |
+| D21 | Quota alterável no `ATIVO` por operação soberana explícita, gate administrativo **`cycle.manage`** (sem capability nova), `expected_version`, `operation_id`, evento, lock, e **nunca abaixo do existente** | **Q14** |
+| D22 | RLS = isolamento/visibilidade de tenant; Policy Engine = autoridade funcional; `SELECT` own-tenant **não** concede `goal.read` funcional; leitura de terceiros com gate (§11) | revisão GPT |
+| D23 | Edge `metas` + contrato transportável único; RPCs `SECURITY INVOKER` com `EXECUTE` só `service_role`; sem `.rpc(`/`SERVICE_ROLE_KEY` no cliente | auditoria |
+| D24 | Cutover com barreira de escrita; leitura legada só para backfill; **sem fallback funcional após o cutover** | **Q7 + revisão GPT** |
 
-## 18. QUESTÕES PARA DECISÃO
+**Rastreabilidade Q→D (nenhuma questão permanece aberta):** Q1→D6 · Q2→D7 · Q3→D8 · Q4→D14/D15 ·
+Q5→D4 · Q6→D10 · Q7→D13/D24 · Q8→D9 · Q9+Q13→D16 (consolidadas) · Q10→D17/D19 · Q11→D18/D19 ·
+Q12→D20 · Q14→D21. A numeração original de **Q9 e Q13** foi consolidada em **D16** por
+duplicidade conceitual (progresso × agregação); a rastreabilidade dos dois números é preservada aqui.
 
-> Formato: problema → alternativas → recomendação. **Não decidir silenciosamente.**
+## 18. BLOCKERS DOCUMENTAIS
 
-**Q1 — Granularidade das capabilities.** (a) reusar `goal.read/write/approve`;
-(b) criar `goal.create/edit/finalize/delete`. *Recomendação:* **(a)** — D20
-(“nenhuma capability nova”) e evita tocar 3 espelhos TS + o contador do validador
-P9; a distinção fina fica no estado/capability do recurso.
+**B1 — Profundidade da cadeia congelada para derivar os aprovadores (afeta D14/§9.1).**
+`collegiate_cycle_snapshot_positions` registra `superior_position_id`/`superior_collaborator_id` do
+**superior imediato**; a regra de “gerente = raiz da cadeia” exige saber se o **snapshot do ciclo**
+permite reconstruir a **raiz** (ou se `cycle_evaluation_responsibilities` já a registra).
+**Não decide-se por suposição:** a P3 deve, **antes de implementar**, confirmar (somente leitura) as
+colunas/tabelas do congelamento. Se a raiz não for reconstruível a partir do congelado, a P3 deve
+propor a fonte **sem reabrir contrato da F5-09** (ex.: registrar a raiz no momento da ativação por
+evento) e trazer para ratificação. Enquanto B1 não for resolvido, a derivação do **gerente** fica
+**fail-closed** (nega) e o **coordenador** (superior imediato) já é derivável.
 
-**Q2 — Concessão em produção.** (a) `goal.read/write` no bundle `admin`;
-(b) metas próprias por vínculo (SELF) + `goal.approve` só por configuração
-explícita; (c) role de sistema nova. *Recomendação:* **(b)** — (a) daria a ADMIN
-leitura de metas de terceiros, contra `.ai/architecture-rules.md` §2.
+**Sem outros blockers.** Os pontos abaixo são **itens de implementação já decididos**, não escolhas
+abertas: substituição do invariante SQL que proíbe metas (P1); capability administrativa da quota =
+`cycle.manage` (D21 — derivável do catálogo vigente **sem** ampliar privilégio e **sem** capability
+nova); criação da RPC de leitura com gate (D22/§11).
 
-**Q3 — Tipo de alvo autorizável.** (a) promover `goal` a soberano
-(`{type:"goal", id:UUID}`); (b) manter `{type:"collaborator", id:<dono>}`.
-*Recomendação:* **(a)** — (b) mantém meta fora do enforcement e o tenant da meta
-nunca é derivado do recurso; (a) exige `resolveTargetTenant` + `carregarRecurso`.
+## 19. Decomposição final (P1–P7)
 
-**Q4 — Fonte da relação de aprovação.** (a) raiz/intermediário da cadeia
-relacional vigente no ciclo (F3-09); (b) cargo/função textual (status quo em
-`AcompanhamentoMetasPage`). *Recomendação:* **(a)**, com fail-closed quando a
-estrutura não for resolvível (preserva `metaExigeAprovacaoCoordenador`).
+> **P0 (contrato e decisões) está CONCLUÍDO por este documento.** A ordem abaixo é a recomendada;
+> cada pacote é pequeno, auditável e tem gates próprios.
 
-**Q5 — Onde ficam os limites por ciclo.** (a) tabela aditiva
-`evaluation_cycle_goal_limits`; (b) colunas em `evaluation_cycles` (objeto da
-F5-09). *Recomendação:* **(a)** — (b) mexe em contrato fechado de outra fase.
-
-**Q6 — Chave de advisory lock.** (a) reusar `evaluation_cycles:<org>`;
-(b) criar `evaluation_goals:<org>`. *Recomendação:* **(a)** — evita deadlock
-entre RPC de ciclo e de meta; (b) exigiria catalogação explícita na guarda P6-6.
-
-**Q7 — Backfill das metas locais.** (a) migrar só o que resolve por
-`(org, ano, numero)` → UUID soberano, resto em quarentena; (b) migrar tudo
-fabricando ciclos; (c) descartar o acervo local. *Recomendação:* **(a)** — (b)
-fabrica identidade (proibido); (c) perde dado do usuário sem trilha.
-
-**Q8 — Metas de terceiros (gestor/coordenador).** O gerente pode **criar/editar**
-meta do liderado, ou só **aprovar**? O legado só permite ao dono escrever e ao
-gestor aprovar. *Recomendação:* manter SELF para escrita; gestor/coordenador
-apenas aprovam e leem (ampliar exige decisão explícita).
-
-**Q9 — Progresso parcial e arredondamento.** `progressoPercentual` é livre
-(0–100) ou derivado de `resultadoAtual` vs `valorAlvo` (que é texto)? *Recomendação:*
-manter numérico 0–100 informado pelo dono no primeiro momento e **não** inferir
-de texto (o `valorAlvo` é `string` hoje); derivação fica como evolução.
-
-**Q10 — Finalização exige aprovações, e re-finalizar é permitido?** Regra vigente:
-`metaEstaAprovada = (!exigeCoordenador || aprovacaoCoordenador) && aprovacaoGerente`
-(`metaStorage.ts:201-218`) ⇒ **o gerente é sempre exigido**; o coordenador é
-exigido quando o dono tem nível intermediário acima (`metaExigeAprovacaoCoordenador`).
-Alternativas: (a) preservar a regra vigente e **proibir** re-finalização;
-(b) preservar a regra e permitir re-finalização como transição explícita
-(evento + `before_value` + `expected_version`); (c) exigir as duas aprovações
-sempre; (d) não exigir aprovação para finalizar. *Recomendação:* **(b)** — mantém
-o comportamento atual de exigência (sem surpresa no cutover) e transforma a
-“revisão de fechamento” que hoje é **sobrescrita silenciosa** em transição
-auditada; (c) e (d) mudam regra de negócio e exigem decisão de produto.
-
-**Q13 — O progresso continua entrada humana 0..100 ou passa a derivar de
-`resultadoAtual` × `valorAlvo`?** Hoje é inteiro digitado (slider/number com
-clamp, `MinhasMetasPage.tsx:339-361`), e `valorAlvo` é **texto livre**.
-*Recomendação:* manter 0..100 informado; derivação exigiria tipar `valorAlvo`
-(o que muda o modelo de conteúdo e a UI) — evolução futura, não F5-10.
-
-**Q14 — A quota (`quantidadeMetas*`) pode ser alterada durante o ciclo
-`ATIVO`?** Hoje **não** (só em `PLANEJADO`, `cicloAvaliacaoStorage.ts:339-343`)
-— o que é contraditório, porque é no `ATIVO` que as metas nascem.
-*Recomendação:* permitir alteração no `ATIVO` pelo caminho administrativo, com
-`expected_version`, `operation_id` e evento, validando que a nova quota **não**
-é menor que o total já existente (senão CONFLICT, nunca apagar meta).
-
-**Q11 — Correção de período do ciclo invalida aprovações?** *Recomendação:* sim,
-quando o período mudar o ciclo de referência — com evento
-`APROVACOES_INVALIDADA` (conforme §6.2) e sem apagar histórico.
-
-**Q12 — Limite de metas: bloqueia ou alerta?** Hoje o serviço **bloqueia** a
-criação acima do limite e a UI também. *Recomendação:* manter **bloqueio no
-banco** (invariante) e alerta na UI.
-
-## 19. Decomposição recomendada
-
-> Derivada da arquitetura encontrada (não é a lista inicial: inclui P0 de
-> contrato/backfill e P7 de validação integrada).
-
-- **P0 — Contrato e decisões.** Ratificar Q1–Q12; registrar em
-  `docs/F5-10-duvidas.md` (molde: `docs/F5-09-duvidas.md`). *Sem código.*
-- **P1 — Schema, integridade e limites.** As 4 tabelas, FKs compostas, índices
-  únicos parciais, `version`, triggers de `updated_at`, revokes/deny-by-default,
-  preflight + guarda final fail-closed. *Inclui* o ajuste do validador P9
-  (remoção do guarda de “não antecipar metas”) e o validador P1.
-- **P2 — RPCs de operações da meta.** `meta_criar/editar/atualizar_progresso/
-  finalizar/excluir` + `meta_definir_limites_do_ciclo` (INVOKER, EXECUTE só
-  `service_role`, `expected_version`, idempotência, lock, eventos).
-- **P3 — Aprovações.** `meta_aprovar` + `meta_invalidar_aprovacoes`, tabela de
-  aprovações, resolução relacional coordenador/gerente, regras de invalidação.
-- **P4 — Autorização.** `goal` como tipo soberano, `domainState` de meta com
-  fonte única, `resolveTargetTenant`, mapa capability×status×relação, RLS de
-  leitura e a **decisão de concessão** (Q2) com teste de ALLOW real.
-- **P5 — Edge e cliente.** `supabase/functions/metas` (trio + contrato),
-  contrato transportável compartilhado, adapter fail-closed, guardas
-  Edge→RPC/import-graph.
-- **P6 — Cutover do frontend e backfill.** Porta soberana de leitura, controlador
-  de mutações, telas (`MinhasMetasPage`, `AcompanhamentoMetasPage`), consumidores
-  de arrasto (feedback, detalhe, PDF, fechamento, correção de período),
-  **backfill com quarentena** (Q7) e remoção do `localStorage` do caminho funcional.
-- **P7 — Validação integrada.** Matriz de cenários + concorrência real entre duas
-  sessões + revisão de todas as guardas/regressões P1–P8, no molde
-  `docs/F5-09-p9-matriz-integrada.md`.
+- **P1 — Schema, integridade e limites.** As 4 tabelas (§6.2), FKs compostas de tenant, unicidade
+  parcial `(org, cycle_id, collaborator_id, tipo) where excluida = false`, `version`, triggers de
+  `updated_at`, trilha append-only com os 3 triggers, ACL/deny-by-default, quota como invariante
+  (guarda server-side), preflight + guarda final fail-closed; **substituir o invariante SQL que
+  proíbe metas** e registrar a migration no `README`; cenário + validador P1.
+- **P2 — Operações soberanas.** `meta_criar`, `meta_editar`, `meta_atualizar_progresso`,
+  `meta_finalizar`, `meta_revisar_finalizacao`, `meta_excluir`, `meta_definir_limites_do_ciclo`
+  (INVOKER, `EXECUTE` só `service_role`, `expected_version`, `operation_id`, idempotência, lock D10,
+  eventos, invalidação conforme §9.4).
+- **P3 — Aprovações e invalidação.** `meta_aprovar` + `meta_invalidar_aprovacoes`, tabela de
+  aprovações, resolução relacional congelada (§9.1), regra preservada (§9.2), matriz §9.4;
+  **resolver B1** (somente leitura) antes de codificar a derivação do gerente.
+- **P4 — Autorização e RLS.** `goal` como tipo soberano (D8), matriz capability × estado com fonte
+  única, `carregarRecurso` real de meta, escopos SELF/relacional, **concessão explícita** (D7) com
+  teste de **ALLOW real em produção**, RLS own-tenant (policy antes do grant) e a **RPC de leitura
+  com gate** (§11).
+- **P5 — Edge e cliente.** `supabase/functions/metas` (trio + contrato), contrato transportável
+  único, adapter fail-closed, guardas Edge→RPC e de grafo de imports.
+- **P6 — Cutover e backfill.** Porta soberana de leitura própria, controlador de mutações, telas
+  (`MinhasMetasPage`, `AcompanhamentoMetasPage`), consumidores de arrasto (feedback, detalhe, PDF,
+  fechamento, impacto da correção — corrigindo a divergência de chave), **backfill com congelamento/
+  exportação, contagens e quarentena** (D13) e barreira de escrita (D24).
+- **P7 — Validação integrada.** Matriz de cenários SQL, **concorrência real entre duas sessões**
+  (edição e aprovação), regressões P1–P8, ajuste das guardas invertidas e relatório de gates
+  executados × não executados (molde `docs/F5-09-p9-matriz-integrada.md`).
 
 ## 20. Definição de pronto (DoD)
 
-- Container de metas no PostgreSQL com RLS own-tenant e escrita fechada.
-- Nenhuma autoridade funcional de meta no `localStorage`.
-- `goal.*` **decidível** em produção por caminho canônico (não por mundo DEV).
-- Trilha append-only com autoria soberana, `operation_id` e `payload_hash`.
-- Concorrência real provada entre duas sessões; `expected_version` e rollback
-  comprovados.
-- Cutover das telas e dos consumidores de arrasto com ciclo por UUID soberano.
-- Backfill executado com evidência de contagem e quarentena explícita.
-- Gates do projeto verdes (focados, suíte completa, build, lint, tsc,
-  `git diff --check`, bateria SQL na ordem do CI) no SHA auditado.
-- F5-11 **não** antecipada; D1–D28 da F5-09 não reabertas sem evidência nova.
+1. Container de metas no PostgreSQL com RLS own-tenant, escrita fechada e quota invariante.
+2. Nenhuma autoridade funcional de meta no `localStorage`; nenhum fallback funcional.
+3. `goal.*` decidível **em produção** pelo caminho canônico (sem `localWorld`).
+4. Aprovação como fato auditável, com legitimidade **relacional congelada** e matriz §9.4 aplicada.
+5. Trilha append-only com autoria soberana, `operation_id`, `payload_hash`; revisão de fechamento
+   auditada (nunca sobrescrita).
+6. Concorrência real provada entre duas sessões; `expected_version` e rollback comprovados.
+7. Cutover das telas e dos consumidores com ciclo por UUID soberano; backfill com evidência de
+   contagem e quarentena explícita.
+8. Gates verdes (focados, suíte completa, build, lint, tsc, `git diff --check`, bateria SQL na ordem
+   do CI) no SHA auditado; CI verde; auditorias GPT e Codex aprovadas.
+9. F5-11 não antecipada; contratos da F5-09 (D1–D28) não reabertos.
 
 ---
 
-### Anexo A — Como esta auditoria foi feita
+### Anexo A — Método
 
-Varredura read-only por conteúdo (`meta`, `Meta`, `metaStorage`, `goal`, `peso`,
-`progresso`, `aprovacao`, `coordenador`, `gerente`, `limite`,
-`quantidadeMetas`) em `src/`, `supabase/` e `docs/`, mais leitura integral de
-`src/types/Meta.ts` e das partes de `src/services/metaStorage.ts` relevantes a
-limite, ciclo ativo, autorização e aprovação, e conferência dos padrões da
-F5-09 nas migrations `20260915/16/17/18/19/21*`. Buscas que resultaram vazias
-(tabela de metas, `MetaProgresso`, `aprovacaoMeta`, peso de meta) estão
-declaradas no §3.7 com os termos usados. Nenhum `db reset`, `npm`, teste ou
-alteração de código funcional foi executado.
+Auditoria read-only por conteúdo (`meta`, `Meta`, `metaStorage`, `goal`, `peso`, `progresso`,
+`aprovacao`, `coordenador`, `gerente`, `limite`, `quantidadeMetas`) em `src/`, `supabase/` e `docs/`;
+leitura integral de `src/types/Meta.ts` e das partes relevantes de `src/services/metaStorage.ts`;
+varredura dos `create table` das migrations (nenhuma tabela de metas); conferência dos padrões da
+F5-09 nas migrations `20260915/16/17/18/19/20/21*`; três frentes independentes de auditoria
+(modelo/lifecycle, consumo no cliente, autorização/RLS). Ausências são declaradas com o método de
+busca. **Nenhum** `db reset`, `npm`, teste, build, lint ou `tsc` foi executado; a única verificação
+desta rodada é `git diff --check`.
