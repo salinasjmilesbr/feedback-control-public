@@ -2672,4 +2672,3 @@ begin
 
   raise notice 'F5-10 P4: guarda final OK (2 policies own-tenant de metas, trilha/limites deny-by-default, escrita de cliente fechada, 10 RPCs + 3 helpers INVOKER com EXECUTE so service_role, catalogo intacto sem capability nova e sem novo SECURITY DEFINER)';
 end $$;
-

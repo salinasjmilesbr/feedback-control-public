@@ -503,4 +503,3 @@ begin
 
   raise notice 'F5-10 P4 (correcao pos-auditoria): guarda final OK (relacao congelada exigida nos 3 caminhos de retorno de meta_aprovar, capability no gate, lock normativo preservado, nenhuma fonte viva, catalogo e DEFINER intactos)';
 end $$;
-
