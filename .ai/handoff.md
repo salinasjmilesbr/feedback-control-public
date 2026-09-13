@@ -34,7 +34,115 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
-- **Atividade (rodada atual):** F5-09 — **P6 (fechamento do Policy Engine para
+- **Atividade (rodada atual):** F5-09 — **P7 (Edge Function `ciclos` + reconciliação
+  do catálogo D28) IMPLEMENTADA** — **aguardando auditoria independente**. Issue
+  **#202**. Contrato: `docs/F5-09-desenho-tecnico.md` (§8 tabela
+  operação→capability, §13.1 contrato da Edge e regras 1–9, §13.2 assinaturas das
+  RPCs, §13.3 reuso obrigatório, §13.5 cliente, §19 P7) e `docs/F5-09-duvidas.md`
+  (**D25** uma Edge por domínio, **D26** admissão, **D28** bundle `admin`).
+- **Base:** `main`/`origin/main` = `014a7b4303bdcb2887dc0342810e363e2e141527`
+  (F5-09 P6 integrada em `main`).
+- **Branch da P7:** `feat/f5-09-p7-cycle-edge` — **sem merge**; push/PR ficam com
+  o usuário.
+- **Entregue nesta rodada (P7):**
+  - `src/infrastructure/supabase/ciclos/contrato.ts` (novo): fonte **única** do
+    contrato transportável — as 8 operações, o mapa EXPLÍCITO operação → gate
+    (`funcional`/`administrativo`) → capability (sem default e sem alias), e a
+    validação de FORMA com **allowlist estrita** de chaves por operação;
+  - `supabase/functions/ciclos/core.ts` (novo): núcleo testável da fronteira —
+    método → JWT (`auth.getUser`) → forma → **tenant revalidado** contra
+    membership ativa → **gate** (Policy Engine com recurso real ou plano
+    administrativo D19) → **execução privilegiada**; erro de RPC mapeado por
+    prefixo `F5_09_*` para código público, com `INTERNAL` como fallback;
+  - `supabase/functions/ciclos/index.ts` (novo): wiring Deno — cliente
+    `service_role` (executor), `DepsContextoAutorizacao` com
+    `carregarRecurso` de **ciclo** (linha real de `evaluation_cycles` com o
+    `status` soberano → `domainState` do P6), resolutores da fronteira e dispatch
+    das 8 RPCs com o ator verificado e **sem** `p_payload_hash`;
+  - `supabase/functions/ciclos/contrato.ts` (novo): reexport do contrato
+    compartilhado (estrutura `index`/`core`/`contrato` como nas demais Edges);
+  - `src/infrastructure/supabase/ciclos/edgeCiclos.ts` (novo): adapter de cliente
+    (8 métodos) que envia apenas INTENÇÃO e é fail-closed (erro de transporte,
+    `error` no corpo, 2xx fora do contrato e código desconhecido NÃO viram
+    sucesso);
+  - `supabase/migrations/20260921000000_f5_09_p7_catalog_admin_bundle.sql`
+    (**D28**): `cycle.manage` entra **aditivamente** no bundle `admin`
+    (`+1` exato, idempotente), com preflight/guarda final fail-closed provando
+    catálogo intacto, `cycle.read` preservada e as três excepcionais fora de
+    qualquer role;
+  - `supabase/validacao/11-validar-f5-09-p7.sql` (novo): bundle `admin` = 9
+    funcionais com `cycle.manage`, excepcionais fora, catálogo com 31 códigos,
+    descrição de `cycle.cancel` (P6), RLS own-tenant + escrita fechada +
+    `cycle_events` deny-by-default (P5) e as 8 RPCs `INVOKER` com `EXECUTE` só
+    `service_role` (P2–P4);
+  - testes: `src/authorization/ciclosEdge.test.ts` (cobertura A–R: happy path das
+    8 operações, UUID real como alvo, cross-tenant/IDOR, membership/perfil/
+    identidade, capability/scope, campos textuais de autoridade, alvo
+    malformado/sintético, `service_role` só após o gate, ausência de matriz de
+    lifecycle e idempotência por `operationId`),
+    `src/authorization/ciclosContratoRpc.test.ts` (contrato Edge → RPC com nomes e
+    argumentos EXATOS + guard de que **toda** função chamada existe no schema,
+    D28 estrito e nenhuma capability nova) e
+    `src/infrastructure/supabase/ciclos/edgeCiclos.test.ts` (adapter do cliente);
+  - adaptações explícitas de contrato antigo (D28): `02-validar-f5-04.sql` e
+    `02-validar-f4-01.sql` passam a esperar **9** capabilities no bundle `admin`
+    (com `cycle.manage`), mantendo as proibições de controle/deprecado/
+    confidencial;
+  - `.github/workflows/ci.yml` (validador P7 no job `supabase-local`, após o par
+    P5 e antes das regressões F5-06/F5-07), `supabase/migrations/README.md` e este
+    arquivo.
+- **Arquitetura final da Edge:** request → `OPTIONS`/`POST` (405 fora disso) →
+  `Authorization` obrigatório (401) → `auth.getUser` (401) → forma da intenção
+  (400, allowlist estrita) → tenant do corpo revalidado contra a identidade
+  (403/401) → gate por operação → RPC `ciclo_*` com `service_role` e ator
+  verificado → resposta `{ok, operacao, resultado}` com erro público.
+  `service_role` **executa**, nunca decide: nenhum caminho alternativo existe e o
+  JWT do usuário não é propagado.
+- **Correção pós-auditoria Codex (D28, mesma rodada):** as guardas da migration
+  `20260921000000` foram restringidas ao **tipo de role** — as três excepcionais
+  ficam proibidas apenas em roles **DE SISTEMA** (`is_system = true`) e seguem
+  **concedíveis** em roles **CUSTOMIZADAS** (contrato D28/Q-F5-09-3); a migration
+  passou a ser **realmente idempotente** (`v_ja_existia`: +1 só na primeira
+  execução, 0 na reexecução, com prova de relação única e bundle no tamanho
+  esperado). Provas automatizadas: `12-cenario/13-validar-f5-09-p7-d28.sql`
+  (A–H, incluindo role customizada aceita, role de sistema recusada pelo
+  predicado, primeira execução +1, reexecução sem duplicata e catálogo intacto) e
+  a reaplicação da migration (2×) no job `supabase-local` do CI.
+- **Operações expostas (8) e RPC de cada uma:** `cycle.criar`→`ciclo_criar`
+  (plano administrativo, sem alvo sintético — D21); `cycle.editar`→`ciclo_editar`;
+  `cycle.ativar`→`ciclo_ativar`; `cycle.encerrar`→`ciclo_encerrar`;
+  `cycle.cancelar`→`ciclo_cancelar`; `cycle.reabrir`→`ciclo_reabrir`;
+  `cycle.corrigir_periodo`→`ciclo_corrigir_periodo`;
+  `cycle.admissao.incluir`→`ciclo_incluir_admissao` (matrícula resolvida na
+  fronteira pela ponte F3-01; campos estruturais recusados — §13.1 regra 9).
+- **D28:** bundle `admin` = 9 capabilities funcionais (`collaborator.create/edit/
+  read`, **`cycle.manage`**, `cycle.read`, `membership.read`,
+  `org.catalog.manage`, `org.structure.manage`, `settings.manage`);
+  `cycle.cancel`/`cycle.reopen`/`cycle.period.correct` **não** estão em nenhuma
+  role (configuração explícita apenas).
+- **Gates reais desta rodada:** `supabase db reset --local --yes` (migration D28
+  aplicada) + **suíte SQL completa na ordem do CI, 25 arquivos, ZERO `[FAIL]`** +
+  `npm test`, `npm run build`, `npm run lint`, `npx tsc -b tsconfig.app.json`,
+  `git diff --check` e `git status --short` — todos exit 0.
+- **Limitações/desvios declarados:** (a) a Edge expõe SOMENTE as 8 operações de
+  MUTAÇÃO contratadas — a **leitura/listagem** continua no contrato soberano
+  P5/P6 (PostgREST + RLS), porque **não existe RPC de leitura** (`ciclo_painel`/
+  `ciclo_historico` não foram criadas em P2–P5) e criar RPC nova não é superfície
+  da P7; a pendência da F5-07 (§13.6, `ciclo_listar_colaborador_por_ciclo`)
+  permanece aberta; (b) `cycle.editar` exige o período COMPLETO (ano, número,
+  datas) porque a RPC `ciclo_editar` não aceita edição parcial — a fronteira não
+  faz merge de domínio (§13.1 marcava os campos como opcionais: o contrato real da
+  RPC prevalece); (c) `p_payload_hash` não é enviado (hash derivado server-side,
+  desvio já declarado em P2–P4); (d) o fluxo LOCAL legado de ciclo
+  (`cicloAvaliacaoStorage`) segue intacto — a substituição pela Edge é o cutover
+  P8.
+- **Permanece para P8+:** cutover de páginas/consumidores e remoção da autoridade
+  local de ciclo (P8), validação integrada/concorrência (P9), F5-10 metas e
+  F5-11 observações.
+
+### 3.12 F5-09 P6 (implementada; aguardando auditoria independente)
+
+- **Atividade:** F5-09 — **P6 (fechamento do Policy Engine para
   ciclos soberanos) IMPLEMENTADA** — **aguardando auditoria independente**.
   Issue **#200**. Contrato: `docs/F5-09-desenho-tecnico.md` (§8 tabela
   operação→capability + fechamentos aditivos, §16 R13/R17, §19 P6) e

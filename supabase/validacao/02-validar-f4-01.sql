@@ -331,7 +331,7 @@ do $$
 declare
   v_codes text[];
   v_esperado text[] := array[
-    'collaborator.create','collaborator.edit','collaborator.read','cycle.read',
+    'collaborator.create','collaborator.edit','collaborator.read','cycle.manage','cycle.read',
     'membership.read','org.catalog.manage','org.structure.manage','settings.manage'
   ]::text[];
 begin
@@ -341,9 +341,9 @@ begin
   where rc.access_role_id = 'c0000000-0000-4000-8000-0000000000f1';
 
   if v_codes is distinct from v_esperado then
-    raise exception '[FAIL] bundle admin divergente do contrato (F5-04 D15: sem controle, sem deprecado)';
+    raise exception '[FAIL] bundle admin divergente do contrato (F5-04 D15 + F5-09 P7 D28)';
   end if;
-  raise notice '[PASS] bundle admin = 8 capabilities FUNCIONAIS de administracao (sem controle, sem conteudo confidencial)';
+  raise notice '[PASS] bundle admin = 9 capabilities FUNCIONAIS de administracao (F5-09 P7 D28: cycle.manage aditivo; sem controle, sem conteudo confidencial)';
 end $$;
 
 -- ============================================================================
