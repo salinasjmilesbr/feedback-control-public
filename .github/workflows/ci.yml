@@ -338,6 +338,26 @@ jobs:
             < supabase/validacao/20-validar-f5-10-p1.sql
 
       # ----------------------------------------------------------------------
+      # F5-10 (P2) — OPERACOES SOBERANAS de metas (Issue #212): fixture isolada
+      # (prefixo `f0`) + validador com positivos e NEGATIVOS obrigatorios (UUID
+      # canonico, tenant revalidado, expected_version, idempotencia por
+      # operation_id, eventos append-only, autoria resolvida no banco, lock
+      # normativo unico, quota do banco, atomicidade/rollback e zero DELETE
+      # fisico). Roda depois da P1 e ANTES das regressoes.
+      # ----------------------------------------------------------------------
+      - name: "Seed F5-10 P2 scenario (operacoes soberanas de metas)"
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/21-cenario-f5-10-p2.sql
+
+      - name: "Run F5-10 P2 validation (criar/editar/progresso/finalizar/revisar/excluir)"
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/22-validar-f5-10-p2.sql
+
+      # ----------------------------------------------------------------------
       # Regressão F5-06/F5-07 (§23.4): cenários independentes, com prefixos de
       # UUID próprios (`d6`/`d7`), reaplicados antes de cada validação.
       # ----------------------------------------------------------------------
