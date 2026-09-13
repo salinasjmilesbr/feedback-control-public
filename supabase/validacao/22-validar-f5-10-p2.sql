@@ -19,11 +19,17 @@
 --   F  revisao de fechamento com fechamento anterior recuperavel na trilha;
 --   G  exclusao logica (linha preservada) e meta excluida sem mutacao;
 --   I  a quota continua autoridade do BANCO (trigger da P1) alem da RPC;
---   J  ACL/anti-escopo: 6 RPCs INVOKER com lock normativo, EXECUTE so
---      service_role, zero policy, DELETE fisico negado e P3/P4/P5/D21 nao
+--   J  ACL/anti-escopo: 7 RPCs INVOKER com lock normativo, EXECUTE so
+--      service_role, zero policy, DELETE fisico negado e P3/P4/P5 nao
 --      antecipadas;
 --   K  nenhuma aprovacao criada incidentalmente (P3 nao antecipada);
---   L  estado final deterministico (nenhum residuo dos testes negativos).
+--   L  estado final deterministico (nenhum residuo dos testes negativos);
+--   M  D21 — limites do ciclo: alteracao valida com version do CICLO +1 e evento
+--      `LIMITES_DO_CICLO_ALTERADOS` em **`cycle_events`** (before/after completos),
+--      replay identico, operation_id divergente, stale, ciclo nao ATIVO,
+--      cross-tenant, perfil/membership invalidos, quantidade fora de 0..3,
+--      reducao ate/abaixo das metas vivas, invariante do banco, ROLLBACK por
+--      falha injetada na trilha do ciclo e ZERO vazamento para a trilha de metas.
 --
 -- Saida deterministica: um `[PASS]` por bloco; qualquer falha aborta.
 -- Asserts negativos rodam em subtransacao (a excecao esperada reverte apenas a
@@ -1228,7 +1234,8 @@ declare
     'meta_atualizar_progresso(uuid, uuid, text, integer, integer, uuid, uuid)',
     'meta_finalizar(uuid, uuid, text, boolean, integer, uuid, uuid)',
     'meta_revisar_finalizacao(uuid, uuid, text, boolean, text, integer, uuid, uuid)',
-    'meta_excluir(uuid, uuid, text, integer, uuid, uuid)'];
+    'meta_excluir(uuid, uuid, text, integer, uuid, uuid)',
+    'meta_definir_limites_do_ciclo(uuid, uuid, text, integer, text, integer, uuid, uuid)'];
   v_fn   text;
   v_rec  record;
   v_tab  text;
@@ -1238,7 +1245,7 @@ declare
   v_ok   boolean;
   v_alvo uuid := 'f0900000-0000-0000-0000-000000000008';
 begin
-  -- (J1) superficie das 6 RPCs: INVOKER, search_path, EXECUTE e LOCK normativo.
+  -- (J1) superficie das 7 RPCs: INVOKER, search_path, EXECUTE e LOCK normativo.
   foreach v_fn in array v_fns loop
     select p.prosecdef, coalesce(array_to_string(p.proconfig, ','), '') as config,
            lower(pg_get_functiondef(p.oid)) as def
@@ -1275,19 +1282,21 @@ begin
   end loop;
 
   -- (J2) anti-escopo: NENHUMA outra RPC de meta/goal (nem de fase futura).
+  --      D21 (`meta_definir_limites_do_ciclo`) passou a ser contrato da P2 por
+  --      decisao de review e por isso SAIU da lista de fases futuras.
   select count(*) into v_n
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public'
      and (p.proname like 'meta\_%' or p.proname like 'goal\_%')
      and p.proname <> all (array[
        'meta_criar', 'meta_editar', 'meta_atualizar_progresso', 'meta_finalizar',
-       'meta_revisar_finalizacao', 'meta_excluir']);
+       'meta_revisar_finalizacao', 'meta_excluir', 'meta_definir_limites_do_ciclo']);
   if v_n <> 0 then
     v_prob := v_prob || format('%s RPC(s) de meta fora do contrato da P2', v_n);
   end if;
   foreach v_fn in array array[
     'meta_aprovar', 'meta_invalidar_aprovacoes', 'meta_listar_por_escopo',
-    'meta_definir_limites_do_ciclo', 'goal_listar', 'goal_aprovar'] loop
+    'goal_listar', 'goal_aprovar'] loop
     if exists (
       select 1 from pg_proc p
        where p.pronamespace = 'public'::regnamespace and p.proname = v_fn
@@ -1369,7 +1378,7 @@ begin
     raise exception '[FAIL] J6: capabilities de metas/observacoes = % (esperado 8)', v_n;
   end if;
 
-  raise notice '[PASS] J: 6 RPCs INVOKER com lock normativo unico, EXECUTE so service_role, zero policy/privilegio de cliente, DELETE fisico negado no banco e nenhuma fase futura antecipada';
+  raise notice '[PASS] J: 7 RPCs INVOKER com lock normativo unico, EXECUTE so service_role, zero policy/privilegio de cliente, DELETE fisico negado no banco e nenhuma fase futura antecipada';
 end $$;
 
 -- ============================================================================
@@ -1532,11 +1541,481 @@ begin
 end $$;
 
 -- ============================================================================
--- 14) Resumo
+-- 14) M) D21 — LIMITES DO CICLO (meta_definir_limites_do_ciclo)
+-- ============================================================================
+-- Decisao de review: o evento `LIMITES_DO_CICLO_ALTERADOS` vive em `cycle_events`
+-- (configuracao do CICLO), NUNCA em `evaluation_goal_events`. Este bloco roda
+-- depois do estado final (bloco L) justamente para provar que a operacao de
+-- limites NAO toca a trilha nem as metas.
+-- Pre-condicao: ciclo ATIVO de Alfa com `version = 1` e limites {NP: 2, IND: 1};
+-- metas vivas do tipo NEGOCIO_PROJETO = 2 (as duas de negocio do ciclo ATIVO).
+do $$
+declare
+  v_alfa  uuid := 'f0a00000-0000-0000-0000-0000000000a1';
+  v_ciclo uuid := 'f0d10000-0000-0000-0000-0000000000a1';
+  v_encer uuid := 'f0d10000-0000-0000-0000-0000000000a2';
+  v_cicb  uuid := 'f0d10000-0000-0000-0000-0000000000b1';
+  v_beta  uuid := 'f0a00000-0000-0000-0000-0000000000b1';
+  v_a1    uuid := 'f0c00000-0000-0000-0000-000000000001';
+  v_abeta uuid := 'f0c00000-0000-0000-0000-000000000002';
+  v_adis  uuid := 'f0c00000-0000-0000-0000-000000000003';
+  v_aperf uuid := 'f0c00000-0000-0000-0000-000000000004';
+  v_r1    jsonb;
+  v_r2    jsonb;
+  v_evt   record;
+  v_ok    boolean;
+  v_msg   text;
+  v_n     int;
+  v_qtd   int;
+begin
+  -- (M0) Pre-condicao do bloco.
+  select c.version into v_n from public.evaluation_cycles c where c.id = v_ciclo;
+  if v_n <> 1 then
+    raise exception '[FAIL] M0: pre-condicao — ciclo ATIVO de Alfa deveria estar na version 1 (%)', v_n;
+  end if;
+  select l.quantidade into v_qtd from public.evaluation_cycle_goal_limits l
+   where l.organization_id = v_alfa and l.cycle_id = v_ciclo and l.tipo = 'NEGOCIO_PROJETO';
+  if v_qtd <> 2 then
+    raise exception '[FAIL] M0: pre-condicao — limite inicial de NEGOCIO_PROJETO deveria ser 2 (%)', v_qtd;
+  end if;
+
+  -- (M1) ALTERACAO VALIDA (aumento) em ciclo ATIVO: version do CICLO +1 e evento
+  --      `LIMITES_DO_CICLO_ALTERADOS` na trilha do CICLO, na mesma transacao.
+  v_r1 := public.meta_definir_limites_do_ciclo(v_ciclo, v_alfa, 'NEGOCIO_PROJETO', 3,
+    'aumento de limite de metas de negocio (P2)', 1, v_a1,
+    'f0700000-0000-0000-0000-000000000090');
+  if (v_r1->>'version')::int <> 2 or v_r1->>'tipo' <> 'NEGOCIO_PROJETO'
+     or (v_r1->>'quantidade')::int <> 3 then
+    raise exception '[FAIL] M1: retorno da alteracao de limites divergente (%)', v_r1;
+  end if;
+  select c.version into v_n from public.evaluation_cycles c where c.id = v_ciclo;
+  if v_n <> 2 then
+    raise exception '[FAIL] M1: a version do CICLO deveria ser 2 (%)', v_n;
+  end if;
+  select l.quantidade into v_qtd from public.evaluation_cycle_goal_limits l
+   where l.organization_id = v_alfa and l.cycle_id = v_ciclo and l.tipo = 'NEGOCIO_PROJETO';
+  if v_qtd <> 3 then
+    raise exception '[FAIL] M1: o limite gravado deveria ser 3 (%)', v_qtd;
+  end if;
+  select e.* into v_evt from public.cycle_events e
+   where e.organization_id = v_alfa
+     and e.operation_id = 'f0700000-0000-0000-0000-000000000090';
+  if v_evt.id is null then
+    raise exception '[FAIL] M1: evento LIMITES_DO_CICLO_ALTERADOS ausente em cycle_events';
+  end if;
+  if v_evt.event_type <> 'LIMITES_DO_CICLO_ALTERADOS'
+     or v_evt.entity_type <> 'evaluation_cycle' then
+    raise exception '[FAIL] M1: evento deveria ser LIMITES_DO_CICLO_ALTERADOS/evaluation_cycle (%/%)',
+      v_evt.event_type, v_evt.entity_type;
+  end if;
+  if v_evt.cycle_id <> v_ciclo or v_evt.result_entity_id <> v_ciclo then
+    raise exception '[FAIL] M1: o evento deveria apontar o ciclo (cycle_id/result_entity_id)';
+  end if;
+  if v_evt.actor_user_profile_id <> v_a1
+     or v_evt.actor_membership_id <> 'f0d00000-0000-0000-0000-000000000001'::uuid then
+    raise exception '[FAIL] M1: autoria soberana do evento de limites incorreta';
+  end if;
+  if v_evt.reason <> 'aumento de limite de metas de negocio (P2)' then
+    raise exception '[FAIL] M1: motivo do evento de limites nao registrado';
+  end if;
+  if v_evt.payload_hash !~ '^[0-9a-f]{64}$' then
+    raise exception '[FAIL] M1: payload_hash do evento de limites fora do formato SHA-256';
+  end if;
+  -- before_value preserva os limites ANTERIORES e a version anterior.
+  if v_evt.before_value->'limites'->>'NEGOCIO_PROJETO' <> '2'
+     or v_evt.before_value->'limites'->>'INDIVIDUAL' <> '1'
+     or (v_evt.before_value->>'version')::int <> 1
+     or (v_evt.before_value->>'quantidade')::int <> 2 then
+    raise exception '[FAIL] M1: before_value nao preserva os limites anteriores (%)', v_evt.before_value;
+  end if;
+  -- after_value registra os NOVOS limites e a NOVA version do ciclo.
+  if v_evt.after_value->'limites'->>'NEGOCIO_PROJETO' <> '3'
+     or v_evt.after_value->'limites'->>'INDIVIDUAL' <> '1'
+     or (v_evt.after_value->>'version')::int <> 2
+     or v_evt.after_value->>'tipo' <> 'NEGOCIO_PROJETO'
+     or (v_evt.after_value->>'quantidade')::int <> 3 then
+    raise exception '[FAIL] M1: after_value nao registra os novos limites/version (%)', v_evt.after_value;
+  end if;
+
+  -- NENHUM evento no dominio de metas (o limite e configuracao do CICLO).
+  select count(*) into v_n from public.evaluation_goal_events e
+   where e.organization_id = v_alfa and e.event_type = 'LIMITES_DO_CICLO_ALTERADOS';
+  if v_n <> 0 then
+    raise exception '[FAIL] M1: LIMITES_DO_CICLO_ALTERADOS vazou para evaluation_goal_events (%)', v_n;
+  end if;
+  select count(*) into v_n from public.evaluation_goal_events e
+   where e.organization_id = v_alfa;
+  if v_n <> 13 then
+    raise exception '[FAIL] M1: a trilha de metas foi alterada pela operacao de limites (%)', v_n;
+  end if;
+  select count(*) into v_n from public.cycle_events e
+   where e.organization_id = v_alfa and e.cycle_id = v_ciclo;
+  if v_n <> 1 then
+    raise exception '[FAIL] M1: esperado exatamente 1 evento de ciclo para a operacao (%)', v_n;
+  end if;
+
+  -- (M2) REPLAY IDENTICO: mesmo resultado, sem nova mutacao e sem novo evento.
+  v_r2 := public.meta_definir_limites_do_ciclo(v_ciclo, v_alfa, 'NEGOCIO_PROJETO', 3,
+    'aumento de limite de metas de negocio (P2)', 1, v_a1,
+    'f0700000-0000-0000-0000-000000000090');
+  if v_r1 <> v_r2 then
+    raise exception '[FAIL] M2: replay identico devolveu resultado diferente (% vs %)', v_r1, v_r2;
+  end if;
+  select c.version into v_n from public.evaluation_cycles c where c.id = v_ciclo;
+  select count(*) into v_qtd from public.cycle_events e
+   where e.organization_id = v_alfa and e.cycle_id = v_ciclo;
+  if v_n <> 2 or v_qtd <> 1 then
+    raise exception '[FAIL] M2: replay duplicou mutacao/evento (version=%, eventos=%)', v_n, v_qtd;
+  end if;
+
+  -- (M3) OPERATION_ID DIVERGENTE: mesma chave, intencao diferente => CONFLICT.
+  v_ok := false; v_msg := null;
+  begin
+    perform public.meta_definir_limites_do_ciclo(v_ciclo, v_alfa, 'NEGOCIO_PROJETO', 0,
+      'aumento de limite de metas de negocio (P2)', 2, v_a1,
+      'f0700000-0000-0000-0000-000000000090');
+  exception when others then v_ok := sqlerrm like '%F5_10_CONFLICT%'; v_msg := sqlerrm;
+  end;
+  if not v_ok then
+    raise exception '[FAIL] M3: operation_id divergente deveria ser CONFLICT (recebido %)', v_msg;
+  end if;
+  select l.quantidade into v_qtd from public.evaluation_cycle_goal_limits l
+   where l.organization_id = v_alfa and l.cycle_id = v_ciclo and l.tipo = 'NEGOCIO_PROJETO';
+  if v_qtd <> 3 then
+    raise exception '[FAIL] M3: a recusa por intencao divergente alterou o limite (%)', v_qtd;
+  end if;
+
+  -- (M4) STALE expected_version => CONFLICT sem efeito.
+  v_ok := false; v_msg := null;
+  begin
+    perform public.meta_definir_limites_do_ciclo(v_ciclo, v_alfa, 'NEGOCIO_PROJETO', 2,
+      'reducao com versao obsoleta (P2)', 1, v_a1,
+      'f0700000-0000-0000-0000-000000000092');
+  exception when others then v_ok := sqlerrm like '%F5_10_CONFLICT%'; v_msg := sqlerrm;
+  end;
+  if not v_ok then
+    raise exception '[FAIL] M4: expected_version obsoleto deveria ser CONFLICT (recebido %)', v_msg;
+  end if;
+  select c.version into v_n from public.evaluation_cycles c where c.id = v_ciclo;
+  if v_n <> 2 then
+    raise exception '[FAIL] M4: a recusa por versao alterou a version do ciclo (%)', v_n;
+  end if;
+
+  -- (M5) REDUCAO EXATAMENTE ATE O NUMERO DE METAS VIVAS = ACEITA (2 vivas -> 2).
+  v_r1 := public.meta_definir_limites_do_ciclo(v_ciclo, v_alfa, 'NEGOCIO_PROJETO', 2,
+    'reducao ate o numero de metas vivas (P2)', 2, v_a1,
+    'f0700000-0000-0000-0000-000000000093');
+  if (v_r1->>'version')::int <> 3 or (v_r1->>'quantidade')::int <> 2 then
+    raise exception '[FAIL] M5: reducao ate o numero de metas vivas deveria ser aceita (%)', v_r1;
+  end if;
+  select l.quantidade into v_qtd from public.evaluation_cycle_goal_limits l
+   where l.organization_id = v_alfa and l.cycle_id = v_ciclo and l.tipo = 'NEGOCIO_PROJETO';
+  if v_qtd <> 2 then
+    raise exception '[FAIL] M5: o limite apos a reducao deveria ser 2 (%)', v_qtd;
+  end if;
+  select e.* into v_evt from public.cycle_events e
+   where e.organization_id = v_alfa
+     and e.operation_id = 'f0700000-0000-0000-0000-000000000093';
+  if (v_evt.before_value->>'version')::int <> 2 or (v_evt.after_value->>'version')::int <> 3
+     or v_evt.before_value->'limites'->>'NEGOCIO_PROJETO' <> '3'
+     or v_evt.after_value->'limites'->>'NEGOCIO_PROJETO' <> '2' then
+    raise exception '[FAIL] M5: before/after da reducao divergentes (% / %)',
+      v_evt.before_value, v_evt.after_value;
+  end if;
+
+  -- (M6) REDUCAO ABAIXO DAS METAS VIVAS => CONFLICT sem efeito.
+  v_ok := false; v_msg := null;
+  begin
+    perform public.meta_definir_limites_do_ciclo(v_ciclo, v_alfa, 'NEGOCIO_PROJETO', 1,
+      'reducao abaixo das metas vivas (P2)', 3, v_a1,
+      'f0700000-0000-0000-0000-000000000094');
+  exception when others then v_ok := sqlerrm like '%F5_10_CONFLICT%'; v_msg := sqlerrm;
+  end;
+  if not v_ok then
+    raise exception '[FAIL] M6: reducao abaixo das metas vivas deveria ser CONFLICT (recebido %)', v_msg;
+  end if;
+  select c.version into v_n from public.evaluation_cycles c where c.id = v_ciclo;
+  select l.quantidade into v_qtd from public.evaluation_cycle_goal_limits l
+   where l.organization_id = v_alfa and l.cycle_id = v_ciclo and l.tipo = 'NEGOCIO_PROJETO';
+  if v_n <> 3 or v_qtd <> 2 then
+    raise exception '[FAIL] M6: a recusa por reducao alterou estado (version=%, limite=%)', v_n, v_qtd;
+  end if;
+
+  -- (M6b) o BANCO tambem recusa a reducao abaixo das vivas (autoridade do trigger
+  --       da P1, independente da RPC).
+  v_ok := false; v_msg := null;
+  begin
+    update public.evaluation_cycle_goal_limits l
+       set quantidade = 1
+     where l.organization_id = v_alfa and l.cycle_id = v_ciclo
+       and l.tipo = 'NEGOCIO_PROJETO';
+  exception when others then v_ok := sqlerrm like '%F5-10: quota%'; v_msg := sqlerrm;
+  end;
+  if not v_ok then
+    raise exception '[FAIL] M6b: UPDATE direto abaixo das metas vivas deveria violar o invariante do banco (recebido %)', v_msg;
+  end if;
+
+  -- (M7) QUANTIDADE fora de 0..3 => INVALID_INPUT sem efeito.
+  foreach v_msg in array array['4', '-1'] loop
+    v_ok := false;
+    begin
+      perform public.meta_definir_limites_do_ciclo(v_ciclo, v_alfa, 'NEGOCIO_PROJETO',
+        v_msg::integer, 'probe de dominio (P2)', 3, v_a1,
+        'f0700000-0000-0000-0000-0000000000a0');
+    exception when others then v_ok := sqlerrm like '%F5_10_INVALID_INPUT%';
+    end;
+    if not v_ok then
+      raise exception '[FAIL] M7: quantidade % deveria ser INVALID_INPUT', v_msg;
+    end if;
+  end loop;
+  -- motivo e tipo invalidos tambem sao INVALID_INPUT.
+  v_ok := false;
+  begin
+    perform public.meta_definir_limites_do_ciclo(v_ciclo, v_alfa, 'NEGOCIO_PROJETO', 2,
+      '   ', 3, v_a1, 'f0700000-0000-0000-0000-0000000000a1');
+  exception when others then v_ok := sqlerrm like '%F5_10_INVALID_INPUT%';
+  end;
+  if not v_ok then
+    raise exception '[FAIL] M7: motivo em branco deveria ser INVALID_INPUT';
+  end if;
+  v_ok := false;
+  begin
+    perform public.meta_definir_limites_do_ciclo(v_ciclo, v_alfa, 'EQUIPE', 2,
+      'probe de tipo (P2)', 3, v_a1, 'f0700000-0000-0000-0000-0000000000a2');
+  exception when others then v_ok := sqlerrm like '%F5_10_INVALID_INPUT%';
+  end;
+  if not v_ok then
+    raise exception '[FAIL] M7: tipo invalido deveria ser INVALID_INPUT';
+  end if;
+  select c.version into v_n from public.evaluation_cycles c where c.id = v_ciclo;
+  if v_n <> 3 then
+    raise exception '[FAIL] M7: probe invalido alterou a version do ciclo (%)', v_n;
+  end if;
+
+  -- (M8) CICLO NAO ATIVO => CONFLICT (o ciclo ENCERRADO de Alfa esta na version 3).
+  v_ok := false; v_msg := null;
+  begin
+    perform public.meta_definir_limites_do_ciclo(v_encer, v_alfa, 'NEGOCIO_PROJETO', 3,
+      'probe em ciclo encerrado (P2)', 3, v_a1,
+      'f0700000-0000-0000-0000-000000000095');
+  exception when others then v_ok := sqlerrm like '%F5_10_CONFLICT%'; v_msg := sqlerrm;
+  end;
+  if not v_ok then
+    raise exception '[FAIL] M8: ciclo nao ATIVO deveria ser CONFLICT (recebido %)', v_msg;
+  end if;
+
+  -- (M9) CROSS-TENANT: ciclo de Beta com a organizacao Alfa => NOT_FOUND.
+  v_ok := false; v_msg := null;
+  begin
+    perform public.meta_definir_limites_do_ciclo(v_cicb, v_alfa, 'NEGOCIO_PROJETO', 1,
+      'probe cross-tenant (P2)', 1, v_a1,
+      'f0700000-0000-0000-0000-000000000096');
+  exception when others then v_ok := sqlerrm like '%F5_10_NOT_FOUND%'; v_msg := sqlerrm;
+  end;
+  if not v_ok then
+    raise exception '[FAIL] M9: ciclo de outro tenant deveria ser NOT_FOUND (recebido %)', v_msg;
+  end if;
+
+  -- (M10) PERFIL/MEMBERSHIP INVALIDOS, ator de outro tenant e expected_version
+  --       ausente => FORBIDDEN / INVALID_INPUT, todos sem efeito.
+  v_ok := false;
+  begin
+    perform public.meta_definir_limites_do_ciclo(v_ciclo, v_alfa, 'NEGOCIO_PROJETO', 2,
+      'probe membership disabled (P2)', 3, v_adis,
+      'f0700000-0000-0000-0000-000000000098');
+  exception when others then v_ok := sqlerrm like '%F5_10_FORBIDDEN%';
+  end;
+  if not v_ok then
+    raise exception '[FAIL] M10: ator com membership disabled deveria ser FORBIDDEN';
+  end if;
+  v_ok := false;
+  begin
+    perform public.meta_definir_limites_do_ciclo(v_ciclo, v_alfa, 'NEGOCIO_PROJETO', 2,
+      'probe perfil disabled (P2)', 3, v_aperf,
+      'f0700000-0000-0000-0000-000000000099');
+  exception when others then v_ok := sqlerrm like '%F5_10_FORBIDDEN%';
+  end;
+  if not v_ok then
+    raise exception '[FAIL] M10: ator com perfil disabled deveria ser FORBIDDEN';
+  end if;
+  v_ok := false;
+  begin
+    perform public.meta_definir_limites_do_ciclo(v_cicb, v_beta, 'NEGOCIO_PROJETO', 1,
+      'probe ator de outro tenant (P2)', 1, v_a1,
+      'f0700000-0000-0000-0000-00000000009a');
+  exception when others then v_ok := sqlerrm like '%F5_10_FORBIDDEN%';
+  end;
+  if not v_ok then
+    raise exception '[FAIL] M10: ator de outro tenant deveria ser FORBIDDEN';
+  end if;
+  v_ok := false;
+  begin
+    perform public.meta_definir_limites_do_ciclo(v_cicb, v_beta, 'NEGOCIO_PROJETO', 1,
+      'probe expected_version ausente (P2)', null, v_abeta,
+      'f0700000-0000-0000-0000-00000000009b');
+  exception when others then v_ok := sqlerrm like '%F5_10_INVALID_INPUT%';
+  end;
+  if not v_ok then
+    raise exception '[FAIL] M10: expected_version ausente deveria ser INVALID_INPUT';
+  end if;
+
+  raise notice '[PASS] M/D21: alteracao valida de limites em ciclo ATIVO com version do CICLO +1 e evento LIMITES_DO_CICLO_ALTERADOS em cycle_events (before/after completos); replay identico sem novo efeito; operation_id divergente, stale, ciclo nao ATIVO, cross-tenant, perfil/membership invalidos e quantidade fora de 0..3 recusados sem efeito';
+end $$;
+
+-- ============================================================================
+-- 15) M2) D21 — ROLLBACK TOTAL quando a gravacao do evento de limites falha
+-- ============================================================================
+-- A falha e injetada APENAS no INSERT de `cycle_events`, que ocorre DEPOIS do
+-- upsert da quota e do incremento da version do ciclo: se a transacao nao fosse
+-- atomica, quota/version ficariam mutadas sem evento. DDL no nivel SQL.
+create or replace function public._mut_f5_10_p2_falhar_trilha_ciclo()
+returns trigger
+language plpgsql
+as $mut$
+begin
+  raise exception 'MUT_F5_10_P2: falha injetada na gravacao da trilha de ciclo';
+end;
+$mut$;
+
+create trigger _mut_f5_10_p2_trilha_ciclo before insert on public.cycle_events
+  for each row execute function public._mut_f5_10_p2_falhar_trilha_ciclo();
+
+do $$
+declare
+  v_alfa  uuid := 'f0a00000-0000-0000-0000-0000000000a1';
+  v_ciclo uuid := 'f0d10000-0000-0000-0000-0000000000a1';
+  v_a1    uuid := 'f0c00000-0000-0000-0000-000000000001';
+  v_ok    boolean;
+  v_n     int;
+  v_qtd   int;
+begin
+  v_ok := false;
+  begin
+    perform public.meta_definir_limites_do_ciclo(v_ciclo, v_alfa, 'NEGOCIO_PROJETO', 3,
+      'probe de rollback dos limites (P2)', 3, v_a1,
+      'f0700000-0000-0000-0000-000000000097');
+  exception when others then v_ok := sqlerrm like '%MUT_F5_10_P2%';
+  end;
+  if not v_ok then
+    raise exception '[FAIL] M2: a falha injetada na trilha do ciclo nao abortou a operacao';
+  end if;
+
+  select c.version into v_n from public.evaluation_cycles c where c.id = v_ciclo;
+  select l.quantidade into v_qtd from public.evaluation_cycle_goal_limits l
+   where l.organization_id = v_alfa and l.cycle_id = v_ciclo and l.tipo = 'NEGOCIO_PROJETO';
+  if v_n <> 3 or v_qtd <> 2 then
+    raise exception '[FAIL] M2: rollback incompleto (version=%, limite=%)', v_n, v_qtd;
+  end if;
+  if exists (
+    select 1 from public.cycle_events e
+     where e.organization_id = v_alfa
+       and e.operation_id = 'f0700000-0000-0000-0000-000000000097'
+  ) then
+    raise exception '[FAIL] M2: evento registrado apesar da falha injetada';
+  end if;
+  select count(*) into v_n from public.cycle_events e
+   where e.organization_id = v_alfa and e.cycle_id = v_ciclo;
+  if v_n <> 2 then
+    raise exception '[FAIL] M2: a trilha do ciclo mudou apos o rollback (%)', v_n;
+  end if;
+  -- A trilha de METAS segue intocada (o evento de limites nao vive nela).
+  select count(*) into v_n from public.evaluation_goal_events e
+   where e.organization_id = v_alfa;
+  if v_n <> 13 then
+    raise exception '[FAIL] M2: a trilha de metas foi alterada (%)', v_n;
+  end if;
+
+  raise notice '[PASS] M2/D21: falha injetada na trilha do CICLO => ROLLBACK TOTAL (limite e version do ciclo intactos, nenhum evento parcial, trilha de metas intocada)';
+end $$;
+
+drop trigger _mut_f5_10_p2_trilha_ciclo on public.cycle_events;
+drop function public._mut_f5_10_p2_falhar_trilha_ciclo();
+
+-- ============================================================================
+-- 16) M3) D21 — Estado final do ciclo de limites e nao-vazamento para metas
+-- ============================================================================
+do $$
+declare
+  v_alfa   uuid := 'f0a00000-0000-0000-0000-0000000000a1';
+  v_ciclo  uuid := 'f0d10000-0000-0000-0000-0000000000a1';
+  v_beta   uuid := 'f0a00000-0000-0000-0000-0000000000b1';
+  v_lim    int;
+  v_ver    int;
+  v_evt    int;
+  v_metas  int;
+  v_goalev int;
+  v_tipo   text;
+begin
+  -- Limites finais de Alfa ATIVO: {NEGOCIO_PROJETO: 2, INDIVIDUAL: 1} (restaurado).
+  select l.quantidade into v_lim from public.evaluation_cycle_goal_limits l
+   where l.organization_id = v_alfa and l.cycle_id = v_ciclo and l.tipo = 'NEGOCIO_PROJETO';
+  if v_lim <> 2 then
+    raise exception '[FAIL] M3: limite final de NEGOCIO_PROJETO deveria ser 2 (%)', v_lim;
+  end if;
+  select l.quantidade into v_lim from public.evaluation_cycle_goal_limits l
+   where l.organization_id = v_alfa and l.cycle_id = v_ciclo and l.tipo = 'INDIVIDUAL';
+  if v_lim <> 1 then
+    raise exception '[FAIL] M3: limite final de INDIVIDUAL deveria ser 1 (%)', v_lim;
+  end if;
+  select count(*) into v_lim from public.evaluation_cycle_goal_limits l
+   where l.organization_id = v_alfa and l.cycle_id = v_ciclo;
+  if v_lim <> 2 then
+    raise exception '[FAIL] M3: a operacao de limites criou/removeu linhas de quota (%)', v_lim;
+  end if;
+
+  -- Version final do CICLO ATIVO e trilha do ciclo: exatamente 2 eventos D21.
+  select c.version into v_ver from public.evaluation_cycles c where c.id = v_ciclo;
+  select count(*) into v_evt from public.cycle_events e
+   where e.organization_id = v_alfa and e.cycle_id = v_ciclo;
+  select count(*) into v_goalev from public.cycle_events e
+   where e.organization_id = v_alfa and e.event_type <> 'LIMITES_DO_CICLO_ALTERADOS';
+  if v_ver <> 3 or v_evt <> 2 or v_goalev <> 0 then
+    raise exception '[FAIL] M3: estado final do ciclo inesperado (version=%, eventos=%, nao-D21=%)',
+      v_ver, v_evt, v_goalev;
+  end if;
+
+  -- NENHUM evento D21 na trilha de metas, em NENHUM tenant, e trilhas intactas.
+  select count(*) into v_evt from public.evaluation_goal_events e
+   where e.event_type = 'LIMITES_DO_CICLO_ALTERADOS';
+  if v_evt <> 0 then
+    raise exception '[FAIL] M3: evento de limites encontrado em evaluation_goal_events (%)', v_evt;
+  end if;
+  select count(*) into v_metas from public.evaluation_goals
+   where organization_id in (v_alfa, v_beta);
+  select count(*) into v_goalev from public.evaluation_goal_events
+   where organization_id in (v_alfa, v_beta);
+  if v_metas <> 6 or v_goalev <> 14 then
+    raise exception '[FAIL] M3: metas/eventos de metas alterados pela operacao de limites (metas=%, eventos=%)',
+      v_metas, v_goalev;
+  end if;
+
+  -- A trilha de limites registra SOMENTE o tipo do contrato (nao antecipa nada).
+  for v_tipo in
+    select distinct e.event_type from public.cycle_events e
+     where e.organization_id = v_alfa
+  loop
+    if v_tipo <> 'LIMITES_DO_CICLO_ALTERADOS' then
+      raise exception '[FAIL] M3: tipo inesperado na trilha do ciclo (%)', v_tipo;
+    end if;
+  end loop;
+
+  -- Nenhum artefato de mutacao (inclusive o da trilha do ciclo) deixado para tras.
+  select count(*) into v_evt from pg_proc p
+   where p.pronamespace = 'public'::regnamespace
+     and p.proname like '\_mut\_f5\_10\_p2%';
+  if v_evt <> 0 then
+    raise exception '[FAIL] M3: artefato de mutacao deixado no schema (%)', v_evt;
+  end if;
+
+  raise notice '[PASS] M3/D21: limites finais {NEGOCIO_PROJETO: 2, INDIVIDUAL: 1}, version do ciclo 3, 2 eventos LIMITES_DO_CICLO_ALTERADOS em cycle_events e ZERO vazamento para a trilha de metas';
+end $$;
+
+-- ============================================================================
+-- 17) Resumo
 -- ============================================================================
 do $$
 begin
   raise notice '============================================================';
-  raise notice 'F5-10 P2: operacoes soberanas de metas validadas — criar, editar, progresso, finalizar, revisar fechamento e excluir logicamente, com UUID canonico, tenant revalidado, expected_version, idempotencia por operation_id, evento append-only, autoria resolvida no banco, lock normativo unico, quota do banco, atomicidade e zero DELETE fisico.';
+  raise notice 'F5-10 P2: operacoes soberanas de metas validadas — criar, editar, progresso, finalizar, revisar fechamento, excluir logicamente e definir limites do ciclo (D21, evento em cycle_events), com UUID canonico, tenant revalidado, expected_version, idempotencia por operation_id, evento append-only, autoria resolvida no banco, lock normativo unico, quota do banco, atomicidade e zero DELETE fisico.';
   raise notice '============================================================';
 end $$;

@@ -42,13 +42,15 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 - **Base:** `main` = `3ebdc4e462560b6d187d7b20e85b03e5d3b87be0` (squash do PR #211,
   F5-10 P1). **Branch:** `feat/f5-10-p2-operacoes-metas`.
 - **Entregue:** `supabase/migrations/20260923000000_f5_10_p2_goals_rpc.sql`
-  (6 RPCs: `meta_criar`, `meta_editar`, `meta_atualizar_progresso`,
-  `meta_finalizar`, `meta_revisar_finalizacao`, `meta_excluir` — `SECURITY
-  INVOKER`, `search_path` fixo, `EXECUTE` só `service_role`, preflight + guarda
-  final), `supabase/validacao/21-cenario-`/`22-validar-f5-10-p2.sql` (positivos e
-  negativos do escopo), `.github/workflows/ci.yml` (2 passos novos, com `name`
-  citado), `supabase/migrations/README.md` e regressões de anti-antecipação:
-  `20-validar-f5-10-p1.sql` (bloco K → **lista fechada** com as 6 RPCs da P2) e
+  (7 RPCs: `meta_criar`, `meta_editar`, `meta_atualizar_progresso`,
+  `meta_finalizar`, `meta_revisar_finalizacao`, `meta_excluir`,
+  `meta_definir_limites_do_ciclo` — `SECURITY INVOKER`, `search_path` fixo,
+  `EXECUTE` só `service_role`, preflight + guarda final), o **CHECK aditivo** de
+  `cycle_events.event_type` (D21), `supabase/validacao/21-cenario-`/
+  `22-validar-f5-10-p2.sql` (positivos e negativos do escopo, incluindo os blocos
+  M/D21), `.github/workflows/ci.yml` (2 passos novos, com `name` citado),
+  `supabase/migrations/README.md` e regressões de anti-antecipação:
+  `20-validar-f5-10-p1.sql` (bloco K → **lista fechada** com as 7 RPCs da P2) e
   `15-validar-f5-09-p9.sql` (lista fechada ampliada).
 - **Padrões reusados da F5-09 P2 (auditados, nada de arquitetura nova):**
   `expected_version` obrigatório comparado **depois** do lock e do
@@ -65,20 +67,36 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   `evaluation_cycles:<organization_id>`), adquirida no início de cada mutação.
   **Nenhuma** família/chave nova e nenhum `pg_advisory_xact_lock` literal nas
   RPCs (a guarda P6-6 do cutover da F5-08 continua verde).
-- **Bloqueio documental declarado (não resolvido por invenção):**
-  `meta_definir_limites_do_ciclo` (D21) **não** foi implementada nesta rodada
-  porque o evento exigido (`LIMITES_DO_CICLO_ALTERADOS`) é de **ciclo** enquanto
-  `evaluation_goal_events.goal_id` é `NOT NULL` com FK composta para
-  `evaluation_goals` (§6.2 implementado na P1): não existe valor **não
-  arbitrário** para `goal_id` (um ciclo sem metas não teria nenhum). Tornar a
-  coluna anulável ou criar trilha própria de limites **reabre** decisão fechada
-  (D4/D11/§6.2) — a escolha pertence ao dono do contrato. A quota permanece
-  invariante do banco (triggers da P1) e as RPCs da P2 apenas serializam pela
-  família normativa de lock; **nenhuma** política de quota paralela foi criada.
+- **D21 — `meta_definir_limites_do_ciclo` (decisão de review, implementada):** o
+  evento `LIMITES_DO_CICLO_ALTERADOS` é registrado em **`cycle_events`**, não em
+  `evaluation_goal_events` — limite é configuração do ciclo; capability normativa
+  `cycle.manage`; `expected_version` e lock são do ciclo; e a trilha de ciclo já
+  possui `cycle_id`, FK tenant-bound, autoria soberana, `operation_id`,
+  `payload_hash`, before/after e idempotência. O CHECK de
+  `cycle_events.event_type` foi ampliado de forma **aditiva e fail-closed**
+  (baseline conferido antes do `ALTER`). **Nada disso foi feito:** anular
+  `evaluation_goal_events.goal_id`, `goal_id` arbitrário, tabela nova de eventos,
+  família nova de lock ou edição de migration histórica da P1. A RPC faz
+  **upsert** do limite de um tipo (nunca abaixo das metas não excluídas), com
+  `expected_version` **do ciclo**, `version` do ciclo **+1**, `operation_id`,
+  `payload_hash` server-side, evento na mesma transação (before = limites
+  anteriores; after = novos limites + nova version; `result_entity_id` =
+  `cycle_id`) e rollback total em falha. O gate funcional `cycle.manage` exigido
+  por D21 permanece na fronteira confiável final (Policy Engine/Edge, P4/P5),
+  registrado no comentário da RPC; a quota segue invariante do banco (triggers da
+  P1) e **nenhuma** política de quota paralela foi criada.
 - **Gates reais (host local):** `db reset` + bateria SQL completa na ordem do CI
-  (**bateria SQL completa na ordem do CI: **37/37 entradas, falhas=0****) + `git diff --check`. `npm test`/`build`/`lint`/`tsc`
-  **não se aplicam** (nenhum arquivo JS/TS alterado; a suíte geral fica no CI).
-- **Elevações de acesso nesta rodada:** **5 (diagnostico obrigatorio de base/preflight, fetch do SHA base inexistente localmente, criacao da branch no SHA exigido, batch de validacao SQL #1 - que encontrou 1 defeito real no cenario, corrigido - e batch de reteste com commit/push)**.
+  (**37/37 entradas, `falhas=0`**) + `git diff --check`. `npm test`/`build`/
+  `lint`/`tsc` **não se aplicam** (nenhum arquivo JS/TS alterado; a suíte geral
+  fica no CI).
+- **Elevações de acesso nesta rodada:** 5 (diagnóstico obrigatório de
+  base/preflight, fetch do SHA base inexistente localmente, criação da branch no
+  SHA exigido, batch de validação SQL #1 — que encontrou 1 defeito real no
+  cenário, corrigido — e batch de reteste com commit/push).
+- **Correção de auditoria (D21, mesma branch):** commit com o CHECK aditivo, a
+  7ª RPC, os blocos M/D21 do validador, as listas fechadas (7 RPCs) e o README.
+  Gates: `db reset` + bateria completa + `git diff --check` = **db reset + bateria SQL completa na ordem do CI (**37/37 entradas, falhas=0**) + `git diff --check` exit 0**;
+  elevações nesta correção: **1 (batch unico de validacao SQL + commit + push)**.
 - **Não feito (por contrato):** P3 (aprovação/invalidação), P4 (matriz
   `goal.*`, Policy Engine, RLS own-tenant, RPC de leitura), P5 (Edge/cliente),
   P6 (cutover/backfill/frontend), P7 (bateria integrada e concorrência real),

@@ -21,6 +21,10 @@
 --                                     integralmente recuperavel na trilha)
 --   6) `meta_excluir`              — EXCLUIDA (soft delete; DELETE fisico segue
 --                                     proibido por ACL e pela doutrina da P1)
+--   7) `meta_definir_limites_do_ciclo` — LIMITES_DO_CICLO_ALTERADOS (D21: quota
+--                                     alteravel no ciclo ATIVO por operacao
+--                                     soberana explicita, NUNCA abaixo do
+--                                     existente; evento na trilha de CICLO)
 --
 -- Fora do escopo (fases seguintes), deliberadamente NAO implementado:
 --   - P3: `meta_aprovar` / `meta_invalidar_aprovacoes` e a matriz §9.4. NENHUMA
@@ -66,20 +70,24 @@
 --     excluida nao aceita mutacao; ciclo `ATIVO` e exigido para criar/editar/
 --     progredir/finalizar (revisar/excluir sao historicas e NAO o exigem).
 --
--- DESVIOS e BLOQUEIO DECLARADOS para auditoria:
---   (a) `meta_definir_limites_do_ciclo` (D21) NAO foi implementada nesta rodada.
---       D21 exige o evento append-only `LIMITES_DO_CICLO_ALTERADOS`, mas o
---       contrato §6.2 — implementado pela P1 — declara
---       `evaluation_goal_events.goal_id uuid NOT NULL` com FK COMPOSTA para
---       `evaluation_goals`. Um evento de CICLO nao possui meta associada: nao ha
---       valor NAO ARBITRARIO para `goal_id` (e um ciclo sem metas nao teria
---       nenhum), e escolher "uma meta qualquer" corromperia a semantica da
---       trilha. Tornar a coluna nullable ou criar trilha propria de limites
---       REABRE decisao fechada (D4/D11/§6.2), o que este trabalho nao faz sem
---       decisao do dono do contrato: o item fica registrado como BLOCKER
---       DOCUMENTAL para a auditoria da P2. A quota permanece invariante do banco
---       (triggers da P1) e as RPCs desta fase serializam pela familia normativa
---       de lock (D10) — nenhuma politica de quota nova, nenhum `DELETE` de quota.
+-- DESVIOS DECLARADOS para auditoria:
+--   (a) D21 (`meta_definir_limites_do_ciclo`) e IMPLEMENTADA nesta fase, com o
+--       evento `LIMITES_DO_CICLO_ALTERADOS` registrado em **`cycle_events`** — e
+--       nao em `evaluation_goal_events`. DECISAO DE REVIEW (fechada): limite e
+--       CONFIGURACAO DO CICLO; a capability normativa e `cycle.manage`; o
+--       `expected_version` e do CICLO; o lock e a familia normativa dos ciclos; e
+--       `cycle_events` ja possui `cycle_id`, FK tenant-bound, autoria soberana,
+--       `operation_id`, `payload_hash`, `before_value`/`after_value` e
+--       idempotencia. `evaluation_goal_events` exige `goal_id NOT NULL` + FK para
+--       a meta + `entity_type = 'evaluation_goal'` e portanto NAO representa uma
+--       alteracao de configuracao de ciclo. O CHECK de `cycle_events.event_type`
+--       e ampliado de forma ADITIVA e FAIL-CLOSED (o baseline e conferido antes
+--       do ALTER). NAO foi feito: tornar `evaluation_goal_events.goal_id`
+--       anulavel, usar `goal_id` arbitrario, criar tabela de eventos, criar
+--       familia de lock, editar migration historica ja mergeada da P1 ou
+--       antecipar P3-P7. A quota continua invariante do banco (triggers da P1) e
+--       a RPC desta fase serializa pela familia normativa de lock (D10) — nenhuma
+--       politica de quota nova, nenhum `DELETE` de quota.
 --   (b) `p_payload_hash` NAO e parametro das RPCs: o hash e DERIVADO server-side
 --       dos parametros ja validados (mesmo desvio declarado e ratificado na
 --       F5-09 P2); aceita-lo do cliente permitiria replay com hash forjado.
@@ -93,6 +101,11 @@
 --       Policy Engine (P4) na fronteira confiavel, e a superficie tecnica e a
 --       Edge (P5) com EXECUTE restrito a `service_role` — que EXECUTA, nunca
 --       decide autorizacao em nome do ator.
+--   (e) `meta_definir_limites_do_ciclo` NAO aplica o gate funcional
+--       `cycle.manage` (Policy Engine/Edge): D21 EXIGE essa capability na
+--       fronteira confiavel FINAL (P4/P5), exatamente como as demais operacoes
+--       desta fase. Aqui a RPC revalida ator/perfil/membership/tenant e deixa o
+--       enforcement funcional para P4/P5 — registro obrigatorio para auditoria.
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -1241,7 +1254,281 @@ comment on function public.meta_excluir(uuid, uuid, text, integer, uuid, uuid) i
   'doutrina da P1; meta excluida nao aceita novas mutacoes.';
 
 -- ----------------------------------------------------------------------------
--- 7) ACL das RPCs (EXECUTE somente service_role)
+-- 7) Ampliacao ADITIVA e FAIL-CLOSED do CHECK de `cycle_events.event_type`
+-- ----------------------------------------------------------------------------
+-- D21 (decisao de review): o evento `LIMITES_DO_CICLO_ALTERADOS` pertence a
+-- trilha do CICLO. A ampliacao e ADITIVA (nenhum tipo removido) e FAIL-CLOSED: o
+-- baseline e conferido ANTES do ALTER e o ALTER so acontece se o CHECK atual for
+-- o do contrato da F5-09 P1 (ja com ADMISSAO_INCLUIDA/PERIODO_CORRIGIDO) e ainda
+-- NAO contemplar o novo tipo. Nenhuma tabela nova, nenhuma coluna anulada e
+-- nenhuma migration historica da P1 editada.
+do $$
+declare
+  v_def text;
+begin
+  select pg_get_constraintdef(c.oid) into v_def
+    from pg_constraint c
+   where c.conrelid = 'public.cycle_events'::regclass
+     and c.conname = 'ck_cycle_events_event_type' and c.contype = 'c';
+  if v_def is null then
+    raise exception 'F5_10_P2_INCOMPATIBLE_BASELINE: CHECK ck_cycle_events_event_type ausente em cycle_events';
+  end if;
+  if position('ADMISSAO_INCLUIDA' in v_def) = 0
+     or position('PERIODO_CORRIGIDO' in v_def) = 0
+     or position('CANCELADO' in v_def) = 0 then
+    raise exception
+      'F5_10_P2_INCOMPATIBLE_BASELINE: CHECK de cycle_events.event_type divergente do contrato da F5-09 P1 (%)', v_def;
+  end if;
+  if position('LIMITES_DO_CICLO_ALTERADOS' in v_def) > 0 then
+    raise exception
+      'F5_10_P2_INCOMPATIBLE_BASELINE: cycle_events.event_type ja aceita LIMITES_DO_CICLO_ALTERADOS (baseline inesperado)';
+  end if;
+end $$;
+
+alter table public.cycle_events drop constraint ck_cycle_events_event_type;
+
+alter table public.cycle_events add constraint ck_cycle_events_event_type
+  check (event_type in (
+    'CRIADO', 'EDITADO', 'ATIVADO', 'ENCERRADO', 'CANCELADO', 'REABERTO',
+    'PERIODO_CORRIGIDO', 'ADMISSAO_INCLUIDA', 'LIMITES_DO_CICLO_ALTERADOS'));
+
+comment on constraint ck_cycle_events_event_type on public.cycle_events is
+  'F5-09 P1 + F5-10 P2 (D21): tipos do contrato da trilha de ciclo. A P2 ampliou '
+  'de forma ADITIVA com LIMITES_DO_CICLO_ALTERADOS (configuracao de limites de '
+  'metas do ciclo alterada por meta_definir_limites_do_ciclo); nenhum tipo '
+  'anterior foi removido.';
+
+-- ----------------------------------------------------------------------------
+-- 8) `meta_definir_limites_do_ciclo` — LIMITES_DO_CICLO_ALTERADOS (D21)
+-- ----------------------------------------------------------------------------
+-- Operacao ADMINISTRATIVA explicita de configuracao do ciclo (D21): define o
+-- limite (quota) de UM tipo por UPSERT em `evaluation_cycle_goal_limits`, NUNCA
+-- abaixo do total de metas NAO EXCLUIDAS daquele tipo, com `expected_version` DO
+-- CICLO, `operation_id`, lock normativo e evento append-only em `cycle_events` na
+-- MESMA transacao. A quota continua autoridade do BANCO: o trigger
+-- `f5_10_validar_quota_do_limite` (P1) e a ULTIMA barreira e a leitura sob o lock
+-- aqui existe apenas para a mensagem estavel do contrato — nenhuma politica de
+-- quota paralela e nenhum `DELETE` da linha de limite.
+--
+-- GATE FUNCIONAL (registro obrigatorio para auditoria — desvio (e) do header):
+-- D21 exige `cycle.manage` na fronteira confiavel FINAL (Policy Engine/Edge,
+-- P4/P5). Esta RPC, exatamente como as demais da P2, revalida
+-- ator/perfil/membership/tenant (autoria soberana) e NAO decide a capability.
+create or replace function public.meta_definir_limites_do_ciclo(
+  p_cycle_id uuid,
+  p_organization_id uuid,
+  p_tipo text,
+  p_quantidade integer,
+  p_motivo text,
+  p_expected_version integer,
+  p_actor_user_profile_id uuid,
+  p_operation_id uuid
+)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_org         uuid := p_organization_id;
+  v_hash        text;
+  v_evento      record;
+  v_membership  uuid;
+  v_ciclo       record;
+  v_antes       jsonb;
+  v_depois      jsonb;
+  v_anterior    integer;
+  v_vivas       integer;
+  v_versao      integer;
+  v_instante    timestamptz := now();
+begin
+  -- (1) Forma do payload — nada aqui e autoridade.
+  if p_cycle_id is null or p_organization_id is null
+     or p_actor_user_profile_id is null or p_operation_id is null then
+    raise exception 'F5_10_INVALID_INPUT: cycle_id, organization_id, ator e operation_id obrigatorios';
+  end if;
+  if p_tipo is null or p_tipo not in ('NEGOCIO_PROJETO', 'INDIVIDUAL') then
+    raise exception 'F5_10_INVALID_INPUT: tipo deve ser NEGOCIO_PROJETO ou INDIVIDUAL';
+  end if;
+  if p_quantidade is null or p_quantidade < 0 or p_quantidade > 3 then
+    raise exception 'F5_10_INVALID_INPUT: quantidade deve estar entre 0 e 3';
+  end if;
+  if p_motivo is null or p_motivo = '' or p_motivo <> btrim(p_motivo) then
+    raise exception 'F5_10_INVALID_INPUT: motivo obrigatorio, nao vazio e sem espacos nas bordas';
+  end if;
+  if p_expected_version is null then
+    raise exception 'F5_10_INVALID_INPUT: expected_version obrigatorio';
+  end if;
+
+  -- (2) Hash canonico da INTENCAO (derivado server-side — desvio (b)).
+  v_hash := encode(sha256(convert_to(jsonb_build_object(
+    'operacao', 'meta_definir_limites_do_ciclo',
+    'organization_id', v_org,
+    'cycle_id', p_cycle_id,
+    'tipo', p_tipo,
+    'quantidade', p_quantidade,
+    'motivo', p_motivo,
+    'expected_version', p_expected_version
+  )::text, 'UTF8')), 'hex');
+
+  -- (3) Ator soberano do tenant.
+  if not public.evaluation_ator_valido(p_actor_user_profile_id, v_org) then
+    raise exception 'F5_10_FORBIDDEN: ator sem perfil/membership ativa na organizacao';
+  end if;
+
+  -- (4) Idempotencia — caminho rapido (revalidado sob o lock em (7)).
+  select e.payload_hash, e.result_entity_id, e.after_value
+    into v_evento
+    from public.cycle_events e
+   where e.organization_id = v_org and e.operation_id = p_operation_id;
+  if found then
+    if v_evento.payload_hash is distinct from v_hash then
+      raise exception 'F5_10_CONFLICT: operation_id ja utilizado com intencao diferente';
+    end if;
+    return jsonb_build_object(
+      'cycle_id', v_evento.result_entity_id,
+      'version', (v_evento.after_value->>'version')::integer,
+      'tipo', v_evento.after_value->>'tipo',
+      'quantidade', (v_evento.after_value->>'quantidade')::integer);
+  end if;
+
+  -- (5) Membership do ator (autoria soberana da trilha).
+  select m.id into v_membership
+    from public.user_organization_memberships m
+   where m.user_profile_id = p_actor_user_profile_id
+     and m.organization_id = v_org
+     and m.status = 'active';
+  if v_membership is null then
+    raise exception 'F5_10_FORBIDDEN: membership ativa do ator nao resolvida';
+  end if;
+
+  -- (6) MESMA familia normativa de lock dos ciclos (D10) — nenhuma chave nova.
+  perform public.ciclo_lock_organizacao(v_org);
+
+  -- (7) Idempotencia sob o lock.
+  select e.payload_hash, e.result_entity_id, e.after_value
+    into v_evento
+    from public.cycle_events e
+   where e.organization_id = v_org and e.operation_id = p_operation_id;
+  if found then
+    if v_evento.payload_hash is distinct from v_hash then
+      raise exception 'F5_10_CONFLICT: operation_id ja utilizado com intencao diferente';
+    end if;
+    return jsonb_build_object(
+      'cycle_id', v_evento.result_entity_id,
+      'version', (v_evento.after_value->>'version')::integer,
+      'tipo', v_evento.after_value->>'tipo',
+      'quantidade', (v_evento.after_value->>'quantidade')::integer);
+  end if;
+
+  -- (8) Ciclo do MESMO tenant (cross-tenant = NOT_FOUND) e ATIVO + versao.
+  select c.id, c.status, c.version into v_ciclo
+    from public.evaluation_cycles c
+   where c.id = p_cycle_id
+     and c.organization_id = v_org
+   for update;
+  if not found then
+    raise exception 'F5_10_NOT_FOUND: ciclo inexistente ou de outro tenant';
+  end if;
+  if v_ciclo.status <> 'ATIVO' then
+    raise exception
+      'F5_10_CONFLICT: alteracao de limites de metas exige ciclo ATIVO (status atual %)',
+      v_ciclo.status;
+  end if;
+  if v_ciclo.version <> p_expected_version then
+    raise exception 'F5_10_CONFLICT: versao divergente (expected_version desatualizado)';
+  end if;
+
+  -- (9) Limites ANTERIORES (mapa completo do ciclo) — preservados em before_value.
+  select coalesce(jsonb_object_agg(l.tipo, l.quantidade), '{}'::jsonb) into v_antes
+    from public.evaluation_cycle_goal_limits l
+   where l.organization_id = v_org
+     and l.cycle_id = p_cycle_id;
+  select l.quantidade into v_anterior
+    from public.evaluation_cycle_goal_limits l
+   where l.organization_id = v_org
+     and l.cycle_id = p_cycle_id
+     and l.tipo = p_tipo;
+
+  -- (10) NUNCA abaixo das metas NAO EXCLUIDAS do tipo (D21). Mesma fonte do
+  --      trigger da P1 (que segue sendo a ULTIMA barreira).
+  select count(*) into v_vivas
+    from public.evaluation_goals g
+   where g.organization_id = v_org
+     and g.cycle_id = p_cycle_id
+     and g.tipo = p_tipo
+     and g.excluida = false;
+  if p_quantidade < v_vivas then
+    raise exception
+      'F5_10_CONFLICT: limite de % nao pode ser reduzido para % (existem % metas vivas)',
+      p_tipo, p_quantidade, v_vivas;
+  end if;
+
+  -- (11) UPSERT soberano: definir o limite CRIA a linha quando ausente (ausencia
+  --      na P1 = quota ZERO) e atualiza quando existe, avancando a `version` da
+  --      propria linha (nenhum overwrite silencioso).
+  insert into public.evaluation_cycle_goal_limits (
+    organization_id, cycle_id, tipo, quantidade, version
+  ) values (
+    v_org, p_cycle_id, p_tipo, p_quantidade, 0
+  )
+  on conflict (cycle_id, tipo) do update
+    set quantidade = excluded.quantidade,
+        version = public.evaluation_cycle_goal_limits.version + 1;
+
+  -- (12) Version do CICLO: +1 efetivo (D12).
+  update public.evaluation_cycles
+     set version = version + 1
+   where id = p_cycle_id
+     and organization_id = v_org
+  returning version into v_versao;
+
+  -- (13) Limites NOVOS (mapa completo) + nova version do ciclo.
+  select coalesce(jsonb_object_agg(l.tipo, l.quantidade), '{}'::jsonb) into v_depois
+    from public.evaluation_cycle_goal_limits l
+   where l.organization_id = v_org
+     and l.cycle_id = p_cycle_id;
+
+  -- (14) Trilha append-only DO CICLO na MESMA transacao (D21): before_value
+  --      preserva os limites anteriores; after_value registra os novos limites e
+  --      a nova version do ciclo; result_entity_id = cycle_id.
+  insert into public.cycle_events (
+    organization_id, cycle_id, entity_type, event_type, effective_date, reason,
+    before_value, after_value, payload_hash, result_entity_id,
+    actor_user_profile_id, actor_membership_id, operation_id
+  ) values (
+    v_org, p_cycle_id, 'evaluation_cycle', 'LIMITES_DO_CICLO_ALTERADOS', v_instante,
+    p_motivo,
+    jsonb_build_object(
+      'limites', v_antes, 'version', v_ciclo.version,
+      'tipo', p_tipo, 'quantidade', v_anterior),
+    jsonb_build_object(
+      'limites', v_depois, 'version', v_versao,
+      'tipo', p_tipo, 'quantidade', p_quantidade),
+    v_hash, p_cycle_id, p_actor_user_profile_id, v_membership, p_operation_id
+  );
+
+  return jsonb_build_object(
+    'cycle_id', p_cycle_id, 'version', v_versao,
+    'tipo', p_tipo, 'quantidade', p_quantidade);
+end;
+$$;
+
+comment on function public.meta_definir_limites_do_ciclo(uuid, uuid, text, integer, text, integer, uuid, uuid) is
+  'F5-10 P2 (D21): altera de forma SOBERANA o limite (quota) de UM tipo de meta do '
+  'ciclo ATIVO do tenant do ator verificado — upsert em '
+  '`evaluation_cycle_goal_limits`, NUNCA abaixo do total de metas nao excluidas '
+  'daquele tipo, com `expected_version` DO CICLO comparado apos o lock e o SELECT '
+  'FOR UPDATE, `version` do ciclo +1, `operation_id` e payload_hash derivado '
+  'server-side. Emite UM evento `LIMITES_DO_CICLO_ALTERADOS` na trilha do CICLO '
+  '(`cycle_events`), na MESMA transacao, com before_value preservando os limites '
+  'anteriores e after_value com os novos limites e a nova version — nunca em '
+  '`evaluation_goal_events` (que exige goal_id e representa meta, nao '
+  'configuracao de ciclo). O gate funcional `cycle.manage` exigido por D21 '
+  'pertence a fronteira confiavel final (Policy Engine/Edge, P4/P5).';
+
+-- ----------------------------------------------------------------------------
+-- 9) ACL das RPCs (EXECUTE somente service_role)
 -- ----------------------------------------------------------------------------
 -- SECURITY INVOKER + search_path fixo; nenhuma superficie a public/anon/
 -- authenticated (o cliente nunca chama RPC privilegiada direto — a fronteira
@@ -1258,6 +1545,8 @@ revoke all on function public.meta_revisar_finalizacao(uuid, uuid, text, boolean
   from public, anon, authenticated;
 revoke all on function public.meta_excluir(uuid, uuid, text, integer, uuid, uuid)
   from public, anon, authenticated;
+revoke all on function public.meta_definir_limites_do_ciclo(uuid, uuid, text, integer, text, integer, uuid, uuid)
+  from public, anon, authenticated;
 
 grant execute on function public.meta_criar(uuid, uuid, uuid, text, text, text, text, uuid, uuid)
   to service_role;
@@ -1271,15 +1560,18 @@ grant execute on function public.meta_revisar_finalizacao(uuid, uuid, text, bool
   to service_role;
 grant execute on function public.meta_excluir(uuid, uuid, text, integer, uuid, uuid)
   to service_role;
+grant execute on function public.meta_definir_limites_do_ciclo(uuid, uuid, text, integer, text, integer, uuid, uuid)
+  to service_role;
 
 -- ----------------------------------------------------------------------------
--- 8) Guarda final FAIL-CLOSED (§19 P2)
+-- 10) Guarda final FAIL-CLOSED (§19 P2)
 -- ----------------------------------------------------------------------------
--- A migration so termina se: as 6 RPCs existirem com a assinatura do contrato,
+-- A migration so termina se: as 7 RPCs existirem com a assinatura do contrato,
 -- SECURITY INVOKER, search_path fixo, EXECUTE restrito a `service_role` e SEM
 -- `DELETE`/`TRUNCATE` no corpo; TODAS usarem o lock normativo da familia de
--- ciclos (e nenhuma familia nova); e o deny-by-default/append-only/invariantes
--- da P1 continuarem intactos.
+-- ciclos (e nenhuma familia nova); o CHECK de `cycle_events.event_type`
+-- contemplar `LIMITES_DO_CICLO_ALTERADOS`; e o deny-by-default/append-only/
+-- invariantes da P1 continuarem intactos.
 do $$
 declare
   v_falhas  text[] := array[]::text[];
@@ -1289,7 +1581,8 @@ declare
     'meta_atualizar_progresso(uuid, uuid, text, integer, integer, uuid, uuid)',
     'meta_finalizar(uuid, uuid, text, boolean, integer, uuid, uuid)',
     'meta_revisar_finalizacao(uuid, uuid, text, boolean, text, integer, uuid, uuid)',
-    'meta_excluir(uuid, uuid, text, integer, uuid, uuid)'];
+    'meta_excluir(uuid, uuid, text, integer, uuid, uuid)',
+    'meta_definir_limites_do_ciclo(uuid, uuid, text, integer, text, integer, uuid, uuid)'];
   v_fn      text;
   v_rec     record;
   v_tab     text;
@@ -1383,14 +1676,26 @@ begin
     end if;
   end loop;
 
-  -- Anti-escopo: nenhuma RPC funcional de meta alem das 6 do contrato desta fase.
+  -- D21: a trilha do CICLO aceita o novo tipo, de forma ADITIVA.
+  if not exists (
+    select 1 from pg_constraint c
+     where c.conrelid = 'public.cycle_events'::regclass
+       and c.conname = 'ck_cycle_events_event_type' and c.contype = 'c'
+       and position('LIMITES_DO_CICLO_ALTERADOS' in pg_get_constraintdef(c.oid)) > 0
+       and position('CRIADO' in pg_get_constraintdef(c.oid)) > 0
+       and position('ADMISSAO_INCLUIDA' in pg_get_constraintdef(c.oid)) > 0
+  ) then
+    v_falhas := v_falhas || 'cycle_events.event_type sem LIMITES_DO_CICLO_ALTERADOS';
+  end if;
+
+  -- Anti-escopo: nenhuma RPC funcional de meta alem das 7 do contrato desta fase.
   select count(*) into v_n
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public'
      and (p.proname like 'meta\_%' or p.proname like 'goal\_%')
      and p.proname <> all (array[
        'meta_criar', 'meta_editar', 'meta_atualizar_progresso', 'meta_finalizar',
-       'meta_revisar_finalizacao', 'meta_excluir']);
+       'meta_revisar_finalizacao', 'meta_excluir', 'meta_definir_limites_do_ciclo']);
   if v_n <> 0 then
     v_falhas := v_falhas || format('%s RPC(s) de meta fora do contrato da P2', v_n);
   end if;
@@ -1407,5 +1712,5 @@ begin
       array_to_string(v_falhas, '; ');
   end if;
 
-  raise notice 'F5-10 P2: guarda final OK (6 RPCs INVOKER com lock normativo, EXECUTE so service_role, zero DELETE, deny-by-default e invariantes da P1 intactos)';
+  raise notice 'F5-10 P2: guarda final OK (7 RPCs INVOKER com lock normativo, EXECUTE so service_role, zero DELETE, CHECK de cycle_events ampliado, deny-by-default e invariantes da P1 intactos)';
 end $$;

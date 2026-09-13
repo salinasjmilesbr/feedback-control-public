@@ -1944,7 +1944,7 @@ declare
     'f5_10_validar_quota_do_limite','f5_10_proteger_limite_do_ciclo',
     'f5_10_validar_autoria_da_aprovacao',
     'meta_criar','meta_editar','meta_atualizar_progresso','meta_finalizar',
-    'meta_revisar_finalizacao','meta_excluir'];
+    'meta_revisar_finalizacao','meta_excluir','meta_definir_limites_do_ciclo'];
 begin
   -- (a) I5, I6 e I3 (P1/F5-06) presentes.
   if not exists (
