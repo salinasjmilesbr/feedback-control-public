@@ -1937,7 +1937,8 @@ declare
     'evaluation_cycle_goal_limits'];
   v_funcoes_metas_p1 text[] := array[
     'enforce_evaluation_goal_events_append_only','f5_10_validar_quota_da_meta',
-    'f5_10_validar_quota_do_limite','f5_10_proteger_limite_do_ciclo'];
+    'f5_10_validar_quota_do_limite','f5_10_proteger_limite_do_ciclo',
+    'f5_10_validar_autoria_da_aprovacao'];
 begin
   -- (a) I5, I6 e I3 (P1/F5-06) presentes.
   if not exists (

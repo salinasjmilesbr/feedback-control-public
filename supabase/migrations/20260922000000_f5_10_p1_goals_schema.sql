@@ -150,12 +150,28 @@ create table public.evaluation_goals (
   constraint ck_evaluation_goals_exclusao
     check ((excluida = false and data_exclusao is null)
            or (excluida = true and data_exclusao is not null)),
-  -- D17: finalizacao/re-finalizacao (operacao da P2) exige o fechamento COMPLETO;
-  -- `status` final sem os tres campos e estado incoerente e nasce recusado.
+  -- D17 (ENDURECIDO na correcao pos-auditoria): o estado de fechamento tem de
+  -- ser COERENTE, nao apenas "completo". Combinações contraditorias nascem
+  -- recusadas: `EM_ANDAMENTO` NAO pode ter campos de fechamento; `ATINGIDA`
+  -- exige `atingida = true` e `NAO_ATINGIDA` exige `atingida = false`; o
+  -- `resultado_final` e obrigatorio, NAO VAZIO e sem espacos nas bordas.
   constraint ck_evaluation_goals_fechamento
-    check (status = 'EM_ANDAMENTO'
-           or (resultado_final is not null and atingida is not null
-               and data_fechamento is not null))
+    check (
+      (status = 'EM_ANDAMENTO'
+       and resultado_final is null and atingida is null and data_fechamento is null)
+      or (status = 'ATINGIDA'
+          and atingida = true
+          and data_fechamento is not null
+          and resultado_final is not null
+          and resultado_final <> ''
+          and resultado_final = btrim(resultado_final))
+      or (status = 'NAO_ATINGIDA'
+          and atingida = false
+          and data_fechamento is not null
+          and resultado_final is not null
+          and resultado_final <> ''
+          and resultado_final = btrim(resultado_final))
+    )
 );
 
 comment on table public.evaluation_goals is
@@ -257,6 +273,10 @@ create table public.evaluation_goal_approvals (
   organization_id     uuid        not null,
   goal_id             uuid        not null,
   papel               text        not null,
+  -- AUTORIA SOBERANA COMPLETA (D2/§9.3, corrigido na revisao pos-auditoria): o
+  -- fato de aprovacao guarda o PERFIL e a MEMBERSHIP do ator - nunca matricula,
+  -- nome ou qualquer identidade textual.
+  actor_user_profile_id uuid      not null,
   actor_membership_id uuid        not null,
   decidido_em         timestamptz not null default now(),
   motivo              text,
@@ -281,6 +301,11 @@ create table public.evaluation_goal_approvals (
     foreign key (actor_membership_id, organization_id)
     references public.user_organization_memberships (id, organization_id)
     on delete restrict,
+  -- AUTORIA SOBERANA (D2/§9.3): o PERFIL do ator e FK real de identidade.
+  constraint fk_evaluation_goal_approvals_actor_profile
+    foreign key (actor_user_profile_id)
+    references public.user_profiles (id)
+    on delete restrict,
   constraint ck_evaluation_goal_approvals_papel
     check (papel in ('COORDENADOR', 'GERENTE')),
   constraint ck_evaluation_goal_approvals_version check (version >= 0),
@@ -293,12 +318,18 @@ create table public.evaluation_goal_approvals (
 
 comment on table public.evaluation_goal_approvals is
   'F5-10 P1 (D2/D19/§9): a aprovacao e um FATO auditavel - linha propria, '
-  'autoria soberana (actor_membership_id + organization_id) e historico '
-  'preservado. NUNCA e campo mutavel em evaluation_goals nem status funcional. '
-  'Revogacao/invalidacao grava revogado_em (nunca apaga o fato); a aprovacao '
-  'vigente e a linha com revogado_em is null (unicidade parcial por papel). A '
-  'legitimidade de QUEM aprova (GESTAO_CADEIA/GESTAO_DIRETA - D14/D25) e '
-  'resolvida pela operacao da P3, nao por constraint.';
+  'autoria soberana COMPLETA (actor_user_profile_id + actor_membership_id, '
+  'ambos coerentes entre si e com o tenant) e historico preservado. NUNCA e '
+  'campo mutavel em evaluation_goals nem status funcional. Revogacao/invalidacao '
+  'grava revogado_em (nunca apaga o fato); a aprovacao vigente e a linha com '
+  'revogado_em is null (unicidade parcial por papel). A legitimidade de QUEM '
+  'aprova (GESTAO_CADEIA/GESTAO_DIRETA - D14/D25) e resolvida pela operacao da '
+  'P3, nao por constraint.';
+comment on column public.evaluation_goal_approvals.actor_user_profile_id is
+  'F5-10 P1 (D2/§9.3): perfil soberano do autor da decisao (FK para '
+  'user_profiles). Nao e matricula, nome nem identidade textual; a coerencia com '
+  'actor_membership_id e garantida por trigger (mesmo perfil da membership no '
+  'tenant da linha).';
 comment on column public.evaluation_goal_approvals.decidido_em is
   'F5-10 P1: instante da decisao (server-side). Nao e a data de gravacao da '
   'revisao (created_at) e nunca vem do cliente.';
@@ -319,6 +350,73 @@ create index ix_evaluation_goal_approvals_goal
 create trigger trg_evaluation_goal_approvals_updated_at
   before update on public.evaluation_goal_approvals
   for each row execute function public.set_updated_at();
+
+-- ----------------------------------------------------------------------------
+-- 3.1) COERENCIA DA AUTORIA SOBERANA (D2/§9.3) — decisao de desenho registrada
+-- ----------------------------------------------------------------------------
+-- Os dois campos de autoria exigidos pelo contrato (perfil + membership) sao
+-- ambos NOT NULL e cada um tem FK propria. A COERENCIA entre eles (a membership
+-- pertence ao perfil informado) NAO pode ser expressa por FK composta sem ALTERAR
+-- contrato anterior: `user_organization_memberships` possui a chave candidata
+-- `(id, organization_id)` (usada pelas FKs de tenant de todo o projeto), mas NAO
+-- possui `(id, organization_id, user_profile_id)` — e criar indice/chave nova
+-- naquela tabela seria mexer em contrato fechado de outra fase. A alternativa
+-- adotada, SEM alterar contrato anterior e SEM nova arquitetura, e o trigger
+-- abaixo (mesma doutrina de invariante estrutural das quotas): fail-closed na
+-- gravacao, com mensagem explicita.
+create or replace function public.f5_10_validar_autoria_da_aprovacao()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_perfil uuid;
+begin
+  -- Ausencia de perfil NAO e tratada aqui: quem recusa e o NOT NULL da coluna
+  -- (23502), para que a mensagem de erro seja a do contrato de schema. Este
+  -- trigger cuida apenas de COERENCIA entre valores efetivamente informados.
+  if new.actor_user_profile_id is null then
+    return new;
+  end if;
+
+  -- Perfil INEXISTENTE tambem nao e tratado aqui: quem recusa e a FK
+  -- fk_evaluation_goal_approvals_actor_profile (23503). Assim cada classe de
+  -- defeito tem o seu codigo: 23502 (ausente), 23503 (perfil inexistente) e
+  -- P0001 (perfil existente, porem incoerente com a membership/tenant).
+  if not exists (
+    select 1 from public.user_profiles p where p.id = new.actor_user_profile_id
+  ) then
+    return new;
+  end if;
+
+  select m.user_profile_id into v_perfil
+    from public.user_organization_memberships m
+   where m.id = new.actor_membership_id
+     and m.organization_id = new.organization_id;
+
+  -- A FK composta ja garante que a membership existe NO TENANT da linha; aqui se
+  -- garante que ela pertence ao PERFIL informado como autor da decisao.
+  if v_perfil is distinct from new.actor_user_profile_id then
+    raise exception
+      'F5-10: autoridade de aprovacao incoerente (actor_user_profile_id % nao e o perfil da membership % no tenant %)',
+      new.actor_user_profile_id, new.actor_membership_id, new.organization_id;
+  end if;
+
+  return new;
+end;
+$$;
+
+comment on function public.f5_10_validar_autoria_da_aprovacao() is
+  'F5-10 P1 (D2/§9.3): invariante de COERENCIA da autoria soberana - o perfil '
+  'informado tem de ser o perfil da membership informada, no tenant da linha. '
+  'Nao decide legitimidade funcional (isso e a P3): apenas impede autoria '
+  'incoerente ou forjada no fato de aprovacao.';
+
+create trigger trg_evaluation_goal_approvals_autoria
+  before insert or update of actor_user_profile_id, actor_membership_id, organization_id
+  on public.evaluation_goal_approvals
+  for each row execute function public.f5_10_validar_autoria_da_aprovacao();
 
 -- ----------------------------------------------------------------------------
 -- 4) public.evaluation_goal_events - trilha APPEND-ONLY (D11, §13)
@@ -435,6 +533,11 @@ create trigger trg_evaluation_goal_events_no_truncate
 -- ----------------------------------------------------------------------------
 -- 5) INVARIANTES DE QUOTA no banco (D20/D21) - nenhuma confianca na UI
 -- ----------------------------------------------------------------------------
+-- ESCOPO DECLARADO: estes invariantes sao ESTRUTURAIS (unicidade/limite por
+-- linha e por agregado). A P1 NAO alega protecao autonoma contra CORRIDA
+-- concorrente: o COUNT sem lock e proposital e sera serializado pela familia
+-- normativa de advisory lock nas OPERACOES SOBERANAS da P2 (e provado com
+-- concorrencia real na P7). NENHUMA familia de lock nova e criada aqui.
 -- (a) Criar/reativar meta acima da quota => recusa.
 --     Ausencia de linha de quota = quota ZERO (fail-closed), coerente com o
 --     legado (`ciclo.quantidadeMetas* ?? 0`).
@@ -712,6 +815,45 @@ begin
      and (p.proname like 'meta\_%' or p.proname like 'goal\_%');
   if v_n <> 0 then
     v_falhas := v_falhas || format('RPC funcional de meta antecipada: %s', v_n);
+  end if;
+
+  -- (h) AUTORIA SOBERANA COMPLETA da aprovacao (D2/§9.3, correcao pos-auditoria):
+  --     coluna NOT NULL, FK propria de perfil e trigger de coerencia.
+  if not exists (
+    select 1 from information_schema.columns c
+     where c.table_schema = 'public' and c.table_name = 'evaluation_goal_approvals'
+       and c.column_name = 'actor_user_profile_id' and c.is_nullable = 'NO'
+  ) then
+    v_falhas := v_falhas || 'actor_user_profile_id ausente ou nullable em evaluation_goal_approvals';
+  end if;
+  if not exists (
+    select 1 from pg_constraint c
+     where c.conrelid = 'public.evaluation_goal_approvals'::regclass
+       and c.conname = 'fk_evaluation_goal_approvals_actor_profile' and c.contype = 'f'
+       and pg_get_constraintdef(c.oid) like '%user_profiles%'
+  ) then
+    v_falhas := v_falhas || 'FK de perfil do autor ausente em evaluation_goal_approvals';
+  end if;
+  if not exists (
+    select 1 from pg_trigger t
+     where t.tgrelid = 'public.evaluation_goal_approvals'::regclass
+       and t.tgname = 'trg_evaluation_goal_approvals_autoria' and not t.tgisinternal
+  ) then
+    v_falhas := v_falhas || 'trigger de coerencia de autoria ausente';
+  end if;
+
+  -- (i) CHECK de fechamento ENDURECIDO (D17, correcao pos-auditoria): a definicao
+  --     precisa conter as clausulas coerentes de ATINGIDA/NAO_ATINGIDA e o
+  --     non-empty/trim do resultado_final.
+  if not exists (
+    select 1 from pg_constraint c
+     where c.conrelid = 'public.evaluation_goals'::regclass
+       and c.conname = 'ck_evaluation_goals_fechamento' and c.contype = 'c'
+       and pg_get_constraintdef(c.oid) like '%ATINGIDA%'
+       and pg_get_constraintdef(c.oid) like '%NAO_ATINGIDA%'
+       and pg_get_constraintdef(c.oid) like '%btrim%'
+  ) then
+    v_falhas := v_falhas || 'CHECK de fechamento nao esta endurecido (D17)';
   end if;
 
   if array_length(v_falhas, 1) is not null then

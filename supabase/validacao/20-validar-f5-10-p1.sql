@@ -11,8 +11,10 @@
 --   A  pre-condicoes: fixture, 4 tabelas, RLS ligada, ZERO policy (deny-by-default);
 --   B  shape das tabelas (colunas do contrato, defaults, `version`, timestamps);
 --   C  isolamento cross-tenant ESTRUTURAL (FKs compostas) - 4 probes negativos;
---   D  constraints de dominio (progresso 0..100, tipo, status, fechamento,
---      textos, exclusao logica, version) - negativos;
+--   D  constraints de dominio (progresso 0..100, tipo, status, fechamento
+--      COERENTE - aceite dos dois estados finais e negativos de todas as
+--      combinacoes contraditorias -, textos, exclusao logica, version) e
+--      AUTORIA da aprovacao (ausente 23502, inexistente 23503, incoerente P0001);
 --   E  quota soberana (D20/D21): limite respeitado, tipo sem quota recusado,
 --      reducao abaixo das vivas recusada, DELETE de quota recusado,
 --      reativacao de meta excluida que estouraria a quota recusada;
@@ -86,7 +88,8 @@ begin
       ('evaluation_cycle_goal_limits', array['id','organization_id','cycle_id','tipo',
         'quantidade','version','created_at','updated_at']),
       ('evaluation_goal_approvals', array['id','organization_id','goal_id','papel',
-        'actor_membership_id','decidido_em','motivo','revogado_em','revogado_motivo',
+        'actor_user_profile_id','actor_membership_id','decidido_em','motivo',
+        'revogado_em','revogado_motivo',
         'version','created_at','updated_at']),
       ('evaluation_goal_events', array['id','organization_id','goal_id','entity_type',
         'event_type','effective_date','reason','before_value','after_value',
@@ -136,7 +139,7 @@ begin
     raise exception '[FAIL] B: progresso_percentual deveria ser integer (D16)';
   end if;
 
-  raise notice '[PASS] B: shape conforme o contrato (20+8+12+15 colunas), id uuid com default soberano, version default 0 e progresso integer';
+  raise notice '[PASS] B: shape conforme o contrato (20+8+13+15 colunas, autoria da aprovacao com perfil E membership), id uuid com default soberano, version default 0 e progresso integer';
 end $$;
 
 -- ----------------------------------------------------------------------------
@@ -195,9 +198,10 @@ begin
   v_ok := false; v_st := null;
   begin
     insert into public.evaluation_goal_approvals
-      (organization_id, goal_id, papel, actor_membership_id)
+      (organization_id, goal_id, papel, actor_user_profile_id, actor_membership_id)
     values ('eea00000-0000-0000-0000-0000000000b1',
             'ee900000-0000-0000-0000-000000000001', 'GERENTE',
+            'eec00000-0000-0000-0000-000000000002',
             'eed00000-0000-0000-0000-000000000002');
   exception when others then v_ok := true; v_st := sqlstate;
   end;
@@ -346,13 +350,269 @@ begin
   v_ok := false;
   begin
     insert into public.evaluation_goal_approvals
-      (organization_id, goal_id, papel, actor_membership_id)
+      (organization_id, goal_id, papel, actor_user_profile_id, actor_membership_id)
     values (v_org, 'ee900000-0000-0000-0000-000000000001', 'DIRETOR',
+            'eec00000-0000-0000-0000-000000000001',
             'eed00000-0000-0000-0000-000000000001');
   exception when others then v_ok := true; v_st := sqlstate;
   end;
   if not v_ok or v_st <> '23514' then
     raise exception '[FAIL] D8: papel de aprovacao invalido deveria violar CHECK (23514), veio %', v_st;
+  end if;
+
+  -- --------------------------------------------------------------------------
+  -- D-DEZ) FECHAMENTO COERENTE (D17 endurecido na correcao pos-auditoria).
+  -- Negativos explicitos de TODAS as combinacoes contraditorias e aceite dos
+  -- dois estados finais legitimos.
+  -- --------------------------------------------------------------------------
+
+  -- (D10) Aceite: fechamento COERENTE e valido. O probe e desfeito por excecao
+  -- sentinela dentro da propria subtransacao, para nao deixar residuo (o bloco L
+  -- valida o estado final do cenario).
+  declare
+    v_fech text;
+    v_msg  text;
+  begin
+    foreach v_fech in array array['ATINGIDA', 'NAO_ATINGIDA'] loop
+      v_ok := false;
+      v_msg := null;
+      begin
+        insert into public.evaluation_goals
+          (organization_id, cycle_id, collaborator_id, tipo, descricao, kpi,
+           valor_alvo, status, resultado_final, atingida, data_fechamento)
+        values (v_org, v_cyc, v_col, 'NEGOCIO_PROJETO', 'probe aceite ' || v_fech,
+                'kpi', 'alvo', v_fech, 'resultado final do probe',
+                v_fech = 'ATINGIDA', now());
+        raise exception 'f5-10-probe-rollback';
+      exception when others then
+        if sqlerrm = 'f5-10-probe-rollback' then
+          v_ok := true;
+        else
+          v_msg := sqlstate;
+        end if;
+      end;
+      if not v_ok then
+        raise exception '[FAIL] D10: fechamento coerente (%) deveria ser aceito, veio %',
+          v_fech, coalesce(v_msg, 'sem erro');
+      end if;
+    end loop;
+  end;
+
+  -- (D11) EM_ANDAMENTO com resultado_final preenchido.
+  v_ok := false; v_st := null;
+  begin
+    insert into public.evaluation_goals
+      (organization_id, cycle_id, collaborator_id, tipo, descricao, kpi, valor_alvo,
+       status, resultado_final)
+    values (v_org, v_cyc, v_col, 'NEGOCIO_PROJETO', 'probe andamento resultado', 'kpi',
+            'alvo', 'EM_ANDAMENTO', 'resultado indevido');
+  exception when others then v_ok := true; v_st := sqlstate;
+  end;
+  if not v_ok or v_st <> '23514' then
+    raise exception '[FAIL] D11: EM_ANDAMENTO com resultado_final deveria violar CHECK (23514), veio %', v_st;
+  end if;
+
+  -- (D12) EM_ANDAMENTO com atingida preenchido.
+  v_ok := false; v_st := null;
+  begin
+    insert into public.evaluation_goals
+      (organization_id, cycle_id, collaborator_id, tipo, descricao, kpi, valor_alvo,
+       status, atingida)
+    values (v_org, v_cyc, v_col, 'NEGOCIO_PROJETO', 'probe andamento atingida', 'kpi',
+            'alvo', 'EM_ANDAMENTO', true);
+  exception when others then v_ok := true; v_st := sqlstate;
+  end;
+  if not v_ok or v_st <> '23514' then
+    raise exception '[FAIL] D12: EM_ANDAMENTO com atingida deveria violar CHECK (23514), veio %', v_st;
+  end if;
+
+  -- (D13) EM_ANDAMENTO com data_fechamento preenchida.
+  v_ok := false; v_st := null;
+  begin
+    insert into public.evaluation_goals
+      (organization_id, cycle_id, collaborator_id, tipo, descricao, kpi, valor_alvo,
+       status, data_fechamento)
+    values (v_org, v_cyc, v_col, 'NEGOCIO_PROJETO', 'probe andamento data', 'kpi',
+            'alvo', 'EM_ANDAMENTO', now());
+  exception when others then v_ok := true; v_st := sqlstate;
+  end;
+  if not v_ok or v_st <> '23514' then
+    raise exception '[FAIL] D13: EM_ANDAMENTO com data_fechamento deveria violar CHECK (23514), veio %', v_st;
+  end if;
+
+  -- (D14) ATINGIDA com atingida = false (contradicao direta).
+  v_ok := false; v_st := null;
+  begin
+    insert into public.evaluation_goals
+      (organization_id, cycle_id, collaborator_id, tipo, descricao, kpi, valor_alvo,
+       status, resultado_final, atingida, data_fechamento)
+    values (v_org, v_cyc, v_col, 'NEGOCIO_PROJETO', 'probe atingida falsa', 'kpi',
+            'alvo', 'ATINGIDA', 'resultado final', false, now());
+  exception when others then v_ok := true; v_st := sqlstate;
+  end;
+  if not v_ok or v_st <> '23514' then
+    raise exception '[FAIL] D14: ATINGIDA com atingida=false deveria violar CHECK (23514), veio %', v_st;
+  end if;
+
+  -- (D15) ATINGIDA sem resultado_final.
+  v_ok := false; v_st := null;
+  begin
+    insert into public.evaluation_goals
+      (organization_id, cycle_id, collaborator_id, tipo, descricao, kpi, valor_alvo,
+       status, resultado_final, atingida, data_fechamento)
+    values (v_org, v_cyc, v_col, 'NEGOCIO_PROJETO', 'probe atingida sem resultado',
+            'kpi', 'alvo', 'ATINGIDA', null, true, now());
+  exception when others then v_ok := true; v_st := sqlstate;
+  end;
+  if not v_ok or v_st <> '23514' then
+    raise exception '[FAIL] D15: ATINGIDA sem resultado_final deveria violar CHECK (23514), veio %', v_st;
+  end if;
+
+  -- (D16) ATINGIDA sem data_fechamento.
+  v_ok := false; v_st := null;
+  begin
+    insert into public.evaluation_goals
+      (organization_id, cycle_id, collaborator_id, tipo, descricao, kpi, valor_alvo,
+       status, resultado_final, atingida, data_fechamento)
+    values (v_org, v_cyc, v_col, 'NEGOCIO_PROJETO', 'probe atingida sem data', 'kpi',
+            'alvo', 'ATINGIDA', 'resultado final', true, null);
+  exception when others then v_ok := true; v_st := sqlstate;
+  end;
+  if not v_ok or v_st <> '23514' then
+    raise exception '[FAIL] D16: ATINGIDA sem data_fechamento deveria violar CHECK (23514), veio %', v_st;
+  end if;
+
+  -- (D17) ATINGIDA com resultado_final em branco.
+  v_ok := false; v_st := null;
+  begin
+    insert into public.evaluation_goals
+      (organization_id, cycle_id, collaborator_id, tipo, descricao, kpi, valor_alvo,
+       status, resultado_final, atingida, data_fechamento)
+    values (v_org, v_cyc, v_col, 'NEGOCIO_PROJETO', 'probe atingida branco', 'kpi',
+            'alvo', 'ATINGIDA', '   ', true, now());
+  exception when others then v_ok := true; v_st := sqlstate;
+  end;
+  if not v_ok or v_st <> '23514' then
+    raise exception '[FAIL] D17: ATINGIDA com resultado_final em branco deveria violar CHECK (23514), veio %', v_st;
+  end if;
+
+  -- (D18) ATINGIDA com resultado_final com espacos nas bordas (tem de ser = btrim()).
+  v_ok := false; v_st := null;
+  begin
+    insert into public.evaluation_goals
+      (organization_id, cycle_id, collaborator_id, tipo, descricao, kpi, valor_alvo,
+       status, resultado_final, atingida, data_fechamento)
+    values (v_org, v_cyc, v_col, 'NEGOCIO_PROJETO', 'probe atingida bordas', 'kpi',
+            'alvo', 'ATINGIDA', '  resultado com bordas  ', true, now());
+  exception when others then v_ok := true; v_st := sqlstate;
+  end;
+  if not v_ok or v_st <> '23514' then
+    raise exception '[FAIL] D18: resultado_final com bordas deveria violar CHECK (23514), veio %', v_st;
+  end if;
+
+  -- (D19) NAO_ATINGIDA com atingida = true (contradicao direta).
+  v_ok := false; v_st := null;
+  begin
+    insert into public.evaluation_goals
+      (organization_id, cycle_id, collaborator_id, tipo, descricao, kpi, valor_alvo,
+       status, resultado_final, atingida, data_fechamento)
+    values (v_org, v_cyc, v_col, 'NEGOCIO_PROJETO', 'probe nao atingida verdadeira',
+            'kpi', 'alvo', 'NAO_ATINGIDA', 'resultado final', true, now());
+  exception when others then v_ok := true; v_st := sqlstate;
+  end;
+  if not v_ok or v_st <> '23514' then
+    raise exception '[FAIL] D19: NAO_ATINGIDA com atingida=true deveria violar CHECK (23514), veio %', v_st;
+  end if;
+
+  -- (D20) NAO_ATINGIDA sem resultado_final.
+  v_ok := false; v_st := null;
+  begin
+    insert into public.evaluation_goals
+      (organization_id, cycle_id, collaborator_id, tipo, descricao, kpi, valor_alvo,
+       status, resultado_final, atingida, data_fechamento)
+    values (v_org, v_cyc, v_col, 'NEGOCIO_PROJETO', 'probe nao atingida sem res',
+            'kpi', 'alvo', 'NAO_ATINGIDA', null, false, now());
+  exception when others then v_ok := true; v_st := sqlstate;
+  end;
+  if not v_ok or v_st <> '23514' then
+    raise exception '[FAIL] D20: NAO_ATINGIDA sem resultado_final deveria violar CHECK (23514), veio %', v_st;
+  end if;
+
+  -- (D21) NAO_ATINGIDA sem data_fechamento.
+  v_ok := false; v_st := null;
+  begin
+    insert into public.evaluation_goals
+      (organization_id, cycle_id, collaborator_id, tipo, descricao, kpi, valor_alvo,
+       status, resultado_final, atingida, data_fechamento)
+    values (v_org, v_cyc, v_col, 'NEGOCIO_PROJETO', 'probe nao atingida sem data',
+            'kpi', 'alvo', 'NAO_ATINGIDA', 'resultado final', false, null);
+  exception when others then v_ok := true; v_st := sqlstate;
+  end;
+  if not v_ok or v_st <> '23514' then
+    raise exception '[FAIL] D21: NAO_ATINGIDA sem data_fechamento deveria violar CHECK (23514), veio %', v_st;
+  end if;
+
+  -- (D22) status final com o fechamento INTEIRO ausente (completude, D4 acima) e
+  -- ainda com `excluida` coerente: garante que o CHECK unico cobre os dois eixos.
+  v_ok := false; v_st := null;
+  begin
+    insert into public.evaluation_goals
+      (organization_id, cycle_id, collaborator_id, tipo, descricao, kpi, valor_alvo,
+       status, excluida, data_exclusao)
+    values (v_org, v_cyc, v_col, 'NEGOCIO_PROJETO', 'probe nao atingida incompleta',
+            'kpi', 'alvo', 'NAO_ATINGIDA', false, null);
+  exception when others then v_ok := true; v_st := sqlstate;
+  end;
+  if not v_ok or v_st <> '23514' then
+    raise exception '[FAIL] D22: NAO_ATINGIDA sem fechamento deveria violar CHECK (23514), veio %', v_st;
+  end if;
+
+  -- --------------------------------------------------------------------------
+  -- D-AUTORIA) AUTORIA SOBERANA da aprovacao (D2/§9.3, correcao pos-auditoria):
+  -- actor_user_profile_id + actor_membership_id, com codigos de erro distintos
+  -- por classe de defeito (23502 ausente, 23503 inexistente, P0001 incoerente).
+  -- --------------------------------------------------------------------------
+
+  -- (D23) aprovacao SEM actor_user_profile_id: NOT NULL (23502).
+  v_ok := false; v_st := null;
+  begin
+    insert into public.evaluation_goal_approvals
+      (organization_id, goal_id, papel, actor_membership_id)
+    values (v_org, 'ee900000-0000-0000-0000-000000000001', 'GERENTE',
+            'eed00000-0000-0000-0000-000000000001');
+  exception when others then v_ok := true; v_st := sqlstate;
+  end;
+  if not v_ok or v_st <> '23502' then
+    raise exception '[FAIL] D23: aprovacao sem actor_user_profile_id deveria violar NOT NULL (23502), veio %', v_st;
+  end if;
+
+  -- (D24) aprovacao com perfil INEXISTENTE: FK de perfil (23503).
+  v_ok := false; v_st := null;
+  begin
+    insert into public.evaluation_goal_approvals
+      (organization_id, goal_id, papel, actor_user_profile_id, actor_membership_id)
+    values (v_org, 'ee900000-0000-0000-0000-000000000001', 'GERENTE',
+            'ee000000-0000-0000-0000-0000000000ff',
+            'eed00000-0000-0000-0000-000000000001');
+  exception when others then v_ok := true; v_st := sqlstate;
+  end;
+  if not v_ok or v_st <> '23503' then
+    raise exception '[FAIL] D24: perfil inexistente deveria violar FK (23503), veio %', v_st;
+  end if;
+
+  -- (D25) aprovacao com perfil EXISTENTE, porem de outra membership/tenant:
+  -- invariante de coerencia fail-closed (P0001).
+  v_ok := false; v_st := null;
+  begin
+    insert into public.evaluation_goal_approvals
+      (organization_id, goal_id, papel, actor_user_profile_id, actor_membership_id)
+    values (v_org, 'ee900000-0000-0000-0000-000000000001', 'GERENTE',
+            'eec00000-0000-0000-0000-000000000002',
+            'eed00000-0000-0000-0000-000000000001');
+  exception when others then v_ok := true; v_st := sqlstate;
+  end;
+  if not v_ok or v_st <> 'P0001' then
+    raise exception '[FAIL] D25: perfil incoerente com a membership deveria violar a coerencia de autoria (P0001), veio %', v_st;
   end if;
 
   alter table public.evaluation_goals enable trigger trg_evaluation_goals_quota;
@@ -365,7 +625,7 @@ begin
     raise exception '[FAIL] D9: o trigger de quota nao foi reabilitado apos os probes de dominio';
   end if;
 
-  raise notice '[PASS] D: dominio recusado no banco (progresso <0/>100/999, tipo, status, fechamento incoerente, texto branco, exclusao incoerente, version negativa, papel de aprovacao)';
+  raise notice '[PASS] D: dominio recusado no banco (progresso <0/>100/999, tipo, status, texto branco, exclusao incoerente, version negativa, papel de aprovacao, 13 estados de fechamento invalidos recusados e os dois fechamentos coerentes aceitos, autoria da aprovacao: ausente 23502 / inexistente 23503 / incoerente P0001)';
 end $$;
 
 -- ----------------------------------------------------------------------------
@@ -523,8 +783,9 @@ begin
   v_ok := false;
   begin
     insert into public.evaluation_goal_approvals
-      (organization_id, goal_id, papel, actor_membership_id)
+      (organization_id, goal_id, papel, actor_user_profile_id, actor_membership_id)
     values (v_org, 'ee900000-0000-0000-0000-000000000001', 'COORDENADOR',
+            'eec00000-0000-0000-0000-000000000001',
             'eed00000-0000-0000-0000-000000000001');
   exception when others then v_ok := true; v_st := sqlstate;
   end;
@@ -767,18 +1028,19 @@ begin
     raise exception '[FAIL] K2: capabilities de metas/observacoes deveriam continuar 8 (P1 nao cria capability), encontradas %', v_caps;
   end if;
 
-  -- As 4 funcoes introduzidas pela P1 sao apenas de INVARIANTE/append-only.
+  -- As 5 funcoes introduzidas pela P1 sao apenas de INVARIANTE/append-only.
   select count(*) into v_n
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public'
      and p.proname in ('f5_10_validar_quota_da_meta', 'f5_10_validar_quota_do_limite',
                        'f5_10_proteger_limite_do_ciclo',
+                       'f5_10_validar_autoria_da_aprovacao',
                        'enforce_evaluation_goal_events_append_only');
-  if v_n <> 4 then
+  if v_n <> 5 then
     raise exception '[FAIL] K3: funcoes de integridade da P1 ausentes (encontradas %)', v_n;
   end if;
 
-  raise notice '[PASS] K: anti-escopo respeitado — nenhuma RPC funcional de meta, nenhuma capability nova e as 4 funcoes da P1 sao apenas de integridade/append-only';
+  raise notice '[PASS] K: anti-escopo respeitado — nenhuma RPC funcional de meta, nenhuma capability nova e as 5 funcoes da P1 sao apenas de integridade/append-only';
 end $$;
 
 -- ----------------------------------------------------------------------------

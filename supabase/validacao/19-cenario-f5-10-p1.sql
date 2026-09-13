@@ -117,9 +117,11 @@ insert into public.evaluation_goals
    'EM_ANDAMENTO', 0, null);
 
 insert into public.evaluation_goal_approvals
-  (id, organization_id, goal_id, papel, actor_membership_id, motivo) values
+  (id, organization_id, goal_id, papel, actor_user_profile_id, actor_membership_id,
+   motivo) values
   ('ee800000-0000-0000-0000-000000000001', 'eea00000-0000-0000-0000-0000000000a1',
    'ee900000-0000-0000-0000-000000000001', 'COORDENADOR',
+   'eec00000-0000-0000-0000-000000000001',
    'eed00000-0000-0000-0000-000000000001', 'Aprovacao de fixture (P1)');
 
 insert into public.evaluation_goal_events

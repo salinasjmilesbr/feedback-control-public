@@ -34,6 +34,47 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
+### 3.14 F5-10 P1 (implementada; correção pós-auditoria GPT aplicada)
+
+- **Atividade:** F5-10 — **P1 (SCHEMA, INTEGRIDADE e LIMITES das metas
+  soberanas)** — Issue **#210**. Contrato: `docs/F5-10-desenho-tecnico.md`
+  (D1–D25). **Somente a P1**: P2–P7 não iniciadas, **sem PR e sem merge**.
+- **Base:** `main` = `e5700e83388eb90ed4aa11f208127a5e2fc3f391`.
+  **Branch:** `feat/f5-10-p1-schema-metas`.
+- **Entregue:** `supabase/migrations/20260922000000_f5_10_p1_goals_schema.sql`
+  (4 tabelas — `evaluation_goals`, `evaluation_goal_approvals` como FATO,
+  `evaluation_goal_events` append-only e `evaluation_cycle_goal_limits` como
+  autoridade de quota, com invariantes de quota no banco e RLS
+  deny-by-default), `supabase/validacao/19-cenario-`/`20-validar-f5-10-p1.sql`
+  (testes negativos), regressões de catálogo `02`/`03` (F4-08), guarda de
+  anti-antecipação `15` (F5-09 P9 convertida em **lista fechada** da P1),
+  `.github/workflows/ci.yml` e `supabase/migrations/README.md`.
+- **Correção pós-auditoria** (auditoria GPT do commit `b3b3306`: **2 blockers**):
+  (1) `evaluation_goal_approvals` ganhou **`actor_user_profile_id uuid not null`**
+  com FK própria para `user_profiles(id)` — além de `actor_membership_id`, que
+  segue vinculada ao tenant por FK composta — e o invariante de coerência
+  `f5_10_validar_autoria_da_aprovacao` (perfil = perfil da membership no tenant),
+  com códigos de erro distintos: 23502 ausente, 23503 inexistente, P0001
+  incoerente. Coerência por FK composta exigiria chave nova em
+  `user_organization_memberships` (contrato anterior), então **nenhum contrato
+  anterior foi alterado** e a solução é o trigger fail-closed. (2)
+  `ck_evaluation_goals_fechamento` **endurecido** de "completo" para "coerente":
+  `EM_ANDAMENTO` ⇒ fechamento integralmente nulo; `ATINGIDA` ⇒ `atingida = true` +
+  `data_fechamento` + `resultado_final` não vazio e `= btrim()`; `NAO_ATINGIDA` ⇒
+  `atingida = false` + as mesmas regras — com negativos explícitos de todas as
+  combinações contraditórias no validador 20 (bloco D).
+- **A P1 não reivindica proteção autônoma de corrida:** o `COUNT` do trigger de
+  quota continua sem lock e **nenhuma família de advisory lock nova** foi criada
+  (a família `evaluation_cycles:` segue exclusiva das fases seguintes; a P2 traz as
+  operações soberanas com lock e a P7 prova a concorrência real).
+- **Gates reais (host local):** `db reset` + bateria SQL completa na ordem do CI
+  (**35/35 entradas, `falhas=0`**) + `git diff --check` — exit 0.
+  `npm test`/`build`/`lint`/`tsc` **não se aplicam** (nenhum arquivo JS/TS
+  alterado nesta rodada).
+- **Elevações de acesso nesta rodada:** **1** (bateria consolidada: `db reset` +
+  validações SQL + `git diff --check` + `commit` + `push`).
+- **Não feito (por contrato):** P2–P7, PR, merge e auditoria independente.
+
 ### 3.13 F5-09 P9 (implementada; aguardando auditoria independente)
 
 - **Atividade:** F5-09 — **P9 (Validação Integrada de Ciclos Soberanos)
