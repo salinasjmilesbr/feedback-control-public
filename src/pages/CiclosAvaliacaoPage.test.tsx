@@ -299,6 +299,7 @@ describe("F5-09 P8 Bloco 2 — mutations soberanas (C1–C15)", () => {
   });
 });
 
+describe("F5-09 P8 — confirmação de exclusão (utilitário de UX, sem autoridade)", () => {
   it("exige confirmação explícita antes da exclusão", () => {
     const ciclo = {
       id: "ciclo-confirmacao",
