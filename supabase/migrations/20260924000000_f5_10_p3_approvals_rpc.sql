@@ -84,9 +84,19 @@
 --       ciclo permanece nas operacoes materiais (criar/editar/progredir/
 --       finalizar/aprovar). A invalidacao conectada por D19 roda dentro de
 --       `meta_editar`, que ja exige ciclo ATIVO;
---   (d) `meta_invalidar_aprovacoes` sem aprovacao VIGENTE e NO-OP auditavel:
---       devolve `invalidated = 0`, NAO grava evento (nenhuma mutacao sem evento) e
---       NAO consome `operation_id` — fatos ja revogados NUNCA sao re-mutados;
+--   (d) `meta_invalidar_aprovacoes` sem aprovacao VIGENTE e NO-OP, porem
+--       **REGISTRADO NA TRILHA** (correcao pos-auditoria): grava exatamente UM
+--       evento `APROVACAO_INVALIDADA` com o `operation_id` e o `payload_hash`
+--       canonicos da intencao, `invalidated = 0`, `result_entity_id = NULL` e
+--       before/after explicitando que nenhum fato vigente foi encontrado (sem
+--       tocar `evaluation_goal_approvals`). O `operation_id` E consumido — a
+--       intencao passa a ser **persistentemente idempotente**: replay identico
+--       (inclusive TEMPORAL, depois de surgir nova aprovacao vigente) devolve
+--       `invalidated = 0` e JAMAIS invalida fato que nao existia na intencao
+--       original; o nucleo reutilizavel (`f5_10_invalidar_aprovacoes_vigentes`)
+--       continua sem gravar evento nesse caso, e por isso o NO-OP conectado a D19
+--       (`meta_editar`) nao produz evento extra. Fatos ja revogados NUNCA sao
+--       re-mutados;
 --   (e) os sub-eventos de uma MESMA intencao (invalidacao de mais de um papel, ou
 --       invalidacao disparada por `meta_editar`) precisam de `operation_id`
 --       distinto por evento (`unique (organization_id, operation_id)`); a
@@ -757,6 +767,8 @@ declare
   v_membership uuid;
   v_meta       record;
   v_res        jsonb;
+  v_qtd        integer;
+  v_instante   timestamptz := now();
 begin
   if p_goal_id is null or p_organization_id is null
      or p_actor_user_profile_id is null or p_operation_id is null then
@@ -848,15 +860,50 @@ begin
     raise exception 'F5_10_CONFLICT: versao divergente (expected_version desatualizado)';
   end if;
 
-  -- Nucleo reutilizavel: nenhuma aprovacao vigente => NO-OP auditavel (sem
-  -- evento e sem consumo do operation_id), nunca re-mutacao de fato revogado.
+  -- Nucleo reutilizavel: revoga APENAS fatos vigentes (fato ja revogado NUNCA e
+  -- re-mutado). O nucleo NAO grava evento quando nao ha fato vigente: o registro da
+  -- intencao NO-OP e responsabilidade DESTA RPC (abaixo).
   v_res := public.f5_10_invalidar_aprovacoes_vigentes(
     p_goal_id, v_org, p_actor_user_profile_id, v_membership, p_motivo, v_hash,
     p_operation_id);
+  v_qtd := (v_res->>'invalidated')::integer;
+
+  -- NO-OP PERSISTENTEMENTE IDEMPOTENTE (correcao pos-auditoria): sem fato vigente
+  -- a INTENCAO e registrada na trilha com o MESMO `operation_id` e o MESMO
+  -- `payload_hash` canonico. Sem esse registro, um replay temporal posterior
+  -- (depois de surgir NOVA aprovacao vigente) invalidaria um fato que NAO existia
+  -- na intencao original, violando "mesmo operation_id + mesmo payload => mesmo
+  -- resultado sem nova mutacao". `result_entity_id` fica NULL porque nenhum fato
+  -- foi revogado e NENHUMA linha de `evaluation_goal_approvals` e tocada; a
+  -- autoria soberana e o motivo sao preservados e before/after deixam explicito
+  -- que a busca por fato vigente retornou vazio (com versao/status da meta para
+  -- reconstrucao).
+  if v_qtd = 0 then
+    insert into public.evaluation_goal_events (
+      organization_id, goal_id, entity_type, event_type, effective_date, reason,
+      before_value, after_value, payload_hash, result_entity_id,
+      actor_user_profile_id, actor_membership_id, operation_id
+    ) values (
+      v_org, p_goal_id, 'evaluation_goal', 'APROVACAO_INVALIDADA', v_instante,
+      p_motivo,
+      jsonb_build_object(
+        'invalidated', 0, 'fato_vigente_encontrado', false,
+        'aprovacao_id', null, 'papel', null,
+        'versao_meta', v_meta.version, 'status_meta', v_meta.status,
+        'motivo', p_motivo),
+      jsonb_build_object(
+        'invalidated', 0, 'fato_vigente_encontrado', false,
+        'aprovacao_id', null, 'papel', null,
+        'versao_fato', null, 'revogado_em', null, 'revogado_motivo', p_motivo,
+        'versao_meta', v_meta.version, 'status_meta', v_meta.status,
+        'registro', 'NO_OP'),
+      v_hash, null, p_actor_user_profile_id, v_membership, p_operation_id
+    );
+  end if;
 
   return jsonb_build_object(
     'goal_id', p_goal_id,
-    'invalidated', (v_res->>'invalidated')::integer,
+    'invalidated', v_qtd,
     'aprovacao_id', (v_res->>'aprovacao_id')::uuid,
     'papel', v_res->>'papel',
     'versao_fato', (v_res->>'versao_fato')::integer,
@@ -866,15 +913,20 @@ end;
 $$;
 
 comment on function public.meta_invalidar_aprovacoes(uuid, uuid, text, integer, uuid, uuid) is
-  'F5-10 P3 (D19): invalidacao SOBERANA das aprovacoes VIGENTES de uma meta, '
-  'preservando o historico (revogado_em/revogado_motivo na propria linha, nunca '
-  'DELETE) e emitindo UM evento APROVACAO_INVALIDADA por papel na MESMA transacao. '
-  'expected_version da META comparado apos o lock normativo e o SELECT FOR UPDATE; '
-  'idempotente por (organization_id, operation_id); sem fatos vigentes a operacao '
-  'e NO-OP auditavel (invalidated = 0, sem evento e sem re-mutacao de fato '
-  'revogado). Nao exige ciclo ATIVO (desvio (c) do header): nao altera definicao '
-  'nem estado funcional da meta. O gate funcional `goal.approve` e da fronteira '
-  'confiavel final (P4/P5).';
+  'F5-10 P3 (D19 + correcao pos-auditoria): invalidacao SOBERANA das aprovacoes '
+  'VIGENTES de uma meta, preservando o historico (revogado_em/revogado_motivo na '
+  'propria linha, nunca DELETE) e emitindo UM evento APROVACAO_INVALIDADA por papel '
+  'na MESMA transacao. expected_version da META comparado apos o lock normativo e o '
+  'SELECT FOR UPDATE; idempotente por (organization_id, operation_id). SEM fato '
+  'vigente a operacao e NO-OP REGISTRADO na trilha (invalidated = 0, um unico '
+  'evento APROVACAO_INVALIDADA com o operation_id e o payload_hash da intencao, '
+  'result_entity_id NULL, nenhuma linha de evaluation_goal_approvals alterada): a '
+  'intencao passa a ser PERSISTENTEMENTE idempotente, de modo que um replay '
+  'temporal — mesmo depois de surgir nova aprovacao vigente — continua devolvendo '
+  'invalidated = 0 e JAMAIS invalida fato que nao existia na intencao original. '
+  'Nao exige ciclo ATIVO (desvio (c) do header): nao altera definicao nem estado '
+  'funcional da meta. O gate funcional `goal.approve` e da fronteira confiavel '
+  'final (P4/P5).';
 
 -- ----------------------------------------------------------------------------
 -- 6) Matriz D19 conectada a `meta_editar` (create or replace da RPC da P2)

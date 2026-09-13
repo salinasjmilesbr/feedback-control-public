@@ -76,12 +76,25 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   `ciclo_lock_organizacao` + `SELECT … FOR UPDATE` (desvio (a) do header);
   `operation_id` + `payload_hash` SHA-256 server-side; sub-eventos da mesma
   intenção usam `operation_id` **derivado determinísticamente** (desvio (e));
-  `meta_invalidar_aprovacoes` sem fato vigente é **NO-OP auditável** (sem evento,
-  sem re-mutação de fato revogado).
+  `meta_invalidar_aprovacoes` sem fato vigente é **NO-OP REGISTRADO na trilha**
+  (um evento `APROVACAO_INVALIDADA` com o `operation_id` consumido,
+  `result_entity_id` NULL, `invalidated = 0`, versão/status/motivo em before/after
+  e **nenhuma** linha de aprovação alterada) — idempotência **temporal** provada:
+  replay depois de surgir nova aprovação vigente continua devolvendo
+  `invalidated = 0` e nunca invalida o novo fato; payload divergente ⇒ CONFLICT.
 - **Gates reais (host local):** `db reset` + bateria SQL completa na ordem do CI
-  = **db reset + bateria SQL completa na ordem do CI (**39/39 entradas, falhas=0**)** + `git diff --check` exit 0. `npm test`/`build`/`lint`/`tsc` **não
-  se aplicam** (nenhum arquivo JS/TS alterado).
-- **Elevações de acesso nesta rodada:** **6 (preflight obrigatorio com `db reset` e criacao da branch; batch #1 â€” defeito real: o CHECK de `evaluation_cycle_goal_limits.quantidade` so admite 0..3 e o fixture usava 4/5; batch #2 â€” defeito real: `min(uuid)` nao existe no PostgreSQL em 2 pontos da derivacao; batch #3 â€” defeito real de semantica: o helper de invalidacao gravava `payload_hash` proprio, divergente do hash canonico da intencao, quebrando o replay; batch #4 â€” defeito real no TESTE: expectativa absoluta de fatos revogados no F6, trocada por assercao comparativa antes/depois; batch #5 â€” defeito real no TESTE: o probe H3 editava meta ja finalizada (G1 e fechada no bloco E5), e o bloco H foi MOVIDO para antes da finalizacao; batch #6 â€” reteste com correcao, commit e push), cada reteste precedido de revisao estatica profunda da superficie ainda nao executada**.
+  = **39/39 entradas, `falhas=0`** + `git diff --check` exit 0. `npm test`/
+  `build`/`lint`/`tsc` **não se aplicam** (nenhum arquivo JS/TS alterado).
+- **Elevações de acesso nesta rodada:** 6 (preflight obrigatório com `db reset` e
+  criação da branch; batch #1 quota 0..3; batch #2 `min(uuid)`; batch #3
+  `payload_hash` do helper; batch #4 expectativa absoluta no F6; batch #5 bloco H
+  movido para antes da finalização; batch #6 reteste verde com commit/push).
+- **Correção de auditoria (idempotência do NO-OP, mesma branch):** NO-OP de
+  `meta_invalidar_aprovacoes` passou a ser **persistente** (evento na trilha com
+  `operation_id` consumido), com teste temporal crítico (nova aprovação vigente
+  criada depois do NO-OP e replay da MESMA intenção), rollback da gravação do
+  NO-OP e documentação corrigida. Gates: `db reset` + bateria completa +
+  `git diff --check` = **db reset + bateria SQL completa na ordem do CI (**39/39 entradas, falhas=0**) + `git diff --check` exit 0**; elevações nesta correção: **2 (batch #1 â€” defeito real: `v_msg` usado no novo teste F9 sem estar declarado no bloco F, corrigido; batch #2 â€” reteste verde com commit e push)**.
 - **Não feito (por contrato):** P4 (matriz `goal.*`, Policy Engine, RLS funcional,
   grants ao cliente, leitura por escopo), P5 (Edge/adapter), P6 (frontend/cutover/
   backfill), P7 (bateria integrada e concorrência real), F5-11, PR e merge.

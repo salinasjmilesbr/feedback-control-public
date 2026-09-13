@@ -21,8 +21,11 @@
 --      primeira finalizacao, revisao de fechamento e quota NAO invalidam;
 --      reaprovacao cria NOVO fato preservando o revogado;
 --   F  `meta_invalidar_aprovacoes`: motivo obrigatorio, stale, cross-tenant,
---      invalidacao efetiva, replay idempotente, NO-OP auditavel sem fato vigente
---      (nunca re-muta fato revogado);
+--      invalidacao efetiva, replay idempotente, NO-OP SEM fato vigente
+--      **REGISTRADO na trilha** (um evento, operation_id consumido,
+--      result_entity_id NULL) com idempotencia TEMPORAL provada (nova aprovacao
+--      vigente criada depois do NO-OP NAO e invalidada pelo replay) e payload
+--      divergente => CONFLICT (nunca re-muta fato revogado);
 --   G  soft delete e TERMINAL e preserva os fatos historicos;
 --   H  rollback total com falhas injetadas (evento de aprovacao, evento de
 --      invalidacao e evento EDITADA apos a invalidacao);
@@ -653,7 +656,38 @@ begin
     raise exception '[FAIL] H3: evento parcial da edicao revertida ficou na trilha';
   end if;
 
-  raise notice '[PASS] H: rollback TOTAL com falha no evento de aprovacao (nenhum fato parcial), no evento de invalidacao (nenhuma revogacao parcial) e no evento EDITADA apos a invalidacao (edicao + D19 revertidas juntas)';
+  -- (H4) falha no evento do NO-OP (meta SEM fato vigente): nenhum registro
+  --      parcial na trilha e nenhuma alteracao de aprovacao. A meta G3 nao tem
+  --      avaliacao (logo, nenhuma aprovacao possivel) e esta em version 0.
+  perform set_config('f5_10_p3.falhar', 'APROVACAO_INVALIDADA', true);
+  v_ok := false;
+  begin
+    perform public.meta_invalidar_aprovacoes(
+      'f1000000-0000-0000-0000-000000000003', v_alfa,
+      'probe de rollback do NO-OP (P3)', 0, v_a1,
+      'f1700000-0000-0000-0000-000000000164');
+  exception when others then v_ok := sqlerrm like '%MUT_F5_10_P3%';
+  end;
+  perform set_config('f5_10_p3.falhar', '', true);
+  if not v_ok then
+    raise exception '[FAIL] H4: a falha injetada no evento do NO-OP nao abortou a operacao';
+  end if;
+  if exists (
+    select 1 from public.evaluation_goal_events
+     where organization_id = v_alfa
+       and operation_id = 'f1700000-0000-0000-0000-000000000164'
+  ) then
+    raise exception '[FAIL] H4: o evento do NO-OP ficou na trilha apesar da falha';
+  end if;
+  if exists (
+    select 1 from public.evaluation_goal_approvals
+     where organization_id = v_alfa
+       and goal_id = 'f1000000-0000-0000-0000-000000000003'
+  ) then
+    raise exception '[FAIL] H4: o NO-OP abortado tocou aprovacoes';
+  end if;
+
+  raise notice '[PASS] H: rollback TOTAL com falha no evento de aprovacao (nenhum fato parcial), no evento de invalidacao (nenhuma revogacao parcial), no evento EDITADA apos a invalidacao (edicao + D19 revertidas juntas) e no evento do NO-OP (nenhum registro parcial)';
 end $$;
 
 drop trigger _mut_f5_10_p3_evento on public.evaluation_goal_events;
@@ -725,7 +759,7 @@ begin
     raise exception '[FAIL] E8: soft delete NAO pode invalidar nem apagar aprovacoes (%)', v_n;
   end if;
 
-  raise notice '[PASS] E/D19: edicao material invalida as duas aprovacoes vigentes (fato preservado, version+1, evento por papel) e reaprovacao cria novo fato; edicao nao efetiva, progresso, primeira finalizacao, revisao, quota e soft delete NAO invalidam';
+  raise notice '[PASS] E-cont/D19: progresso, primeira finalizacao, revisao de fechamento, alteracao de quota e soft delete NAO invalidam as aprovacoes vigentes';
 end $$;
 
 -- ============================================================================
@@ -740,10 +774,14 @@ declare
   v_res   jsonb;
   v_res2  jsonb;
   v_fato  record;
+  v_evento record;
   v_evt   int;
   v_n     int;
+  v_fatos int;
+  v_vig   int;
   v_versoes int;
   v_ok    boolean;
+  v_msg   text;
 begin
   -- (F1) motivo obrigatorio => INVALID_INPUT.
   v_ok := false;
@@ -812,29 +850,87 @@ begin
     raise exception '[FAIL] F5: replay da invalidacao devolveu resultado diferente (% vs %)', v_res, v_res2;
   end if;
 
-  -- (F6) NO-OP auditavel: nova intencao SEM fato vigente nao grava evento e nao
-  --      re-muta fato revogado (asserção comparativa antes/depois, sem depender
-  --      do numero absoluto de fatos revogados acumulados pelos blocos).
+  -- (F6) NO-OP PERSISTENTEMENTE IDEMPOTENTE (correcao pos-auditoria): sem fato
+  --      vigente a INTENCAO e registrada na trilha (UM evento, com o operation_id
+  --      e o payload_hash da intencao, result_entity_id NULL, invalidated = 0) e
+  --      NENHUMA linha de `evaluation_goal_approvals` e alterada.
   select count(*) into v_evt from public.evaluation_goal_events
    where organization_id = v_alfa;
-  select count(*), coalesce(sum(a.version), 0) into v_n, v_versoes
+  select count(*), coalesce(sum(a.version), 0) into v_fatos, v_versoes
     from public.evaluation_goal_approvals a
-   where a.organization_id = v_alfa and a.goal_id = v_g1 and a.revogado_em is not null;
+   where a.organization_id = v_alfa and a.goal_id = v_g1;
+  select count(*) into v_vig from public.evaluation_goal_approvals a
+   where a.organization_id = v_alfa and a.goal_id = v_g1 and a.revogado_em is null;
+  if v_vig <> 0 then
+    raise exception '[FAIL] F6: pre-condicao — G1 deveria estar sem aprovacao vigente (%)', v_vig;
+  end if;
+
   v_res := public.meta_invalidar_aprovacoes(v_g1, v_alfa,
     'segunda invalidacao sem fatos vigentes (P3)', 5, v_a1,
     'f1700000-0000-0000-0000-000000000145');
   if (v_res->>'invalidated')::int <> 0 then
-    raise exception '[FAIL] F6: sem fatos vigentes a invalidacao deveria ser NO-OP (%)', v_res;
+    raise exception '[FAIL] F6: sem fato vigente a invalidacao deveria ser NO-OP (%)', v_res;
   end if;
-  if (select count(*) from public.evaluation_goal_events where organization_id = v_alfa) <> v_evt then
-    raise exception '[FAIL] F6: o NO-OP gravou evento (nenhuma mutacao sem evento, nenhum evento sem mutacao)';
+  if v_res->>'aprovacao_id' is not null or v_res->>'papel' is not null then
+    raise exception '[FAIL] F6: o NO-OP nao pode devolver fato revogado (%)', v_res;
   end if;
+
+  -- Exatamente UM evento novo, e ele E o registro do NO-OP.
+  if (select count(*) from public.evaluation_goal_events where organization_id = v_alfa) <> v_evt + 1 then
+    raise exception '[FAIL] F6: o NO-OP deveria gravar EXATAMENTE um evento';
+  end if;
+  if (select count(*) from public.evaluation_goal_events e
+       where e.organization_id = v_alfa
+         and e.operation_id = 'f1700000-0000-0000-0000-000000000145') <> 1 then
+    raise exception '[FAIL] F6: esperado exatamente 1 evento para o NO-OP';
+  end if;
+  select e.* into v_evento from public.evaluation_goal_events e
+   where e.organization_id = v_alfa
+     and e.operation_id = 'f1700000-0000-0000-0000-000000000145';
+  if v_evento.event_type <> 'APROVACAO_INVALIDADA'
+     or v_evento.goal_id <> v_g1
+     or v_evento.result_entity_id is not null
+     or v_evento.actor_user_profile_id <> v_a1
+     or v_evento.actor_membership_id <> 'f1d00000-0000-0000-0000-000000000001'::uuid
+     or v_evento.reason <> 'segunda invalidacao sem fatos vigentes (P3)'
+     or v_evento.payload_hash !~ '^[0-9a-f]{64}$' then
+    raise exception '[FAIL] F6: evento do NO-OP divergente (%)', v_evento;
+  end if;
+  if (v_evento.before_value->>'invalidated')::int <> 0
+     or (v_evento.after_value->>'invalidated')::int <> 0
+     or v_evento.before_value->>'fato_vigente_encontrado' <> 'false'
+     or v_evento.after_value->>'fato_vigente_encontrado' <> 'false'
+     or v_evento.after_value->>'registro' <> 'NO_OP'
+     or (v_evento.after_value->>'versao_meta')::int <> 5
+     or v_evento.after_value->>'status_meta' <> 'NAO_ATINGIDA'
+     or v_evento.after_value->>'revogado_motivo' <> 'segunda invalidacao sem fatos vigentes (P3)'
+     or v_evento.after_value->>'aprovacao_id' is not null
+     or v_evento.after_value->>'versao_fato' is not null then
+    raise exception '[FAIL] F6: before/after do NO-OP nao explicitam invalidated=0/versao/status/motivo (% / %)',
+      v_evento.before_value, v_evento.after_value;
+  end if;
+
+  -- NENHUMA linha de `evaluation_goal_approvals` foi alterada.
   if (select count(*) from public.evaluation_goal_approvals a
-       where a.organization_id = v_alfa and a.goal_id = v_g1 and a.revogado_em is not null) <> v_n
+       where a.organization_id = v_alfa and a.goal_id = v_g1) <> v_fatos
      or (select coalesce(sum(a.version), 0) from public.evaluation_goal_approvals a
-          where a.organization_id = v_alfa and a.goal_id = v_g1 and a.revogado_em is not null) <> v_versoes then
-    raise exception '[FAIL] F6: o NO-OP re-mutou fatos ja revogados (% fatos / versoes % antes)',
-      v_n, v_versoes;
+          where a.organization_id = v_alfa and a.goal_id = v_g1) <> v_versoes
+     or (select count(*) from public.evaluation_goal_approvals a
+          where a.organization_id = v_alfa and a.goal_id = v_g1
+            and a.revogado_em is null) <> v_vig then
+    raise exception '[FAIL] F6: o NO-OP alterou linhas de aprovacao (fatos=%, versoes=%, vigentes=%)',
+      v_fatos, v_versoes, v_vig;
+  end if;
+
+  -- Replay IMEDIATO do NO-OP: mesmo resultado e nenhum evento adicional.
+  v_res2 := public.meta_invalidar_aprovacoes(v_g1, v_alfa,
+    'segunda invalidacao sem fatos vigentes (P3)', 5, v_a1,
+    'f1700000-0000-0000-0000-000000000145');
+  if v_res <> v_res2 then
+    raise exception '[FAIL] F6: replay imediato do NO-OP divergiu (% vs %)', v_res, v_res2;
+  end if;
+  if (select count(*) from public.evaluation_goal_events where organization_id = v_alfa) <> v_evt + 1 then
+    raise exception '[FAIL] F6: o replay do NO-OP gravou evento adicional';
   end if;
 
   -- (F7) reaprovacao apos a invalidacao explicita cria NOVO FATO vigente.
@@ -850,7 +946,73 @@ begin
     raise exception '[FAIL] F7: deveriam existir 3 fatos de GERENTE (2 revogados + 1 vigente), encontrados %', v_n;
   end if;
 
-  raise notice '[PASS] F: invalidacao soberana (motivo, stale, cross-tenant, fato preservado com version+1 e evento) com replay idempotente, NO-OP auditavel sem fato vigente e reaprovacao gerando novo fato';
+  -- (F8) TESTE CRITICO DE IDEMPOTENCIA TEMPORAL: com NOVA aprovacao VIGENTE criada
+  --      DEPOIS do NO-OP, repetir EXATAMENTE a chamada com o MESMO operation_id e o
+  --      MESMO payload continua devolvendo `invalidated = 0` e NAO pode invalidar a
+  --      nova aprovacao (o registro do NO-OP consumiu o operation_id).
+  select e.* into v_evento from public.evaluation_goal_events e
+   where e.organization_id = v_alfa
+     and e.operation_id = 'f1700000-0000-0000-0000-000000000146';
+  select count(*) into v_vig from public.evaluation_goal_approvals a
+   where a.organization_id = v_alfa and a.goal_id = v_g1 and a.revogado_em is null;
+  if v_vig <> 1 then
+    raise exception '[FAIL] F8: pre-condicao — G1 deveria ter exatamente 1 aprovacao vigente (%)', v_vig;
+  end if;
+  select count(*) into v_evt from public.evaluation_goal_events
+   where organization_id = v_alfa;
+
+  v_res := public.meta_invalidar_aprovacoes(v_g1, v_alfa,
+    'segunda invalidacao sem fatos vigentes (P3)', 5, v_a1,
+    'f1700000-0000-0000-0000-000000000145');
+  if (v_res->>'invalidated')::int <> 0 then
+    raise exception '[FAIL] F8: replay TEMPORAL do NO-OP deveria continuar invalidated = 0 (%)', v_res;
+  end if;
+  if v_res->>'aprovacao_id' is not null then
+    raise exception '[FAIL] F8: o replay TEMPORAL devolveu fato revogado (%)', v_res;
+  end if;
+  select count(*) into v_n from public.evaluation_goal_approvals a
+   where a.organization_id = v_alfa and a.goal_id = v_g1 and a.revogado_em is null;
+  if v_n <> 1 then
+    raise exception '[FAIL] F8: o replay TEMPORAL invalidou a NOVA aprovacao vigente (%)', v_n;
+  end if;
+  if not exists (
+    select 1 from public.evaluation_goal_approvals a
+     where a.organization_id = v_alfa and a.goal_id = v_g1 and a.revogado_em is null
+       and a.id = (v_evento.result_entity_id)
+       and a.version = 0
+  ) then
+    raise exception '[FAIL] F8: a nova aprovacao vigente foi alterada pelo replay temporal';
+  end if;
+  if (select count(*) from public.evaluation_goal_events where organization_id = v_alfa) <> v_evt then
+    raise exception '[FAIL] F8: o replay TEMPORAL gravou evento adicional';
+  end if;
+  if (select count(*) from public.evaluation_goal_events e
+       where e.organization_id = v_alfa
+         and e.operation_id = 'f1700000-0000-0000-0000-000000000145') <> 1 then
+    raise exception '[FAIL] F8: deve existir APENAS UM evento para o NO-OP';
+  end if;
+
+  -- (F9) mesmo operation_id com PAYLOAD DIVERGENTE => CONFLICT (nada muda).
+  v_ok := false; v_msg := null;
+  begin
+    perform public.meta_invalidar_aprovacoes(v_g1, v_alfa,
+      'payload divergente com o mesmo operation_id (P3)', 5, v_a1,
+      'f1700000-0000-0000-0000-000000000145');
+  exception when others then v_ok := sqlerrm like '%F5_10_CONFLICT%'; v_msg := sqlerrm;
+  end;
+  if not v_ok then
+    raise exception '[FAIL] F9: payload divergente no mesmo operation_id deveria ser CONFLICT (recebido %)', v_msg;
+  end if;
+  select count(*) into v_n from public.evaluation_goal_approvals a
+   where a.organization_id = v_alfa and a.goal_id = v_g1 and a.revogado_em is null;
+  if v_n <> 1 then
+    raise exception '[FAIL] F9: a recusa por payload divergente alterou a aprovacao vigente (%)', v_n;
+  end if;
+  if (select count(*) from public.evaluation_goal_events where organization_id = v_alfa) <> v_evt then
+    raise exception '[FAIL] F9: a recusa por payload divergente gravou evento';
+  end if;
+
+  raise notice '[PASS] F: invalidacao soberana (motivo, stale, cross-tenant, fato preservado com version+1 e evento) com replay idempotente, NO-OP SEM fato vigente REGISTRADO na trilha (operation_id consumido, result_entity_id NULL), replay IMEDIATO e TEMPORAL (nova aprovacao vigente preservada), payload divergente => CONFLICT e reaprovacao gerando novo fato';
 end $$;
 
 -- ============================================================================
@@ -1151,8 +1313,23 @@ begin
   end loop;
 
   select count(*) into v_evt from public.evaluation_goal_events where organization_id = v_alfa;
-  if v_evt <> 18 then
-    raise exception '[FAIL] K: trilha de Alfa deveria ter 18 eventos, encontrado %', v_evt;
+  if v_evt <> 19 then
+    raise exception '[FAIL] K: trilha de Alfa deveria ter 19 eventos, encontrado %', v_evt;
+  end if;
+  -- Exatamente UM evento de invalidacao sem fato associado: o registro do NO-OP.
+  select count(*) into v_evt from public.evaluation_goal_events e
+   where e.organization_id = v_alfa
+     and e.event_type = 'APROVACAO_INVALIDADA'
+     and e.result_entity_id is null;
+  if v_evt <> 1 then
+    raise exception '[FAIL] K: esperado exatamente 1 evento de invalidacao SEM fato (NO-OP), encontrado %', v_evt;
+  end if;
+  select count(*) into v_evt from public.evaluation_goal_events e
+   where e.organization_id = v_alfa
+     and e.event_type = 'APROVACAO_INVALIDADA'
+     and e.result_entity_id is not null;
+  if v_evt <> 3 then
+    raise exception '[FAIL] K: esperados 3 eventos de invalidacao COM fato revogado, encontrado %', v_evt;
   end if;
   select count(*) into v_evt from public.evaluation_goal_events where organization_id = v_beta;
   if v_evt <> 1 then
@@ -1169,7 +1346,7 @@ begin
     if (v_tipo = 'CRIADA' and v_rec.qtd <> 4)
        or (v_tipo = 'APROVACAO_GERENTE' and v_rec.qtd <> 4)
        or (v_tipo = 'APROVACAO_COORDENADOR' and v_rec.qtd <> 1)
-       or (v_tipo = 'APROVACAO_INVALIDADA' and v_rec.qtd <> 3)
+       or (v_tipo = 'APROVACAO_INVALIDADA' and v_rec.qtd <> 4)
        or (v_tipo = 'EDITADA' and v_rec.qtd <> 2)
        or (v_tipo = 'PROGRESSO_ATUALIZADO' and v_rec.qtd <> 1)
        or (v_tipo = 'FINALIZADA' and v_rec.qtd <> 1)
@@ -1216,7 +1393,7 @@ begin
     raise exception '[FAIL] K: gatilho de mutacao deixado no schema (%)', v_n;
   end if;
 
-  raise notice '[PASS] K: estado final deterministico (5 fatos de aprovacao — 2 vigentes e 3 revogados —, 18 eventos em Alfa e 1 em Beta, status funcional de G1 intacto e nenhum residuo)';
+  raise notice '[PASS] K: estado final deterministico (5 fatos de aprovacao — 2 vigentes e 3 revogados —, 19 eventos em Alfa e 1 em Beta, exatamente 1 evento de invalidacao sem fato (NO-OP registrado), status funcional de G1 intacto e nenhum residuo)';
 end $$;
 
 -- ============================================================================
