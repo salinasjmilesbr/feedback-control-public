@@ -293,7 +293,7 @@ jobs:
             psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
             < supabase/validacao/15-validar-f5-09-p9.sql
 
-      - name: Run F5-09 P9 concurrency (DUAS sessoes reais: A em background, B em foreground)
+      - name: "Run F5-09 P9 concurrency (DUAS sessoes reais: A em background, B em foreground)"
         run: |
           set -e
           docker exec -i supabase_db_feedback-control \
