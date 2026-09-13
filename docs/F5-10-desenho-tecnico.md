@@ -72,6 +72,12 @@ histórico e a substituição do acervo local por autoridade no PostgreSQL.
 - `getMetasDoColaboradorNoCiclo(colaboradorMatricula, cicloId)`,
   `getMetasDoCiclo(cicloId)`, `contarMetasPorTipo(...)` — todas leem o blob e
   filtram em memória (`metaStorage.ts:40-81`).
+- **Fallback silencioso com perda de dado:** JSON corrompido ⇒ `catch { return [] }`
+  (`metaStorage.ts:31-33`) e a escrita seguinte persiste apenas o array novo — o
+  acervo anterior desaparece **sem erro visível**.
+- **Segundo produtor da mesma chave:** `src/services/geradorDadosTeste.ts:525-532`
+  grava metas direto na chave `feedback-control-metas` (fixture, DEV-gated) —
+  o serviço dono não é o único autor do blob.
 
 ### 3.3 Lifecycle real (implementado)
 
@@ -169,7 +175,17 @@ para metas; qualquer `expectedVersion`, `operationId` ou trilha append-only.
 3. **Autorização inoperante em produção:** `goal.*` sem concessão e mundo
    sintético ⇒ DENY; em DEV concede `goal.write`+SELF a qualquer ativo.
 4. **Estado autorizativo dentro do objeto mutável do cliente** (aprovações +
-   histórico), com idempotência por *early-return* local.
+   histórico), com idempotência por *early-return* local — **duas aprovações
+   concorrentes (coordenador e gerente) se sobrescrevem**, porque cada
+   `persistir` regrava o array inteiro a partir da própria cópia
+   (`metaStorage.ts:401-456`, `:490-492`).
+5. **Decisão estrutural assíncrona lida de forma síncrona:** o serviço chama
+   `estruturaSoberanaEfetiva()` sincronamente (`metaStorage.ts:158`, `:233`,
+   `:427-433`) enquanto a projeção estrutural é carregada de forma assíncrona
+   pelo shell (`src/pages/useEstruturaSoberanaDoCliente.ts:59`); se a decisão
+   ocorrer antes de “pronta” (ou em `indisponivel`), o resultado é
+   `ESTRUTURA_SOBERANA_VAZIA` ⇒ fail-closed **silencioso** (a tela de metas não
+   sinaliza a indisponibilidade).
 5. **Regra de negócio duplicada** (limite em serviço e UI; relação de aprovação
    no serviço e no engine; assimetria entre os dois ramos de
    `metaStorage.aprovarMeta` — o ramo do gerente recomputa a estrutura, o do
@@ -248,7 +264,25 @@ public.evaluation_cycle_goal_limits      -- limites por ciclo (substitui campos 
 | criar | — | `goal.write` (SELF) ou administrativo (ver Q3) | ciclo `ATIVO` **da linha**; limite do tipo disponível; sem sobreposição de unicidade parcial |
 | editar (conteúdo) | `EM_ANDAMENTO` | `goal.write` (SELF) | `expected_version`; **invalida aprovações** (evento `APROVACOES_INVALIDADAS`) |
 | atualizar progresso | `EM_ANDAMENTO` | `goal.write` (SELF) | `expected_version` |
-| finalizar | `EM_ANDAMENTO` | `goal.write` (SELF) + aprovações vigentes exigidas pelo tipo | `expected_version`; `resultadoFinal`/`atingida`; **não** reabre |
+| finalizar | `EM_ANDAMENTO` | `goal.write` (SELF) + aprovações exigidas | `expected_version`; `resultadoFinal`/`atingida` |
+| re-finalizar (“Revisar fechamento”) | **qualquer** status final | `goal.write` (SELF) | hoje `finalizarMeta` **sobrescreve** `resultadoFinal`/`atingida`/`status`/`dataFechamento` **sem checar o estado atual** (`metaStorage.ts:631-684`; a UI oferece o botão em `MinhasMetasPage.tsx:521`) — o único vestígio é outro evento `FINALIZACAO` com `*Anterior`. O desenho exige transição explícita (Q10) |
+| reabrir meta | — | — | **não existe** reabertura hoje (não há função em `metaStorage.ts`); não é proposta uma (Q10) |
+
+**Regra de aprovação vigente** (`metaEstaAprovada`, `metaStorage.ts:201-218`):
+`(!exigeCoordenador || aprovacaoCoordenador) && aprovacaoGerente` — a aprovação
+do **gerente é sempre exigida**, mesmo quando a do coordenador não é. O desenho
+preserva essa assimetria como ponto de partida e a expõe em Q10.
+
+**Quota imutável durante o ciclo `ATIVO`:** `atualizarConfiguracaoMetasCiclo` só
+aceita ciclo `PLANEJADO` (`cicloAvaliacaoStorage.ts:327-359`) — a quota não pode
+ser ajustada exatamente quando as metas são criadas.
+
+**Agregação hoje (o que o modelo soberano precisa substituir):** média
+aritmética simples do `progressoPercentual` do array retornado, com `Math.round`
+e guarda de divisão por zero (`MinhasMetasPage.tsx:660`,
+`AcompanhamentoMetasPage.tsx:137-144`); “Aguardando aprovação” =
+`totalCadastrado - aprovadas`. **Não há** peso de meta, nota de meta, nem
+agregação por ciclo no domínio de metas.
 | excluir (soft) | `EM_ANDAMENTO`/finalizada | `goal.write` (SELF) ou administrativo | `expected_version`; motivo; nunca físico |
 | aprovar (coordenador) | meta viva, ciclo `ATIVO` | `goal.approve` + relação soberana | não é o dono; é o nível **intermediário** da cadeia (Q4) |
 | aprovar (gerente) | idem | `goal.approve` + relação soberana | é a **raiz** da cadeia do dono no ciclo (Q4) |
@@ -379,6 +413,17 @@ da tabela de aprovações; isso elimina o estado autorizativo dentro do objeto.
      (business code) com **falha explícita** quando não resolver;
    - executar **uma vez**, com `operation_id` determinístico por meta e
      evidência de contagem antes/depois; sem dual-write permanente.
+   - **pontes autoritativas a reusar (não heurísticas):**
+     `evaluation_resolver_ciclo(org, ano, numero, actor)` — recusa 0, >1 e
+     `CANCELADO` (`supabase/migrations/20260911020000_f5_06_cutover_leitura_e_ciclo.sql:33-79`);
+     `mapearCiclosPorAnoNumero` (`supabase/functions/avaliacoes/assignedSupabase.ts:90-95`);
+     matrícula→UUID por `ponteMatricula` (**recusa ambiguidade**,
+     `src/infrastructure/supabase/avaliacoes/ponteMatricula.ts:49-66`) e
+     `ponteColaborador` server-side (`supabase/functions/avaliacoes/ponteColaborador.ts:40-56`);
+   - **barreira de escrita no serviço legado:** o modelo a copiar é
+     `src/services/colaboradorStorage.ts:53-62` — a **leitura** legada é
+     preservada e as funções de **escrita** passam a `throw` apontando a porta
+     soberana única (mesma doutrina usada no cutover da F5-07).
 4. **Legado**: `metaStorage` vira LEITURA transitória para o backfill e depois é
    removido do caminho funcional; nenhum fallback é mantido.
 5. **Consumidores de arrasto** (feedback, PDF, fechamento, impacto da correção)
@@ -416,6 +461,8 @@ da tabela de aprovações; isso elimina o estado autorizativo dentro do objeto.
 | R6 | Lock novo causando deadlock com RPCs de ciclo | média | reusar a chave `evaluation_cycles:<org>` (Q6) |
 | R7 | Guardas de “não antecipar F5-10” quebrarem o CI | baixa | atualizar os validadores na própria atividade (declarado) |
 | R8 | Escopo crescer para observações (F5-11) | média | `observation.*` intocado; nenhuma tabela de observação |
+| R9 | **Fail-closed silencioso** por estrutura soberana ainda não carregada (decisão síncrona sobre projeção assíncrona) | média | o caminho soberano de metas deve expor a indisponibilidade na UI (fase explícita), nunca tratar “sem estrutura” como “sem direito” sem sinalizar |
+| R10 | **Perda silenciosa do acervo legado** (JSON corrompido ⇒ `[]` ⇒ próxima escrita regrava só o novo) durante o backfill | média | o backfill deve **exportar/congelar** o acervo antes de qualquer escrita e abortar em contagem divergente |
 
 ## 17. Decisões propostas (para ratificação)
 
@@ -488,10 +535,30 @@ apenas aprovam e leem (ampliar exige decisão explícita).
 manter numérico 0–100 informado pelo dono no primeiro momento e **não** inferir
 de texto (o `valorAlvo` é `string` hoje); derivação fica como evolução.
 
-**Q10 — Finalização exige aprovações?** (a) só exige para `NEGOCIO_PROJETO`;
-(b) exige para ambos; (c) não exige. *Recomendação:* decidir com o produto;
-tecnicamente **(a)** preserva o comportamento atual do coordenador e mantém
-`ATINGIDA/NAO_ATINGIDA` independente de aprovação.
+**Q10 — Finalização exige aprovações, e re-finalizar é permitido?** Regra vigente:
+`metaEstaAprovada = (!exigeCoordenador || aprovacaoCoordenador) && aprovacaoGerente`
+(`metaStorage.ts:201-218`) ⇒ **o gerente é sempre exigido**; o coordenador é
+exigido quando o dono tem nível intermediário acima (`metaExigeAprovacaoCoordenador`).
+Alternativas: (a) preservar a regra vigente e **proibir** re-finalização;
+(b) preservar a regra e permitir re-finalização como transição explícita
+(evento + `before_value` + `expected_version`); (c) exigir as duas aprovações
+sempre; (d) não exigir aprovação para finalizar. *Recomendação:* **(b)** — mantém
+o comportamento atual de exigência (sem surpresa no cutover) e transforma a
+“revisão de fechamento” que hoje é **sobrescrita silenciosa** em transição
+auditada; (c) e (d) mudam regra de negócio e exigem decisão de produto.
+
+**Q13 — O progresso continua entrada humana 0..100 ou passa a derivar de
+`resultadoAtual` × `valorAlvo`?** Hoje é inteiro digitado (slider/number com
+clamp, `MinhasMetasPage.tsx:339-361`), e `valorAlvo` é **texto livre**.
+*Recomendação:* manter 0..100 informado; derivação exigiria tipar `valorAlvo`
+(o que muda o modelo de conteúdo e a UI) — evolução futura, não F5-10.
+
+**Q14 — A quota (`quantidadeMetas*`) pode ser alterada durante o ciclo
+`ATIVO`?** Hoje **não** (só em `PLANEJADO`, `cicloAvaliacaoStorage.ts:339-343`)
+— o que é contraditório, porque é no `ATIVO` que as metas nascem.
+*Recomendação:* permitir alteração no `ATIVO` pelo caminho administrativo, com
+`expected_version`, `operation_id` e evento, validando que a nova quota **não**
+é menor que o total já existente (senão CONFLICT, nunca apagar meta).
 
 **Q11 — Correção de período do ciclo invalida aprovações?** *Recomendação:* sim,
 quando o período mudar o ciclo de referência — com evento
