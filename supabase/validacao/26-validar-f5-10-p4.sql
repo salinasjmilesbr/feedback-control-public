@@ -1094,6 +1094,170 @@ begin
 end $$;
 
 -- ============================================================================
+-- 10-bis) CORRECAO POS-AUDITORIA GPT (Issue #216): o REPLAY de `meta_aprovar`
+--         tambem tem de provar capability + RELACAO CONGELADA em TODOS os
+--         caminhos de retorno (blocker de enforcement apontado na auditoria).
+-- ============================================================================
+-- No artefato auditado (c65df85) a relacao congelada era provada apenas na
+-- execucao normal: os dois retornos de idempotencia (replay rapido, antes do
+-- lock, e replay sob o lock) devolviam sucesso provando somente `goal.approve`.
+-- Este bloco prova A-G:
+--   A  replay LEGITIMO devolve o MESMO resultado, sem novo fato/evento;
+--   B  replay apos PERDA da capability => FORBIDDEN, sem efeito;
+--   C  capability presente e RELACAO ausente (vinculo desativado) => FORBIDDEN;
+--   D  outro ator com `goal.approve` que NAO e o aprovador congelado => FORBIDDEN
+--      (e operation_id alheio => CONFLICT, nunca sucesso);
+--   E  hierarquia VIVA divergente NAO transfere autoridade => FORBIDDEN;
+--   F  prova ESTATICA dos 3 caminhos de retorno (o replay sob lock nao e
+--      alcancavel numa unica sessao sem concorrencia; concorrencia real de
+--      metas e escopo da P7);
+--   G  ausencia de efeitos colaterais em todos os DENY.
+do $$
+declare
+  v_alfa    uuid := 'f2a00000-0000-0000-0000-0000000000a1';
+  v_m1      uuid := 'f2000000-0000-0000-0000-000000000001';
+  v_a2      uuid := 'f2c00000-0000-0000-0000-000000000002';
+  v_a3      uuid := 'f2c00000-0000-0000-0000-000000000003';
+  v_aa      uuid := 'f2c00000-0000-0000-0000-00000000000a';
+  v_role    uuid := 'f2f90000-0000-0000-0000-000000000002';
+  v_link    uuid := 'f2e00000-0000-0000-0000-000000000002';
+  v_cap     uuid;
+  v_res     jsonb;
+  v_base    jsonb;
+  v_ok      boolean;
+  v_msg     text;
+  v_fatos   int;
+  v_eventos int;
+  v_versao  int;
+  v_def     text;
+begin
+  select id into v_cap from public.capabilities where code = 'goal.approve';
+  if v_cap is null then
+    raise exception '[FAIL] H: capability goal.approve ausente do catalogo';
+  end if;
+
+  -- (A) REPLAY LEGITIMO: mesmo ator, mesmo operation_id e mesmo payload.
+  v_base := public.meta_aprovar(v_m1, v_alfa, 'GERENTE', 'aprovacao de gerente (P4)',
+    0, v_a2, 'f2700000-0000-0000-0000-000000000706');
+  v_res := public.meta_aprovar(v_m1, v_alfa, 'GERENTE', 'aprovacao de gerente (P4)',
+    0, v_a2, 'f2700000-0000-0000-0000-000000000706');
+  if v_res <> v_base or v_res->>'aprovado' <> 'true' then
+    raise exception '[FAIL] H(A): replay legitimo deveria devolver o MESMO resultado (%)', v_res;
+  end if;
+
+  select count(*) into v_fatos from public.evaluation_goal_approvals a
+   where a.organization_id = v_alfa and a.goal_id = v_m1;
+  select count(*) into v_eventos from public.evaluation_goal_events e
+   where e.organization_id = v_alfa and e.goal_id = v_m1;
+  select g.version into v_versao from public.evaluation_goals g where g.id = v_m1;
+
+  -- (B) REPLAY APOS PERDA DA CAPABILITY (mesmo ator/operation_id): o gate da P4
+  --     roda ANTES do replay => FORBIDDEN. Concessao removida e RESTAURADA aqui.
+  delete from public.access_role_capabilities rc
+   where rc.access_role_id = v_role and rc.capability_id = v_cap;
+  v_ok := false; v_msg := null;
+  begin
+    perform public.meta_aprovar(v_m1, v_alfa, 'GERENTE', 'aprovacao de gerente (P4)',
+      0, v_a2, 'f2700000-0000-0000-0000-000000000706');
+  exception when others then v_ok := sqlerrm like '%F5_10_FORBIDDEN%'; v_msg := sqlerrm;
+  end;
+  insert into public.access_role_capabilities (access_role_id, capability_id)
+  values (v_role, v_cap);
+  if not v_ok or position('exige a capability goal.approve' in v_msg) = 0 then
+    raise exception '[FAIL] H(B): replay sem goal.approve deveria ser FORBIDDEN (recebido %)', v_msg;
+  end if;
+
+  -- (C) CAPABILITY PRESENTE, RELACAO AUSENTE: vinculo soberano do ator
+  --     desativado (e restaurado) => FORBIDDEN pela RELACAO, sem efeito.
+  update public.membership_collaborator_links l set status = 'disabled' where l.id = v_link;
+  v_ok := false; v_msg := null;
+  begin
+    perform public.meta_aprovar(v_m1, v_alfa, 'GERENTE', 'aprovacao de gerente (P4)',
+      0, v_a2, 'f2700000-0000-0000-0000-000000000706');
+  exception when others then v_ok := sqlerrm like '%F5_10_FORBIDDEN%'; v_msg := sqlerrm;
+  end;
+  update public.membership_collaborator_links l set status = 'active' where l.id = v_link;
+  if not v_ok or position('sem vinculo UNICO de colaborador ativo' in v_msg) = 0 then
+    raise exception '[FAIL] H(C): replay sem relacao congelada deveria ser FORBIDDEN (recebido %)', v_msg;
+  end if;
+
+  -- (D1) OUTRO ATOR COM `goal.approve` (COORDENADOR congelado) tentando o papel
+  --      GERENTE com operation_id NOVO => FORBIDDEN pela relacao.
+  v_ok := false; v_msg := null;
+  begin
+    perform public.meta_aprovar(v_m1, v_alfa, 'GERENTE', 'probe de outro aprovador (P4)',
+      0, v_a3, 'f2700000-0000-0000-0000-0000000009d1');
+  exception when others then v_ok := sqlerrm like '%F5_10_FORBIDDEN%'; v_msg := sqlerrm;
+  end;
+  if not v_ok or position('nao e o participante congelado do papel GERENTE' in v_msg) = 0 then
+    raise exception '[FAIL] H(D1): outro ator com goal.approve deveria ser FORBIDDEN pela relacao (recebido %)', v_msg;
+  end if;
+  -- (D2) "REPLAY" DO MESMO operation_id POR OUTRO ATOR: o payload_hash canonico
+  --      e da INTENCAO (nao inclui o ator), logo o caminho de replay e alcancado
+  --      e a RELACAO recusa — outro ator NAO reaproveita o operation_id alheio.
+  v_ok := false; v_msg := null;
+  begin
+    perform public.meta_aprovar(v_m1, v_alfa, 'GERENTE', 'aprovacao de gerente (P4)',
+      0, v_a3, 'f2700000-0000-0000-0000-000000000706');
+  exception when others then v_ok := sqlerrm like '%F5_10_FORBIDDEN%'; v_msg := sqlerrm;
+  end;
+  if not v_ok or position('nao e o participante congelado do papel GERENTE' in v_msg) = 0 then
+    raise exception '[FAIL] H(D2): replay do operation_id alheio deveria ser FORBIDDEN pela relacao (recebido %)', v_msg;
+  end if;
+
+  -- (E) HIERARQUIA VIVA DIVERGENTE: `aa` (gestor VIVO, com goal.approve) NAO
+  --     substitui o participante CONGELADO.
+  v_ok := false; v_msg := null;
+  begin
+    perform public.meta_aprovar(v_m1, v_alfa, 'GERENTE', 'probe de hierarquia viva (P4)',
+      0, v_aa, 'f2700000-0000-0000-0000-0000000009e1');
+  exception when others then v_ok := sqlerrm like '%F5_10_FORBIDDEN%'; v_msg := sqlerrm;
+  end;
+  if not v_ok or position('nao e o participante congelado do papel GERENTE' in v_msg) = 0 then
+    raise exception '[FAIL] H(E): hierarquia viva nao pode aprovar (recebido %)', v_msg;
+  end if;
+
+  -- (F) PROVA ESTATICA dos caminhos de retorno: relacao exigida em 3 pontos
+  --     (2 replays + execucao normal), gate da capability e lock preservados.
+  select lower(pg_get_functiondef(p.oid)) into v_def
+    from pg_proc p
+   where p.oid = to_regprocedure('public.meta_aprovar(uuid, uuid, text, text, integer, uuid, uuid)');
+  if (length(v_def) - length(replace(v_def, 'f5_10_exigir_relacao_aprovador', '')))
+     / length('f5_10_exigir_relacao_aprovador') <> 3 then
+    raise exception '[FAIL] H(F): meta_aprovar deveria exigir a relacao nos 3 caminhos de retorno';
+  end if;
+  if position('f5_10_exigir_autorizacao_meta' in v_def) = 0 then
+    raise exception '[FAIL] H(F): meta_aprovar perdeu o gate de capability da P4';
+  end if;
+  if position('ciclo_lock_organizacao' in v_def) = 0 then
+    raise exception '[FAIL] H(F): meta_aprovar perdeu o lock normativo da familia de ciclos';
+  end if;
+
+  -- (G) AUSENCIA DE EFEITOS COLATERAIS nos DENY (B/C/D/E).
+  if (select count(*) from public.evaluation_goal_approvals a
+       where a.organization_id = v_alfa and a.goal_id = v_m1) <> v_fatos then
+    raise exception '[FAIL] H(G): os DENY de replay alteraram evaluation_goal_approvals';
+  end if;
+  if (select count(*) from public.evaluation_goal_events e
+       where e.organization_id = v_alfa and e.goal_id = v_m1) <> v_eventos then
+    raise exception '[FAIL] H(G): os DENY de replay gravaram evento';
+  end if;
+  if (select g.version from public.evaluation_goals g where g.id = v_m1) <> v_versao then
+    raise exception '[FAIL] H(G): os DENY de replay alteraram a versao da meta';
+  end if;
+  if (select count(*) from public.access_role_capabilities rc
+       where rc.access_role_id = v_role and rc.capability_id = v_cap) <> 1 then
+    raise exception '[FAIL] H(G): a capability removida em (B) nao foi restaurada';
+  end if;
+  if (select count(*) from public.membership_collaborator_links l
+       where l.id = v_link and l.status = 'active') <> 1 then
+    raise exception '[FAIL] H(G): o vinculo alterado em (C) nao foi restaurado';
+  end if;
+
+  raise notice '[PASS] H (correcao pos-auditoria): REPLAY de meta_aprovar revalida capability + RELACAO CONGELADA nos 3 caminhos de retorno (A legitimo devolve o MESMO resultado; B/C/D/E recusam), sem novo fato, sem evento e sem alterar a meta';
+end $$;
+
+-- ============================================================================
 -- 11) POSITIVO 8: GESTOR CONGELADO le SOMENTE as metas autorizadas
 -- ============================================================================
 do $$
@@ -1699,7 +1863,10 @@ declare
     'public.meta_listar_por_escopo(uuid, uuid, uuid)',
     'public.f5_10_ator_valido_meta(uuid, uuid, text)',
     'public.f5_10_vinculo_meta_do_ator(uuid, uuid)',
-    'public.f5_10_exigir_autorizacao_meta(text, uuid, uuid, uuid, uuid)'];
+    'public.f5_10_exigir_autorizacao_meta(text, uuid, uuid, uuid, uuid)',
+    -- Correcao pos-auditoria (Issue #216): a fonte unica da RELACAO congelada
+    -- tambem e um objeto de autorizacao e entra na verificacao de ACL.
+    'public.f5_10_exigir_relacao_aprovador(uuid, uuid, text, uuid)'];
   v_fn     text;
   v_secdef boolean;
   v_config text;
@@ -1830,7 +1997,10 @@ declare
     'public.meta_listar_por_escopo(uuid, uuid, uuid)',
     'public.f5_10_ator_valido_meta(uuid, uuid, text)',
     'public.f5_10_vinculo_meta_do_ator(uuid, uuid)',
-    'public.f5_10_exigir_autorizacao_meta(text, uuid, uuid, uuid, uuid)'];
+    'public.f5_10_exigir_autorizacao_meta(text, uuid, uuid, uuid, uuid)',
+    -- Correcao pos-auditoria (Issue #216): a fonte unica da RELACAO congelada
+    -- tambem e um objeto de autorizacao e entra na verificacao de ACL.
+    'public.f5_10_exigir_relacao_aprovador(uuid, uuid, text, uuid)'];
   v_tabelas text[] := array[
     'evaluation_goals', 'evaluation_goal_approvals',
     'evaluation_goal_events', 'evaluation_cycle_goal_limits'];

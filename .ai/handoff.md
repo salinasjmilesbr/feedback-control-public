@@ -34,6 +34,34 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
+### 3.18 F5-10 P4 — correção pós-auditoria GPT (Issue #216)
+
+- **Atividade:** correção do **blocker funcional de autorização** apontado pela
+  auditoria independente sobre o SHA auditado
+  `c65df8551e29a4d7705a5aa26e0d4598acf75f5d`: `meta_aprovar` **não revalidava a
+  RELAÇÃO congelada** nos caminhos de replay (rápido, antes do lock, e sob o lock),
+  devolvendo sucesso provando apenas `goal.approve`. **Sem PR e sem merge**; a
+  migration auditada (`20260925000000`) **não foi editada** — a correção entra por
+  migration **aditiva**: `supabase/migrations/20260926000000_f5_10_p4_replay_aprovador.sql`.
+- **Correção:** a MESMA regra das etapas (12)/(13) da P3
+  (`f5_10_aprovador_congelado` + vínculo soberano único via
+  `resolver_collaborador_vinculado`, mensagens e sqlstates **idênticos**) passa a
+  viver em um único ponto, **`f5_10_exigir_relacao_aprovador`**, chamado nos **3
+  caminhos de retorno**: replay rápido, replay sob o lock e execução normal
+  (substituindo o bloco inline original). **Não** é um segundo motor: reusa a
+  autoridade canônica já existente.
+- **Preservado:** idempotência (replay legítimo devolve o **MESMO** resultado, sem
+  novo fato/evento), legitimidade **exclusivamente** do snapshot congelado da
+  avaliação original, D19, `cycle.manage` em `meta_definir_limites_do_ciclo`,
+  `goal.approve` sem implicar `goal.write`, nenhuma capability nova, nenhum
+  `SECURITY DEFINER` novo e nenhuma família nova de advisory lock.
+- **Testes:** bloco **H (A–G)** novo em `26-validar-f5-10-p4.sql` — replay legítimo,
+  perda de capability, relação ausente (vínculo desativado), outro ator com
+  `goal.approve`, hierarquia viva divergente, prova estática dos 3 caminhos e
+  ausência de efeitos colaterais nos DENY.
+- **Gates reais desta rodada:** db reset + bateria SQL completa na ordem do CI (**41/41 entradas, falhas=0**) + `npm test`/`npm run build`/`npm run lint` verdes + `git diff --check` exit 0. Elevações de acesso: 3 batches (1 diagnostico+correcao focado, 1 reteste focado, 1 gate completo de fechamento).
+- **Não feito (por contrato):** P5, P6, P7, F5-11, PR e merge.
+
 ### 3.17 F5-10 P4 — guardas/CI/harness/documentação (em andamento; implementação paralela)
 
 - **Atividade:** F5-10 — **P4 (AUTORIZAÇÃO/RLS de metas)** — recorte de
