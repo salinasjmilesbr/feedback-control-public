@@ -20,7 +20,6 @@ const CHAVES_PARA_LIMPAR = [
   "feedback-control-colaboradores",
   "feedback-control-feedbacks",
   "feedback-control-observacoes",
-  "feedback-control-metas",
   "feedback-control-ciclos",
   "feedback-control-usuario-atual",
 ];

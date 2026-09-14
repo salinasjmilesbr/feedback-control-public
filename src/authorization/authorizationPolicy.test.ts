@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { obterPermissoesAvaliacao } from "../services/permissaoAvaliacao";
-import { podeAprovarMetaNoCiclo } from "../services/metaStorage";
 import { aplicarEscopoRelatorio } from "../services/relatorioService";
 import { getColaboradoresVisiveis } from "../services/visibilidadeColaboradores";
 import { instalarLocalStorageEmMemoria } from "../test/localStorageMock";
@@ -905,18 +904,6 @@ describe("authorizationPolicy", () => {
       can(contexto(actorAusente), "evaluation.edit.board", evaluationResource)
     ).toBe(false);
   });
-
-  it.each([
-    ["goal.approve.manager", gerente],
-    ["goal.approve.coordinator", coordenador],
-  ] as const)(
-    "mantém equivalência de %s com podeAprovarMetaNoCiclo",
-    (capability, actor) => {
-      expect(can(contexto(actor), capability, goalResource)).toBe(
-        podeAprovarMetaNoCiclo(actor, direto, collaborators, ciclo)
-      );
-    }
-  );
 
   const capabilitiesMetasProprias = [
     "goal.create.own",

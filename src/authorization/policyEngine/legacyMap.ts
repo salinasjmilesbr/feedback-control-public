@@ -22,7 +22,7 @@ export const LEGACY_AUTHORIZATION_MAP: readonly LegacyAuthorizationMapping[] = [
     legacyRule: "goal.create.own (perfilPossuiFluxosPropriosAtuais)",
     capability: "goal.write",
     scope: "SELF",
-    note: "Fluxo-piloto migrado na F4-03 (MinhasMetas/metaStorage).",
+    note: "Fluxo-piloto migrado na F4-03 (MinhasMetas); o dominio de metas tornou-se integralmente soberano na F5-10 P6.",
   },
   {
     legacyRule: "goal.edit.own (perfilPossuiFluxosPropriosAtuais)",

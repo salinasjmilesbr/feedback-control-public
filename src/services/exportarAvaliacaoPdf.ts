@@ -1,11 +1,12 @@
-﻿import jsPDF from "jspdf";
+import jsPDF from "jspdf";
 import type { Colaborador } from "../types/Colaborador";
 import type { Feedback } from "../types/Feedback";
 import { getColaboradores } from "./colaboradorStorage";
 import { getObservacoesComunicadasByCiclo } from "./observacaoStorage";
-import { getCiclosAvaliacao } from "./cicloAvaliacaoStorage";
-import { getMetasDoColaboradorNoCiclo } from "./metaStorage";
+
+
 import { formatarNota } from "./escalaAvaliacaoStorage";
+import type { MetaSoberana } from "../application/ports/GoalRepository";
 
 function limparNomeArquivo(valor: string) {
   return valor
@@ -88,8 +89,9 @@ function obterAvaliadores(colaborador: Colaborador) {
 
 export function exportarAvaliacaoPdf(
   colaborador: Colaborador,
-  feedback: Feedback
-) {
+  feedback: Feedback,
+  metasDoCiclo: readonly MetaSoberana[] = []
+): void {
   const avaliadores = obterAvaliadores(colaborador);
 
   const observacoesComunicadas = getObservacoesComunicadasByCiclo(
@@ -98,18 +100,9 @@ export function exportarAvaliacaoPdf(
     feedback.ciclo
   );
 
-  const cicloDaAvaliacao = getCiclosAvaliacao().find(
-    (ciclo) =>
-      ciclo.ano === feedback.ano &&
-      ciclo.ciclo === feedback.ciclo
-  );
-
-  const metasDoCiclo = cicloDaAvaliacao
-    ? getMetasDoColaboradorNoCiclo(
-        colaborador.matricula,
-        cicloDaAvaliacao.id
-      )
-    : [];
+  // F5-10 P6 (Issue #220): as metas chegam JÁ LIDAS da superfície soberana pelo
+  // chamador (relação SELF, `!excluida`, ordenadas por `criadoEm`). Este serviço
+  // NÃO lê storage local, NÃO resolve ciclo por rótulo e NÃO decide autorização.
 
   const dataConclusao =
     feedback.dataConclusao ??

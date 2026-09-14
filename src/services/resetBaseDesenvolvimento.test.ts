@@ -6,7 +6,6 @@ const chavesDoReset = [
   "feedback-control-colaboradores",
   "feedback-control-feedbacks",
   "feedback-control-observacoes",
-  "feedback-control-metas",
   "feedback-control-ciclos",
   "feedback-control-usuario-atual",
 ];
@@ -62,6 +61,21 @@ describe("reset exclusivo de desenvolvimento", () => {
 
     expect(localStorage.getItem(marcador)).toBe("ok");
     chavesDoReset.forEach((chave) => expect(localStorage.getItem(chave)).toBeNull());
+  });
+
+  it("F5-10 P6: o registro legado de metas fica FORA do contrato do reset de DEV", async () => {
+    vi.stubEnv("DEV", true);
+    // O módulo legado de metas foi eliminado do caminho funcional. A chave NÃO
+    // integra o reset: nada a lê, nada a grava e nada a migra — ela permanece
+    // intocada, sem virar fonte funcional nem alvo de limpeza.
+    const CHAVE_METAS_LEGADA = "feedback-control-metas";
+    localStorage.setItem(CHAVE_METAS_LEGADA, "resto-legado-nao-funcional");
+    const { executarResetBaseDesenvolvimento } = await import("./resetBaseDesenvolvimento");
+
+    executarResetBaseDesenvolvimento();
+
+    expect(chavesDoReset).not.toContain(CHAVE_METAS_LEGADA);
+    expect(localStorage.getItem(CHAVE_METAS_LEGADA)).toBe("resto-legado-nao-funcional");
   });
 
   it.each([null, "ok", "versão antiga"])(

@@ -399,11 +399,9 @@ const CAMINHOS_LEGADO_LEITURA: readonly string[] = [
   "../pages/RelatoriosPage.tsx",
   "../services/cancelamentoCicloService.ts",
   "../services/cicloEquipeService.ts",
-  "../services/correcaoPeriodoCicloService.ts",
   "../services/exportarAvaliacaoPdf.ts",
   "../services/geradorDadosTeste.ts",
   "../services/historicoOrganizacionalStorage.ts",
-  "../services/metaStorage.ts",
   "../services/permissaoAvaliacao.ts",
   "../services/reaberturaCicloService.ts",
   "../infrastructure/localStorage/localCollaboratorRepository.ts",
@@ -502,10 +500,10 @@ describe("F5-08 P6 — nenhuma autoridade estrutural local", () => {
   });
 
   it("a autoridade de mundo local não é consumida por estrutura (legado contido)", () => {
-    expect(produtoresQueCitam("providers/localWorld")).toEqual([
-      "src/pages/MinhasMetasPage.tsx",
-      "src/services/metaStorage.ts",
-    ]);
+    // F5-10 P6 (Issue #220): o cutover de metas eliminou os DOIS produtores que
+    // existiam (a página migrada e o módulo legado). A expectativa vazia é o
+    // estado real: nenhum módulo de produção consome o mundo local.
+    expect(produtoresQueCitam("providers/localWorld")).toEqual([]);
   });
 
   it("a fixture local de equipe de avaliação foi removida e não é referenciada", () => {
@@ -553,7 +551,6 @@ describe("F5-08 P6 — nenhuma autoridade estrutural local", () => {
 const CAMINHOS_PAPEL_ELEGIBILIDADE: readonly string[] = [
   "../services/progressoAvaliacao.ts",
   "../services/cicloEquipeService.ts",
-  "../services/metaStorage.ts",
   "../services/permissaoAvaliacao.ts",
 ];
 

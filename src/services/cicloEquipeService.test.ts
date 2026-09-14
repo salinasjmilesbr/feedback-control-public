@@ -16,7 +16,6 @@ import type { Colaborador } from "../types/Colaborador";
 import type { Feedback } from "../types/Feedback";
 import { getColaboradores } from "./colaboradorStorage";
 import {
-  analisarPendenciasDoCiclo,
   concluirAvaliacoesNoEncerramentoDoCiclo,
   criarAvaliacoesDoCicloAtivado,
   excluirAvaliacoesVaziasDoCiclo,
@@ -189,20 +188,6 @@ describe("cicloEquipeService com avaliação cancelada", () => {
     expect(linhas).toHaveLength(1);
     expect(linhas[0].situacao).toBe("CANCELADA");
     expect(linhas[0].possuiPendencias).toBe(false);
-  });
-
-  it("não gera pendência de encerramento", () => {
-    expect(analisarPendenciasDoCiclo(ciclo)).toEqual([]);
-  });
-
-  it("não gera pendências para ciclo cancelado", () => {
-    const cicloCancelado = { ...ciclo, status: "CANCELADO" as const };
-    localStorage.setItem(
-      "feedback-control-ciclos",
-      JSON.stringify([cicloCancelado])
-    );
-
-    expect(analisarPendenciasDoCiclo(cicloCancelado)).toEqual([]);
   });
 
   it("encerramento de ciclo sem avaliação nova não chama o servidor nem escreve local", async () => {

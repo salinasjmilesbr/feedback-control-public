@@ -1,17 +1,21 @@
 /**
  * F5-08 P6 (correção da auditoria GPT) — PRODUTOR e PONTE da estrutura soberana.
  *
- * Prova que a estrutura consumida pelos domínios legados de ciclo/meta é
+ * Prova que a estrutura consumida pelos domínios legados de ciclo é
  * obtida pelo caminho NORMAL já existente (leitura RLS do P4 + porta de
  * colaboradores F5-07), sem injeção manual:
  *
  * 1. o carregamento usa as portas soberanas e publica a projeção por UUID;
  * 2. a matrícula é apenas PONTE de compatibilidade (não é chave estrutural);
- * 3. ciclo/metas/painel/permissões funcionam em produção com a estrutura
+ * 3. ciclo/painel/permissões funcionam em produção com a estrutura
  *    soberana carregada — sem parâmetro manual;
  * 4. falha real do Supabase/porta ⇒ fail-closed (nada de `localStorage`/seed);
  * 5. a estrutura SOBERANA vence o cadastro local quando eles divergem;
  * 6. DEV continua isolado atrás do gate explícito.
+ *
+ * F5-10 P6: as decisões de META saíram deste arquivo junto com o módulo legado
+ * `metaStorage`; a cobertura soberana equivalente vive em
+ * `src/authorization/metaRecursoSoberano.test.ts` e nos validadores SQL F5-10.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -348,7 +352,7 @@ describe("F5-08 P6 — produtor soberano (caminho normal, sem injeção manual)"
     expect([...alcanceLegado(estado.estrutura, 1)].sort()).toEqual([2, 3, 4]);
   });
 
-  it("ciclo, metas e painel funcionam com a estrutura soberana SEM parâmetro manual", async () => {
+  it("ciclo, painel e permissões funcionam com a estrutura soberana SEM parâmetro manual", async () => {
     vi.stubEnv("DEV", false);
     vi.stubEnv("PROD", true);
     vi.stubEnv("VITE_APP_ENV", "production");
@@ -362,7 +366,6 @@ describe("F5-08 P6 — produtor soberano (caminho normal, sem injeção manual)"
 
     const progresso = await import("./progressoAvaliacao");
     const cicloEquipe = await import("./cicloEquipeService");
-    const metas = await import("./metaStorage");
     const permissao = await import("./permissaoAvaliacao");
 
     const criterios = [{ id: "c1", subcriterios: ["s1"] }];
@@ -385,16 +388,6 @@ describe("F5-08 P6 — produtor soberano (caminho normal, sem injeção manual)"
 
     const linhas = cicloEquipe.getPainelCiclo(ciclo, gerenteLocal);
     expect(linhas.map((linha) => linha.colaborador.matricula)).toEqual([2, 3, 4]);
-
-    expect(
-      metas.podeAprovarMetaNoCiclo(coordenadorLocal, analistaLocal, mundoLocal, ciclo)
-    ).toBe(true);
-    expect(
-      metas.podeAprovarMetaNoCiclo(gerenteLocal, analistaLocal, mundoLocal, ciclo)
-    ).toBe(true);
-    expect(
-      metas.metaExigeAprovacaoCoordenador(analistaLocal, mundoLocal, ciclo)
-    ).toBe(true);
 
     const permissoes = permissao.obterPermissoesAvaliacao(
       coordenadorLocal,
@@ -447,20 +440,7 @@ describe("F5-08 P6 — produtor soberano (caminho normal, sem injeção manual)"
       })
     );
 
-    const metas = await import("./metaStorage");
     const cicloEquipe = await import("./cicloEquipeService");
-
-    // O cadastro local diz que 2 gerencia 3; o soberano diz que é 4.
-    expect(
-      metas.podeAprovarMetaNoCiclo(coordenadorLocal, analistaLocal, mundoLocal, ciclo)
-    ).toBe(false);
-    expect(
-      metas.podeAprovarMetaNoCiclo(colegaLocal, analistaLocal, mundoLocal, ciclo)
-    ).toBe(true);
-    // A raiz continua sendo o gerente (1).
-    expect(
-      metas.podeAprovarMetaNoCiclo(gerenteLocal, analistaLocal, mundoLocal, ciclo)
-    ).toBe(true);
 
     // Painel do gerente: o alcance soberano inclui 3 e 4 (não 2).
     expect(
@@ -496,7 +476,6 @@ describe("F5-08 P6 — fail-closed real e isolamento de DEV", () => {
 
     const progresso = await import("./progressoAvaliacao");
     const cicloEquipe = await import("./cicloEquipeService");
-    const metas = await import("./metaStorage");
     const permissao = await import("./permissaoAvaliacao");
 
     // O cadastro local está populado — e ainda assim nada é concedido.
@@ -518,15 +497,6 @@ describe("F5-08 P6 — fail-closed real e isolamento de DEV", () => {
     expect(resultado.coordenador.necessario).toBe(false);
 
     expect(cicloEquipe.getPainelCiclo(ciclo, gerenteLocal)).toEqual([]);
-    expect(cicloEquipe.analisarPendenciasDoCiclo(ciclo)[0]?.papel).toBe("Estrutura");
-
-    expect(
-      metas.podeAprovarMetaNoCiclo(coordenadorLocal, analistaLocal, mundoLocal, ciclo)
-    ).toBe(false);
-    expect(
-      metas.podeAprovarMetaNoCiclo(gerenteLocal, analistaLocal, mundoLocal, ciclo)
-    ).toBe(false);
-    expect(metas.metaExigeAprovacaoCoordenador(analistaLocal, mundoLocal, ciclo)).toBe(true);
 
     expect(
       permissao.obterPermissoesAvaliacao(coordenadorLocal, analistaLocal, mundoLocal, ciclo)
