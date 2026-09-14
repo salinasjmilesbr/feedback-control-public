@@ -34,6 +34,105 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
+### 3.21 F5-10 P7 — validação integrada e certificação do domínio de metas (Issue #232)
+
+- **Atividade:** F5-10 **P7** (Issue #232) na branch
+  `feat/f5-10-p7-validacao-integrada`, base `main` =
+  `f53144ff81cc8e011e68f81b1e3f942f50decb29` (após P6 e os PRs de dependência
+  #229/#230/#231). **Sem PR e sem merge** (ficam com o usuário). F5-11 não iniciada.
+- **Natureza:** **certificação/validação integrada** — **não** é feature e **não**
+  cria arquitetura: **zero** migration, RPC, capability, policy, RLS, grant, Edge ou
+  página alterados.
+- **Entregue (8 arquivos):** `supabase/validacao/29-cenario-f5-10-p7.sql` (fixture
+  integrada ISOLADA, prefixo `e8`; 3 organizações com papéis não sobrepostos —
+  Alfa = matriz, Beta = cross-tenant, Gama = corrida exclusiva),
+  `30-validar-f5-10-p7.sql` (matriz dos blocos 1 e 4–19; **19 `[PASS]`**),
+  `31-sessao-a-`/`32-sessao-b-`/`33-validar-`**concorrência** (bloco 6),
+  `docs/F5-10-p7-matriz-integrada.md` (molde da P9, com gates executados × não
+  executados, findings e desvios), `.github/workflows/ci.yml` (4 passos novos após
+  a P5.2 e antes das regressões F5-06/F5-07) e este arquivo.
+- **Bloco 6 — concorrência REAL (dois backends), o núcleo novo da P7:** a sessão A
+  cria as 2 metas da corrida por `meta_criar` em Gama-P7 e detém
+  `ciclo_lock_organizacao` (`evaluation_cycles:<org>`) dentro de uma escrita
+  atrasada em ~8 s; a sessão B aguarda deterministicamente a **marca não
+  transacional** publicada DENTRO da escrita e então tenta a MESMA operação.
+  - **Fase 1 (edição, mesma versão):** A ~8,03 s; B **bloqueada ~7,47 s** →
+    `F5_10_CONFLICT: versao divergente`; estado final é o de A (version 1) —
+    **nenhum lost update**.
+  - **Fase 2 (aprovação, MESMO papel):** a aprovação **não altera `version` da
+    meta** (D2/D3), logo o `expected_version` de B segue válido e o que reprova B é
+    "uma única aprovação VIGENTE por (meta, papel)", avaliada **depois** do lock:
+    A ~8,02 s, B **bloqueada ~7,78 s** → `F5_10_CONFLICT: ja existe aprovacao
+    vigente do papel GERENTE`.
+  - **Fase 3 (papéis distintos, contraparte positiva):** COORDENADOR congelado
+    aprova a MESMA meta — os **2 fatos coexistem** (1 vigente por papel) e o fato
+    de A permanece intacto.
+  - A prova de **contenção** vive no stdout da sessão B; o consolidador `33` prova o
+    estado final, a **ausência** de efeito das intenções perdedoras e a **higiene**
+    (remoção dos 2 gatilhos, 2 funções e 2 sequences temporárias).
+- **Gates reais desta rodada:** preflight obrigatório (Docker 29.7.2 + Supabase
+  local PostgreSQL 17.6 + `db reset` exit 0) **antes** de qualquer implementação;
+  gate **focado** `db reset` + 29 + 30 + 31/32/33 = **`falhas=0`** (30 com 19
+  `[PASS]`, concorrência A=5/B=4, consolidação 3); **bateria SQL completa na ordem
+  do CI = 46/46 entradas, `falhas=0`**; `npm run build`/`npm run lint`/
+  `npx tsc -b tsconfig.app.json` exit 0; `git diff --cached --check` exit 0.
+- **Limitação de ambiente registrada (não é do escopo):** `npm test` local =
+  **2060 PASS / 2 falhas** em `src/pages/MinhasMetasPage.test.tsx:340` e
+  `src/pages/AcompanhamentoMetasPage.test.tsx:341`. Causa-raiz **provada**:
+  `git diff HEAD -- src/` está **vazio** (as falhas são pré-existentes ao baseline
+  `f53144f` e a P7 não toca `src/`), `core.autocrlf=true` **sem `.gitattributes`**
+  materializa o working copy com **CRLF**, e as duas asserções comparam texto-fonte
+  com literais que contêm `\n` — sonda objetiva: **FAIL com CRLF / PASS com LF**. O
+  **CI (ubuntu-latest, LF)** casa as mesmas asserções. **Não corrigido de
+  propósito** (editar 2 testes fora do inventário da Issue ou introduzir
+  `.gitattributes` = manutenção oportunista/mudança transversal); registrado como
+  finding para o owner.
+- **Elevações de acesso (agrupadas, DEV-02):** **4 batches** — P-0 preflight +
+  branch, P-1 gate focado (**2 execuções**: a 1ª revelou 3 defeitos **meus** de
+  artefato de validação — contagem da fixture, escopo do gatilho de marca e um
+  bloco morto — corrigidos em lote com causa-raiz distinta), P-3 gate final e um
+  batch de **diagnóstico** da falha de `npm test` (mandatório por DEV-03: root-cause
+  antes de nova execução). Nenhuma elevação para tentativa às cegas.
+- **Não feito (por contrato):** F5-11, PR, merge, auditorias GPT/Codex e CI no SHA
+  exato (etapas externas). **Nenhum defeito de produção encontrado.**
+
+### 3.20 F5-10 P5.2 / P5.3 / P6 — lacunas documentais sanadas (Issues #222, #226 e #220)
+
+> **Nota de manutenção:** este handoff ficou **atrás da `main`** entre a P5 e a P6
+> (a P5.2, a P5.3 e a P6 foram integradas sem registro aqui). As entradas abaixo
+> fecham a lacuna, em ordem cronológica, a partir do histórico e dos PRs
+> (`#222`, `#227`, `#228`) — a **P7** é a entrada 3.21.
+
+- **3.20.1 F5-10 P5.2 — leitura soberana de metas (Issue #222, PR #222):**
+  `supabase/migrations/20260928000000_f5_10_p5_2_leitura_soberana_metas.sql`
+  (`create or replace` de `meta_listar_por_escopo` — **mesma assinatura**) +
+  `supabase/validacao/28-validar-f5-10-p5-2.sql` + `GoalRepository`/repositório
+  (campos de data, `aprovacoes[]`, `limites`) e o contrato em
+  `docs/F5-10-P5.2-contrato-leitura-soberana-metas.md`. **Zero** ampliação de
+  privilégio: a superfície autorizada continua
+  `SELF ∪ APROVADOR_GERENTE_CONGELADO ∪ APROVADOR_COORDENADOR_CONGELADO`; a RPC
+  segue `SECURITY INVOKER` com `EXECUTE` só `service_role` e as 4 tabelas de metas
+  seguem **deny-by-default integral** (D22-A).
+- **3.20.2 F5-10 P5.3 — autoridade soberana do Painel de Ciclo (Issue #226,
+  PR #227):** atividade **documental**
+  (`docs/F5-10-P5.3-autoridade-painel-ciclo.md`). Decisão fechada: **autoridade
+  zero nova** — o Painel não exibe metas individuais e o único consumo vivo é o
+  KPI agregado "Minhas aprovações de metas", coberto pela superfície já existente.
+  Nenhuma capability/RPC/relação/RLS/grant nova.
+- **3.20.3 F5-10 P6 — cutover funcional de metas (Issue #220, PR #228, squash
+  `4868ca7`):** consumidores migrados para `GoalRepository.listarMetasPorEscopo`
+  (Edge `metas`) via acessor único `src/services/acessoMetasSoberanas.ts` e hook
+  `useMetasSoberanasDaAvaliacao`; Painel de Ciclo por **UUID soberano**; **removidos**
+  `metaStorage.ts`, `correcaoPeriodoCicloService.ts`,
+  `impactoCorrecaoPeriodoCiclo.ts` e `cicloEquipeService.analisarPendenciasDoCiclo`;
+  nova guarda `src/authorization/cutoverMetasSoberanas.test.ts` (13 guardas) e
+  `estruturaUiSeguranca.test.ts` ajustado. Sem capability/RLS/RPC nova; nenhum dado
+  de `localStorage` migrado; `can()`/`localWorld` fora da autoridade de metas.
+- **3.20.4 Dependências (fora de atividades estruturais):** PRs `#229`
+  (react-router-dom 7.18.3), `#230` (react-dom/@types/react-dom 19.3) e `#231`
+  (vite 8.3.0) — squash-merged na `main` **depois** da P6. Baseline operacional da
+  P7: `main` = `f53144ff81cc8e011e68f81b1e3f942f50decb29`.
+
 ### 3.19 F5-10 P5 — transporte soberano de metas + hardening D22-A (Issue #218)
 
 - **Atividade:** F5-10 **P5** (Issue #218) na branch `feat/f5-10-p5-transporte-metas`,
