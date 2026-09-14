@@ -18,6 +18,11 @@ import { criarRepositorioMetasSoberanas } from "./repositorioMetasSoberanas";
  * inclusive (`goal.listar_por_escopo`) —, que nenhuma tabela/RLS é acessada, que
  * a projeção não inventa campos (linha fora do contrato é descartada e envelope
  * anômalo é `INTERNAL`) e que os erros propagam como `Resultado*` fail-closed.
+ *
+ * P5.2 (Issue #222): a projeção AMPLIADA é coberta aqui — datas soberanas,
+ * `aprovacoes[]` por papel (sempre os DOIS papéis, §4) e `limites[]` do
+ * ciclo/tipo (ausência = quota ZERO, §5) — sempre com payload SINTÉTICO e com o
+ * mesmo critério fail-closed.
  */
 
 const ORG = "11111111-1111-4111-8111-111111111111";
@@ -28,6 +33,7 @@ const CICLO = "55555555-5555-4555-8555-555555555555";
 const OUTRO_CICLO = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const COLABORADOR = "77777777-7777-4777-8777-777777777777";
 const APROVACAO = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const APROVADOR = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const OPERACAO = "66666666-6666-4666-8666-666666666666";
 
 type MetodoEdge =
@@ -101,6 +107,37 @@ function apenasCodigo(fonte: string): string {
     .join("\n");
 }
 
+/**
+ * Aprovação POR PAPEL (P5.2 §4): `GERENTE` sempre exigida (D15) e CONCEDIDA
+ * neste fixture. Fatos sintéticos — a UI consome, nunca reconstrói regra.
+ */
+function aprovacaoGerente(extra: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    papel: "GERENTE",
+    exigida: true,
+    vigente: true,
+    aprovacao_id: APROVACAO,
+    decidido_em: "2035-02-01T10:00:00.000Z",
+    motivo: "Aprovada no colegiado",
+    aprovador_collaborator_id: APROVADOR,
+    ...extra,
+  };
+}
+
+/** `COORDENADOR` NÃO exigido (estrutura congelada sem coordenador distinto). */
+function aprovacaoCoordenador(extra: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    papel: "COORDENADOR",
+    exigida: false,
+    vigente: false,
+    aprovacao_id: null,
+    decidido_em: null,
+    motivo: null,
+    aprovador_collaborator_id: null,
+    ...extra,
+  };
+}
+
 function linhaMeta(extra: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     goal_id: META,
@@ -118,6 +155,14 @@ function linhaMeta(extra: Record<string, unknown> = {}): Record<string, unknown>
     excluida: false,
     version: 2,
     relacao: "SELF",
+    // P5.2 §3: datas soberanas (`created_at`/`updated_at` são `not null`).
+    criado_em: "2035-01-10T09:00:00.000Z",
+    atualizado_em: "2035-03-05T18:30:00.000Z",
+    data_ultimo_acompanhamento: "2035-03-01T12:00:00.000Z",
+    data_fechamento: null,
+    data_exclusao: null,
+    // P5.2 §4: SEMPRE os dois papéis.
+    aprovacoes: [aprovacaoGerente(), aprovacaoCoordenador()],
     aprovacoes_vigentes: [
       {
         papel: "COORDENADOR",
@@ -130,7 +175,7 @@ function linhaMeta(extra: Record<string, unknown> = {}): Record<string, unknown>
   };
 }
 
-/** Envelope REAL de `meta_listar_por_escopo` (P4 §11). */
+/** Envelope REAL de `meta_listar_por_escopo` (P4 §11 + P5.2 §5). */
 function envelope(
   metas: readonly unknown[],
   extra: Record<string, unknown> = {}
@@ -142,6 +187,7 @@ function envelope(
     relacao_ator: metas.length === 0 ? "SEM_META_AUTORIZADA" : "ESCOPO_APLICADO",
     quantidade: metas.length,
     metas,
+    limites: [],
     ...extra,
   };
 }
@@ -318,6 +364,33 @@ describe("F5-10 P5 — repositório soberano de metas (port atendido pela Edge)"
             excluida: false,
             version: 2,
             relacao: "SELF",
+            // P5.2 §3: projeção ADITIVA das datas soberanas e das aprovações
+            // por papel — nada é derivado de rótulo.
+            criadoEm: "2035-01-10T09:00:00.000Z",
+            atualizadoEm: "2035-03-05T18:30:00.000Z",
+            dataUltimoAcompanhamento: "2035-03-01T12:00:00.000Z",
+            dataFechamento: null,
+            dataExclusao: null,
+            aprovacoes: [
+              {
+                papel: "GERENTE",
+                exigida: true,
+                vigente: true,
+                aprovacaoId: APROVACAO,
+                decididoEm: "2035-02-01T10:00:00.000Z",
+                motivo: "Aprovada no colegiado",
+                aprovadorCollaboratorId: APROVADOR,
+              },
+              {
+                papel: "COORDENADOR",
+                exigida: false,
+                vigente: false,
+                aprovacaoId: null,
+                decididoEm: null,
+                motivo: null,
+                aprovadorCollaboratorId: null,
+              },
+            ],
             aprovacoesVigentes: [
               {
                 papel: "COORDENADOR",
@@ -328,6 +401,8 @@ describe("F5-10 P5 — repositório soberano de metas (port atendido pela Edge)"
             ],
           },
         ],
+        // P5.2 §5: envelope sem linha de quota ⇒ quota ZERO explícita.
+        limites: [],
       },
     });
   });
@@ -342,6 +417,238 @@ describe("F5-10 P5 — repositório soberano de metas (port atendido pela Edge)"
     expect(resultado.data.metas).toEqual([]);
   });
 
+  it("P5.2: projeta as datas soberanas sem confundir `atualizadoEm` com acompanhamento", async () => {
+    const { edge } = edgeFalso({
+      listarPorEscopo: {
+        ok: true,
+        data: envelope([
+          linhaMeta(),
+          linhaMeta({
+            goal_id: META_B,
+            data_ultimo_acompanhamento: null,
+            data_fechamento: "2035-04-02T08:00:00.000Z",
+            data_exclusao: "2035-04-03T08:00:00.000Z",
+            excluida: true,
+          }),
+        ]),
+      },
+    });
+    const resultado = await criarRepositorioMetasSoberanas(edge).listarMetasPorEscopo(ORG, CICLO);
+
+    expect(resultado.ok).toBe(true);
+    if (!resultado.ok) return;
+    const [primeira, segunda] = resultado.data.metas;
+    expect(primeira!.criadoEm).toBe("2035-01-10T09:00:00.000Z");
+    expect(primeira!.atualizadoEm).toBe("2035-03-05T18:30:00.000Z");
+    expect(primeira!.dataUltimoAcompanhamento).toBe("2035-03-01T12:00:00.000Z");
+    expect(primeira!.dataFechamento).toBeNull();
+    expect(primeira!.dataExclusao).toBeNull();
+    // `null` é ausência REAL do fato (coluna anulável), nunca derivado da linha.
+    expect(segunda!.dataUltimoAcompanhamento).toBeNull();
+    expect(segunda!.dataFechamento).toBe("2035-04-02T08:00:00.000Z");
+    expect(segunda!.dataExclusao).toBe("2035-04-03T08:00:00.000Z");
+  });
+
+  it("P5.2: `aprovacoes` projeta SEMPRE os dois papéis com o fato de cada um (G1/G5)", async () => {
+    const { edge } = edgeFalso({
+      listarPorEscopo: {
+        ok: true,
+        data: envelope([
+          linhaMeta(),
+          linhaMeta({
+            goal_id: META_B,
+            // COORDENADOR exigido e PENDENTE + GERENTE concedida (sem motivo).
+            aprovacoes: [
+              aprovacaoGerente({ motivo: null }),
+              aprovacaoCoordenador({ exigida: true }),
+            ],
+          }),
+        ]),
+      },
+    });
+    const resultado = await criarRepositorioMetasSoberanas(edge).listarMetasPorEscopo(ORG, CICLO);
+
+    expect(resultado.ok).toBe(true);
+    if (!resultado.ok) return;
+    const [primeira, segunda] = resultado.data.metas;
+    expect(primeira!.aprovacoes).toEqual([
+      {
+        papel: "GERENTE",
+        exigida: true,
+        vigente: true,
+        aprovacaoId: APROVACAO,
+        decididoEm: "2035-02-01T10:00:00.000Z",
+        motivo: "Aprovada no colegiado",
+        aprovadorCollaboratorId: APROVADOR,
+      },
+      {
+        papel: "COORDENADOR",
+        exigida: false,
+        vigente: false,
+        aprovacaoId: null,
+        decididoEm: null,
+        motivo: null,
+        aprovadorCollaboratorId: null,
+      },
+    ]);
+    // Exigida e PENDENTE: `!vigente && exigida` — a UI não reconstrói regra (D15).
+    expect(segunda!.aprovacoes).toEqual([
+      {
+        papel: "GERENTE",
+        exigida: true,
+        vigente: true,
+        aprovacaoId: APROVACAO,
+        decididoEm: "2035-02-01T10:00:00.000Z",
+        motivo: null,
+        aprovadorCollaboratorId: APROVADOR,
+      },
+      {
+        papel: "COORDENADOR",
+        exigida: true,
+        vigente: false,
+        aprovacaoId: null,
+        decididoEm: null,
+        motivo: null,
+        aprovadorCollaboratorId: null,
+      },
+    ]);
+  });
+
+  it("P5.2: aprovação por papel AUSENTE, repetida ou malformada DESCarta a linha (fail-closed)", async () => {
+    const casos: readonly Record<string, unknown>[] = [
+      linhaMeta({ goal_id: META_B, aprovacoes: "GERENTE" }),
+      linhaMeta({ goal_id: META_B, aprovacoes: [] }),
+      linhaMeta({ goal_id: META_B, aprovacoes: [aprovacaoGerente()] }),
+      linhaMeta({ goal_id: META_B, aprovacoes: [aprovacaoGerente(), aprovacaoGerente()] }),
+      linhaMeta({
+        goal_id: META_B,
+        aprovacoes: [aprovacaoGerente({ papel: "CHEFE" }), aprovacaoCoordenador()],
+      }),
+      linhaMeta({
+        goal_id: META_B,
+        aprovacoes: [aprovacaoGerente({ exigida: "true" }), aprovacaoCoordenador()],
+      }),
+      linhaMeta({
+        goal_id: META_B,
+        aprovacoes: [aprovacaoGerente({ vigente: null }), aprovacaoCoordenador()],
+      }),
+      linhaMeta({
+        goal_id: META_B,
+        aprovacoes: [aprovacaoGerente({ aprovacao_id: "nao-e-uuid" }), aprovacaoCoordenador()],
+      }),
+      linhaMeta({
+        goal_id: META_B,
+        aprovacoes: [aprovacaoGerente({ decidido_em: 20350201 }), aprovacaoCoordenador()],
+      }),
+      linhaMeta({
+        goal_id: META_B,
+        aprovacoes: [
+          aprovacaoGerente({ aprovador_collaborator_id: "sem-uuid" }),
+          aprovacaoCoordenador(),
+        ],
+      }),
+      linhaMeta({
+        goal_id: META_B,
+        aprovacoes: [aprovacaoGerente({ motivo: 7 }), aprovacaoCoordenador()],
+      }),
+      linhaMeta({ goal_id: META_B, aprovacoes: [aprovacaoGerente(), "nao-e-registro"] }),
+    ];
+    const { edge } = edgeFalso({
+      listarPorEscopo: { ok: true, data: envelope([linhaMeta(), ...casos]) },
+    });
+    const resultado = await criarRepositorioMetasSoberanas(edge).listarMetasPorEscopo(ORG, CICLO);
+
+    expect(resultado.ok).toBe(true);
+    if (!resultado.ok) return;
+    // Somente a linha íntegra sobrevive: nenhuma forma é normalizada.
+    expect(resultado.data.metas.map((meta) => meta.id)).toEqual([META]);
+  });
+
+  it("P5.2: `limites` do CICLO é projetado por tipo (quota e versão da LINHA)", async () => {
+    const { edge } = edgeFalso({
+      listarPorEscopo: {
+        ok: true,
+        data: envelope([], {
+          limites: [
+            { tipo: "NEGOCIO_PROJETO", quantidade: 2, version: 3 },
+            { tipo: "INDIVIDUAL", quantidade: 0, version: 0 },
+          ],
+        }),
+      },
+    });
+    const resultado = await criarRepositorioMetasSoberanas(edge).listarMetasPorEscopo(ORG, CICLO);
+
+    expect(resultado.ok).toBe(true);
+    if (!resultado.ok) return;
+    expect(resultado.data.limites).toEqual([
+      { tipo: "NEGOCIO_PROJETO", quantidade: 2, version: 3 },
+      { tipo: "INDIVIDUAL", quantidade: 0, version: 0 },
+    ]);
+  });
+
+  it("P5.2: `limites` ausente/`null`/`[]` ⇒ quota ZERO explícita, nunca ilimitado", async () => {
+    const semChave = {
+      organization_id: ORG,
+      cycle_id: CICLO,
+      ciclo_status: "ATIVO",
+      metas: [],
+    };
+    const respostas: readonly unknown[] = [
+      semChave,
+      envelope([], { limites: null }),
+      envelope([]),
+    ];
+
+    for (const data of respostas) {
+      const resultado = await criarRepositorioMetasSoberanas(
+        edgeFalso({ listarPorEscopo: { ok: true, data } }).edge
+      ).listarMetasPorEscopo(ORG, CICLO);
+
+      expect(resultado.ok).toBe(true);
+      if (!resultado.ok) return;
+      expect(resultado.data.limites).toEqual([]);
+    }
+  });
+
+  it("P5.2: `limites` com linha malformada DESCARTA a linha (tipo fica sem quota ⇒ zero)", async () => {
+    const { edge } = edgeFalso({
+      listarPorEscopo: {
+        ok: true,
+        data: envelope([], {
+          limites: [
+            { tipo: "NEGOCIO_PROJETO", quantidade: 1, version: 0 },
+            { tipo: "INDIVIDUAL", quantidade: "2", version: 0 },
+            { tipo: "TIPO_INVENTADO", quantidade: 2, version: 0 },
+            { tipo: "INDIVIDUAL", quantidade: -1, version: 0 },
+            { tipo: "INDIVIDUAL", quantidade: 1, version: 1.5 },
+            { tipo: "INDIVIDUAL" },
+            "linha-invalida",
+          ],
+        }),
+      },
+    });
+    const resultado = await criarRepositorioMetasSoberanas(edge).listarMetasPorEscopo(ORG, CICLO);
+
+    expect(resultado.ok).toBe(true);
+    if (!resultado.ok) return;
+    expect(resultado.data.limites).toEqual([
+      { tipo: "NEGOCIO_PROJETO", quantidade: 1, version: 0 },
+    ]);
+  });
+
+  it("P5.2: `limites` com forma inesperada é envelope fora do contrato ⇒ INTERNAL", async () => {
+    for (const limites of [3, "INDIVIDUAL", { tipo: "INDIVIDUAL" }]) {
+      const resultado = await criarRepositorioMetasSoberanas(
+        edgeFalso({ listarPorEscopo: { ok: true, data: envelope([], { limites }) } }).edge
+      ).listarMetasPorEscopo(ORG, CICLO);
+
+      expect(resultado).toEqual({
+        ok: false,
+        error: { code: "INTERNAL", message: "Resposta inesperada do servidor." },
+      });
+    }
+  });
+
   it("linha fora do contrato é DESCARTADA (nunca inventa identidade/estado)", async () => {
     const { edge } = edgeFalso({
       listarPorEscopo: {
@@ -352,6 +659,15 @@ describe("F5-10 P5 — repositório soberano de metas (port atendido pela Edge)"
           linhaMeta({ goal_id: META_B, cycle_id: OUTRO_CICLO }),
           linhaMeta({ goal_id: META_B, version: 1.5 }),
           linhaMeta({ goal_id: META_B, aprovacoes_vigentes: [{ papel: "CHEFE" }] }),
+          // P5.2 §3: as datas da LINHA são FATO obrigatório (`not null`); coluna
+          // anulável aceita `null`, mas nunca forma inesperada.
+          linhaMeta({ goal_id: META_B, criado_em: null }),
+          linhaMeta({ goal_id: META_B, atualizado_em: undefined }),
+          linhaMeta({ goal_id: META_B, data_ultimo_acompanhamento: 20350301 }),
+          linhaMeta({ goal_id: META_B, data_fechamento: [2035] }),
+          linhaMeta({ goal_id: META_B, data_exclusao: { ano: 2035 } }),
+          // P5.2 §4: sem `aprovacoes` (chave ausente) a linha não é completada.
+          linhaMeta({ goal_id: META_B, aprovacoes: undefined }),
           "linha-invalida",
         ]),
       },

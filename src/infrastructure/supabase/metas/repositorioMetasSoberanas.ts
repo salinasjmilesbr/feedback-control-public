@@ -25,11 +25,21 @@
  *   como ausência de metas);
  * - `operationId` é chave de IDEMPOTÊNCIA (D11): pode ser fornecido pelo
  *   chamador (retentativa segura) ou gerado aqui quando ausente.
+ *
+ * ## P5.2 (Issue #222) — projeção AMPLIADA, sem nova superfície
+ *
+ * A P5.2 é estritamente ADITIVA na PROJEÇÃO (§3/§4/§5 do contrato): datas
+ * soberanas da linha, `aprovacoes[]` por papel e `limites[]` do ciclo. A
+ * superfície de métodos, os gates, o `operationId` e a lista de operações NÃO
+ * mudam (§6). Os campos novos seguem a MESMA disciplina fail-closed: forma
+ * inesperada é contrato violado — linha descartada (metas) ou `INTERNAL`
+ * (envelope), nunca normalizada, nunca completada com valor inventado.
  */
 
 import type {
   AprovacaoMetaSolicitada,
   AprovacaoRegistradaSoberana,
+  AprovacaoSoberana,
   AprovacaoVigenteSoberana,
   DefinicaoDeLimitesDoSoberana,
   EdicaoMetaSoberana,
@@ -37,6 +47,7 @@ import type {
   ExclusaoMetaSoberana,
   FinalizacaoMetaSoberana,
   GoalRepository,
+  LimiteSoberano,
   LimitesDoSoberanos,
   MetaMutadaSoberana,
   MetaSoberana,
@@ -113,6 +124,12 @@ function inteiroOuNulo(valor: unknown): number | null | undefined {
   return ehVersao(valor) ? valor : undefined;
 }
 
+/** UUID possivelmente nulo (identidade soberana): `undefined` = fora do contrato. */
+function uuidOuNulo(valor: unknown): string | null | undefined {
+  if (valor === null) return null;
+  return ehUuid(valor) ? valor.trim() : undefined;
+}
+
 /** Status soberano do ciclo: valor fora do domínio conhecido vira `null`. */
 function statusDoCiclo(valor: unknown): StatusCicloAvaliacao | null {
   return typeof valor === "string" && (STATUS_CICLO as readonly string[]).includes(valor)
@@ -143,10 +160,56 @@ function mapearAprovacoes(valor: unknown): readonly AprovacaoVigenteSoberana[] |
 }
 
 /**
+ * Aprovações POR PAPEL da meta (§4 do contrato P5.2): a superfície devolve SEMPRE
+ * os dois papéis (`PAPEIS`), e `papel`/`exigida`/`vigente` são FATOS — o
+ * repositório só os transporta, nunca reconstrói a regra (D15/§4).
+ *
+ * Fail-closed: item que não é registro, papel desconhecido, campo com tipo
+ * inesperado, papel AUSENTE ou REPETIDO ⇒ `null`, e a LINHA inteira é descartada
+ * — nada é normalizado nem completado com valor inventado (mesmo padrão das
+ * demais colunas). A ambiguidade documentada em §4 (`exigida` do COORDENADOR)
+ * permanece FATO da RPC: aqui não há inferência.
+ */
+function mapearAprovacoesSoberanas(valor: unknown): readonly AprovacaoSoberana[] | null {
+  if (!Array.isArray(valor)) return null;
+  const aprovacoes: AprovacaoSoberana[] = [];
+  for (const item of valor) {
+    if (!ehRegistro(item)) return null;
+    const papel = item.papel;
+    const exigida = item.exigida;
+    const vigente = item.vigente;
+    const aprovacaoId = uuidOuNulo(item.aprovacao_id);
+    const decididoEm = textoOuNulo(item.decidido_em);
+    const motivo = textoOuNulo(item.motivo);
+    const aprovadorCollaboratorId = uuidOuNulo(item.aprovador_collaborator_id);
+    if (!ehPapel(papel)) return null;
+    if (typeof exigida !== "boolean" || typeof vigente !== "boolean") return null;
+    if (aprovacaoId === undefined || decididoEm === undefined) return null;
+    if (motivo === undefined || aprovadorCollaboratorId === undefined) return null;
+    aprovacoes.push({
+      papel,
+      exigida,
+      vigente,
+      aprovacaoId,
+      decididoEm,
+      motivo,
+      aprovadorCollaboratorId,
+    });
+  }
+  // SEMPRE os dois papéis, cada um exatamente uma vez (§4): ausência ou repetição
+  // é contrato violado — a linha é descartada e nada é inventado para o papel que
+  // falta (a UI não reconstrói regra).
+  if (aprovacoes.length !== PAPEIS.length) return null;
+  if (!PAPEIS.every((papel) => aprovacoes.some((item) => item.papel === papel))) return null;
+  return aprovacoes;
+}
+
+/**
  * Mapeia a meta devolvida pela leitura por escopo, sem derivar identidade de
  * rótulo algum. Linha fora do contrato (id/colaborador/ciclo divergente, tipo,
- * status, relação ou versão inválidos, aprovações malformadas) é DESCARTADA
- * (fail-closed) — nunca normalizada nem completada com valor inventado.
+ * status, relação ou versão inválidos, data de linha ausente/malformada,
+ * aprovações por papel malformadas ou incompletas) é DESCARTADA (fail-closed) —
+ * nunca normalizada nem completada com valor inventado.
  */
 function mapearMeta(
   bruto: unknown,
@@ -193,6 +256,30 @@ function mapearMeta(
   const aprovacoesVigentes = mapearAprovacoes(bruto.aprovacoes_vigentes);
   if (aprovacoesVigentes === null) return null;
 
+  // P5.2 (§3): datas soberanas da LINHA. `created_at`/`updated_at` são `not null`
+  // no schema, então o fato SEMPRE existe: ausência ou forma inesperada (inclusive
+  // `null`) é contrato violado e a linha é DESCARTADA — nunca se inventa data.
+  const criadoEm = bruto.criado_em;
+  const atualizadoEm = bruto.atualizado_em;
+  if (!ehTexto(criadoEm) || !ehTexto(atualizadoEm)) return null;
+
+  // P5.2 (§3): colunas ANULÁVEIS — `null` é ausência REAL do fato. `atualizadoEm`
+  // NÃO é "último acompanhamento": são fatos distintos.
+  const dataUltimoAcompanhamento = textoOuNulo(bruto.data_ultimo_acompanhamento);
+  const dataFechamento = textoOuNulo(bruto.data_fechamento);
+  const dataExclusao = textoOuNulo(bruto.data_exclusao);
+  if (
+    dataUltimoAcompanhamento === undefined ||
+    dataFechamento === undefined ||
+    dataExclusao === undefined
+  ) {
+    return null;
+  }
+
+  // P5.2 (§4): estado de aprovação POR PAPEL — sempre os dois papéis.
+  const aprovacoes = mapearAprovacoesSoberanas(bruto.aprovacoes);
+  if (aprovacoes === null) return null;
+
   return {
     id: id.trim(),
     organizationId,
@@ -210,13 +297,48 @@ function mapearMeta(
     excluida,
     version,
     relacao,
+    criadoEm,
+    atualizadoEm,
+    dataUltimoAcompanhamento,
+    dataFechamento,
+    dataExclusao,
+    aprovacoes,
     aprovacoesVigentes,
   };
 }
 
 /**
+ * Quotas do CICLO por tipo (§5 do contrato P5.2): array de `{tipo, quantidade,
+ * version}`.
+ *
+ * Fail-closed:
+ * - chave AUSENTE (`undefined`), `null` ou `[]` ⇒ `[]`, que é a quota ZERO
+ *   EXPLÍCITA para todos os tipos ("ausência de linha = quota ZERO", §5) — nunca
+ *   "ilimitado";
+ * - linha malformada é DESCARTADA (o tipo fica sem quota ⇒ ZERO), como já
+ *   acontece com a linha de meta;
+ * - forma inesperada do campo (não-array e não-ausente) ⇒ `null`: envelope fora
+ *   do contrato, que vira `INTERNAL` — anomalia NÃO vira quota zero silenciosa.
+ */
+function mapearLimitesDoEscopo(valor: unknown): readonly LimiteSoberano[] | null {
+  if (valor === undefined || valor === null) return [];
+  if (!Array.isArray(valor)) return null;
+  const limites: LimiteSoberano[] = [];
+  for (const item of valor) {
+    if (!ehRegistro(item)) continue;
+    const tipo = item.tipo;
+    const quantidade = item.quantidade;
+    const version = item.version;
+    if (!ehTipo(tipo) || !ehVersao(quantidade) || !ehVersao(version)) continue;
+    limites.push({ tipo, quantidade, version });
+  }
+  return limites;
+}
+
+/**
  * Mapeia o envelope do escopo. Envelope fora do contrato — ou com tenant/ciclo
  * divergente do PEDIDO — é `null`: resposta anômala NÃO vira "não há metas".
+ * P5.2 (§5): `limites` (quota do ciclo/tipo) entra na mesma disciplina.
  */
 function mapearEscopo(
   bruto: unknown,
@@ -227,6 +349,9 @@ function mapearEscopo(
   if (bruto.organization_id !== organizationId) return null;
   if (bruto.cycle_id !== cycleId) return null;
   if (!Array.isArray(bruto.metas)) return null;
+
+  const limites = mapearLimitesDoEscopo(bruto.limites);
+  if (limites === null) return null;
 
   const metas = bruto.metas
     .map((item) => mapearMeta(item, organizationId, cycleId))
@@ -240,6 +365,9 @@ function mapearEscopo(
     // autoridade): conjunto vazio é ausência EXPLÍCITA de meta autorizada.
     escopo: metas.length === 0 ? "SEM_META_AUTORIZADA" : "ESCOPO_APLICADO",
     metas,
+    // Vazio = quota ZERO para todos os tipos (§5); `usado` é derivado no cliente
+    // das próprias metas (relação SELF e `!excluida`), nunca lido de outra via.
+    limites,
   };
 }
 
