@@ -23,18 +23,26 @@ export type PapelAprovadorSoberano = Extract<
 >;
 
 /**
- * Colaboradores (por UUID soberano) com meta no conjunto AUTORIZADO da leitura.
- * É a RELAÇÃO já autorizada — nada é decidido no cliente.
+ * Colaboradores (UUID soberano) com ao menos UMA meta no conjunto AUTORIZADO da
+ * leitura (não excluída) — a propriedade BOOLEANA que o Painel consome.
+ *
+ * A `relacao` diz COMO o ator está autorizado, e o MESMO colaborador pode ter
+ * metas em que o ator é APROVADOR_GERENTE_CONGELADO e outras em que é
+ * APROVADOR_COORDENADOR_CONGELADO: reduzir isso a "a última relação vista" era
+ * uma modelagem arbitrária (achado LOW da auditoria do PR #228). Como o único
+ * consumidor pergunta "existe meta autorizada deste colaborador?", modelamos
+ * exatamente essa propriedade — sem escolher relação e sem decidir autorização
+ * (o conjunto já vem autorizado pelo servidor).
  */
-export function relacoesSoberanasPorColaborador(
+export function colaboradoresComMetaSoberana(
   metas: readonly MetaSoberana[]
-): ReadonlyMap<string, RelacaoMetaSoberana> {
-  const relacoes = new Map<string, RelacaoMetaSoberana>();
+): ReadonlySet<string> {
+  const colaboradores = new Set<string>();
   for (const meta of metas) {
     if (meta.excluida) continue;
-    relacoes.set(meta.collaboratorId, meta.relacao);
+    colaboradores.add(meta.collaboratorId);
   }
-  return relacoes;
+  return colaboradores;
 }
 
 /** O item de `aprovacoes[]` do papel soberano do ator (fato da leitura). */

@@ -31,7 +31,7 @@ import {
   cicloLegadoDeApresentacao,
   contarAprovacoesPendentes,
   indisponivel,
-  relacoesSoberanasPorColaborador,
+  colaboradoresComMetaSoberana,
 } from "./painelCicloMetasSoberanas";
 import { getStatusGeralPainel } from "./painelCicloStatus";
 
@@ -145,7 +145,7 @@ function codigoPublicoDaLeitura(codigo: string): CodigoPublico {
 }
 
 // Os helpers PUROS de METAS SOBERANAS do painel
-// (`relacoesSoberanasPorColaborador`, `metaEntraNoKpiDeAprovacoes`,
+// (`colaboradoresComMetaSoberana`, `metaEntraNoKpiDeAprovacoes`,
 // `contarAprovacoesPendentes`, `cicloLegadoDeApresentacao` e `indisponivel`, com
 // seus privados) vivem no companheiro `./painelCicloMetasSoberanas`: este
 // arquivo exporta apenas o componente e TIPOS
@@ -452,8 +452,8 @@ function PainelCicloPage() {
   // do KPI e do botão "Acompanhar metas".
   const metasAutorizadas =
     aprovacoes.fase === "pronta" ? aprovacoes.metas : [];
-  const relacoesSoberanas =
-    relacoesSoberanasPorColaborador(metasAutorizadas);
+  const colaboradoresComMetas =
+    colaboradoresComMetaSoberana(metasAutorizadas);
   const aprovacoesPendentes = contarAprovacoesPendentes(
     metasAutorizadas,
     colaboradorElegivelParaKpi
@@ -600,7 +600,7 @@ function PainelCicloPage() {
                   </div>
 
                   <div className="cycle-row-actions">
-                    {relacoesSoberanas.has(
+                    {colaboradoresComMetas.has(
                       idSoberanoDoColaborador(linha.colaborador.matricula)
                     ) && (
                       <button

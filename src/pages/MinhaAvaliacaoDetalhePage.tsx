@@ -13,6 +13,7 @@ import {
 import { getColaboradores } from "../services/colaboradorStorage";
 import { useAuth } from "../auth/AuthContext";
 import { obterRepositorioMetasSoberanas } from "../services/acessoMetasSoberanas";
+import { metasDoAvaliadoSoberanas } from "./useMetasSoberanasDaAvaliacao";
 import { obterRepositorioCiclosSoberanos } from "../services/acessoCiclosSoberanos";
 import type { MetaSoberana } from "../application/ports/GoalRepository";
 
@@ -194,14 +195,11 @@ function MinhaAvaliacaoDetalhePage() {
           return;
         }
 
-        // Somente o SELF do próprio ator: a relação devolvida é o que autoriza.
-        const metasDoAtor = metas.data.metas
-          .filter(
-            (meta) =>
-              meta.relacao === "SELF" &&
-              meta.collaboratorId === colaboradorUuid &&
-              !meta.excluida
-          )
+        // Metas DO PRÓPRIO ATOR: o dono é `collaboratorId`, nunca a `relacao`.
+        const metasDoAtor = metasDoAvaliadoSoberanas(
+          metas.data.metas,
+          colaboradorUuid
+        )
           .slice()
           .sort(
             (a, b) =>

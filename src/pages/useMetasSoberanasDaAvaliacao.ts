@@ -1,18 +1,28 @@
 import { useEffect, useState } from "react";
-import type { MetaSoberana } from "../application/ports/GoalRepository";
+import type {
+  EscopoMetasSoberanas,
+  MetaSoberana,
+  ResultadoMetas,
+} from "../application/ports/GoalRepository";
 import { obterRepositorioMetasSoberanas } from "../services/acessoMetasSoberanas";
 import { obterRepositorioCiclosSoberanos } from "../services/acessoCiclosSoberanos";
 import { collaboratorIdDoLegado, estruturaSoberanaEfetiva } from "../services/estruturaSoberanaCliente";
 import { getColaboradores } from "../services/colaboradorStorage";
 
 /**
- * F5-10 P6 (Issue #220) — METAS DO AVALIADO (relação SELF) para o formulário de
- * feedback.
+ * F5-10 P6 (Issue #220) — METAS DO AVALIADO no formulário de feedback.
  *
- * As telas de feedback só precisam saber se a meta do colaborador avaliado está
- * FORMALMENTE aprovada (todos os papéis EXIGIDOS vigentes). Esse fato vem da
- * superfície soberana `goal.listar_por_escopo` — nunca de helper do domínio
- * local de metas, de `funcao` textual ou de hierarquia viva.
+ * As telas de feedback só precisam saber se as metas DO AVALIADO estão
+ * FORMALMENTE aprovadas (todos os papéis EXIGIDOS vigentes). Esse fato vem da
+ * superfície soberana `goal.listar_por_escopo` — nunca de helper do domínio local
+ * de metas, de `funcao` textual ou de hierarquia viva.
+ *
+ * O escopo devolvido pelo servidor é `SELF ∪ APROVADOR_GERENTE_CONGELADO ∪
+ * APROVADOR_COORDENADOR_CONGELADO`, e a `relacao` diz COMO o ator está autorizado
+ * — nunca QUEM é o dono da meta. O recorte das metas DO AVALIADO é portanto por
+ * `collaboratorId` (+ `!excluida`): exigir `relacao === "SELF"` descartaria metas
+ * legítimas quando o ator é o aprovador congelado do avaliado (achado HIGH da
+ * auditoria do PR #228) e produziria falso estado benigno de "sem pendências".
  *
  * Fail-closed e SEM fallback: sem caminho soberano, sem organização, sem UUID do
  * avaliado ou sem ciclo resolvido, a leitura fica INDISPONÍVEL com aviso
@@ -42,8 +52,54 @@ function formalmenteAprovada(meta: MetaSoberana): boolean {
   );
 }
 
+/** Metas do avaliado que NÃO têm todos os papéis EXIGIDOS vigentes. */
+export function metasSemAprovacaoFormal(
+  metas: readonly MetaSoberana[]
+): readonly MetaSoberana[] {
+  return metas.filter((meta) => !formalmenteAprovada(meta));
+}
+
+/**
+ * Metas DO AVALIADO dentro do escopo que o servidor JÁ autorizou.
+ *
+ * O dono da meta é `collaboratorId`; a `relacao` informa apenas COMO o ator está
+ * autorizado (SELF, aprovador gerente congelado ou aprovador coordenador
+ * congelado). Exigir `SELF` aqui descartaria metas do avaliado quando o ator é o
+ * aprovador congelado dele — e o formulário passaria a dizer "sem pendências".
+ */
+export function metasDoAvaliadoSoberanas(
+  metas: readonly MetaSoberana[],
+  collaboratorIdDoAvaliado: string
+): readonly MetaSoberana[] {
+  return metas.filter(
+    (meta) => meta.collaboratorId === collaboratorIdDoAvaliado && !meta.excluida
+  );
+}
+
+/**
+ * Traduz o resultado da leitura soberana no estado exibido: ERRO continua ERRO
+ * (nunca sucesso vazio) e o sucesso recorta as metas do avaliado por
+ * `collaboratorId` + `!excluida`.
+ */
+export function resultadoDaLeituraDaAvaliacao(
+  resultado: ResultadoMetas<EscopoMetasSoberanas>,
+  collaboratorIdDoAvaliado: string
+): ResultadoDaLeitura {
+  if (!resultado.ok) {
+    return { metas: [], carregando: false, erro: ERRO_LEITURA };
+  }
+  return {
+    metas: metasDoAvaliadoSoberanas(
+      resultado.data.metas,
+      collaboratorIdDoAvaliado
+    ),
+    carregando: false,
+    erro: "",
+  };
+}
+
 /** Resultado de UMA leitura (o que a tela consome, sem a chave do contexto). */
-interface ResultadoDaLeitura {
+export interface ResultadoDaLeitura {
   readonly metas: readonly MetaSoberana[];
   readonly carregando: boolean;
   readonly erro: string;
@@ -149,23 +205,10 @@ export function useMetasSoberanasDaAvaliacao(entrada: {
           cicloSoberano.id
         );
 
-        if (!resultado.ok) {
-          publicar({ metas: [], carregando: false, erro: ERRO_LEITURA });
-          return;
-        }
-
-        // Somente o SELF do AVALIADO: a relação SELF é o que autoriza o ator a ler
-        // a própria meta; metas de terceiros nunca entram aqui.
-        publicar({
-          metas: resultado.data.metas.filter(
-            (meta) =>
-              meta.relacao === "SELF" &&
-              meta.collaboratorId === colaboradorUuid &&
-              !meta.excluida
-          ),
-          carregando: false,
-          erro: "",
-        });
+        // ERRO continua ERRO (nunca sucesso vazio) e o sucesso recorta as metas DO
+        // AVALIADO por `collaboratorId` + `!excluida`: a `relacao` diz COMO o ator
+        // está autorizado, não quem é o dono da meta.
+        publicar(resultadoDaLeituraDaAvaliacao(resultado, colaboradorUuid));
       } catch {
         publicar({ metas: [], carregando: false, erro: ERRO_LEITURA });
       }
@@ -184,7 +227,7 @@ export function useMetasSoberanasDaAvaliacao(entrada: {
 
   return {
     metas: estado.metas,
-    semAprovacaoFormal: estado.metas.filter((meta) => !formalmenteAprovada(meta)),
+    semAprovacaoFormal: metasSemAprovacaoFormal(estado.metas),
     carregando: estado.carregando,
     erro: estado.erro,
   };

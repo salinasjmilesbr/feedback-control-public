@@ -11,7 +11,7 @@ import {
   cicloLegadoDeApresentacao,
   contarAprovacoesPendentes,
   metaEntraNoKpiDeAprovacoes,
-  relacoesSoberanasPorColaborador,
+  colaboradoresComMetaSoberana,
 } from "./painelCicloMetasSoberanas";
 import PainelCicloMetasSoberanasFonte from "./painelCicloMetasSoberanas.ts?raw";
 import { getStatusGeralPainel } from "./painelCicloStatus";
@@ -180,15 +180,46 @@ describe("F5-10 P6 — KPI pelos fatos da leitura soberana", () => {
     expect(contarAprovacoesPendentes([], todosElegiveis)).toBe(0);
   });
 
-  it("a relação soberana por colaborador vem do próprio conjunto autorizado", () => {
-    const relacoes = relacoesSoberanasPorColaborador([
+  it("os colaboradores com meta autorizada vêm do próprio conjunto autorizado", () => {
+    // O consumidor só pergunta "existe meta autorizada deste colaborador?" — a
+    // propriedade modelada é BOOLEANA, sem reduzir várias relações do MESMO
+    // colaborador a "a última vista" (achado LOW da auditoria do PR #228).
+    const colaboradores = colaboradoresComMetaSoberana([
       meta(),
       meta({ id: "88888888-8888-4888-8888-888888888888", collaboratorId: OUTRO_COLABORADOR, relacao: "SELF" }),
     ]);
-    expect(relacoes.get("44444444-4444-4444-8444-444444444444")).toBe("APROVADOR_GERENTE_CONGELADO");
-    expect(relacoes.get(OUTRO_COLABORADOR)).toBe("SELF");
-    // Colaborador fora do conjunto autorizado NÃO aparece: sem relação, sem botão.
-    expect(relacoes.has("99999999-9999-4999-8999-999999999999")).toBe(false);
+
+    expect(colaboradores.has("44444444-4444-4444-8444-444444444444")).toBe(true);
+    expect(colaboradores.has(OUTRO_COLABORADOR)).toBe(true);
+    // Colaborador fora do conjunto autorizado NÃO aparece: sem meta, sem botão.
+    expect(colaboradores.has("99999999-9999-4999-8999-999999999999")).toBe(false);
+  });
+
+  it("o MESMO colaborador com as duas relações continua presente e meta excluída não conta", () => {
+    const mesmoColaborador = "55555555-5555-4555-8555-555555555555";
+    const semBotao = "99999999-9999-4999-8999-999999999999";
+    const colaboradores = colaboradoresComMetaSoberana([
+      meta({
+        id: "aaaaaaaa-1111-4111-8111-111111111111",
+        collaboratorId: mesmoColaborador,
+        relacao: "APROVADOR_GERENTE_CONGELADO",
+      }),
+      meta({
+        id: "bbbbbbbb-2222-4222-8222-222222222222",
+        collaboratorId: mesmoColaborador,
+        relacao: "APROVADOR_COORDENADOR_CONGELADO",
+      }),
+      meta({
+        id: "cccccccc-3333-4333-8333-333333333333",
+        collaboratorId: semBotao,
+        excluida: true,
+      }),
+    ]);
+
+    // A presença não depende de QUAL relação foi vista por último.
+    expect(colaboradores.has(mesmoColaborador)).toBe(true);
+    // Meta excluída logicamente não habilita o botão.
+    expect(colaboradores.has(semBotao)).toBe(false);
   });
 });
 
@@ -303,7 +334,7 @@ describe("F5-10 P6 — guardas estáticas da autoridade de METAS do painel", () 
 
   it("os helpers de runtime do painel vivem no companheiro, não na página", () => {
     for (const nome of [
-      "relacoesSoberanasPorColaborador",
+      "colaboradoresComMetaSoberana",
       "metaEntraNoKpiDeAprovacoes",
       "contarAprovacoesPendentes",
       "cicloLegadoDeApresentacao",
