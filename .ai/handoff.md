@@ -34,6 +34,58 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
+### 3.19 F5-10 P5 — transporte soberano de metas + hardening D22-A (Issue #218)
+
+- **Atividade:** F5-10 **P5** (Issue #218) na branch `feat/f5-10-p5-transporte-metas`,
+  base `c5cf51acf60e67ac1ca54b6b26b92cb33f3cec0f`. **Sem PR e sem merge**; P6, P7 e
+  F5-11 **não** iniciados.
+- **Bloco 1 — transporte:** Edge Function `metas`
+  (`supabase/functions/metas/{contrato,core,index}.ts`) com a ordem normativa
+  (método → JWT via `auth.getUser` → forma → tenant revalidado contra membership
+  ativa → gate → RPC privilegiada). O núcleo `metas(req, deps)` é testável e
+  **não** menciona a credencial; `index.ts` é o **único** lugar que lê
+  `SUPABASE_SERVICE_ROLE_KEY` (credencial de **execução** do ator verificado,
+  nunca de decisão; o JWT do usuário não é propagado). Contrato transportável
+  único em `src/infrastructure/supabase/metas/contrato.ts` (9 operações `goal.*`,
+  sem `goal.invalidar_aprovacoes`, que é interna às mutações), adapter de cliente
+  fail-closed `edgeMetas.ts`, porta `src/application/ports/GoalRepository.ts` e
+  repositório `repositorioMetasSoberanas.ts` (leitura **exclusivamente** por
+  `goal.listar_por_escopo`). `[functions.metas] verify_jwt = true` em
+  `supabase/config.toml`. Gates: `criar`→funcional `goal.write` (alvo
+  colaborador dono); `editar`/`atualizar_progresso`/`finalizar`/
+  `revisar_finalizacao`/`excluir`→funcional `goal.write` (alvo meta);
+  `aprovar`→funcional `goal.approve`; `definir_limites_do_ciclo`→funcional
+  `cycle.manage` (alvo ciclo); `listar_por_escopo`→**administrativo** `goal.read`.
+- **Bloco 2 — hardening D22-A (decisão aprovada pelo owner):** migration aditiva
+  `supabase/migrations/20260927000000_f5_10_p5_d22a_hardening.sql` revoga as 2
+  policies own-tenant e o `SELECT` de `authenticated` nas tabelas de metas,
+  devolvendo as **4** tabelas (`evaluation_goals`, `evaluation_goal_approvals`,
+  `evaluation_goal_events`, `evaluation_cycle_goal_limits`) a
+  **deny-by-default integral**, preservando a matriz de `service_role` (executor
+  técnico), **sem tocar `evaluation_cycles`**, sem RPC/capability/`SECURITY
+  DEFINER` novos. Guardas P4 invertidas: `02-validar-f4-08.sql`,
+  `02-validar-f5-06.sql`, `20-validar-f5-10-p1.sql`, `22-validar-f5-10-p2.sql`,
+  `24-validar-f5-10-p3.sql`, `26-validar-f5-10-p4.sql` e registro em
+  `supabase/migrations/README.md`.
+- **Testes focados (ambos verdes):** Bloco 1 — `vitest` de 9 arquivos (**157
+  testes, 0 falhas**) + `tsc -b` exit 0 + `eslint` dos arquivos de metas exit 0;
+  Bloco 2 — `db reset` + **13/13 entradas** SQL afetadas (f4-08, f5-06, F5-10
+  P1–P4), **falhas=0**.
+- **Gate de fechamento:** db reset + bateria SQL completa na ordem do CI (**41/41 entradas, falhas=0**) + `npm test`/`npm run build`/`npm run lint` verdes + `git diff --cached --check` exit 0 + `git diff --check c5cf51acf60e67ac1ca54b6b26b92cb33f3cec0f...HEAD` exit 0.
+- **Elevações de acesso (agrupadas, DEV-02/§6):** **6 batches privilegiados** —
+  1 preflight/inventário, 1 criação de branch, 2 do teste focado do Bloco 1 (o 1º
+  vermelho por defeito no teste de guarda, o 2º verde), 1 da bateria focada SQL do
+  Bloco 2 e este gate completo; 1 tentativa do Bloco 1 foi barrada pelo sandbox
+  (`spawn EPERM` no carregamento do `vite.config.ts`) **antes** de executar
+  qualquer teste e foi reexecutada com acesso amplo. Nenhuma outra elevação foi
+  usada para depuração.
+- **Nota de leitura:** as entradas §3.17/§3.18 descrevem o estado da **P4**, que
+  expunha `SELECT` own-tenant de metas a `authenticated`; essa exposição foi
+  **revogada por decisão** no Bloco 2 desta entrega (D22-A). A leitura funcional de
+  metas passa exclusivamente pela superfície soberana (`meta_listar_por_escopo`).
+- **Não feito (por contrato):** P6 (cutover das telas legadas de metas), P7,
+  F5-11, PR e merge.
+
 ### 3.18 F5-10 P4 — correção pós-auditoria GPT (Issue #216)
 
 - **Atividade:** correção do **blocker funcional de autorização** apontado pela

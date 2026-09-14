@@ -8,9 +8,9 @@
 --   3) este arquivo             (asserts `[PASS]`/`[FAIL]`)
 --
 -- Contrato coberto (docs/F5-10-desenho-tecnico.md D1-D25):
---   A  pre-condicoes: fixture, 4 tabelas, RLS ligada; goals/approvals LEGIVEIS
---      own-tenant (1 policy SELECT cada — F5-10 P4) e events/limits
---      deny-by-default integral (ZERO policy);
+--   A  pre-condicoes: fixture, 4 tabelas, RLS ligada; as 4 tabelas de metas sao
+--      DENY-BY-DEFAULT INTEGRAL (ZERO policy e ZERO privilegio de cliente —
+--      a F5-10 P5/D22-A revogou a exposicao SELECT contratada na F5-10 P4);
 --   B  shape das tabelas (colunas do contrato, defaults, `version`, timestamps);
 --   C  isolamento cross-tenant ESTRUTURAL (FKs compostas) - 4 probes negativos;
 --   D  constraints de dominio (progresso 0..100, tipo, status, fechamento
@@ -25,10 +25,10 @@
 --   G  soft delete NAO e DELETE fisico (ACL nega DELETE; a linha permanece);
 --   H  trilha APPEND-ONLY: UPDATE/DELETE/TRUNCATE negados inclusive ao owner;
 --   I  payload_hash/event_type/entity_type e FK composta da trilha - negativos;
---   J  RLS/ACL: goals/approvals LEGIVEIS own-tenant (policy do contrato + grant
---      minimo de SELECT; sem escrita), events/limits deny-by-default, nenhum
---      privilegio de escrita a authenticated/anon, service_role sem
---      DELETE/TRUNCATE, e leitura do cliente sem identidade soberana = 0 linhas;
+--   J  RLS/ACL: as 4 tabelas de metas DENY-BY-DEFAULT INTEGRAL (ZERO policy e
+--      ZERO privilegio de cliente), SELECT direto por `authenticated` NEGADO por
+--      permissao (42501), nenhum privilegio de escrita a authenticated/anon e
+--      `service_role` sem DELETE/TRUNCATE (matriz de executor tecnico preservada);
 --   K  anti-escopo da P1: nenhuma RPC `meta_*`/`goal_*` e nenhuma capability nova;
 --   L  estado final coerente (nenhum residuo dos testes negativos).
 --
@@ -63,33 +63,28 @@ begin
     end if;
   end loop;
 
-  -- F5-10 P4: goals/approvals passaram a ser LEGIVEIS own-tenant (UMA policy de
-  -- SELECT cada, criada ANTES do grant de SELECT); events/limits continuam
-  -- deny-by-default integral.
+  -- F5-10 P5 (D22-A): as 4 tabelas de metas voltaram a DENY-BY-DEFAULT INTEGRAL
+  -- (ZERO policy) e o cliente NAO tem privilegio algum — a exposicao SELECT da
+  -- F5-10 P4 foi REVOGADA por decisao aprovada; a leitura funcional passa
+  -- exclusivamente pela superficie soberana (`meta_listar_por_escopo`, executada
+  -- por `service_role`).
   select count(*) into v_n from pg_policies p
    where p.schemaname = 'public'
-     and p.tablename in ('evaluation_goal_events', 'evaluation_cycle_goal_limits');
+     and p.tablename in ('evaluation_goals', 'evaluation_goal_approvals',
+                         'evaluation_goal_events', 'evaluation_cycle_goal_limits');
   if v_n <> 0 then
-    raise exception '[FAIL] pre-condicao: events/limits das metas exigem ZERO policy (encontradas %)', v_n;
+    raise exception '[FAIL] pre-condicao: as 4 tabelas de metas exigem ZERO policy (encontradas %)', v_n;
   end if;
-  select count(*) into v_n from pg_policies p
-   where p.schemaname = 'public' and p.tablename = 'evaluation_goals'
-     and p.policyname = 'evaluation_goals_select_same_tenant'
-     and p.cmd = 'SELECT' and p.roles = array['authenticated']::name[]
-     and p.qual like '%user_has_active_membership%';
-  if v_n <> 1 then
-    raise exception '[FAIL] pre-condicao: evaluation_goals exige a policy SELECT own-tenant da F5-10 P4 (encontradas %)', v_n;
-  end if;
-  select count(*) into v_n from pg_policies p
-   where p.schemaname = 'public' and p.tablename = 'evaluation_goal_approvals'
-     and p.policyname = 'evaluation_goal_approvals_select_same_tenant'
-     and p.cmd = 'SELECT' and p.roles = array['authenticated']::name[]
-     and p.qual like '%user_has_active_membership%';
-  if v_n <> 1 then
-    raise exception '[FAIL] pre-condicao: evaluation_goal_approvals exige a policy SELECT own-tenant da F5-10 P4 (encontradas %)', v_n;
-  end if;
+  foreach v_tab in array array[
+    'evaluation_goals', 'evaluation_goal_approvals',
+    'evaluation_goal_events', 'evaluation_cycle_goal_limits'] loop
+    if has_table_privilege('authenticated', format('public.%I', v_tab), 'SELECT')
+       or has_table_privilege('anon', format('public.%I', v_tab), 'SELECT') then
+      raise exception '[FAIL] pre-condicao: % nao pode conceder SELECT a authenticated/anon (D22-A)', v_tab;
+    end if;
+  end loop;
 
-  raise notice '[PASS] A: fixture presente, 4 tabelas com RLS ligada, goals/approvals com a policy SELECT own-tenant da F5-10 P4 e events/limits com ZERO policy (deny-by-default integral)';
+  raise notice '[PASS] A: fixture presente, 4 tabelas com RLS ligada e a totalidade do dominio de metas (goals/approvals/events/limits) com ZERO policy e ZERO SELECT de cliente (deny-by-default integral por D22-A)';
 end $$;
 
 -- ----------------------------------------------------------------------------
@@ -988,8 +983,8 @@ begin
 end $$;
 
 -- ----------------------------------------------------------------------------
--- J) RLS e ACL (F5-10 P4: goals/approvals LEGIVEIS own-tenant; events/limits
---    deny-by-default; service_role executor tecnico)
+-- J) RLS e ACL (D22-A: as 4 tabelas de metas deny-by-default INTEGRAL; cliente
+--    sem privilegio algum; service_role executor tecnico)
 -- ----------------------------------------------------------------------------
 do $$
 declare
@@ -998,11 +993,12 @@ declare
   v_st  text;
   v_n   int;
 begin
-  -- (J1) Privilégios por tabela. F5-10 P4: `evaluation_goals` e
-  -- `evaluation_goal_approvals` recebem SOMENTE SELECT (a escrita segue exclusiva
-  -- da operacao soberana executada por service_role); `evaluation_goal_events` e
-  -- `evaluation_cycle_goal_limits` continuam sem NENHUM privilegio de cliente.
+  -- (J1) Privilégios por tabela. D22-A: as 4 tabelas de metas NAO concedem
+  -- NENHUM privilegio a `authenticated`/`anon` (a exposicao SELECT da F5-10 P4
+  -- foi REVOGADA por decisao) e `service_role` segue executor tecnico sem
+  -- DELETE/TRUNCATE (matriz da P1 preservada).
   foreach v_tab in array array[
+    'evaluation_goals', 'evaluation_goal_approvals',
     'evaluation_goal_events', 'evaluation_cycle_goal_limits'] loop
     if has_table_privilege('authenticated', format('public.%I', v_tab), 'SELECT')
        or has_table_privilege('authenticated', format('public.%I', v_tab), 'INSERT')
@@ -1012,94 +1008,43 @@ begin
        or has_table_privilege('authenticated', format('public.%I', v_tab), 'REFERENCES')
        or has_table_privilege('authenticated', format('public.%I', v_tab), 'TRIGGER')
        or has_table_privilege('anon', format('public.%I', v_tab), 'SELECT') then
-      raise exception '[FAIL] J1: % (deny-by-default) concede privilegio a authenticated/anon', v_tab;
+      raise exception '[FAIL] J1: % (deny-by-default integral por D22-A) concede privilegio a authenticated/anon', v_tab;
     end if;
-  end loop;
-
-  foreach v_tab in array array[
-    'evaluation_goals', 'evaluation_goal_approvals'] loop
-    if not has_table_privilege('authenticated', format('public.%I', v_tab), 'SELECT') then
-      raise exception '[FAIL] J1: % deveria conceder SELECT a authenticated (leitura own-tenant da F5-10 P4)', v_tab;
-    end if;
-    if has_table_privilege('authenticated', format('public.%I', v_tab), 'INSERT')
-       or has_table_privilege('authenticated', format('public.%I', v_tab), 'UPDATE')
-       or has_table_privilege('authenticated', format('public.%I', v_tab), 'DELETE')
-       or has_table_privilege('authenticated', format('public.%I', v_tab), 'TRUNCATE')
-       or has_table_privilege('authenticated', format('public.%I', v_tab), 'REFERENCES')
-       or has_table_privilege('authenticated', format('public.%I', v_tab), 'TRIGGER')
-       or has_table_privilege('anon', format('public.%I', v_tab), 'SELECT') then
-      raise exception '[FAIL] J1: % concede escrita/anon (a F5-10 P4 concede SOMENTE SELECT a authenticated)', v_tab;
-    end if;
-  end loop;
-
-  foreach v_tab in array array[
-    'evaluation_goals', 'evaluation_goal_approvals',
-    'evaluation_goal_events', 'evaluation_cycle_goal_limits'] loop
     if has_table_privilege('service_role', format('public.%I', v_tab), 'DELETE')
        or has_table_privilege('service_role', format('public.%I', v_tab), 'TRUNCATE') then
       raise exception '[FAIL] J1: % concede DELETE/TRUNCATE a service_role', v_tab;
     end if;
   end loop;
 
-  -- (J2) As MESMAS 4 tabelas tem EXATAMENTE 1 policy nas legiveis e ZERO nas
-  -- fechadas — a leitura do cliente e own-tenant por policy EXPLICITA, nunca por
-  -- ausencia de RLS.
+  -- (J2) As MESMAS 4 tabelas tem ZERO policy: a leitura do cliente nao existe
+  -- nem por policy nem por grant — o dominio de metas e fechado por inteiro.
   select count(*) into v_n from pg_policies p
    where p.schemaname = 'public'
-     and p.tablename in ('evaluation_goal_events', 'evaluation_cycle_goal_limits');
+     and p.tablename in ('evaluation_goals', 'evaluation_goal_approvals',
+                         'evaluation_goal_events', 'evaluation_cycle_goal_limits');
   if v_n <> 0 then
-    raise exception '[FAIL] J2: events/limits das metas exigem ZERO policy (encontradas %)', v_n;
-  end if;
-  select count(*) into v_n from pg_policies p
-   where p.schemaname = 'public'
-     and p.tablename in ('evaluation_goals', 'evaluation_goal_approvals');
-  if v_n <> 2 then
-    raise exception '[FAIL] J2: goals/approvals exigem UMA policy SELECT own-tenant cada (encontradas %)', v_n;
+    raise exception '[FAIL] J2: as 4 tabelas de metas exigem ZERO policy (encontradas %)', v_n;
   end if;
 
-  -- (J3) Cliente autenticado LENDO metas legiveis SEM identidade soberana
-  -- (`auth.uid()` nulo => helper falso): a policy own-tenant nao entrega NENHUMA
-  -- linha — leitura PERMITIDA pela ACL, mas VAZIA pela RLS. Ja a leitura das
-  -- tabelas fechadas continua NEGADA por permissao (42501), nao "zero linhas".
+  -- (J3) Cliente autenticado NAO LE NENHUMA das 4 tabelas: sem privilegio de
+  -- SELECT, o acesso direto e negado por PERMISSAO (42501), nunca "zero linhas".
   set role authenticated;
-  begin
-    perform count(*) from public.evaluation_goals;
-  exception when insufficient_privilege then v_ok := true; v_st := sqlstate;
-            when others then v_st := sqlstate;
-  end;
-  if v_ok then
-    raise exception '[FAIL] J3: SELECT de authenticated em evaluation_goals deveria ser PERMITIDO pela ACL (F5-10 P4), mas foi NEGADO por permissao (%)', v_st;
-  end if;
-  v_ok := false;
-  begin
-    perform count(*) from public.evaluation_goal_approvals;
-  exception when insufficient_privilege then v_ok := true; v_st := sqlstate;
-            when others then v_st := sqlstate;
-  end;
-  if v_ok then
-    raise exception '[FAIL] J3: SELECT de authenticated em evaluation_goal_approvals deveria ser PERMITIDO pela ACL (F5-10 P4), mas foi NEGADO por permissao (%)', v_st;
-  end if;
-  v_ok := false;
-  begin
-    perform count(*) from public.evaluation_goal_events;
-  exception when insufficient_privilege then v_ok := true; v_st := sqlstate;
-            when others then v_st := sqlstate;
-  end;
-  if not v_ok or v_st <> '42501' then
-    raise exception '[FAIL] J3: SELECT de authenticated em evaluation_goal_events deveria ser NEGADO por permissao (%), veio %', '42501', v_st;
-  end if;
-  v_ok := false;
-  begin
-    perform count(*) from public.evaluation_cycle_goal_limits;
-  exception when insufficient_privilege then v_ok := true; v_st := sqlstate;
-            when others then v_st := sqlstate;
-  end;
-  if not v_ok or v_st <> '42501' then
-    raise exception '[FAIL] J3: SELECT de authenticated em evaluation_cycle_goal_limits deveria ser NEGADO por permissao (%), veio %', '42501', v_st;
-  end if;
+  foreach v_tab in array array[
+    'evaluation_goals', 'evaluation_goal_approvals',
+    'evaluation_goal_events', 'evaluation_cycle_goal_limits'] loop
+    v_ok := false; v_st := null; v_n := null;
+    begin
+      execute format('select count(*) from public.%I', v_tab) into v_n;
+    exception when insufficient_privilege then v_ok := true; v_st := sqlstate;
+              when others then v_st := sqlstate;
+    end;
+    if not v_ok or v_st <> '42501' then
+      raise exception '[FAIL] J3: SELECT de authenticated em % deveria ser NEGADO por permissao (%), veio %', v_tab, '42501', v_st;
+    end if;
+  end loop;
   reset role;
 
-  raise notice '[PASS] J: goals/approvals LEGIVEIS own-tenant (policy do contrato + SELECT minimo, sem escrita), events/limits deny-by-default, nenhum privilegio de escrita a authenticated/anon, service_role sem DELETE/TRUNCATE e leitura de cliente sem identidade soberana = 0 linhas (nunca vazamento)';
+  raise notice '[PASS] J: as 4 tabelas de metas deny-by-default integral (ZERO policy, ZERO privilegio de cliente e SELECT direto negado por permissao 42501), nenhum privilegio de escrita a authenticated/anon e service_role sem DELETE/TRUNCATE (matriz de executor tecnico preservada)';
 end $$;
 
 -- ----------------------------------------------------------------------------
@@ -1195,6 +1140,6 @@ end $$;
 do $$
 begin
   raise notice '============================================================';
-  raise notice 'F5-10 P1: schema/integridade/limites validados — identidade UUID, FKs compostas cross-tenant, dominio de progresso/tipo/status/fechamento, quota soberana (limite, reducao, DELETE, reativacao), unicidade parcial e idempotencia, soft delete sem DELETE fisico, trilha append-only e RLS (goals/approvals legiveis own-tenant na F5-10 P4; events/limits deny-by-default).';
+  raise notice 'F5-10 P1: schema/integridade/limites validados — identidade UUID, FKs compostas cross-tenant, dominio de progresso/tipo/status/fechamento, quota soberana (limite, reducao, DELETE, reativacao), unicidade parcial e idempotencia, soft delete sem DELETE fisico, trilha append-only e RLS (as 4 tabelas de metas deny-by-default integral por D22-A: ZERO policy, ZERO privilegio de cliente e SELECT direto negado por 42501).';
   raise notice '============================================================';
 end $$;

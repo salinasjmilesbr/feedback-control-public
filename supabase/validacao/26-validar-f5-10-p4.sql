@@ -19,8 +19,9 @@
 --      autorizado, overlay posterior que NAO transfere autoridade, capability +
 --      relacao coexistentes e LIMITES como operacao administrativa de ciclo;
 --   C  `meta_invalidar_aprovacoes` exige `goal.write` + SELF;
---   D  RLS own-tenant como barreira de TENANT (nao de capability) e trilha/
---      quotas deny-by-default INTEGRAL;
+--   D  as 4 tabelas de metas DENY-BY-DEFAULT INTEGRAL (ZERO policy e ZERO
+--      privilegio de cliente — o D22-A/Bloco 2 revogou a exposicao SELECT da P4;
+--      a leitura funcional passa exclusivamente por `meta_listar_por_escopo`);
 --   E  estado final deterministico (contagens calculadas, nao arbitradas).
 --
 -- Saida deterministica: um `[PASS]` por bloco; qualquer falha aborta.
@@ -54,22 +55,22 @@ begin
       v_metas, v_evt, v_aprov;
   end if;
 
-  -- RLS own-tenant da P4: exatamente 1 policy SELECT por tabela legivel...
-  foreach v_tab in array array['evaluation_goals', 'evaluation_goal_approvals'] loop
-    select count(*) into v_pol from pg_policies
-     where schemaname = 'public' and tablename = v_tab;
-    if v_pol <> 1 then
-      raise exception '[FAIL] pre-condicao: % deveria ter exatamente 1 policy (encontradas %)',
-        v_tab, v_pol;
-    end if;
-  end loop;
-  -- ...e deny-by-default INTEGRAL na trilha e nas quotas.
-  foreach v_tab in array array['evaluation_goal_events', 'evaluation_cycle_goal_limits'] loop
+  -- D22-A (F5-10 P5/Bloco 2): as 4 tabelas de metas sao DENY-BY-DEFAULT
+  -- INTEGRAL — ZERO policy e ZERO privilegio de cliente (a exposicao SELECT da
+  -- P4 foi REVOGADA por decisao; a leitura funcional passa exclusivamente pela
+  -- superficie soberana `meta_listar_por_escopo`).
+  foreach v_tab in array array[
+    'evaluation_goals', 'evaluation_goal_approvals',
+    'evaluation_goal_events', 'evaluation_cycle_goal_limits'] loop
     select count(*) into v_pol from pg_policies
      where schemaname = 'public' and tablename = v_tab;
     if v_pol <> 0 then
-      raise exception '[FAIL] pre-condicao: % deveria permanecer deny-by-default (policies=%)',
+      raise exception '[FAIL] pre-condicao: % deveria estar deny-by-default integral (policies=%)',
         v_tab, v_pol;
+    end if;
+    if has_table_privilege('authenticated', format('public.%I', v_tab), 'SELECT')
+       or has_table_privilege('anon', format('public.%I', v_tab), 'SELECT') then
+      raise exception '[FAIL] pre-condicao: % nao pode conceder SELECT a authenticated/anon (D22-A)', v_tab;
     end if;
   end loop;
 
@@ -111,7 +112,7 @@ begin
     raise exception '[FAIL] pre-condicao: cycle.manage NAO pertence a allowlist de meta';
   end if;
 
-  raise notice '[PASS] preflight: fixture limpa (7 metas, 7 eventos CRIADA, 0 aprovacoes), 2 policies own-tenant de metas, trilha/limites deny-by-default, catalogo intacto (8 capabilities N/obs; 3 de meta concediveis) e capability efetiva dos atores verificada';
+  raise notice '[PASS] preflight: fixture limpa (7 metas, 7 eventos CRIADA, 0 aprovacoes), as 4 tabelas de metas deny-by-default integral (ZERO policy e ZERO SELECT de cliente — D22-A), catalogo intacto (8 capabilities N/obs; 3 de meta concediveis) e capability efetiva dos atores verificada';
 end $$;
 
 -- ============================================================================
@@ -1729,22 +1730,29 @@ begin
     raise exception '[FAIL] N16a: helper f5_10_ator_valido_meta nao pode ser executavel por authenticated';
   end if;
 
-  -- (N17a) RLS own-tenant: o ator enxerga SOMENTE as metas do PROPRIO tenant.
-  select count(*) into v_n from public.evaluation_goals;
-  if v_n <> 7 then
-    raise exception '[FAIL] N17a: o cliente de Alfa deveria ver as 7 metas de Alfa (viu %)', v_n;
+  -- (N17a) D22-A: o cliente NAO le NENHUMA das 4 tabelas de metas — zero policy
+  -- e zero privilegio de SELECT. O acesso e negado por PERMISSAO (42501), nunca
+  -- "zero linhas": nao existe mais leitura por RLS (a exposicao SELECT da P4 foi
+  -- revogada; a leitura funcional passa por `meta_listar_por_escopo`).
+  v_ok := false;
+  begin
+    perform 1 from public.evaluation_goals;
+  exception when insufficient_privilege then v_ok := true;
+  end;
+  if not v_ok then
+    raise exception '[FAIL] N17a: SELECT em evaluation_goals por authenticated deveria ser 42501';
   end if;
-  select count(*) into v_n from public.evaluation_goals where organization_id = v_beta;
-  if v_n <> 0 then
-    raise exception '[FAIL] N17a: cross-tenant por filtro deveria ser 0 linhas (viu %)', v_n;
+  v_ok := false;
+  begin
+    perform 1 from public.evaluation_goal_approvals;
+  exception when insufficient_privilege then v_ok := true;
+  end;
+  if not v_ok then
+    raise exception '[FAIL] N17a: SELECT em evaluation_goal_approvals por authenticated deveria ser 42501';
   end if;
-  select count(*) into v_n from public.evaluation_goals where id = v_mbeta;
-  if v_n <> 0 then
-    raise exception '[FAIL] N17a: cross-tenant por ID direto deveria ser 0 linhas (viu %)', v_n;
-  end if;
-  select count(*) into v_n from public.evaluation_goal_approvals;
-  if v_n <> 4 then
-    raise exception '[FAIL] N17a: o cliente deveria ver os 4 fatos de aprovacao de Alfa (viu %)', v_n;
+  if has_table_privilege('authenticated', 'public.evaluation_goals', 'SELECT')
+     or has_table_privilege('authenticated', 'public.evaluation_goal_approvals', 'SELECT') then
+    raise exception '[FAIL] N17a: privilegio de SELECT de cliente residual nas tabelas legiveis da P4';
   end if;
 
   -- (N17b) DML de cliente nas 4 tabelas => permission denied (42501).
@@ -1832,10 +1840,13 @@ begin
     raise exception '[FAIL] N17c: UPDATE em quotas por authenticated deveria ser 42501';
   end if;
 
-  -- (N17d) ACL fechada nas 13 funcoes (10 RPCs + 3 helpers) e nas 4 tabelas.
-  if has_table_privilege('authenticated', 'public.evaluation_goals', 'INSERT')
+  -- (N17d) ACL fechada nas 13 funcoes (10 RPCs + 3 helpers) e nas 4 tabelas —
+  -- D22-A: NENHUM privilegio de cliente (nem SELECT) em nenhuma das 4.
+  if has_table_privilege('authenticated', 'public.evaluation_goals', 'SELECT')
+     or has_table_privilege('authenticated', 'public.evaluation_goals', 'INSERT')
      or has_table_privilege('authenticated', 'public.evaluation_goals', 'UPDATE')
      or has_table_privilege('authenticated', 'public.evaluation_goals', 'DELETE')
+     or has_table_privilege('authenticated', 'public.evaluation_goal_approvals', 'SELECT')
      or has_table_privilege('authenticated', 'public.evaluation_goal_approvals', 'INSERT')
      or has_table_privilege('authenticated', 'public.evaluation_goal_approvals', 'UPDATE')
      or has_table_privilege('authenticated', 'public.evaluation_goal_approvals', 'DELETE')
@@ -1844,7 +1855,7 @@ begin
     raise exception '[FAIL] N17d: privilegio de cliente inesperado nas tabelas de metas';
   end if;
 
-  raise notice '[PASS] N16/N17: `authenticated` NAO executa nenhuma funcao de metas (permission denied / 42501), NAO escreve nas tabelas, NAO le a trilha nem as quotas e o SELECT sob RLS devolve SOMENTE o proprio tenant (cross-tenant = 0 linhas)';
+  raise notice '[PASS] N16/N17: `authenticated` NAO executa nenhuma funcao de metas (permission denied / 42501) e NAO le nem escreve NENHUMA das 4 tabelas de metas (deny-by-default integral por D22-A: zero policy e zero privilegio de cliente — leitura funcional somente por `meta_listar_por_escopo`)';
 end $$;
 
 -- ACL fechada das 13 funcoes (prova declarativa, independente da role corrente).
@@ -1927,35 +1938,37 @@ reset role;
 select set_config('request.jwt.claim.sub', '', false);
 
 -- ============================================================================
--- 17) NEGATIVO 17 (cont.): leitura cross-tenant sob RLS pelo OWNER de Beta
+-- 17) NEGATIVO 17 (cont.): o OWNER de Beta tambem NAO le (D22-A)
 -- ============================================================================
 select set_config('request.jwt.claim.sub', 'f2c00000-0000-0000-0000-0000000000c1', false);
 set role authenticated;
 do $$
 declare
-  v_alfa uuid := 'f2a00000-0000-0000-0000-0000000000a1';
-  v_n    int;
+  v_ok  boolean;
+  v_st  text;
+  v_tab text;
+  v_n   int;
 begin
-  -- O dono de Beta ve SOMENTE a meta de Beta...
-  select count(*) into v_n from public.evaluation_goals;
-  if v_n <> 1 then
-    raise exception '[FAIL] N17f: o cliente de Beta deveria ver 1 meta (viu %)', v_n;
-  end if;
-  -- ...e NENHUMA meta de Alfa, nem por filtro nem por ID direto.
-  select count(*) into v_n from public.evaluation_goals where organization_id = v_alfa;
-  if v_n <> 0 then
-    raise exception '[FAIL] N17f: Beta nao pode ver metas de Alfa (viu %)', v_n;
-  end if;
-  select count(*) into v_n from public.evaluation_goals
-   where id = 'f2000000-0000-0000-0000-000000000001';
-  if v_n <> 0 then
-    raise exception '[FAIL] N17f: Beta nao pode ver meta de Alfa por ID direto (viu %)', v_n;
-  end if;
-  select count(*) into v_n from public.evaluation_goal_approvals;
-  if v_n <> 0 then
-    raise exception '[FAIL] N17f: Beta nao pode ver fatos de aprovacao de Alfa (viu %)', v_n;
-  end if;
-  raise notice '[PASS] N17f: RLS e barreira de TENANT nos dois sentidos — o cliente de Beta ve somente Beta e ZERO linhas de Alfa (filtro e ID direto)';
+  -- D22-A: o cliente NAO le NENHUMA das 4 tabelas de metas, nem as do PROPRIO
+  -- tenant — a leitura e negada por PERMISSAO (42501) para todo cliente, em
+  -- qualquer tenant (nao ha mais leitura por RLS). A leitura funcional passa
+  -- exclusivamente por `meta_listar_por_escopo` (superficie soberana executada
+  -- por service_role).
+  foreach v_tab in array array[
+    'evaluation_goals', 'evaluation_goal_approvals',
+    'evaluation_goal_events', 'evaluation_cycle_goal_limits'] loop
+    v_ok := false; v_st := null;
+    begin
+      execute format('select count(*) from public.%I', v_tab) into v_n;
+    exception when insufficient_privilege then v_ok := true; v_st := sqlstate;
+              when others then v_st := sqlstate;
+    end;
+    if not v_ok or v_st <> '42501' then
+      raise exception '[FAIL] N17f: SELECT do cliente de Beta em % deveria ser NEGADO por permissao (%), veio %',
+        v_tab, '42501', v_st;
+    end if;
+  end loop;
+  raise notice '[PASS] N17f: as 4 tabelas de metas sao invisiveis para QUALQUER cliente — inclusive o dono de Beta — por PERMISSAO (42501), nao por filtro de RLS (D22-A)';
 end $$;
 reset role;
 select set_config('request.jwt.claim.sub', '', false);
@@ -2148,31 +2161,24 @@ begin
     v_erros := v_erros || format('meta criada pelo validador em estado inesperado (%s)', v_n);
   end if;
 
-  -- (e) Superficie da P4 intacta: 2 policies own-tenant; trilha/limites
-  --     deny-by-default; nada de DELETE para service_role.
-  foreach v_meta in array array['evaluation_goals', 'evaluation_goal_approvals'] loop
-    select count(*) into v_n from pg_policies
-     where schemaname = 'public' and tablename = v_meta;
-    if v_n <> 1 then
-      v_erros := v_erros || format('%s com %s policies (esperado 1 SELECT own-tenant)', v_meta, v_n);
-    end if;
-  end loop;
-  foreach v_meta in array array['evaluation_goal_events', 'evaluation_cycle_goal_limits'] loop
+  -- (e) D22-A: as 4 tabelas de metas DENY-BY-DEFAULT INTEGRAL (ZERO policy e
+  --     ZERO privilegio de cliente) e nada de DELETE para service_role.
+  foreach v_meta in array v_tabelas loop
     select count(*) into v_n from pg_policies
      where schemaname = 'public' and tablename = v_meta;
     if v_n <> 0 then
-      v_erros := v_erros || format('%s com policy (deveria ser deny-by-default integral)', v_meta);
+      v_erros := v_erros || format('%s com %s policies (D22-A exige ZERO)', v_meta, v_n);
     end if;
-  end loop;
-  foreach v_meta in array v_tabelas loop
     if has_table_privilege('service_role', format('public.%I', v_meta), 'DELETE')
        or has_table_privilege('service_role', format('public.%I', v_meta), 'TRUNCATE') then
       v_erros := v_erros || format('service_role com DELETE/TRUNCATE em %s', v_meta);
     end if;
-    if has_table_privilege('authenticated', format('public.%I', v_meta), 'INSERT')
+    if has_table_privilege('authenticated', format('public.%I', v_meta), 'SELECT')
+       or has_table_privilege('authenticated', format('public.%I', v_meta), 'INSERT')
        or has_table_privilege('authenticated', format('public.%I', v_meta), 'UPDATE')
-       or has_table_privilege('authenticated', format('public.%I', v_meta), 'DELETE') then
-      v_erros := v_erros || format('authenticated com DML em %s', v_meta);
+       or has_table_privilege('authenticated', format('public.%I', v_meta), 'DELETE')
+       or has_table_privilege('anon', format('public.%I', v_meta), 'SELECT') then
+      v_erros := v_erros || format('privilegio de cliente em %s (D22-A exige zero)', v_meta);
     end if;
   end loop;
 
@@ -2240,7 +2246,7 @@ begin
     raise exception '[FAIL] guarda final da P4: %', array_to_string(v_erros, '; ');
   end if;
 
-  raise notice '[PASS] guarda final: 8 metas (7 de fixture + 1 criada pelo dono c2), 1 excluida, 18 eventos (8 CRIADA, 1 EDITADA, 1 PROGRESSO_ATUALIZADO, 1 FINALIZADA, 1 APROVACAO_GERENTE, 3 APROVACAO_COORDENADOR, 3 APROVACAO_INVALIDADA) sem operation_id duplicado, 4 fatos de aprovacao (2 vigentes / 2 revogados) coerentes com a trilha, 6 roles e 10 assignments intactos, 2 policies own-tenant, trilha/limites deny-by-default, 13 funcoes INVOKER com EXECUTE so service_role e catalogo sem capability nova';
+  raise notice '[PASS] guarda final: 8 metas (7 de fixture + 1 criada pelo dono c2), 1 excluida, 18 eventos (8 CRIADA, 1 EDITADA, 1 PROGRESSO_ATUALIZADO, 1 FINALIZADA, 1 APROVACAO_GERENTE, 3 APROVACAO_COORDENADOR, 3 APROVACAO_INVALIDADA) sem operation_id duplicado, 4 fatos de aprovacao (2 vigentes / 2 revogados) coerentes com a trilha, 6 roles e 10 assignments intactos, as 4 tabelas de metas deny-by-default integral (ZERO policy e ZERO privilegio de cliente — D22-A), 13 funcoes INVOKER com EXECUTE so service_role e catalogo sem capability nova';
 end $$;
 
 -- ============================================================================
@@ -2255,5 +2261,5 @@ end $$;
 
 do $$
 begin
-  raise notice '[PASS] F5-10 P4: validacao concluida — a autoridade e a CAPABILITY efetiva (F4) + a RELACAO (SELF ou participante CONGELADO), o ESTADO permanece nas pre-condicoes de cada RPC, o cliente nao executa nem escreve e o tenant e barreira de RLS nos dois sentidos';
+  raise notice '[PASS] F5-10 P4: validacao concluida — a autoridade e a CAPABILITY efetiva (F4) + a RELACAO (SELF ou participante CONGELADO), o ESTADO permanece nas pre-condicoes de cada RPC, o cliente nao executa, nao le e nao escreve (as 4 tabelas de metas sao deny-by-default integral por D22-A: zero policy e zero privilegio de cliente) e a leitura funcional passa exclusivamente pela superficie soberana `meta_listar_por_escopo`';
 end $$;
