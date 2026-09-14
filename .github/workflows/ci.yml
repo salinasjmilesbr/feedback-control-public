@@ -411,6 +411,54 @@ jobs:
             < supabase/validacao/28-validar-f5-10-p5-2.sql
 
       # ----------------------------------------------------------------------
+      # F5-10 P7 (Issue #232) — VALIDACAO INTEGRADA do dominio de metas.
+      # Fixture integrada (prefixo `e8`; 3 organizacoes: Alfa = matriz, Beta =
+      # cross-tenant, Gama = corrida EXCLUSIVA) + matriz dos blocos 1 e 4-19.
+      # O BLOCO 6 (CONCORRENCIA REAL) roda em DUAS SESSOES psql distintas: a
+      # sessao A em background segura `ciclo_lock_organizacao`
+      # (`evaluation_cycles:<org>`) dentro de uma escrita atrasada em ~8s,
+      # enquanto a sessao B tenta a MESMA edicao (mesma versao) e a MESMA
+      # aprovacao (mesmo papel) — B so pode terminar em CONFLICT DEPOIS de
+      # esperar o lock, o que e evidencia de contencao server-side. Roda ANTES
+      # das regressoes F5-06/F5-07, como as demais atividades correntes.
+      # ----------------------------------------------------------------------
+      - name: "Seed F5-10 P7 scenario (validacao integrada de metas)"
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/29-cenario-f5-10-p7.sql
+
+      - name: "Run F5-10 P7 integrated validation (sequencia historica, cross-tenant, membership, capability, IDOR, ciclo, quota, idempotencia, rollback, append-only, RLS, guardas invertidas)"
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/30-validar-f5-10-p7.sql
+
+      - name: "Run F5-10 P7 concurrency (DUAS sessoes reais: A em background, B em foreground)"
+        run: |
+          set -e
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/31-sessao-a-f5-10-p7-concorrencia.sql &
+          SESSAO_A=$!
+          # A sessao B NAO depende de tempo fixo: o laco dela aguarda o alvo E a
+          # MARCA de contencao publicada por A DENTRO da escrita (ja com o lock da
+          # organizacao em maos). O `sleep 1` existe apenas para dar tempo ao start
+          # do processo de A; a janela real e o pg_sleep(8) de A, com o limiar de
+          # contencao de 2s exigido por B.
+          sleep 1
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/32-sessao-b-f5-10-p7-concorrencia.sql
+          wait "$SESSAO_A"
+
+      - name: "Run F5-10 P7 concurrency consolidation (estado final apos as duas corridas + higiene)"
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/33-validar-f5-10-p7-concorrencia.sql
+
+      # ----------------------------------------------------------------------
       # Regressão F5-06/F5-07 (§23.4): cenários independentes, com prefixos de
       # UUID próprios (`d6`/`d7`), reaplicados antes de cada validação.
       # ----------------------------------------------------------------------
