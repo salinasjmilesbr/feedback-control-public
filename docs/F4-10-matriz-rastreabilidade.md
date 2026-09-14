@@ -297,7 +297,7 @@ Legenda de arquivos:
 | ATTACK-006 | P0 | PASS | `policyEngine.test.ts` "cross-tenant => DENY"; `supabase/validacao/02-validar-f4-08.sql` |
 | ATTACK-007 | P0 | PASS | `f4-10-integrated.test.ts` "PE-006/ATTACK-007 (TOCTOU)" |
 | ATTACK-008 | P0 | PASS | `f4-09-functional.test.ts` "ciclo (Q7)" (domainState soberano) |
-| ATTACK-009 | P0 | PASS | `correcaoPeriodoCicloService.test.ts` "rejeita perfil não autorizado e estados inelegíveis sem alteração" |
+| ATTACK-009 | P0 | PASS | `supabase/validacao/08-validar-f5-09-p4.sql` (ciclo_corrigir_periodo sem `cycle.period.correct` => F5_09_FORBIDDEN; estados != ATIVO recusados) + `ciclosFronteiraSoberana.test.ts` "cycle.period.correct: somente ATIVO permite" (F5-10 P6: substitui `correcaoPeriodoCicloService.test.ts`, modulo legado eliminado) |
 | ATTACK-010 | P0 | PASS | `f4-10-integrated.test.ts` "REV-003" |
 | ATTACK-011 | P0 | PASS | `f4-09-functional.test.ts` "ID/sujeito manipulado" |
 | ATTACK-012 | P0 | PASS | `f4-07-core.test.ts` "23/24. target confidencial + D ⇒ DENY" |

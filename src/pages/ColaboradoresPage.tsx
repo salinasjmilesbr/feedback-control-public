@@ -275,7 +275,6 @@ function ColaboradoresPage({
         `Dados de teste gerados com sucesso.\n\n` +
           `Colaboradores: ${resultado.colaboradores}\n` +
           `Avaliações: ${resultado.avaliacoes}\n` +
-          `Metas: ${resultado.metas}\n` +
           `Observações: ${resultado.observacoes}`
       );
       window.location.reload();

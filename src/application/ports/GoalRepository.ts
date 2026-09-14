@@ -6,7 +6,7 @@
  *
  * A autoridade funcional de metas era LOCAL (`src/services/metaStorage.ts` em
  * `localStorage`): a auditoria da F5-10 (§3/§5) classificou esse caminho como
- * resíduo a remover no cutover (P6), nunca contrato produtivo final. A porta
+ * resíduo a remover no cutover (P6), nunca contrato produtivo final. O P6 (Issue #220) executou essa remocao: o dominio de metas nao tem mais leitura nem escrita no armazenamento do navegador. A porta
  * descreve a fronteira SOBERANA que o substitui:
  *
  * - **assíncrona**: toda operação devolve `Promise<ResultadoMetas<T>>`;

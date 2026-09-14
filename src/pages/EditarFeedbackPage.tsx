@@ -33,10 +33,7 @@ import {
   ehCandidataAvaliacaoNova,
   lerAvaliacaoParaTela,
 } from "../services/origemAvaliacaoTela";
-import {
-  getMetasDoColaboradorNoCiclo,
-  metaEstaAprovada,
-} from "../services/metaStorage";
+import { useMetasSoberanasDaAvaliacao } from "./useMetasSoberanasDaAvaliacao";
 import {
   formatarPeriodoCiclo,
   getCiclosAvaliacao,
@@ -413,6 +410,24 @@ function EditarFeedbackPage() {
     return () => window.clearTimeout(timeoutId);
   }, [criterioAberto, criterioParaAlinhar]);
 
+  // Rótulos do ciclo da avaliação (ano/número), independentes do estado de
+  // carregamento: a avaliação NOVA traz o ciclo na própria linha do banco e o
+  // legado, no registro local.
+  const anoAvaliacao = feedbackLegado?.ano ?? painel?.cycleAno;
+  const cicloAvaliacao = feedbackLegado?.ciclo ?? painel?.cycleNumero;
+
+  // F5-10 P6 (Issue #220): "meta formalmente aprovada" é decidida pelos FATOS da
+  // projeção soberana (`aprovacoes[].exigida/vigente`); nenhum helper do domínio
+  // local participa. Erro é AVISO explícito e NÃO bloqueia a edição. O hook fica
+  // ANTES dos retornos antecipados (regras de hooks) e é fail-closed por dentro.
+  const metasSoberanasDaAvaliacao = useMetasSoberanasDaAvaliacao({
+    organizationId: organizacaoAtivaId ?? null,
+    ano: anoAvaliacao,
+    ciclo: cicloAvaliacao,
+    matriculaDoAvaliado: Number.isFinite(matricula) ? matricula : undefined,
+  });
+  const metasSemAprovacaoFormal = metasSoberanasDaAvaliacao.semAprovacaoFormal;
+
   if (!colaborador) {
     return (
       <div style={{ padding: "30px" }}>
@@ -447,10 +462,6 @@ function EditarFeedbackPage() {
   }
 
   const feedbackAtual = feedbackLegado;
-  // Contexto do ciclo: o da avaliação NOVA vem da própria linha do banco; o do
-  // legado vem do registro local.
-  const anoAvaliacao = feedbackAtual?.ano ?? painel?.cycleAno;
-  const cicloAvaliacao = feedbackAtual?.ciclo ?? painel?.cycleNumero;
 
   // Estado inicial do formulário derivado da ORIGEM (painel do banco ou registro
   // local). Derivar aqui — e não em efeito — evita estado espelhado e mantém a
@@ -508,16 +519,6 @@ function EditarFeedbackPage() {
     : colaborador;
 
   const escalaAvaliacao = getEscalaAvaliacao();
-
-  const metasDoCiclo = cicloDaAvaliacao
-    ? getMetasDoColaboradorNoCiclo(
-        colaborador.matricula,
-        cicloDaAvaliacao.id
-      )
-    : [];
-  const metasSemAprovacaoFormal = metasDoCiclo.filter(
-    (meta) => !metaEstaAprovada(meta, colaborador, colaboradores)
-  );
 
   const avaliadoresColegiado = (
     colaboradorEfetivo.avaliadoresColegiadoMatriculas ?? []
@@ -1284,6 +1285,22 @@ function EditarFeedbackPage() {
           </p>
         )}
       </section>
+
+      {!metasSoberanasDaAvaliacao.carregando &&
+        metasSoberanasDaAvaliacao.erro && (
+          <section className="new-evaluation-goals-warning" role="alert">
+            <div className="new-evaluation-goals-warning__icon" aria-hidden="true">
+              !
+            </div>
+            <div>
+              <strong>Metas do ciclo indisponíveis</strong>
+              <p>
+                {metasSoberanasDaAvaliacao.erro} A avaliação pode continuar
+                normalmente.
+              </p>
+            </div>
+          </section>
+        )}
 
       {metasSemAprovacaoFormal.length > 0 && (
         <section className="new-evaluation-goals-warning" role="status">

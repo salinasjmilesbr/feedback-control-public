@@ -1,4 +1,4 @@
-﻿import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import CriterionIcon from "../components/CriterionIcon";
 import RoleExpectationsCard from "../components/RoleExpectationsCard";
@@ -9,9 +9,13 @@ import { getObservacoesComunicadasByCiclo } from "../services/observacaoStorage"
 import {
   formatarPeriodoCiclo,
   getCiclosAvaliacao,
-} from "../services/cicloAvaliacaoStorage";
+} from "./cicloApresentacaoLegada";
 import { getColaboradores } from "../services/colaboradorStorage";
-import { getMetasDoColaboradorNoCiclo } from "../services/metaStorage";
+import { useAuth } from "../auth/AuthContext";
+import { obterRepositorioMetasSoberanas } from "../services/acessoMetasSoberanas";
+import { obterRepositorioCiclosSoberanos } from "../services/acessoCiclosSoberanos";
+import type { MetaSoberana } from "../application/ports/GoalRepository";
+
 import {
   getEscalaAvaliacao,
   getItemEscalaPorNota,
@@ -22,6 +26,7 @@ import {
   possuiNotaAvaliacao,
 } from "../services/apresentacaoNota";
 import {
+  collaboratorIdDoLegado,
   estruturaSoberanaEfetiva,
   visaoEstruturalLegada,
 } from "../services/estruturaSoberanaCliente";
@@ -40,11 +45,189 @@ function IconSpark() {
   );
 }
 
+/** Resultado de UMA leitura de metas (o que a tela consome, sem a chave). */
+interface LeituraDasMetasSelf {
+  readonly metas: readonly MetaSoberana[];
+  readonly carregando: boolean;
+  readonly erro: string;
+}
+
+/** Resultado PUBLICADO, preso à chave do contexto que o produziu. */
+interface LeituraPublicadaDasMetas {
+  readonly chave: string;
+  readonly resultado: LeituraDasMetasSelf;
+}
+
 function MinhaAvaliacaoDetalhePage() {
   const navigate = useNavigate();
   const { feedbackId } = useParams();
   const { usuarioAtual } = useUsuarioAtual();
+  const { organizacaoAtivaId } = useAuth();
   const [mostrarRegua, setMostrarRegua] = useState(false);
+  /**
+   * F5-10 P6 (Issue #220): as metas do ciclo vêm da superfície SOBERANA (relação
+   * SELF). Loading e erro são EXPLÍCITOS — ausência de caminho soberano nunca
+   * vira lista vazia silenciosa nem leitura local. O resultado é publicado com a
+   * CHAVE do contexto (mesmo padrão de `MinhasMetasPage`) e o estado exibido é
+   * DERIVADO: nenhum `setState` síncrono no corpo do efeito.
+   */
+  const [leituraMetas, setLeituraMetas] = useState<LeituraPublicadaDasMetas | null>(
+    null
+  );
+  const [erroPdf, setErroPdf] = useState("");
+  const [gerandoPdf, setGerandoPdf] = useState(false);
+
+  const organizacaoId =
+    typeof organizacaoAtivaId === "string" && organizacaoAtivaId.length > 0
+      ? organizacaoAtivaId
+      : null;
+
+  /**
+   * FONTE ESTÁVEL do efeito: a leitura de feedbacks é SÍNCRONA e devolve um novo
+   * objeto a cada render, o que dispararia releitura infinita se a REFERÊNCIA
+   * fosse dependência. Derivamos aqui a CHAVE FUNCIONAL da avaliação (matrícula +
+   * ano + ciclo + id) como PRIMITIVOS estáveis: a mesma avaliação produz sempre a
+   * mesma chave, e o efeito só relê quando ela muda de fato.
+   */
+  const matriculaDoAtor = usuarioAtual?.matricula;
+  const avaliacaoDoAtor =
+    matriculaDoAtor === undefined
+      ? undefined
+      : getFeedbacksByColaborador(matriculaDoAtor).find(
+          (item) => item.id === feedbackId && item.status === "CONCLUIDA"
+        );
+  const anoDaAvaliacao = avaliacaoDoAtor?.ano;
+  const numeroDoCicloDaAvaliacao = avaliacaoDoAtor?.ciclo;
+
+  /** Chave funcional da leitura de metas (organização + ator + avaliação). */
+  const chaveDasMetas = `${organizacaoId ?? "sem-organizacao"}|${
+    matriculaDoAtor ?? "sem-ator"
+  }|${anoDaAvaliacao ?? "sem-ano"}|${numeroDoCicloDaAvaliacao ?? "sem-ciclo"}`;
+
+  const semEntradaParaMetas =
+    !organizacaoId ||
+    matriculaDoAtor === undefined ||
+    anoDaAvaliacao === undefined ||
+    numeroDoCicloDaAvaliacao === undefined;
+
+  const resultadoDasMetas: LeituraDasMetasSelf = semEntradaParaMetas
+    ? { metas: [], carregando: false, erro: "" }
+    : leituraMetas?.chave === chaveDasMetas
+    ? leituraMetas.resultado
+    : { metas: [], carregando: true, erro: "" };
+
+  const metasSelf = resultadoDasMetas.metas;
+  const carregandoMetas = resultadoDasMetas.carregando;
+  const erroMetas = resultadoDasMetas.erro;
+
+  // Leitura SOBERANA das metas do próprio colaborador (relação SELF) no ciclo da
+  // avaliação. O ciclo é resolvido pelo UUID soberano (ano/número são rótulos) e
+  // o dono, pelo UUID da ponte estrutural; nada é decidido no cliente.
+  useEffect(() => {
+    let vigente = true;
+
+    const publicar = (resultado: LeituraDasMetasSelf) => {
+      if (vigente) setLeituraMetas({ chave: chaveDasMetas, resultado });
+    };
+
+    void (async () => {
+      // Rechecagem explícita: é ela que ESTREITA os tipos dentro do fluxo.
+      if (
+        !organizacaoId ||
+        matriculaDoAtor === undefined ||
+        anoDaAvaliacao === undefined ||
+        numeroDoCicloDaAvaliacao === undefined
+      ) {
+        publicar({ metas: [], carregando: false, erro: "" });
+        return;
+      }
+
+      const repositorio = obterRepositorioMetasSoberanas();
+      const portaCiclos = obterRepositorioCiclosSoberanos();
+      const colaboradorUuid = collaboratorIdDoLegado(
+        estruturaSoberanaEfetiva(getColaboradores()),
+        matriculaDoAtor
+      );
+
+      if (!repositorio || !portaCiclos || !colaboradorUuid) {
+        publicar({
+          metas: [],
+          carregando: false,
+          erro: "As metas do ciclo não estão disponíveis pelo caminho soberano neste ambiente.",
+        });
+        return;
+      }
+
+      try {
+        const ciclos = await portaCiclos.listarCiclos(organizacaoId);
+        if (!vigente) return;
+
+        const ciclo = ciclos.ok
+          ? ciclos.data.find(
+              (item) =>
+                item.ano === anoDaAvaliacao &&
+                item.numero === numeroDoCicloDaAvaliacao
+            )
+          : undefined;
+
+        if (!ciclo) {
+          publicar({
+            metas: [],
+            carregando: false,
+            erro: "Não foi possível resolver o ciclo da avaliação pelo caminho soberano.",
+          });
+          return;
+        }
+
+        const metas = await repositorio.listarMetasPorEscopo(
+          organizacaoId,
+          ciclo.id
+        );
+        if (!vigente) return;
+
+        if (!metas.ok) {
+          publicar({
+            metas: [],
+            carregando: false,
+            erro: "Não foi possível carregar as metas do ciclo.",
+          });
+          return;
+        }
+
+        // Somente o SELF do próprio ator: a relação devolvida é o que autoriza.
+        const metasDoAtor = metas.data.metas
+          .filter(
+            (meta) =>
+              meta.relacao === "SELF" &&
+              meta.collaboratorId === colaboradorUuid &&
+              !meta.excluida
+          )
+          .slice()
+          .sort(
+            (a, b) =>
+              new Date(a.criadoEm).getTime() - new Date(b.criadoEm).getTime()
+          );
+
+        publicar({ metas: metasDoAtor, carregando: false, erro: "" });
+      } catch {
+        publicar({
+          metas: [],
+          carregando: false,
+          erro: "Não foi possível carregar as metas do ciclo.",
+        });
+      }
+    })();
+
+    return () => {
+      vigente = false;
+    };
+  }, [
+    chaveDasMetas,
+    organizacaoId,
+    matriculaDoAtor,
+    anoDaAvaliacao,
+    numeroDoCicloDaAvaliacao,
+  ]);
 
   if (!usuarioAtual) {
     return (
@@ -68,13 +251,9 @@ function MinhaAvaliacaoDetalhePage() {
   );
   const usaEstruturaAvaliacaoAnalista = visaoEstrutural?.temCadeiaDeGestao ?? false;
 
-  const feedback = getFeedbacksByColaborador(
-    usuarioAtual.matricula
-  ).find(
-    (item) =>
-      item.id === feedbackId &&
-      item.status === "CONCLUIDA"
-  );
+  // A avaliação do ator é a MESMA identidade derivada acima (chave funcional do
+  // efeito): uma única leitura, sem segunda resolução divergente.
+  const feedback = avaliacaoDoAtor;
 
   if (!feedback) {
     return (
@@ -111,12 +290,7 @@ function MinhaAvaliacaoDetalhePage() {
       ciclo.ciclo === feedback.ciclo
   );
 
-  const metasDoCiclo = cicloDaAvaliacao
-    ? getMetasDoColaboradorNoCiclo(
-        usuarioAtual.matricula,
-        cicloDaAvaliacao.id
-      )
-    : [];
+  const metasDoCiclo = metasSelf;
 
   const metasNegocio = metasDoCiclo.filter(
     (meta) => meta.tipo === "NEGOCIO_PROJETO"
@@ -221,6 +395,49 @@ function MinhaAvaliacaoDetalhePage() {
     return "Pendente / Não finalizada";
   }
 
+  /**
+   * F5-10 P6 (Issue #220): o PDF recebe as metas JÁ LIDAS da superfície soberana.
+   * Enquanto elas não estiverem disponíveis (carregando ou em erro) a exportação é
+   * recusada com aviso explícito — nunca um PDF que PRESUMA metas aprovadas ou
+   * leia storage local.
+   */
+  async function exportarPdf() {
+    if (erroMetas) {
+      setErroPdf(
+        "Não foi possível exportar: as metas do ciclo não foram carregadas."
+      );
+      return;
+    }
+
+    if (carregandoMetas) {
+      setErroPdf("Aguarde o carregamento das metas do ciclo para exportar.");
+      return;
+    }
+
+    if (gerandoPdf) return;
+
+    setErroPdf("");
+    setGerandoPdf(true);
+
+    // `exportarPdf` e declaracao hoisted: o estreitamento de tipo do corpo do
+    // componente NAO atravessa a fronteira da função. Capturamos os valores
+    // ja estreitados e recusamos explicitamente quando faltar identidade ou
+    // avaliação.
+    const ator = usuarioAtual;
+    const avaliacao = feedback;
+    if (!ator || !avaliacao) {
+      setErroPdf("Não foi possível exportar: avaliação ou usuário indisponível.");
+      return;
+    }
+    try {
+      await exportarAvaliacaoPdf(ator, avaliacao, metasDoCiclo);
+    } catch {
+      setErroPdf("Não foi possível gerar o PDF desta avaliação.");
+    } finally {
+      setGerandoPdf(false);
+    }
+  }
+
   return (
     <main className="virtus-page evaluation-detail-page">
       <section className="evaluation-detail-header">
@@ -248,9 +465,10 @@ function MinhaAvaliacaoDetalhePage() {
           <button
             type="button"
             className="evaluation-btn evaluation-btn--primary"
-            onClick={() => exportarAvaliacaoPdf(usuarioAtual, feedback)}
+            onClick={() => void exportarPdf()}
+            disabled={gerandoPdf}
           >
-            Exportar PDF
+            {gerandoPdf ? "Gerando PDF…" : "Exportar PDF"}
           </button>
         </div>
       </section>
@@ -493,6 +711,26 @@ function MinhaAvaliacaoDetalhePage() {
         </div>
       </section>
 
+      {erroPdf && (
+        <section className="evaluation-alert evaluation-alert--warning" role="alert">
+          <strong>Exportação indisponível.</strong>
+          <p>{erroPdf}</p>
+        </section>
+      )}
+
+      {carregandoMetas && (
+        <section className="evaluation-alert evaluation-alert--warning" role="status">
+          <strong>Carregando metas do ciclo…</strong>
+        </section>
+      )}
+
+      {erroMetas && (
+        <section className="evaluation-alert evaluation-alert--warning" role="alert">
+          <strong>Metas do ciclo indisponíveis.</strong>
+          <p>{erroMetas}</p>
+        </section>
+      )}
+
       <section className="evaluation-criteria" id="criterios">
         <div className="evaluation-section-heading">
           <div>
@@ -702,12 +940,22 @@ function MinhaAvaliacaoDetalhePage() {
                             <dd>{meta.valorAlvo}</dd>
                           </div>
                           <div>
+                            <dt>Último acompanhamento</dt>
+                            <dd>
+                              {formatarData(meta.dataUltimoAcompanhamento ?? undefined)}
+                            </dd>
+                          </div>
+                          <div>
                             <dt>Resultado final</dt>
                             <dd>
                               {meta.resultadoFinal?.trim()
                                 ? meta.resultadoFinal
                                 : "Não informado"}
                             </dd>
+                          </div>
+                          <div>
+                            <dt>Concluída em</dt>
+                            <dd>{formatarData(meta.dataFechamento ?? undefined)}</dd>
                           </div>
                         </dl>
                       </article>

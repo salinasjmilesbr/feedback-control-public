@@ -4,7 +4,6 @@ import { getColaboradores } from "./colaboradorStorage";
 import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
 import type { Feedback } from "../types/Feedback";
-import type { Meta, TipoMeta } from "../types/Meta";
 import type {
   Observacao,
   TipoObservacao,
@@ -12,7 +11,6 @@ import type {
 import { getCiclosAvaliacao } from "./cicloAvaliacaoStorage";
 
 const FEEDBACKS_KEY = "feedback-control-feedbacks";
-const METAS_KEY = "feedback-control-metas";
 const OBSERVACOES_KEY = "feedback-control-observacoes";
 
 const frasesCompetencia = {
@@ -71,42 +69,6 @@ const observacoesPorTipo: Record<TipoObservacao, string[]> = {
     "Foi identificado um ponto de atenção na comunicação com as áreas envolvidas.",
   ],
 };
-
-const metasNegocio = [
-  {
-    descricao: "Melhorar a eficiência de uma frente operacional prioritária",
-    kpi: "Redução de retrabalho",
-    alvo: "Reduzir em 15%",
-  },
-  {
-    descricao: "Aumentar a qualidade das entregas do time no ciclo",
-    kpi: "Índice de qualidade",
-    alvo: "Atingir 95%",
-  },
-  {
-    descricao: "Contribuir para uma iniciativa estratégica da área",
-    kpi: "Marcos do projeto",
-    alvo: "100% dos marcos no prazo",
-  },
-];
-
-const metasIndividuais = [
-  {
-    descricao: "Desenvolver uma competência técnica relevante para a função",
-    kpi: "Plano de desenvolvimento",
-    alvo: "Concluir 100%",
-  },
-  {
-    descricao: "Aumentar a autonomia na condução das atividades",
-    kpi: "Entregas sem retrabalho",
-    alvo: "Atingir 90%",
-  },
-  {
-    descricao: "Ampliar a colaboração e compartilhamento de conhecimento",
-    kpi: "Ações de compartilhamento",
-    alvo: "Realizar 3 ações",
-  },
-];
 
 function lerArray<T>(chave: string): T[] {
   const valor = localStorage.getItem(chave);
@@ -285,92 +247,6 @@ function gerarFeedback(
   };
 }
 
-function gerarMeta(
-  colaborador: Colaborador,
-  ciclo: CicloAvaliacao,
-  tipo: TipoMeta,
-  indice: number
-): Meta {
-  const modelo =
-    tipo === "NEGOCIO_PROJETO"
-      ? metasNegocio[indice % metasNegocio.length]
-      : metasIndividuais[indice % metasIndividuais.length];
-
-  const agora = dataAleatoriaCiclo(ciclo);
-  const progresso = inteiro(20, 100);
-  const encerrado = ciclo.status === "ENCERRADO";
-  const atingida = encerrado ? Math.random() < 0.72 : undefined;
-
-  const status: Meta["status"] = encerrado
-    ? atingida
-      ? "ATINGIDA"
-      : "NAO_ATINGIDA"
-    : "EM_ANDAMENTO";
-
-  const resultadoAtual =
-    progresso >= 80
-      ? "Execução em estágio avançado, com os principais resultados já observados."
-      : progresso >= 50
-      ? "A meta apresenta evolução consistente e segue em acompanhamento."
-      : "A execução está em andamento e ainda exige evolução relevante no ciclo.";
-
-  const resultadoFinal = encerrado
-    ? atingida
-      ? "Meta concluída com o resultado esperado para o ciclo."
-      : "Meta encerrada abaixo do resultado esperado, com aprendizados registrados para o próximo ciclo."
-    : undefined;
-
-  return {
-    id: crypto.randomUUID(),
-    colaboradorMatricula: colaborador.matricula,
-    colaboradorNome: colaborador.nome,
-    cicloId: ciclo.id,
-    ano: ciclo.ano,
-    ciclo: ciclo.ciclo,
-    tipo,
-    descricao: modelo.descricao,
-    kpi: modelo.kpi,
-    valorAlvo: modelo.alvo,
-    status,
-    resultadoAtual,
-    progressoPercentual: encerrado ? 100 : progresso,
-    dataUltimoAcompanhamento: agora,
-    resultadoFinal,
-    atingida,
-    dataFechamento: encerrado ? agora : undefined,
-    dataCriacao: agora,
-    dataUltimaAtualizacao: agora,
-    excluida: false,
-    historico: [
-      {
-        id: crypto.randomUUID(),
-        acao: "CRIACAO",
-        data: agora,
-        autorMatricula: colaborador.matricula,
-        autorNome: colaborador.nome,
-      },
-      {
-        id: crypto.randomUUID(),
-        acao: "ATUALIZACAO_PROGRESSO",
-        data: agora,
-        autorMatricula: colaborador.matricula,
-        autorNome: colaborador.nome,
-      },
-      ...(encerrado
-        ? [
-            {
-              id: crypto.randomUUID(),
-              acao: "FINALIZACAO" as const,
-              data: agora,
-              autorMatricula: colaborador.matricula,
-              autorNome: colaborador.nome,
-            },
-          ]
-        : []),
-    ],
-  };
-}
-
 function sortearTipoObservacao(base: number): TipoObservacao {
   const chance = Math.random();
 
@@ -429,7 +305,6 @@ function gerarObservacoes(
 
 export interface ResultadoGeracaoDadosTeste {
   avaliacoes: number;
-  metas: number;
   observacoes: number;
   colaboradores: number;
 }
@@ -476,10 +351,6 @@ export function gerarDadosTesteDoCiclo(
       )
   );
 
-  const metasExistentes = lerArray<Meta>(METAS_KEY).filter(
-    (meta) => meta.cicloId !== ciclo.id
-  );
-
   const observacoesExistentes = lerArray<Observacao>(
     OBSERVACOES_KEY
   ).filter(
@@ -493,18 +364,6 @@ export function gerarDadosTesteDoCiclo(
   const feedbacksNovos = analistas.map((colaborador) =>
     gerarFeedback(colaborador, ciclo, todos)
   );
-
-  const metasNovas = analistas.flatMap((colaborador) => [
-    ...Array.from(
-      { length: ciclo.quantidadeMetasNegocio ?? 0 },
-      (_, indice) =>
-        gerarMeta(colaborador, ciclo, "NEGOCIO_PROJETO", indice)
-    ),
-    ...Array.from(
-      { length: ciclo.quantidadeMetasIndividuais ?? 0 },
-      (_, indice) => gerarMeta(colaborador, ciclo, "INDIVIDUAL", indice)
-    ),
-  ]);
 
   const feedbackPorMatricula = new Map(
     feedbacksNovos.map((feedback) => [
@@ -527,17 +386,15 @@ export function gerarDadosTesteDoCiclo(
     JSON.stringify([...feedbacksExistentes, ...feedbacksNovos])
   );
   localStorage.setItem(
-    METAS_KEY,
-    JSON.stringify([...metasExistentes, ...metasNovas])
-  );
-  localStorage.setItem(
     OBSERVACOES_KEY,
     JSON.stringify([...observacoesExistentes, ...observacoesNovas])
   );
 
   return {
     avaliacoes: feedbacksNovos.length,
-    metas: metasNovas.length,
+    // F5-10 P6 (Issue #220): o domínio de metas é SOBERANO (Edge/RPC + RLS) e
+    // este gerador de fixtures DEV não produz mais metas nem toca o registro
+    // local legado — por isso o campo `metas` saiu da forma pública.
     observacoes: observacoesNovas.length,
     colaboradores: analistas.length,
   };

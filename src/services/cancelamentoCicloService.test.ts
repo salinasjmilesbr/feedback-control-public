@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthorizationError } from "../authorization/authorizationError";
 import { instalarLocalStorageEmMemoria } from "../test/localStorageMock";
 import type { CicloAvaliacao } from "../types/CicloAvaliacao";
@@ -12,6 +12,13 @@ import {
 } from "./cicloAvaliacaoStorage";
 import { cancelarCiclo } from "./cancelamentoCicloService";
 import { gerarDadosTesteDoCiclo } from "./geradorDadosTeste";
+
+/**
+ * F5-10 P6: o módulo legado de metas foi eliminado do caminho funcional. A
+ * chave só sobrevive aqui como MARCADOR PROIBIDO: prova que o cancelamento e o
+ * gerador de fixtures não leem nem gravam o registro local legado de metas.
+ */
+const CHAVE_METAS_LEGADA = "feedback-control-metas";
 
 const gerente: Colaborador = {
   matricula: 1,
@@ -52,11 +59,12 @@ describe("cancelarCiclo", () => {
 
   it("permite ao gerente cancelar ciclo ativo com auditoria e preserva dados", () => {
     const feedbacks = [{ id: "avaliacao", conteudo: "preservado" }];
-    const metas = [{ id: "meta", conteudo: "preservado" }];
     const observacoes = [{ id: "observacao", conteudo: "preservado" }];
     localStorage.setItem("feedback-control-feedbacks", JSON.stringify(feedbacks));
-    localStorage.setItem("feedback-control-metas", JSON.stringify(metas));
     localStorage.setItem("feedback-control-observacoes", JSON.stringify(observacoes));
+
+    const gravar = vi.spyOn(localStorage, "setItem");
+    const ler = vi.spyOn(localStorage, "getItem");
 
     const cancelado = cancelarCiclo(ativo.id, "  Interrupção necessária  ", gerente);
 
@@ -74,14 +82,24 @@ describe("cancelarCiclo", () => {
     expect(Number.isNaN(Date.parse(cancelado.cancelamento!.data))).toBe(false);
     expect(getCicloAtivo()).toBeUndefined();
     expect(JSON.parse(localStorage.getItem("feedback-control-feedbacks")!)).toEqual(feedbacks);
-    expect(JSON.parse(localStorage.getItem("feedback-control-metas")!)).toEqual(metas);
     expect(JSON.parse(localStorage.getItem("feedback-control-observacoes")!)).toEqual(observacoes);
     expect(() => gerarDadosTesteDoCiclo(ativo, gerente)).toThrow(
       "Dados de ciclo cancelado não podem ser alterados."
     );
     expect(JSON.parse(localStorage.getItem("feedback-control-feedbacks")!)).toEqual(feedbacks);
-    expect(JSON.parse(localStorage.getItem("feedback-control-metas")!)).toEqual(metas);
     expect(JSON.parse(localStorage.getItem("feedback-control-observacoes")!)).toEqual(observacoes);
+
+    // Prova metas-free: nem o cancelamento nem o gerador de fixtures leem ou
+    // gravam o registro local legado de metas.
+    const gravouRegistroLegado = gravar.mock.calls.some(
+      ([chave]) => chave === CHAVE_METAS_LEGADA
+    );
+    const leuRegistroLegado = ler.mock.calls.some(
+      ([chave]) => chave === CHAVE_METAS_LEGADA
+    );
+    expect(gravouRegistroLegado).toBe(false);
+    expect(leuRegistroLegado).toBe(false);
+    expect(localStorage.getItem(CHAVE_METAS_LEGADA)).toBeNull();
   });
 
   it("rejeita não gerente e motivo vazio sem modificar o ciclo", () => {

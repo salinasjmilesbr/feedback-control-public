@@ -37,10 +37,7 @@ import {
   getCicloAtivo,
   formatarPeriodoCiclo,
 } from "../services/cicloAvaliacaoStorage";
-import {
-  getMetasDoColaboradorNoCiclo,
-  metaEstaAprovada,
-} from "../services/metaStorage";
+import { useMetasSoberanasDaAvaliacao } from "./useMetasSoberanasDaAvaliacao";
 import { getColaboradorEfetivoNoCiclo } from "../services/historicoOrganizacionalStorage";
 import { getExpectativaDoColaborador } from "../services/expectativaCargoStorage";
 import "../styles/nova-avaliacao.css";
@@ -218,6 +215,18 @@ function NovoFeedbackPage() {
     return () => window.clearTimeout(timeoutId);
   }, [criterioAberto, criterioParaAlinhar]);
     
+  // F5-10 P6 (Issue #220): "meta formalmente aprovada" é decidida pelos FATOS da
+  // projeção soberana (`aprovacoes[].exigida/vigente`); nenhum helper do domínio
+  // local participa. Erro é AVISO explícito e NÃO bloqueia a avaliação. O hook
+  // fica ANTES de todos os retornos antecipados (regras de hooks).
+  const metasSoberanasDaAvaliacao = useMetasSoberanasDaAvaliacao({
+    organizationId: organizacaoAtivaId ?? null,
+    ano: cicloAtivo?.ano,
+    ciclo: cicloAtivo?.ciclo,
+    matriculaDoAvaliado: Number.isFinite(matricula) ? matricula : undefined,
+  });
+  const metasSemAprovacaoFormal = metasSoberanasDaAvaliacao.semAprovacaoFormal;
+
   if (!colaborador) {
     return (
       <div style={{ padding: "30px" }}>
@@ -256,6 +265,7 @@ function NovoFeedbackPage() {
   }
 
   const contextoAutorizado = authorizationContext;
+
 
   if (!cicloAtivo) {
     return (
@@ -304,13 +314,7 @@ function NovoFeedbackPage() {
     cicloAvaliacao,
     colaborador.matricula
   );
-  const metasDoCiclo = getMetasDoColaboradorNoCiclo(
-    colaborador.matricula,
-    cicloAtivo.id
-  );
-  const metasSemAprovacaoFormal = metasDoCiclo.filter(
-    (meta) => !metaEstaAprovada(meta, colaborador, colaboradores)
-  );
+
 
   const avaliadoresColegiado = (
     colaboradorEfetivo.avaliadoresColegiadoMatriculas ?? []
@@ -1028,6 +1032,22 @@ function NovoFeedbackPage() {
           </p>
         )}
       </section>
+
+      {!metasSoberanasDaAvaliacao.carregando &&
+        metasSoberanasDaAvaliacao.erro && (
+          <section className="new-evaluation-goals-warning" role="alert">
+            <div className="new-evaluation-goals-warning__icon" aria-hidden="true">
+              !
+            </div>
+            <div>
+              <strong>Metas do ciclo indisponíveis</strong>
+              <p>
+                {metasSoberanasDaAvaliacao.erro} A avaliação pode continuar
+                normalmente.
+              </p>
+            </div>
+          </section>
+        )}
 
       {metasSemAprovacaoFormal.length > 0 && (
         <section className="new-evaluation-goals-warning" role="status">

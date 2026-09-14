@@ -1,31 +1,72 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { can } from "../authorization/authorizationPolicy";
-import type { AuthorizationContext } from "../authorization/AuthorizationContext";
-import type { GoalResource } from "../authorization/ResourceContext";
+import { useAuth } from "../auth/AuthContext";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import CollaboratorIdentity from "../components/CollaboratorIdentity";
+import { getColaboradores } from "../services/colaboradorStorage";
+import { obterRepositorioMetasSoberanas } from "../services/acessoMetasSoberanas";
+import { obterRepositorioCiclosSoberanos } from "../services/acessoCiclosSoberanos";
+import type {
+  EscopoMetasSoberanas,
+  GoalRepository,
+  MetaSoberana,
+} from "../application/ports/GoalRepository";
+import type { PapelAprovacaoMeta } from "../infrastructure/supabase/metas/contrato";
 import {
-  formatarPeriodoCiclo,
-  getCiclosAvaliacao,
-} from "../services/cicloAvaliacaoStorage";
+  ERRO_CICLO_NAO_RESOLVIDO,
+  ERRO_OPERACAO,
+  ERRO_SEM_CAMINHO,
+  ERRO_SEM_ORGANIZACAO,
+  aprovacaoDoPapel,
+  mensagemDoErro,
+  metaFormalmenteAprovada,
+  pendenteDoPerfil,
+  relacaoAutorizaPapel,
+} from "./acompanhamentoMetasApoio";
 import {
-  getColaboradorByMatricula,
-  getColaboradores,
-} from "../services/colaboradorStorage";
-import {
-  aprovarMeta,
-  getMetasDoColaboradorNoCiclo,
-  metaEstaAprovada,
-  metaExigeAprovacaoCoordenador,
-} from "../services/metaStorage";
+  collaboratorIdDoLegado,
+  estruturaSoberanaEfetiva,
+} from "../services/estruturaSoberanaCliente";
+import { getCiclosAvaliacao } from "./cicloApresentacaoLegada";
 import { getColaboradorEfetivoNoCiclo } from "../services/historicoOrganizacionalStorage";
-import type { Meta } from "../types/Meta";
+import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import "../styles/ciclos.css";
 import "../styles/metas-gestao.css";
 import "../styles/historico-ciclo.css";
 
-function formatarDataHora(data?: string) {
+/**
+ * F5-10 P6 (Issue #220) — CUTOVER FUNCIONAL do acompanhamento de metas.
+ *
+ * A autoridade de metas desta tela é EXCLUSIVAMENTE a relação CONGELADA devolvida
+ * pela superfície soberana (`goal.listar_por_escopo`, via `GoalRepository`):
+ * `SELF ∪ APROVADOR_GERENTE_CONGELADO ∪ APROVADOR_COORDENADOR_CONGELADO`. Nada
+ * aqui decide autorização: `funcao`, `gestorDiretoMatricula`, `localWorld`,
+ * `can()`, `metaStorage` e `localStorage` NÃO participam da leitura nem da
+ * aprovação de metas (o colegiado, por consequência, não concede acesso).
+ *
+ * A tela usa apenas as metas cujo `relacao` autoriza o ator; quando nenhuma meta
+ * do alvo está nesse conjunto, a resposta é explícita — nunca uma meta vazada nem
+ * um "zero silencioso".
+ *
+ * As decisões PURAS e as mensagens públicas desta tela vivem no módulo
+ * companheiro `./acompanhamentoMetasApoio` (o arquivo exporta só o componente).
+ *
+ * FASE 4 (tratamento assíncrono): o estado EXIBIDO é DERIVADO de uma leitura
+ * CHAVEADA (`leitura?.chave === chave`) — nenhum `setState` síncrono no corpo do
+ * efeito; só o resultado é publicado (dentro do `async`/callbacks). Loading e erro
+ * são explícitos, o clique duplo é bloqueado, o 409 tem mensagem própria com
+ * refresh SOBERANO da leitura e a guarda de unmount (`vigente` no efeito,
+ * `montado` nas mutações) impede publicar depois de desmontar.
+ */
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** O parâmetro de rota já é a identidade SOBERANA do ciclo? */
+function ehUuidCanonico(valor: string | undefined): valor is string {
+  return typeof valor === "string" && UUID.test(valor.trim());
+}
+
+function formatarDataHora(data?: string | null) {
   if (!data) return "Ainda não atualizado";
 
   return new Date(data).toLocaleString("pt-BR", {
@@ -38,8 +79,253 @@ function AcompanhamentoMetasPage() {
   const { cicloId, id } = useParams();
   const navigate = useNavigate();
   const { usuarioAtual } = useUsuarioAtual();
-  const [versao, setVersao] = useState(0);
-  const [erro, setErro] = useState("");
+  const { organizacaoAtivaId } = useAuth();
+
+  // Contexto de autenticação: organização ativa (intenção de UX, revalidada
+  // server-side) e caminho soberano — resolvidos UMA vez (o acessor é memoizado
+  // por sessão de página). Sem organização não há leitura de metas.
+  const [repo] = useState<GoalRepository | null>(() =>
+    obterRepositorioMetasSoberanas()
+  );
+  const organizacaoId =
+    typeof organizacaoAtivaId === "string" && organizacaoAtivaId.length > 0
+      ? organizacaoAtivaId
+      : null;
+
+  /**
+   * Leitura do CICLO, CHAVEADA: `leituraCiclo` só é publicada pelo `async` do
+   * efeito e SÓ vale quando a chave dela é a chave corrente. Chave ausente (falta
+   * organização ativa) ou chave sem resultado = carregando/indisponível — nunca
+   * resolvida por `setState` síncrono no corpo do efeito (fail-closed).
+   */
+  const [leituraCiclo, setLeituraCiclo] = useState<{
+    readonly chave: string;
+    readonly uuid: string | null;
+    readonly legado: CicloAvaliacao | undefined;
+  } | null>(null);
+
+  /**
+   * Leitura SOBERANA do escopo de metas, também CHAVEADA: ausência de resultado
+   * para a chave CORRENTE significa "carregando", e a chave muda na recarga
+   * (refresh soberano pós-409) sem reset de estado local.
+   */
+  const [leituraMetas, setLeituraMetas] = useState<{
+    readonly chave: string;
+    readonly escopo: EscopoMetasSoberanas | null;
+    readonly erro: string;
+  } | null>(null);
+
+  const [erroAprovacao, setErroAprovacao] = useState("");
+  const [aprovandoId, setAprovandoId] = useState<string | null>(null);
+  const [versaoLeitura, setVersaoLeitura] = useState(0);
+
+  /** Tentativas lógicas de aprovação EM ANDAMENTO (retry reutiliza o mesmo id). */
+  const operacoesEmAndamento = useRef(new Map<string, string>());
+  /** Evita publicar estado depois do unmount (resposta em voo descartada). */
+  const montado = useRef(true);
+
+  useEffect(() => {
+    montado.current = true;
+    return () => {
+      montado.current = false;
+    };
+  }, []);
+
+  // Chave da leitura do CICLO: parâmetro de rota + organização ativa. Sem
+  // organização ativa nada é lido (fail-closed) e não existe chave publicável.
+  const chaveCiclo =
+    cicloId && organizacaoId ? `${organizacaoId}|${cicloId}` : null;
+
+  /**
+   * Identidade soberana do ciclo: o parâmetro é o UUID canônico quando já o é;
+   * caso contrário a ÚNICA ponte aceita é a leitura SOBERANA de ciclos (ano/
+   * número são só rótulos). SEM fallback local de ciclo.
+   */
+  useEffect(() => {
+    if (chaveCiclo === null || !organizacaoId) return undefined;
+
+    // A chave só existe com organização ativa: o vínculo abaixo é o MESMO da
+    // chave corrente (nenhum tenant default, nenhuma identidade inventada).
+    const organizationId = organizacaoId;
+    const canonico = ehUuidCanonico(cicloId) ? cicloId : null;
+    let vigente = true;
+
+    void (async () => {
+      if (canonico !== null) {
+        if (vigente) {
+          setLeituraCiclo({ chave: chaveCiclo, uuid: canonico, legado: undefined });
+        }
+        return;
+      }
+
+      // Ponte de APRESENTAÇÃO apenas (ano/número); a identidade vem do servidor.
+      const legado = getCiclosAvaliacao().find((item) => item.id === cicloId);
+      const porta = obterRepositorioCiclosSoberanos();
+
+      if (!porta || !legado) {
+        if (vigente) {
+          setLeituraCiclo({ chave: chaveCiclo, uuid: null, legado: undefined });
+        }
+        return;
+      }
+
+      const resultado = await porta.listarCiclos(organizationId);
+      if (!vigente) return;
+
+      const encontrado = resultado.ok
+        ? resultado.data.find(
+            (ciclo) => ciclo.ano === legado.ano && ciclo.numero === legado.ciclo
+          )
+        : undefined;
+
+      setLeituraCiclo({
+        chave: chaveCiclo,
+        uuid: encontrado ? encontrado.id : null,
+        legado: encontrado ? legado : undefined,
+      });
+    })();
+
+    return () => {
+      vigente = false;
+    };
+  }, [chaveCiclo, cicloId, organizacaoId]);
+
+  // A leitura do ciclo só vale para a chave CORRENTE.
+  const cicloPublicado =
+    leituraCiclo !== null && leituraCiclo.chave === chaveCiclo ? leituraCiclo : null;
+  const cicloUuid = cicloPublicado?.uuid ?? null;
+  const cicloLegado = cicloPublicado?.legado;
+  const erroCiclo =
+    cicloId && !organizacaoId
+      ? ERRO_SEM_ORGANIZACAO
+      : chaveCiclo === null
+      ? ""
+      : cicloPublicado !== null && cicloPublicado.uuid === null
+      ? ERRO_CICLO_NAO_RESOLVIDO
+      : "";
+  const carregandoCiclo = chaveCiclo !== null && cicloPublicado === null;
+
+  // Chave da leitura de METAS: organização + ciclo soberano + versão de recarga.
+  const chaveMetas =
+    organizacaoId && cicloUuid
+      ? `${organizacaoId}|${cicloUuid}|${versaoLeitura}`
+      : null;
+
+  // Leitura SOBERANA do escopo. O ator recebe SOMENTE as metas em que é o dono
+  // (SELF) ou o aprovador CONGELADO; nada é decidido no cliente.
+  useEffect(() => {
+    if (chaveMetas === null || !organizacaoId || !cicloUuid) return undefined;
+
+    // Vínculos NÃO-NULOS da chave corrente: a chave só existe com organização e
+    // ciclo soberano resolvidos (nenhum default, nenhuma identidade inventada).
+    const organizationId = organizacaoId;
+    const cycleId = cicloUuid;
+    let vigente = true;
+
+    void (async () => {
+      if (!repo) {
+        if (vigente) {
+          setLeituraMetas({ chave: chaveMetas, escopo: null, erro: ERRO_SEM_CAMINHO });
+        }
+        return;
+      }
+
+      setErroAprovacao("");
+      const resultado = await repo.listarMetasPorEscopo(organizationId, cycleId);
+      if (!vigente) return;
+
+      if (!resultado.ok) {
+        setLeituraMetas({
+          chave: chaveMetas,
+          escopo: null,
+          erro: mensagemDoErro(resultado.error, ERRO_OPERACAO),
+        });
+        return;
+      }
+
+      setLeituraMetas({ chave: chaveMetas, escopo: resultado.data, erro: "" });
+    })();
+
+    return () => {
+      vigente = false;
+    };
+  }, [chaveMetas, repo, organizacaoId, cicloUuid, versaoLeitura]);
+
+  const recarregarMetas = useCallback(() => {
+    setVersaoLeitura((valor) => valor + 1);
+  }, []);
+
+  /**
+   * Aprovação soberana de UMA meta por UM papel: `expectedVersion` vem da meta
+   * LIDA e o `operationId` é estável por tentativa lógica (retry reutiliza; nova
+   * ação gera novo). CONFLICT é tratado explicitamente e força releitura.
+   */
+  const aprovar = useCallback(
+    async (meta: MetaSoberana, papel: PapelAprovacaoMeta) => {
+      if (!repo || !organizacaoId) {
+        setErroAprovacao(ERRO_SEM_CAMINHO);
+        return;
+      }
+
+      // Clique duplo/concorrência de UI: uma execução por meta por vez.
+      if (aprovandoId !== null) return;
+      setAprovandoId(meta.id);
+      setErroAprovacao("");
+
+      const operationId =
+        operacoesEmAndamento.current.get(meta.id) ?? crypto.randomUUID();
+      operacoesEmAndamento.current.set(meta.id, operationId);
+
+      try {
+        const resultado = await repo.aprovarMeta({
+          organizationId: organizacaoId,
+          goalId: meta.id,
+          papel,
+          expectedVersion: meta.version,
+          operationId,
+        });
+
+        if (!montado.current) return;
+
+        // Tentativa encerrada (sucesso ou conflito): a próxima ação é NOVA.
+        operacoesEmAndamento.current.delete(meta.id);
+        setAprovandoId(null);
+
+        if (!resultado.ok) {
+          setErroAprovacao(mensagemDoErro(resultado.error, ERRO_OPERACAO));
+          // 409/CONFLICT (e qualquer falha): refresh SOBERANO, sem estado local.
+          if (resultado.error.code === "CONFLICT") recarregarMetas();
+          return;
+        }
+
+        recarregarMetas();
+      } catch {
+        if (!montado.current) return;
+
+        // Falha de transporte: a tentativa lógica CONTINUA (retry reutiliza o id).
+        setAprovandoId(null);
+        setErroAprovacao(ERRO_OPERACAO);
+      }
+    },
+    [repo, organizacaoId, aprovandoId, recarregarMetas]
+  );
+
+  const metasPublicadas =
+    leituraMetas !== null && leituraMetas.chave === chaveMetas ? leituraMetas : null;
+  const escopo = metasPublicadas?.escopo ?? null;
+  const erroMetas = metasPublicadas?.erro ?? "";
+  const carregandoMetas = chaveMetas !== null && metasPublicadas === null;
+
+  /**
+   * Rota de retorno ao ciclo: SÓ navega com identidade soberana resolvida. Sem
+   * UUID o clique volta ao histórico (`navigate(-1)`) — jamais `-1` no lugar de
+   * uma rota, jamais uma rota inventada.
+   */
+  const rotaDoCiclo = cicloUuid ? `/ciclos/${cicloUuid}` : null;
+  const voltarAoCiclo = useCallback(() => {
+    if (rotaDoCiclo) navigate(rotaDoCiclo);
+    else navigate(-1);
+  }, [navigate, rotaDoCiclo]);
 
   if (!usuarioAtual) {
     return (
@@ -52,61 +338,66 @@ function AcompanhamentoMetasPage() {
     );
   }
 
-  const ciclo = getCiclosAvaliacao().find((item) => item.id === cicloId);
+  const colaboradores = getColaboradores();
   const matricula = Number(id);
-  const colaborador = Number.isFinite(matricula)
-    ? getColaboradorByMatricula(matricula)
+  const colaboradorAlvo = Number.isFinite(matricula)
+    ? colaboradores.find((item) => item.matricula === matricula)
     : undefined;
 
-  if (!ciclo || !colaborador) {
+  // Ponte SOBERANA matrícula → UUID: a matrícula é apenas o rótulo da URL.
+  const estruturaSoberana = estruturaSoberanaEfetiva(colaboradores);
+  const colaboradorUuid =
+    Number.isFinite(matricula) && colaboradorAlvo
+      ? collaboratorIdDoLegado(estruturaSoberana, matricula)
+      : null;
+
+  if (!colaboradorAlvo || !colaboradorUuid) {
     return (
       <main className="virtus-page">
         <section className="cycle-empty">
           <h1>Metas não encontradas</h1>
+          <p>Não foi possível identificar o colaborador pelo caminho soberano.</p>
+          <button
+            className="cycle-btn cycle-btn--secondary"
+            onClick={() => navigate(-1)}
+          >
+            Voltar
+          </button>
         </section>
       </main>
     );
   }
 
-  const usuario = usuarioAtual;
-  const cicloAtual = ciclo;
-  const colaboradorAtual = colaborador;
-  const colaboradores = getColaboradores();
-  const colaboradorEfetivo = getColaboradorEfetivoNoCiclo(
-    colaboradorAtual,
-    cicloAtual,
-    colaboradores
-  );
-  const authorizationContext: AuthorizationContext = {
-    actor: {
-      matricula: usuario.matricula,
-      funcao: usuario.funcao,
-      status: usuario.status,
-    },
-  };
-  const goalResource: GoalResource = {
-    kind: "goal",
-    owner: colaboradorAtual,
-    collaborators: colaboradores,
-    cycle: cicloAtual,
-  };
-  const podeAprovarComoGerente = can(
-    authorizationContext,
-    "goal.approve.manager",
-    goalResource
-  );
-  const podeAprovarComoCoordenador = can(
-    authorizationContext,
-    "goal.approve.coordinator",
-    goalResource
-  );
-  const podeAcessar = can(
-    authorizationContext,
-    "goal.view.admin",
-    goalResource
+  const metasAutorizadas = (escopo?.metas ?? []).filter(
+    (meta) => meta.collaboratorId === colaboradorUuid
   );
 
-  if (!podeAcessar) {
+  if (metasAutorizadas.length === 0) {
+    const aindaCarregando = carregandoCiclo || carregandoMetas;
+
+    if (aindaCarregando || erroCiclo || erroMetas || !escopo) {
+      return (
+        <main className="virtus-page goals-manager-page">
+          <section className="cycle-empty">
+            <h1>Acompanhamento de Metas</h1>
+            {aindaCarregando ? (
+              <p role="status">Carregando metas do ciclo…</p>
+            ) : (
+              <p role="alert">{erroCiclo || erroMetas || ERRO_OPERACAO}</p>
+            )}
+            <button
+              className="cycle-btn cycle-btn--secondary"
+              onClick={() => navigate(-1)}
+            >
+              Voltar
+            </button>
+          </section>
+        </main>
+      );
+    }
+
+    // Nenhuma meta do alvo está no escopo autorizado do ator: é exatamente o
+    // caso do vínculo apenas de colegiado (e de qualquer relação não congelada).
     return (
       <main className="virtus-page">
         <section className="cycle-empty">
@@ -117,7 +408,7 @@ function AcompanhamentoMetasPage() {
           </p>
           <button
             className="cycle-btn cycle-btn--secondary"
-            onClick={() => navigate(`/ciclos/${cicloAtual.id}`)}
+            onClick={voltarAoCiclo}
           >
             Voltar ao ciclo
           </button>
@@ -126,14 +417,19 @@ function AcompanhamentoMetasPage() {
     );
   }
 
-  void versao;
-  const metas = getMetasDoColaboradorNoCiclo(colaboradorAtual.matricula, cicloAtual.id);
+  const metas = metasAutorizadas;
+  const cicloStatus = escopo?.cicloStatus ?? null;
+  const papelDoAtor: PapelAprovacaoMeta | null = metas.some((meta) =>
+    relacaoAutorizaPapel(meta.relacao, "GERENTE")
+  )
+    ? "GERENTE"
+    : metas.some((meta) => relacaoAutorizaPapel(meta.relacao, "COORDENADOR"))
+    ? "COORDENADOR"
+    : null;
 
   const negocio = metas.filter((meta) => meta.tipo === "NEGOCIO_PROJETO");
   const individuais = metas.filter((meta) => meta.tipo === "INDIVIDUAL");
-  const aprovadas = metas.filter((meta) =>
-    metaEstaAprovada(meta, colaboradorAtual, colaboradores)
-  ).length;
+  const aprovadas = metas.filter((meta) => metaFormalmenteAprovada(meta)).length;
   const progressoMedio = metas.length
     ? Math.round(
         metas.reduce(
@@ -144,44 +440,26 @@ function AcompanhamentoMetasPage() {
     : 0;
 
   const pendentesDoPerfil =
-    cicloAtual.status === "CANCELADO"
+    cicloStatus === "CANCELADO"
       ? 0
-      : metas.filter((meta) => {
-          if (!podeAcessar) {
-            return false;
-          }
+      : metas.filter((meta) => pendenteDoPerfil(meta, papelDoAtor)).length;
 
-          return podeAprovarComoGerente
-            ? !meta.aprovacaoGerente
-            : !meta.aprovacaoCoordenador;
-        }).length;
+  const colaboradorEfetivo =
+    cicloLegado === undefined
+      ? colaboradorAlvo
+      : getColaboradorEfetivoNoCiclo(colaboradorAlvo, cicloLegado, colaboradores);
 
-  function aprovar(meta: Meta) {
-    setErro("");
-
-    try {
-      aprovarMeta(meta.id, usuario, colaboradorAtual, cicloAtual);
-      setVersao((valor) => valor + 1);
-    } catch (error) {
-      setErro(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível aprovar a meta."
-      );
-    }
+  function podeAprovarComo(papel: PapelAprovacaoMeta): boolean {
+    return metas.some((meta) => relacaoAutorizaPapel(meta.relacao, papel));
   }
 
-  function renderMeta(meta: Meta, indice: number) {
-    const exigeCoordenador = metaExigeAprovacaoCoordenador(
-      colaboradorAtual,
-      colaboradores,
-      cicloAtual
-    );
-    const aprovada = metaEstaAprovada(meta, colaboradorAtual, colaboradores);
-    const podeAprovarDoPerfil =
-      cicloAtual.status === "ATIVO" &&
-      ((podeAprovarComoGerente && !meta.aprovacaoGerente) ||
-        (podeAprovarComoCoordenador && !meta.aprovacaoCoordenador));
+  function renderMeta(meta: MetaSoberana, indice: number) {
+    const aprovacaoGerente = aprovacaoDoPapel(meta, "GERENTE");
+    const aprovacaoCoordenador = aprovacaoDoPapel(meta, "COORDENADOR");
+    const exigeCoordenador = Boolean(aprovacaoCoordenador?.exigida);
+    const aprovada = metaFormalmenteAprovada(meta);
+    const emExecucao = aprovandoId === meta.id;
+    const podeAprovar = cicloStatus === "ATIVO" && !emExecucao;
 
     return (
       <article className="goals-manager-card" key={meta.id}>
@@ -225,12 +503,9 @@ function AcompanhamentoMetasPage() {
 
         <div className="goals-manager-result">
           <span>Resultado atual</span>
-          <strong>
-            {meta.resultadoAtual?.trim() || "Ainda não informado"}
-          </strong>
+          <strong>{meta.resultadoAtual?.trim() || "Ainda não informado"}</strong>
           <small>
-            Última atualização:{" "}
-            {formatarDataHora(meta.dataUltimoAcompanhamento)}
+            Última atualização: {formatarDataHora(meta.dataUltimoAcompanhamento)}
           </small>
         </div>
 
@@ -248,28 +523,26 @@ function AcompanhamentoMetasPage() {
         <div className="goals-manager-approvals">
           {exigeCoordenador && (
             <label
-              className={
-                meta.aprovacaoCoordenador ? "is-approved" : ""
-              }
+              className={aprovacaoCoordenador?.vigente ? "is-approved" : ""}
             >
               <input
                 type="checkbox"
-                checked={Boolean(meta.aprovacaoCoordenador)}
+                checked={Boolean(aprovacaoCoordenador?.vigente)}
                 disabled={
-                  Boolean(meta.aprovacaoCoordenador) ||
-                  !podeAprovarComoCoordenador ||
-                  cicloAtual.status !== "ATIVO"
+                  Boolean(aprovacaoCoordenador?.vigente) ||
+                  !podeAprovarComo("COORDENADOR") ||
+                  !podeAprovar
                 }
-                onChange={() => aprovar(meta)}
+                onChange={() => void aprovar(meta, "COORDENADOR")}
               />
               <span>
                 <strong>Aprovação do coordenador direto</strong>
                 <small>
-                  {meta.aprovacaoCoordenador
-                    ? `${meta.aprovacaoCoordenador.nome} · ${formatarDataHora(
-                        meta.aprovacaoCoordenador.data
+                  {aprovacaoCoordenador?.vigente
+                    ? `${aprovacaoCoordenador.aprovadorCollaboratorId ?? ""} · ${formatarDataHora(
+                        aprovacaoCoordenador.decididoEm
                       )}`
-                    : podeAprovarComoCoordenador && podeAprovarDoPerfil
+                    : podeAprovarComo("COORDENADOR") && podeAprovar
                     ? "Marque para aprovar esta meta."
                     : "Aguardando aprovação."}
                 </small>
@@ -277,27 +550,25 @@ function AcompanhamentoMetasPage() {
             </label>
           )}
 
-          <label
-            className={meta.aprovacaoGerente ? "is-approved" : ""}
-          >
+          <label className={aprovacaoGerente?.vigente ? "is-approved" : ""}>
             <input
               type="checkbox"
-              checked={Boolean(meta.aprovacaoGerente)}
+              checked={Boolean(aprovacaoGerente?.vigente)}
               disabled={
-                Boolean(meta.aprovacaoGerente) ||
-                !podeAprovarComoGerente ||
-                cicloAtual.status !== "ATIVO"
+                Boolean(aprovacaoGerente?.vigente) ||
+                !podeAprovarComo("GERENTE") ||
+                !podeAprovar
               }
-              onChange={() => aprovar(meta)}
+              onChange={() => void aprovar(meta, "GERENTE")}
             />
             <span>
               <strong>Aprovação do gerente</strong>
               <small>
-                {meta.aprovacaoGerente
-                  ? `${meta.aprovacaoGerente.nome} · ${formatarDataHora(
-                      meta.aprovacaoGerente.data
+                {aprovacaoGerente?.vigente
+                  ? `${aprovacaoGerente.aprovadorCollaboratorId ?? ""} · ${formatarDataHora(
+                      aprovacaoGerente.decididoEm
                     )}`
-                  : podeAprovarComoGerente && podeAprovarDoPerfil
+                  : podeAprovarComo("GERENTE") && podeAprovar
                   ? "Marque para aprovar esta meta."
                   : "Aguardando aprovação."}
               </small>
@@ -305,10 +576,9 @@ function AcompanhamentoMetasPage() {
           </label>
         </div>
 
-        {!aprovada && cicloAtual.status === "ENCERRADO" && (
+        {!aprovada && cicloStatus === "ENCERRADO" && (
           <div className="goals-manager-warning">
-            O ciclo foi encerrado com esta meta sem todas as aprovações
-            formais.
+            O ciclo foi encerrado com esta meta sem todas as aprovações formais.
           </div>
         )}
       </article>
@@ -318,7 +588,7 @@ function AcompanhamentoMetasPage() {
   function renderGrupo(
     titulo: string,
     descricao: string,
-    metasGrupo: Meta[]
+    metasGrupo: MetaSoberana[]
   ) {
     return (
       <section className="goals-manager-section">
@@ -350,20 +620,21 @@ function AcompanhamentoMetasPage() {
         <div className="virtus-page-header__copy">
           <h1>Acompanhamento de Metas</h1>
           <p>
-            {cicloAtual.ano} • Ciclo {cicloAtual.ciclo} ·{" "}
-            {formatarPeriodoCiclo(cicloAtual.dataInicio, cicloAtual.dataFim)}
+            {cicloLegado
+              ? `${cicloLegado.ano} • Ciclo ${cicloLegado.ciclo}`
+              : "Ciclo soberano"}
           </p>
         </div>
 
         <div className="virtus-page-actions goals-manager-page__actions">
           <span
             className={`cycle-status ${
-              cicloAtual.status === "ATIVO" ? "is-active" : "is-closed"
+              cicloStatus === "ATIVO" ? "is-active" : "is-closed"
             }`}
           >
-            {cicloAtual.status === "ATIVO"
+            {cicloStatus === "ATIVO"
               ? "Ciclo ativo"
-              : cicloAtual.status === "CANCELADO"
+              : cicloStatus === "CANCELADO"
               ? "Ciclo cancelado"
               : "Ciclo encerrado"}
           </span>
@@ -371,7 +642,7 @@ function AcompanhamentoMetasPage() {
           <button
             type="button"
             className="virtus-btn virtus-btn--outline"
-            onClick={() => navigate(`/ciclos/${cicloAtual.id}`)}
+            onClick={voltarAoCiclo}
           >
             ← Voltar ao ciclo
           </button>
@@ -409,26 +680,30 @@ function AcompanhamentoMetasPage() {
         </article>
       </section>
 
-      {erro && <div className="goals-manager-error">{erro}</div>}
-
-      {metas.length === 0 ? (
-        <div className="goals-manager-empty goals-manager-empty--page">
-          Nenhuma meta cadastrada para este colaborador neste ciclo.
-        </div>
-      ) : (
-        <div className="goals-manager-sections">
-          {renderGrupo(
-            "Negócio / Projetos",
-            "Metas relacionadas às entregas, resultados e prioridades do negócio.",
-            negocio
-          )}
-          {renderGrupo(
-            "Individuais",
-            "Metas de desenvolvimento e evolução individual.",
-            individuais
-          )}
+      {erroAprovacao && (
+        <div className="goals-manager-error" role="alert">
+          {erroAprovacao}
         </div>
       )}
+
+      {carregandoMetas && (
+        <div className="goals-manager-empty" role="status">
+          Atualizando metas…
+        </div>
+      )}
+
+      <div className="goals-manager-sections">
+        {renderGrupo(
+          "Negócio / Projetos",
+          "Metas relacionadas às entregas, resultados e prioridades do negócio.",
+          negocio
+        )}
+        {renderGrupo(
+          "Individuais",
+          "Metas de desenvolvimento e evolução individual.",
+          individuais
+        )}
+      </div>
     </main>
   );
 }
