@@ -32,7 +32,7 @@
 --   I  estrutura viva/overlay NAO transfere autoridade (ocorrencia original
 --      encerrada => fail-closed);
 --   J  ACL/anti-escopo: 9 RPCs, derivacao na estrutura congelada, zero DELETE,
---      zero policy e P4/P5 nao antecipadas;
+--      zero policy nas 4 tabelas de metas (D22-A) e P5 nao antecipada;
 --   K  estado final deterministico (fatos vigentes/revogados e eventos).
 --
 -- Saida deterministica: um `[PASS]` por bloco; qualquer falha aborta.
@@ -1205,56 +1205,28 @@ begin
     end if;
   end loop;
 
-  -- (J5) RLS da P4: `evaluation_goals` e `evaluation_goal_approvals` tem
-  --      EXATAMENTE a policy de SELECT own-tenant do contrato (nome exato, role
-  --      authenticated, predicado de membership ativa do F4-08 e SEM WITH CHECK)
-  --      + SELECT minimo concedido ao cliente e NENHUMA escrita; a trilha e as
-  --      quotas seguem deny-by-default INTEGRAL (zero policy e zero privilegio
-  --      de cliente); `service_role` continua sem DELETE/TRUNCATE nas 4.
-  foreach v_tab in array array[
-    'evaluation_goals', 'evaluation_goal_approvals'] loop
-    if not exists (
-      select 1 from pg_policies
-       where schemaname = 'public' and tablename = v_tab
-         and policyname = v_tab || '_select_same_tenant'
-         and cmd = 'SELECT'
-         and 'authenticated' = any (roles)
-         and position('user_has_active_membership(organization_id)'
-                      in coalesce(qual, '')) > 0
-         and with_check is null
-    ) then
-      v_prob := v_prob || (v_tab || ': policy SELECT own-tenant da P4 ausente ou divergente');
-    end if;
-    if (select count(*) from pg_policies
-         where schemaname = 'public' and tablename = v_tab) <> 1 then
-      v_prob := v_prob || (v_tab || ': numero de policies diferente de 1 (P4)');
-    end if;
-    if has_table_privilege('authenticated', 'public.' || v_tab, 'SELECT') is not true then
-      v_prob := v_prob || (v_tab || ': authenticated sem SELECT (leitura own-tenant da P4)');
-    end if;
-    if has_table_privilege('authenticated', 'public.' || v_tab, 'INSERT')
-       or has_table_privilege('authenticated', 'public.' || v_tab, 'UPDATE')
-       or has_table_privilege('authenticated', 'public.' || v_tab, 'DELETE')
-       or has_table_privilege('authenticated', 'public.' || v_tab, 'TRUNCATE') then
-      v_prob := v_prob || ('escrita de cliente aberta em ' || v_tab);
-    end if;
-    if has_table_privilege('anon', 'public.' || v_tab, 'SELECT') then
-      v_prob := v_prob || ('leitura de anon aberta em ' || v_tab);
-    end if;
-  end loop;
-  foreach v_tab in array array[
-    'evaluation_goal_events', 'evaluation_cycle_goal_limits'] loop
-    if exists (select 1 from pg_policies where schemaname = 'public' and tablename = v_tab) then
-      v_prob := v_prob || ('policy criada em ' || v_tab || ' (deny-by-default integral da P1/P4)');
-    end if;
-    if has_table_privilege('authenticated', 'public.' || v_tab, 'SELECT')
-       or has_table_privilege('anon', 'public.' || v_tab, 'SELECT') then
-      v_prob := v_prob || ('leitura de cliente aberta em ' || v_tab);
-    end if;
-  end loop;
+  -- (J5) D22-A: as 4 tabelas de metas voltaram a DENY-BY-DEFAULT INTEGRAL —
+  --      ZERO policy e ZERO privilegio de cliente (a exposicao SELECT da F5-10 P4
+  --      foi REVOGADA por decisao; a leitura funcional passa exclusivamente pela
+  --      superficie soberana `meta_listar_por_escopo`); `service_role` continua
+  --      sem DELETE/TRUNCATE em nenhuma delas.
   foreach v_tab in array array[
     'evaluation_goals', 'evaluation_goal_approvals',
     'evaluation_goal_events', 'evaluation_cycle_goal_limits'] loop
+    if exists (select 1 from pg_policies
+                where schemaname = 'public' and tablename = v_tab) then
+      v_prob := v_prob || ('policy criada em ' || v_tab || ' (D22-A exige deny-by-default integral)');
+    end if;
+    if has_table_privilege('authenticated', 'public.' || v_tab, 'SELECT')
+       or has_table_privilege('authenticated', 'public.' || v_tab, 'INSERT')
+       or has_table_privilege('authenticated', 'public.' || v_tab, 'UPDATE')
+       or has_table_privilege('authenticated', 'public.' || v_tab, 'DELETE')
+       or has_table_privilege('authenticated', 'public.' || v_tab, 'TRUNCATE')
+       or has_table_privilege('authenticated', 'public.' || v_tab, 'REFERENCES')
+       or has_table_privilege('authenticated', 'public.' || v_tab, 'TRIGGER')
+       or has_table_privilege('anon', 'public.' || v_tab, 'SELECT') then
+      v_prob := v_prob || ('privilegio de cliente em ' || v_tab || ' (D22-A exige zero)');
+    end if;
     if has_table_privilege('service_role', 'public.' || v_tab, 'DELETE')
        or has_table_privilege('service_role', 'public.' || v_tab, 'TRUNCATE') then
       v_prob := v_prob || ('service_role com DELETE/TRUNCATE em ' || v_tab);
@@ -1295,7 +1267,7 @@ begin
     raise exception '[FAIL] J6: o fato foi APAGADO fisicamente';
   end if;
 
-  raise notice '[PASS] J: 2 RPCs + 3 helpers INVOKER com EXECUTE so service_role, derivacao na estrutura CONGELADA, D19 conectada, zero DELETE de fatos, zero policy/P4/P5 e catalogo intacto';
+  raise notice '[PASS] J: 2 RPCs + 3 helpers INVOKER com EXECUTE so service_role, derivacao na estrutura CONGELADA, D19 conectada, zero DELETE de fatos, as 4 tabelas de metas deny-by-default integral (ZERO policy e ZERO privilegio de cliente — D22-A), P5 nao antecipada e catalogo intacto';
 end $$;
 
 -- ============================================================================

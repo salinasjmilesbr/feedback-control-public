@@ -5,3 +5,4 @@
  */
 export type { CycleRepository } from "./CycleRepository";
 export type { CollaboratorRepository } from "./CollaboratorRepository";
+export type { GoalRepository } from "./GoalRepository";

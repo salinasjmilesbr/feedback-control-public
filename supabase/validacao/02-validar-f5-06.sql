@@ -9,9 +9,8 @@
 \set ON_ERROR_STOP on
 
 -- ============================================================================
--- 1) Schema: 13 tabelas, RLS habilitado, deny-by-default (excecoes: as policies
---    de SELECT own-tenant de `evaluation_cycles` — F5-09 P5 — e de
---    `evaluation_goals`/`evaluation_goal_approvals` — F5-10 P4)
+-- 1) Schema: 13 tabelas, RLS habilitado, deny-by-default (excecao unica: a
+--    policy de SELECT own-tenant de `evaluation_cycles` — F5-09 P5)
 -- ============================================================================
 do $$
 declare
@@ -55,14 +54,16 @@ end $$;
 -- A partir do F5-09 P5 (migration 20260919000000) `evaluation_cycles` deixa de ser
 -- deny-by-default para LEITURA: passa a ter UMA policy de SELECT own-tenant para
 -- `authenticated` (predicado `user_has_active_membership(organization_id)`).
--- A F5-10 P4 (migration 20260925000000) faz o MESMO movimento em DUAS tabelas do
--- dominio de metas, que tambem casam com `evaluation%`:
--- `evaluation_goals_select_same_tenant` e
--- `evaluation_goal_approvals_select_same_tenant`.
--- Essas TRES policies sao as UNICAS excecoes admitidas aqui; qualquer outra policy
--- nas tabelas que casam com `evaluation%` (inclusive de escrita) continua falha.
--- `evaluation_goal_events` e `evaluation_cycle_goal_limits` continuam
--- deny-by-default (zero policy).
+-- A F5-10 P5 / D22-A (migration 20260927000000) REVOGOU a exposicao SELECT que a
+-- F5-10 P4 havia contratado em DUAS tabelas do dominio de metas que tambem casam
+-- com `evaluation%`: `evaluation_goals` e `evaluation_goal_approvals` voltaram a
+-- DENY-BY-DEFAULT INTEGRAL (ZERO policy e ZERO privilegio de cliente), porque a
+-- leitura funcional de metas passa exclusivamente pela superficie soberana
+-- (`meta_listar_por_escopo`).
+-- Logo, `evaluation_cycles_select_same_tenant` e a UNICA excecao admitida aqui;
+-- qualquer outra policy nas tabelas que casam com `evaluation%` (inclusive de
+-- escrita) continua falha — em especial as 4 tabelas de metas, que exigem ZERO
+-- policy.
 -- ----------------------------------------------------------------------------
 do $$
 declare
@@ -78,23 +79,13 @@ begin
         and p.cmd = 'SELECT'
         and p.roles = array['authenticated']::name[]
         and p.qual like '%user_has_active_membership%')
-       or (p.tablename = 'evaluation_goals'
-        and p.policyname = 'evaluation_goals_select_same_tenant'
-        and p.cmd = 'SELECT'
-        and p.roles = array['authenticated']::name[]
-        and p.qual like '%user_has_active_membership%')
-       or (p.tablename = 'evaluation_goal_approvals'
-        and p.policyname = 'evaluation_goal_approvals_select_same_tenant'
-        and p.cmd = 'SELECT'
-        and p.roles = array['authenticated']::name[]
-        and p.qual like '%user_has_active_membership%')
      );
 
   if v_indevidas > 0 then
     raise exception '[FAIL] policy indevida nas tabelas que casam com evaluation%% (deny-by-default violado): %', v_indevidas;
   end if;
 
-  raise notice '[PASS] nenhuma policy indevida nas tabelas evaluation%% (excecoes conformes e explicitas: SELECT own-tenant de evaluation_cycles — F5-09 P5 —, evaluation_goals e evaluation_goal_approvals — F5-10 P4)';
+  raise notice '[PASS] nenhuma policy indevida nas tabelas evaluation%% (excecao unica e explicita: SELECT own-tenant de evaluation_cycles — F5-09 P5 —; as 4 tabelas de metas sao deny-by-default integral por D22-A)';
 end $$;
 
 -- ============================================================================

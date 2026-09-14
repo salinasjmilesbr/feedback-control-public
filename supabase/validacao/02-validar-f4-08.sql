@@ -120,12 +120,13 @@ declare v_tab text;
     'collegiate_cycle_snapshot_members','capabilities',
     -- F5-09 P5: `evaluation_cycles` passa a ser LEGIVEL (policy own-tenant +
     -- grant minimo de SELECT), deixando a categoria "tabela fechada".
-    'evaluation_cycles',
-    -- F5-10 P4: `evaluation_goals` e `evaluation_goal_approvals` tambem passam a
-    -- ser LEGIVEIS (UMA policy de SELECT own-tenant cada + grant minimo de
-    -- SELECT), deixando a categoria "tabela fechada". `evaluation_goal_events` e
-    -- `evaluation_cycle_goal_limits` continuam fechadas (deny-by-default).
-    'evaluation_goals','evaluation_goal_approvals'];
+    'evaluation_cycles'];
+  -- F5-10 P5 (D22-A): `evaluation_goals` e `evaluation_goal_approvals` voltaram a
+  -- ser DENY-BY-DEFAULT INTEGRAL (ZERO policy e ZERO privilegio de cliente). A
+  -- exposicao SELECT da P4 foi REVOGADA por decisao aprovada, nao por defeito: a
+  -- leitura funcional de metas passa exclusivamente pela superficie soberana
+  -- (`meta_listar_por_escopo`, executada por `service_role`). As 4 tabelas de
+  -- metas estao na lista `v_closed` abaixo.
   -- F5-07: `collaborator_events` e APPEND-ONLY. Recebe policy SELECT
   -- own-tenant (contrato F5-07 §10.2) mas NAO recebe grant a `authenticated`
   -- (espinha F5-07 §1.2): leitura somente pela RPC server-side. Categoria
@@ -151,7 +152,7 @@ begin
       raise exception '[FAIL] authenticated com SELECT no log append-only public.%', v_tab;
     end if;
   end loop;
-  raise notice '[PASS] 21 tabelas legiveis com policy SELECT (18 F4-08 + evaluation_cycles do P5 + evaluation_goals/evaluation_goal_approvals do P4) e 1 log append-only com policy own-tenant sem grant';
+  raise notice '[PASS] 19 tabelas legiveis com policy SELECT (18 F4-08 + evaluation_cycles do P5) e 1 log append-only com policy own-tenant sem grant';
 end $$;
 
 do $$
@@ -166,8 +167,10 @@ declare v_tab text;
     'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
     'evaluation_events','evaluation_pendencies','evaluation_aggregates',
     'structure_events','cycle_events',
-    -- F5-10 P4: apenas `evaluation_goal_events` e `evaluation_cycle_goal_limits`
-    -- seguem fechadas; goals/approvals sairam daqui para `v_readable`.
+    -- F5-10 P5 (D22-A): as 4 tabelas de metas voltaram a DENY-BY-DEFAULT
+    -- INTEGRAL (a exposicao SELECT da P4 foi revogada por decisao); goals e
+    -- approvals reentram aqui junto de events/limits.
+    'evaluation_goals','evaluation_goal_approvals',
     'evaluation_goal_events','evaluation_cycle_goal_limits'];
 begin
   foreach v_tab in array v_closed loop
@@ -175,62 +178,59 @@ begin
       raise exception '[FAIL] tabela fechada com policy indevida: %', v_tab;
     end if;
   end loop;
-  raise notice '[PASS] 24 tabelas fechadas permanecem sem policy (21 historicas + evaluation_goal_events/evaluation_cycle_goal_limits da F5-10 P1)';
+  raise notice '[PASS] 26 tabelas fechadas permanecem sem policy (22 historicas + as 4 tabelas de metas, deny-by-default integral por D22-A)';
 end $$;
 
 do $$
 declare v_n int;
 begin
   select count(*) into v_n from pg_policies p where p.schemaname='public';
-  if v_n <> 25 then raise exception '[FAIL] policies esperadas=25, encontradas=%', v_n; end if;
-  raise notice '[PASS] 25 policies (3 identidade + 21 de leitura own-tenant [18 F4-08 + evaluation_cycles do P5 + 2 de metas do P4] + 1 F5-07 append-only)';
+  if v_n <> 23 then raise exception '[FAIL] policies esperadas=23, encontradas=%', v_n; end if;
+  raise notice '[PASS] 23 policies (3 identidade + 19 de leitura own-tenant [18 F4-08 + evaluation_cycles do P5] + 1 F5-07 append-only)';
 end $$;
 
 -- ----------------------------------------------------------------------------
--- F5-10 P4: a leitura de `evaluation_goals`/`evaluation_goal_approvals` e
--- OWN-TENANT e explicita — UMA policy SELECT por tabela, com o nome exato do
--- contrato, role `authenticated` e predicado de membership ativa. Nao basta
--- "existe alguma policy SELECT": a policy precisa ser a do contrato.
+-- F5-10 P5 (D22-A): a leitura de metas NAO passa pela RLS. Por decisao aprovada
+-- (Issue #218, Bloco 2), a exposicao SELECT da P4 foi REVOGADA — as 2 policies
+-- own-tenant foram DROPADAS e o SELECT de `authenticated` foi
+-- revogado, de modo que as 4 tabelas de metas voltaram ao DENY-BY-DEFAULT
+-- INTEGRAL identico ao estado da P1. Nao basta "nao existe policy SELECT":
+-- nenhuma policy de NENHUM cmd pode existir nessas tabelas e o cliente
+-- (`authenticated`/`anon`) nao pode ter NENHUM privilegio de tabela. A leitura
+-- funcional passa exclusivamente pela superficie soberana (`meta_listar_por_escopo`).
 -- ----------------------------------------------------------------------------
 do $$
 declare
-  v_par   record;
-  v_pol   record;
+  v_tab   text;
+  v_priv  text;
   v_falta text[] := array[]::text[];
 begin
-  for v_par in
-    select * from (values
-      ('evaluation_goals','evaluation_goals_select_same_tenant'),
-      ('evaluation_goal_approvals','evaluation_goal_approvals_select_same_tenant')
-    ) as t(tabela, policy)
-  loop
-    if (select count(*) from pg_policies p
-         where p.schemaname='public' and p.tablename=v_par.tabela) <> 1 then
-      v_falta := v_falta || format('%s deveria ter EXATAMENTE 1 policy', v_par.tabela);
-      continue;
+  foreach v_tab in array array[
+    'evaluation_goals', 'evaluation_goal_approvals',
+    'evaluation_goal_events', 'evaluation_cycle_goal_limits'] loop
+    if exists (select 1 from pg_policies p
+                where p.schemaname='public' and p.tablename=v_tab) then
+      v_falta := v_falta || format('%s ainda tem policy', v_tab);
     end if;
-    select p.cmd, p.roles, coalesce(p.qual, '') as qual into v_pol
-      from pg_policies p
-     where p.schemaname='public' and p.tablename=v_par.tabela
-       and p.policyname=v_par.policy;
-    if not found then
-      v_falta := v_falta || format('%s sem policy %s', v_par.tabela, v_par.policy);
-      continue;
-    end if;
-    if v_pol.cmd <> 'SELECT'
-       or not ('authenticated'::name = any(v_pol.roles))
-       or position('user_has_active_membership' in v_pol.qual) = 0
-       or position('organization_id' in v_pol.qual) = 0 then
-      v_falta := v_falta || format('%s: policy %s fora do contrato own-tenant (% / % / %)',
-        v_par.tabela, v_par.policy, v_pol.cmd, array_to_string(v_pol.roles, ','), v_pol.qual);
+    foreach v_priv in array array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'] loop
+      if has_table_privilege('authenticated', format('public.%I', v_tab), v_priv) then
+        v_falta := v_falta || format('%s: authenticated com %s', v_tab, v_priv);
+      end if;
+      if has_table_privilege('anon', format('public.%I', v_tab), v_priv) then
+        v_falta := v_falta || format('%s: anon com %s', v_tab, v_priv);
+      end if;
+    end loop;
+    if has_table_privilege('service_role', format('public.%I', v_tab), 'DELETE')
+       or has_table_privilege('service_role', format('public.%I', v_tab), 'TRUNCATE') then
+      v_falta := v_falta || format('%s: service_role com DELETE/TRUNCATE', v_tab);
     end if;
   end loop;
 
   if array_length(v_falta, 1) is not null then
-    raise exception '[FAIL] policies own-tenant da F5-10 P4 indevidas: %', array_to_string(v_falta, '; ');
+    raise exception '[FAIL] tabelas de metas fora do estado D22-A: %', array_to_string(v_falta, '; ');
   end if;
 
-  raise notice '[PASS] 2 policies de leitura own-tenant da F5-10 P4 com o nome do contrato (evaluation_goals_select_same_tenant, evaluation_goal_approvals_select_same_tenant): SELECT, authenticated, user_has_active_membership(organization_id)';
+  raise notice '[PASS] as 4 tabelas de metas estao DENY-BY-DEFAULT INTEGRAL (ZERO policy) e sem NENHUM privilegio de cliente (authenticated/anon) — decisao D22-A: a leitura funcional passa exclusivamente pela superficie soberana meta_listar_por_escopo (service_role)';
 end $$;
 
 -- ----------------------------------------------------------------------------
@@ -259,9 +259,9 @@ declare
     'evaluation_events','evaluation_pendencies','evaluation_aggregates',
     'collaborator_events',
     'structure_events','cycle_events',
-    -- F5-10 P1 (+ P4): nas 4 tabelas de metas `anon` segue sem NENHUM privilegio
-    -- efetivo (a P4 concede SELECT somente a `authenticated`, por policy
-    -- own-tenant); a categoria aqui e apenas o inventario completo das tabelas.
+    -- F5-10 P1 (+ D22-A): nas 4 tabelas de metas `anon` NAO tem NENHUM privilegio
+    -- efetivo (deny-by-default integral); a categoria aqui e apenas o inventario
+    -- completo das tabelas.
     'evaluation_goals','evaluation_goal_approvals','evaluation_goal_events',
     'evaluation_cycle_goal_limits'];
   v_privs text[] := array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'];
@@ -300,9 +300,9 @@ declare
     'evaluation_events','evaluation_pendencies','evaluation_aggregates',
     'collaborator_events',
     'structure_events','cycle_events',
-    -- F5-10 P1 + P4: metas — o cliente NAO recebe DML (escrita so pela operacao
-    -- soberana da P2, executada por service_role); a P4 concede SOMENTE SELECT em
-    -- goals/approvals (por policy own-tenant), nunca escrita.
+    -- F5-10 P1 + D22-A: metas — o cliente NAO recebe DML nem SELECT (escrita e
+    -- leitura passam exclusivamente pelas operacoes soberanas executadas por
+    -- service_role).
     'evaluation_goals','evaluation_goal_approvals','evaluation_goal_events',
     'evaluation_cycle_goal_limits'];
 begin
@@ -326,10 +326,7 @@ declare v_tab text;
     'cycle_evaluation_responsibilities','collaborator_status_periods',
     'organizations','user_profiles','user_organization_memberships',
     'collegiate_cycle_snapshots','collegiate_cycle_snapshot_positions',
-    'collegiate_cycle_snapshot_members','capabilities','evaluation_cycles',
-    -- F5-10 P4: goals/approvals passam a ser legiveis (policy own-tenant + grant
-    -- minimo de SELECT); a escrita do cliente continua fechada.
-    'evaluation_goals','evaluation_goal_approvals'];
+    'collegiate_cycle_snapshot_members','capabilities','evaluation_cycles'];
   v_closed text[] := array[
     'access_roles','access_role_capabilities','membership_access_role_assignments',
     'membership_collaborator_links','access_role_assignment_scopes',
@@ -340,8 +337,10 @@ declare v_tab text;
     'evaluations','evaluation_participants','evaluation_scores','evaluation_comments',
     'evaluation_events','evaluation_pendencies','evaluation_aggregates',
     'structure_events','cycle_events',
-    -- F5-10 P1 + P4: apenas events/limits das metas seguem FECHADAS
-    -- (deny-by-default integral); goals/approvals sairam para `v_readable`.
+    -- F5-10 P1 + D22-A: as 4 tabelas de metas sao FECHADAS (deny-by-default
+    -- integral, zero policy e zero privilegio de cliente); a leitura funcional
+    -- passa exclusivamente pela superficie soberana `meta_listar_por_escopo`.
+    'evaluation_goals','evaluation_goal_approvals',
     'evaluation_goal_events','evaluation_cycle_goal_limits'];
   -- F5-07: log append-only — tem policy SELECT own-tenant mas NAO tem grant a
   -- `authenticated` (categoria propria; nao e "legivel" nem "fechada").
@@ -362,7 +361,7 @@ begin
       raise exception '[FAIL] authenticated com SELECT no log append-only public.%', v_tab;
     end if;
   end loop;
-  raise notice '[PASS] authenticated com SELECT somente nas tabelas legiveis (21 legiveis: +evaluation_goals/evaluation_goal_approvals da F5-10 P4; 23 fechadas + 1 log append-only sem SELECT)';
+  raise notice '[PASS] authenticated com SELECT somente nas tabelas legiveis (22 legiveis: 18 F4-08 + evaluation_cycles do P5 + organizations/user_profiles/user_organization_memberships; 26 fechadas + 1 log append-only sem SELECT)';
 end $$;
 
 -- ----------------------------------------------------------------------------
@@ -804,14 +803,14 @@ end $$;
 
 do $$
 declare v_t text; v_ok boolean;
-  v_closed text[] := array['access_roles','access_role_capabilities','membership_access_role_assignments','membership_collaborator_links','access_role_assignment_scopes','access_role_assignment_unit_targets','evaluation_succession_events','privilege_mutation_audit','evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria','evaluation_config_scale_bands','evaluation_config_participant_roles','evaluations','evaluation_participants','evaluation_scores','evaluation_comments','evaluation_events','evaluation_pendencies','evaluation_aggregates','collaborator_events','cycle_events'];
+  v_closed text[] := array['access_roles','access_role_capabilities','membership_access_role_assignments','membership_collaborator_links','access_role_assignment_scopes','access_role_assignment_unit_targets','evaluation_succession_events','privilege_mutation_audit','evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria','evaluation_config_scale_bands','evaluation_config_participant_roles','evaluations','evaluation_participants','evaluation_scores','evaluation_comments','evaluation_events','evaluation_pendencies','evaluation_aggregates','collaborator_events','cycle_events','evaluation_goals','evaluation_goal_approvals','evaluation_goal_events','evaluation_cycle_goal_limits'];
 begin
   foreach v_t in array v_closed loop
     v_ok := false;
     begin execute format('select count(*) from public.%I', v_t); exception when insufficient_privilege then v_ok := true; end;
     if not v_ok then raise exception '[FAIL] authenticated leu tabela fechada %', v_t; end if;
   end loop;
-  raise notice '[PASS] 22 tabelas fechadas invisiveis (permission denied) apesar de dados de fixture (goals/approvals sao LEGIVEIS own-tenant desde a F5-10 P4 — nao entram nesta lista)';
+  raise notice '[PASS] 26 tabelas fechadas invisiveis (permission denied) apesar de dados de fixture (as 4 tabelas de metas voltaram a deny-by-default integral por D22-A — a leitura funcional passa pela superficie soberana, nunca pela RLS)';
 end $$;
 
 do $$

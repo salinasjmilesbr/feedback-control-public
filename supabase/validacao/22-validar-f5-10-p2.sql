@@ -20,9 +20,9 @@
 --   G  exclusao logica (linha preservada) e meta excluida sem mutacao;
 --   I  a quota continua autoridade do BANCO (trigger da P1) alem da RPC;
 --   J  ACL/anti-escopo: 7 RPCs INVOKER com lock normativo, EXECUTE so
---      service_role, RLS own-tenant do P4 (1 policy SELECT por tabela legivel,
---      escrita de cliente fechada), trilha/limites deny-by-default,
---      DELETE fisico negado e P5 nao antecipada;
+--      service_role, as 4 tabelas de metas DENY-BY-DEFAULT INTEGRAL por D22-A
+--      (ZERO policy e ZERO privilegio de cliente — a exposicao SELECT do P4 foi
+--      revogada), DELETE fisico negado e P5 nao antecipada;
 --   K  nenhuma aprovacao criada incidentalmente (P3 nao antecipada);
 --   L  estado final deterministico (nenhum residuo dos testes negativos);
 --   M  D21 — limites do ciclo: alteracao valida com version do CICLO +1 e evento
@@ -1276,7 +1276,7 @@ end $$;
 
 -- ============================================================================
 -- 11) J) ACL, lock normativo e anti-escopo (P3/P4 implementadas; P5/D21 nao
---     antecipadas) — RLS own-tenant do P4 nas duas tabelas legiveis
+--     antecipadas) — as 4 tabelas de metas DENY-BY-DEFAULT INTEGRAL (D22-A)
 -- ============================================================================
 do $$
 declare
@@ -1360,66 +1360,28 @@ begin
     end if;
   end loop;
 
-  -- (J3) RLS do P4: as duas tabelas LEGIVEIS tem EXATAMENTE a policy de SELECT
-  --      own-tenant do contrato (nome exato, role authenticated, predicado de
-  --      membership ativa do F4-08 e SEM WITH CHECK) + SELECT minimo concedido ao
-  --      cliente e NENHUM privilegio de escrita. `evaluation_goal_events` e
-  --      `evaluation_cycle_goal_limits` seguem deny-by-default INTEGRAL.
+  -- (J3) RLS/D22-A: as 4 tabelas de metas voltaram a DENY-BY-DEFAULT INTEGRAL —
+  --      ZERO policy e ZERO privilegio de cliente (a exposicao SELECT da F5-10 P4
+  --      foi REVOGADA por decisao; a leitura funcional passa exclusivamente pela
+  --      superficie soberana `meta_listar_por_escopo`). `service_role` mantem a
+  --      matriz de executor tecnico (sem DELETE/TRUNCATE).
   foreach v_tab in array array[
-    'evaluation_goals', 'evaluation_goal_approvals'] loop
+    'evaluation_goals', 'evaluation_goal_approvals',
+    'evaluation_goal_events', 'evaluation_cycle_goal_limits'] loop
     select count(*) into v_n from pg_policies
      where schemaname = 'public' and tablename = v_tab;
-    if v_n <> 1 then
-      v_prob := v_prob || format('%s: %s policies (esperado 1 SELECT own-tenant do P4)', v_tab, v_n);
-    else
-      select * into v_rec from pg_policies
-       where schemaname = 'public' and tablename = v_tab;
-      if v_rec.policyname::text <> (v_tab || '_select_same_tenant') then
-        v_prob := v_prob || format('%s: policy %s (esperado %s)', v_tab, v_rec.policyname, v_tab || '_select_same_tenant');
-      end if;
-      if v_rec.cmd <> 'SELECT' then
-        v_prob := v_prob || format('%s: policy com cmd %s (esperado SELECT)', v_tab, v_rec.cmd);
-      end if;
-      if not ('authenticated' = any (v_rec.roles)) then
-        v_prob := v_prob || format('%s: policy sem a role authenticated', v_tab);
-      end if;
-      if position('user_has_active_membership(organization_id)'
-                  in coalesce(v_rec.qual, '')) = 0 then
-        v_prob := v_prob || format('%s: policy sem o predicado de membership ativa do tenant', v_tab);
-      end if;
-      if v_rec.with_check is not null then
-        v_prob := v_prob || format('%s: policy de SELECT com WITH CHECK', v_tab);
-      end if;
-    end if;
-    if has_table_privilege('authenticated', 'public.' || v_tab, 'SELECT') is not true then
-      v_prob := v_prob || format('%s: authenticated sem SELECT (leitura own-tenant do P4)', v_tab);
-    end if;
-    if has_table_privilege('authenticated', 'public.' || v_tab, 'INSERT')
-       or has_table_privilege('authenticated', 'public.' || v_tab, 'UPDATE')
-       or has_table_privilege('authenticated', 'public.' || v_tab, 'DELETE')
-       or has_table_privilege('authenticated', 'public.' || v_tab, 'TRUNCATE')
-       or has_table_privilege('anon', 'public.' || v_tab, 'SELECT') then
-      v_prob := v_prob || ('privilegio de escrita/anon em ' || v_tab
-        || ' (a P4 concede SOMENTE SELECT a authenticated)');
-    end if;
-    if has_table_privilege('service_role', 'public.' || v_tab, 'DELETE')
-       or has_table_privilege('service_role', 'public.' || v_tab, 'TRUNCATE') then
-      v_prob := v_prob || ('service_role com DELETE/TRUNCATE em ' || v_tab);
-    end if;
-  end loop;
-
-  foreach v_tab in array array[
-    'evaluation_goal_events', 'evaluation_cycle_goal_limits'] loop
-    if exists (select 1 from pg_policies where schemaname = 'public' and tablename = v_tab) then
-      v_prob := v_prob || ('policy indevida em ' || v_tab
-        || ' (trilha/limites seguem deny-by-default integral no P4)');
+    if v_n <> 0 then
+      v_prob := v_prob || format('%s: %s policies (D22-A exige ZERO policy)', v_tab, v_n);
     end if;
     if has_table_privilege('authenticated', 'public.' || v_tab, 'SELECT')
        or has_table_privilege('authenticated', 'public.' || v_tab, 'INSERT')
        or has_table_privilege('authenticated', 'public.' || v_tab, 'UPDATE')
        or has_table_privilege('authenticated', 'public.' || v_tab, 'DELETE')
+       or has_table_privilege('authenticated', 'public.' || v_tab, 'TRUNCATE')
+       or has_table_privilege('authenticated', 'public.' || v_tab, 'REFERENCES')
+       or has_table_privilege('authenticated', 'public.' || v_tab, 'TRIGGER')
        or has_table_privilege('anon', 'public.' || v_tab, 'SELECT') then
-      v_prob := v_prob || ('privilegio de cliente em ' || v_tab || ' (deveria ser zero)');
+      v_prob := v_prob || ('privilegio de cliente em ' || v_tab || ' (D22-A exige zero)');
     end if;
     if has_table_privilege('service_role', 'public.' || v_tab, 'DELETE')
        or has_table_privilege('service_role', 'public.' || v_tab, 'TRUNCATE') then
@@ -1480,7 +1442,7 @@ begin
     raise exception '[FAIL] J6: capabilities de metas/observacoes = % (esperado 8)', v_n;
   end if;
 
-  raise notice '[PASS] J: 7 RPCs INVOKER com lock normativo unico, EXECUTE so service_role, RLS own-tenant do P4 (exatamente 1 policy de SELECT por tabela legivel, nome/predicado do contrato, nenhum privilegio de escrita de cliente), trilha/limites deny-by-default integral, DELETE fisico negado no banco, lista FECHADA de 10 RPCs de meta e nenhuma fase futura antecipada';
+  raise notice '[PASS] J: 7 RPCs INVOKER com lock normativo unico, EXECUTE so service_role, as 4 tabelas de metas DENY-BY-DEFAULT INTEGRAL (ZERO policy, ZERO privilegio de cliente — D22-A revogou a exposicao SELECT do P4), DELETE fisico negado no banco, lista FECHADA de 10 RPCs de meta e nenhuma fase futura antecipada';
 end $$;
 
 -- ============================================================================
@@ -2118,6 +2080,6 @@ end $$;
 do $$
 begin
   raise notice '============================================================';
-  raise notice 'F5-10 P2 (adaptado ao gate funcional da P4): operacoes soberanas de metas validadas — criar, editar, progresso, finalizar, revisar fechamento, excluir logicamente e definir limites do ciclo (D21, evento em cycle_events), com UUID canonico, tenant revalidado, gate de capability/relacao (goal.write + SELF; cycle.manage para limites), expected_version, idempotencia por operation_id, evento append-only, autoria resolvida no banco, lock normativo unico, quota do banco, atomicidade, RLS own-tenant do P4 e zero DELETE fisico.';
+  raise notice 'F5-10 P2 (adaptado ao gate funcional da P4): operacoes soberanas de metas validadas — criar, editar, progresso, finalizar, revisar fechamento, excluir logicamente e definir limites do ciclo (D21, evento em cycle_events), com UUID canonico, tenant revalidado, gate de capability/relacao (goal.write + SELF; cycle.manage para limites), expected_version, idempotencia por operation_id, evento append-only, autoria resolvida no banco, lock normativo unico, quota do banco, atomicidade, as 4 tabelas de metas deny-by-default integral (D22-A) e zero DELETE fisico.';
   raise notice '============================================================';
 end $$;
