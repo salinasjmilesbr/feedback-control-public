@@ -248,17 +248,24 @@ repositório que **não** pertence a esta atividade. Fica registrado como
 **Não executados (e por quê):**
 
 - **job `supabase-local` do CI no SHA exato:** os passos P7 foram adicionados ao
-  workflow, mas o CI só roda **após o push** — a evidência local usa exatamente os
-  mesmos arquivos e a mesma ordem;
+  workflow, mas o CI **ainda não executou** — o `ci.yml` dispara em
+  `pull_request` para `main` e em `push` para `main`, e o push desta branch de
+  atividade **não** dispara o job. Ele rodará quando o **PR for aberto** para
+  `main`; a evidência local usa exatamente os mesmos arquivos e a mesma ordem;
 - **auditoria GPT e auditoria independente Codex:** etapas externas do fluxo,
   posteriores a esta entrega.
 
 ## 7. Métricas DEV-02 / DEV-03
 
-- **Batches privilegiados (elevações): 3** — (1) **P-0** preflight + criação da
+- **Entrega:** commit **`1db70b986d3ce9b90f1521ad0e4d0128834baa31`** na branch
+  `feat/f5-10-p7-validacao-integrada` (8 arquivos, +3873 linhas), **push OK**.
+- **Batches privilegiados (elevações): 5** — (1) **P-0** preflight + criação da
   branch; (2) **P-1** gate focado (que rodou **2×**: a 1ª revelou os 3 defeitos de
   artefato descritos em §5 e a 2ª ficou verde, com causa-raiz analisada **antes**
-  de cada correção); (3) **P-3** gate final (bateria completa + `npm` + commit).
+  de cada correção); (3) **P-3** gate final (bateria SQL completa + `npm`
+  test/build/lint/tsc); (4) **diagnóstico** da falha de `npm test` — mandatório por
+  DEV-03 (root-cause **antes** de nova execução), que produziu a prova
+  CRLF×LF; (5) **commit + push** do fechamento.
   Nenhuma elevação foi usada para "tentativa às cegas".
 - **Repetições justificadas:** o gate focado rodou 2× porque a 1ª execução produziu
   **três informações novas e independentes** (contagem da fixture, escopo do

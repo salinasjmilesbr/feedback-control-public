@@ -39,7 +39,10 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 - **Atividade:** F5-10 **P7** (Issue #232) na branch
   `feat/f5-10-p7-validacao-integrada`, base `main` =
   `f53144ff81cc8e011e68f81b1e3f942f50decb29` (após P6 e os PRs de dependência
-  #229/#230/#231). **Sem PR e sem merge** (ficam com o usuário). F5-11 não iniciada.
+  #229/#230/#231). **Commit da entrega:**
+  `1db70b986d3ce9b90f1521ad0e4d0128834baa31` (8 arquivos, +3873 linhas);
+  **push feito com sucesso** (`origin/feat/f5-10-p7-validacao-integrada`).
+  **Sem PR e sem merge** (ficam com o usuário). F5-11 não iniciada.
 - **Natureza:** **certificação/validação integrada** — **não** é feature e **não**
   cria arquitetura: **zero** migration, RPC, capability, policy, RLS, grant, Edge ou
   página alterados.
