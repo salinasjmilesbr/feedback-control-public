@@ -245,20 +245,53 @@ repositório que **não** pertence a esta atividade. Fica registrado como
 `* text=auto eol=lf`; (b) tornar as asserções insensíveis a fim-de-linha
 (`\r?\n` / normalizar a fonte antes de comparar).
 
-**Não executados (e por quê):**
+### PR #233 e CI no SHA auditado
 
-- **job `supabase-local` do CI no SHA exato:** os passos P7 foram adicionados ao
-  workflow, mas o CI **ainda não executou** — o `ci.yml` dispara em
-  `pull_request` para `main` e em `push` para `main`, e o push desta branch de
-  atividade **não** dispara o job. Ele rodará quando o **PR for aberto** para
-  `main`; a evidência local usa exatamente os mesmos arquivos e a mesma ordem;
-- **auditoria GPT e auditoria independente Codex:** etapas externas do fluxo,
-  posteriores a esta entrega.
+- **PR #233 aberto** — `feat(F5-10): certificar P7 com validação integrada do
+  domínio de metas`, base `main`, corpo com **`Closes #232`**, head
+  `feat/f5-10-p7-validacao-integrada` @
+  **`3d33f68bf51e7e46aa019c4041625a4e33794f45`** (2 commits, 8 arquivos, +3883/−0).
+- **CI verde nesse SHA:** workflow **CI**, **run `34908000458`** / **run_number
+  264**, evento **`pull_request`**, `completed` / **`success`**
+  (2026-09-14T23:15:20Z → 23:16:55Z):
+  - job **`Test, build, lint and diff-check`** (ubuntu-latest) — `success`:
+    `Test`, `Build`, `Lint` e `Check diff whitespace` ✅;
+  - job **`Supabase local — RLS/policy validation`** (ubuntu-latest) — `success`,
+    com os **4 passos novos da P7** verdes (seed `29`, matriz `30`, concorrência
+    `31`/`32` em duas sessões reais + consolidação `33`) e as regressões
+    F5-06/F5-07;
+  - run adicional **CodeQL `34907997442`** — `success`.
+- **O `npm test` passou no runner Linux (`ubuntu-latest`)**, confirmando por
+  evidência externa que as 2 falhas locais eram **exclusivamente o CRLF do working
+  copy Windows** (seção anterior).
+- **Auditoria Codex do SHA `3d33f68…`: CHANGES REQUIRED / DO NOT MERGE, com
+  APENAS dívida documental** — o conteúdo versionado de certificação e o handoff
+  não refletiam o estado real do PR/CI. **Nenhum achado de código, SQL, workflow,
+  `src/` ou arquitetura**; nenhuma correção de código foi necessária.
+
+### Pendências antes do merge
+
+1. **Novo CI no SHA resultante desta correção documental** — obrigatório: este
+   commit gera **novo SHA**, e o CI roda por `pull_request`;
+2. **auditoria delta GPT**;
+3. **auditoria delta Codex**;
+4. **squash merge** — somente com solicitação explícita do responsável.
+
+A correção desta rodada é **estritamente documental**: toca **somente**
+`docs/F5-10-p7-matriz-integrada.md` e `.ai/handoff.md`. Nenhum arquivo SQL, de
+workflow, de `src/` ou de teste foi alterado.
 
 ## 7. Métricas DEV-02 / DEV-03
 
-- **Entrega:** commit **`1db70b986d3ce9b90f1521ad0e4d0128834baa31`** na branch
-  `feat/f5-10-p7-validacao-integrada` (8 arquivos, +3873 linhas), **push OK**.
+- **Entrega:** commits **`1db70b986d3ce9b90f1521ad0e4d0128834baa31`** (8 arquivos,
+  +3873 linhas) e **`3d33f68bf51e7e46aa019c4041625a4e33794f45`** (ajustes
+  documentais) na branch `feat/f5-10-p7-validacao-integrada` — **push OK** e **PR
+  #233 aberto** (CI verde em `3d33f68…`: run `34908000458` / #264). O commit
+  **desta correção documental pós-auditoria Codex** é o **terceiro** da branch e
+  gera **novo SHA**, que exige **novo CI** e **revalidação final** antes do merge.
+  Esta rodada **não** executou full gate local (correção documental, sem impacto em
+  código): validação = `git diff --check` + confirmação de que **somente 2
+  arquivos** mudaram.
 - **Batches privilegiados (elevações): 5** — (1) **P-0** preflight + criação da
   branch; (2) **P-1** gate focado (que rodou **2×**: a 1ª revelou os 3 defeitos de
   artefato descritos em §5 e a 2ª ficou verde, com causa-raiz analisada **antes**
