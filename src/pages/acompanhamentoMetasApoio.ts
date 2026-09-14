@@ -35,13 +35,6 @@ export const ERRO_OPERACAO = "Não foi possível concluir a operação de metas.
 export const ERRO_CONFLITO =
   "A meta foi alterada por outra pessoa. Os dados foram atualizados; revise e tente novamente.";
 
-/** Relações CONGELADAS que habilitam aprovação por cada papel. */
-const RELACOES_GERENTE: readonly RelacaoMetaSoberana[] = [
-  "APROVADOR_GERENTE_CONGELADO",
-];
-const RELACOES_COORDENADOR: readonly RelacaoMetaSoberana[] = [
-  "APROVADOR_COORDENADOR_CONGELADO",
-];
 
 /**
  * Mensagem pública da falha. Os códigos são os do contrato (`CodigoPublico`) e a
@@ -77,21 +70,38 @@ export function metaFormalmenteAprovada(meta: MetaSoberana): boolean {
   );
 }
 
-/** Pendência ACIONÁVEL do perfil do ator, conforme a relação que o autoriza. */
-export function pendenteDoPerfil(
-  meta: MetaSoberana,
-  papelDoAtor: PapelAprovacaoMeta | null
-): boolean {
-  if (papelDoAtor === null) return false;
-  const aprovacao = aprovacaoDoPapel(meta, papelDoAtor);
-  return Boolean(aprovacao?.exigida) && !aprovacao?.vigente;
+/**
+ * Papel aprovador DERIVADO da relação CONGELADA de UMA meta.
+ *
+ * A relação é propriedade da META: no MESMO ciclo o ator pode ser o aprovador
+ * GERENTE_CONELADO de uma meta e o aprovador COORDENADOR_CONGELADO de outra.
+ * Por isso NUNCA existe "papel do ator" global para o conjunto de metas — era
+ * exatamente o achado MEDIUM da auditoria do PR #228. `SELF` não habilita
+ * aprovação nenhuma.
+ */
+export function papelAprovadorDaRelacao(
+  relacao: RelacaoMetaSoberana
+): PapelAprovacaoMeta | null {
+  if (relacao === "APROVADOR_GERENTE_CONGELADO") return "GERENTE";
+  if (relacao === "APROVADOR_COORDENADOR_CONGELADO") return "COORDENADOR";
+  return null;
 }
 
-/** A relação CONGELADA autoriza o ator a aprovar por ESTE papel? */
+/** A relação CONGELADA autoriza o ator a aprovar por ESTE papel NESTA meta? */
 export function relacaoAutorizaPapel(
   relacao: RelacaoMetaSoberana,
   papel: PapelAprovacaoMeta
 ): boolean {
-  const relacoes = papel === "GERENTE" ? RELACOES_GERENTE : RELACOES_COORDENADOR;
-  return (relacoes as readonly string[]).includes(relacao);
+  return papelAprovadorDaRelacao(relacao) === papel;
+}
+
+/**
+ * Pendência ACIONÁVEL do perfil PARA ESTA META, derivada da relação CONGELADA da
+ * própria meta — nunca de um papel global do conjunto de metas.
+ */
+export function pendenteDoPerfil(meta: MetaSoberana): boolean {
+  const papel = papelAprovadorDaRelacao(meta.relacao);
+  if (papel === null) return false;
+  const aprovacao = aprovacaoDoPapel(meta, papel);
+  return Boolean(aprovacao?.exigida) && !aprovacao?.vigente;
 }

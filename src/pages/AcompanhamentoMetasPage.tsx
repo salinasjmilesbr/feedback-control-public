@@ -419,13 +419,6 @@ function AcompanhamentoMetasPage() {
 
   const metas = metasAutorizadas;
   const cicloStatus = escopo?.cicloStatus ?? null;
-  const papelDoAtor: PapelAprovacaoMeta | null = metas.some((meta) =>
-    relacaoAutorizaPapel(meta.relacao, "GERENTE")
-  )
-    ? "GERENTE"
-    : metas.some((meta) => relacaoAutorizaPapel(meta.relacao, "COORDENADOR"))
-    ? "COORDENADOR"
-    : null;
 
   const negocio = metas.filter((meta) => meta.tipo === "NEGOCIO_PROJETO");
   const individuais = metas.filter((meta) => meta.tipo === "INDIVIDUAL");
@@ -439,23 +432,27 @@ function AcompanhamentoMetasPage() {
       )
     : 0;
 
+  // Cada meta responde pela PRÓPRIA relação congelada (o ator pode ser aprovador
+  // GERENTE em uma meta e COORDENADOR em outra no mesmo ciclo).
   const pendentesDoPerfil =
-    cicloStatus === "CANCELADO"
-      ? 0
-      : metas.filter((meta) => pendenteDoPerfil(meta, papelDoAtor)).length;
+    cicloStatus === "CANCELADO" ? 0 : metas.filter(pendenteDoPerfil).length;
 
   const colaboradorEfetivo =
     cicloLegado === undefined
       ? colaboradorAlvo
       : getColaboradorEfetivoNoCiclo(colaboradorAlvo, cicloLegado, colaboradores);
 
-  function podeAprovarComo(papel: PapelAprovacaoMeta): boolean {
-    return metas.some((meta) => relacaoAutorizaPapel(meta.relacao, papel));
-  }
 
   function renderMeta(meta: MetaSoberana, indice: number) {
     const aprovacaoGerente = aprovacaoDoPapel(meta, "GERENTE");
     const aprovacaoCoordenador = aprovacaoDoPapel(meta, "COORDENADOR");
+    // Autorização POR META: derivada da relação congelada DESTA meta. O conjunto
+    // de metas NÃO define papel do ator (achado MEDIUM da auditoria do PR #228).
+    const autorizaGerente = relacaoAutorizaPapel(meta.relacao, "GERENTE");
+    const autorizaCoordenador = relacaoAutorizaPapel(
+      meta.relacao,
+      "COORDENADOR"
+    );
     const exigeCoordenador = Boolean(aprovacaoCoordenador?.exigida);
     const aprovada = metaFormalmenteAprovada(meta);
     const emExecucao = aprovandoId === meta.id;
@@ -530,7 +527,7 @@ function AcompanhamentoMetasPage() {
                 checked={Boolean(aprovacaoCoordenador?.vigente)}
                 disabled={
                   Boolean(aprovacaoCoordenador?.vigente) ||
-                  !podeAprovarComo("COORDENADOR") ||
+                  !autorizaCoordenador ||
                   !podeAprovar
                 }
                 onChange={() => void aprovar(meta, "COORDENADOR")}
@@ -542,7 +539,7 @@ function AcompanhamentoMetasPage() {
                     ? `${aprovacaoCoordenador.aprovadorCollaboratorId ?? ""} · ${formatarDataHora(
                         aprovacaoCoordenador.decididoEm
                       )}`
-                    : podeAprovarComo("COORDENADOR") && podeAprovar
+                    : autorizaCoordenador && podeAprovar
                     ? "Marque para aprovar esta meta."
                     : "Aguardando aprovação."}
                 </small>
@@ -556,7 +553,7 @@ function AcompanhamentoMetasPage() {
               checked={Boolean(aprovacaoGerente?.vigente)}
               disabled={
                 Boolean(aprovacaoGerente?.vigente) ||
-                !podeAprovarComo("GERENTE") ||
+                !autorizaGerente ||
                 !podeAprovar
               }
               onChange={() => void aprovar(meta, "GERENTE")}
@@ -568,7 +565,7 @@ function AcompanhamentoMetasPage() {
                   ? `${aprovacaoGerente.aprovadorCollaboratorId ?? ""} · ${formatarDataHora(
                       aprovacaoGerente.decididoEm
                     )}`
-                  : podeAprovarComo("GERENTE") && podeAprovar
+                  : autorizaGerente && podeAprovar
                   ? "Marque para aprovar esta meta."
                   : "Aguardando aprovação."}
               </small>

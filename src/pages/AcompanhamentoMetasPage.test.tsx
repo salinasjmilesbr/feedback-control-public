@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import paginaFonte from "./AcompanhamentoMetasPage.tsx?raw";
 import apoioFonte from "./acompanhamentoMetasApoio.ts?raw";
-import type { MetaSoberana } from "../application/ports/GoalRepository";
+import type { AprovacaoSoberana, MetaSoberana } from "../application/ports/GoalRepository";
 import {
   aprovacaoDoPapel,
   mensagemDoErro,
   metaFormalmenteAprovada,
+  papelAprovadorDaRelacao,
   pendenteDoPerfil,
   relacaoAutorizaPapel,
 } from "./acompanhamentoMetasApoio";
@@ -114,19 +115,35 @@ describe("F5-10 P6 — decisões puras do acompanhamento de metas", () => {
     expect(metaFormalmenteAprovada(comAprovacoes(true, true, true))).toBe(true);
   });
 
-  it("pendência acionável só existe para o papel que a RELAÇÃO do ator autoriza", () => {
-    const alvo = comAprovacoes(false, true, false);
+  it("pendência acionável é derivada da relação CONGELADA da própria meta", () => {
+    const pendente = comAprovacoes(false, true, false).aprovacoes;
 
-    expect(pendenteDoPerfil(alvo, "GERENTE")).toBe(true);
-    expect(pendenteDoPerfil(alvo, "COORDENADOR")).toBe(true);
-    expect(pendenteDoPerfil(alvo, null)).toBe(false);
+    const gerente = meta({
+      relacao: "APROVADOR_GERENTE_CONGELADO",
+      aprovacoes: pendente,
+    });
+    const coordenador = meta({
+      relacao: "APROVADOR_COORDENADOR_CONGELADO",
+      aprovacoes: pendente,
+    });
+    const self = meta({ relacao: "SELF", aprovacoes: pendente });
 
-    const aprovada = comAprovacoes(true, true, true);
-    expect(pendenteDoPerfil(aprovada, "GERENTE")).toBe(false);
-    expect(pendenteDoPerfil(aprovada, "COORDENADOR")).toBe(false);
+    expect(pendenteDoPerfil(gerente)).toBe(true);
+    expect(pendenteDoPerfil(coordenador)).toBe(true);
+    // SELF nunca é pendência acionável do perfil.
+    expect(pendenteDoPerfil(self)).toBe(false);
 
-    const naoExigida = comAprovacoes(false, false, false);
-    expect(pendenteDoPerfil(naoExigida, "COORDENADOR")).toBe(false);
+    const aprovada = meta({
+      relacao: "APROVADOR_GERENTE_CONGELADO",
+      aprovacoes: comAprovacoes(true, true, true).aprovacoes,
+    });
+    expect(pendenteDoPerfil(aprovada)).toBe(false);
+
+    const naoExigida = meta({
+      relacao: "APROVADOR_COORDENADOR_CONGELADO",
+      aprovacoes: comAprovacoes(false, false, false).aprovacoes,
+    });
+    expect(pendenteDoPerfil(naoExigida)).toBe(false);
   });
 
   it("relação → papel: só as duas relações CONGELADAS habilitam aprovação", () => {
@@ -163,6 +180,104 @@ describe("F5-10 P6 — decisões puras do acompanhamento de metas", () => {
       "não foi encontrada"
     );
     expect(mensagemDoErro({ code: "INTERNAL", message: "  " }, padrao)).toBe(padrao);
+  });
+});
+
+describe("F5-10 P6 (auditoria GPT do PR #228) — a relação é POR META", () => {
+  /** Fato de aprovação FICTÍCIO de um papel (a UI não reconstrói a regra). */
+  const aprovacoesDe = (
+    gerente: { exigida: boolean; vigente: boolean },
+    coordenador: { exigida: boolean; vigente: boolean }
+  ): readonly AprovacaoSoberana[] => [
+    {
+      papel: "GERENTE",
+      exigida: gerente.exigida,
+      vigente: gerente.vigente,
+      aprovacaoId: null,
+      decididoEm: null,
+      motivo: null,
+      aprovadorCollaboratorId: null,
+    },
+    {
+      papel: "COORDENADOR",
+      exigida: coordenador.exigida,
+      vigente: coordenador.vigente,
+      aprovacaoId: null,
+      decididoEm: null,
+      motivo: null,
+      aprovadorCollaboratorId: null,
+    },
+  ];
+
+  const comRelacao = (
+    id: string,
+    relacao: MetaSoberana["relacao"],
+    aprovacoes: readonly AprovacaoSoberana[]
+  ): MetaSoberana => meta({ id, relacao, aprovacoes });
+
+  /** A: só GERENTE é exigido e está pendente. */
+  const metaGerente = comRelacao(
+    "aaaaaaaa-1111-4111-8111-111111111111",
+    "APROVADOR_GERENTE_CONGELADO",
+    aprovacoesDe({ exigida: true, vigente: false }, { exigida: false, vigente: false })
+  );
+  /** B: só COORDENADOR é exigido e está pendente. */
+  const metaCoordenador = comRelacao(
+    "bbbbbbbb-2222-4222-8222-222222222222",
+    "APROVADOR_COORDENADOR_CONGELADO",
+    aprovacoesDe({ exigida: false, vigente: false }, { exigida: true, vigente: false })
+  );
+  /** C: SELF — o ator é apenas dono; nenhum papel aprovador. */
+  const metaSelf = comRelacao(
+    "cccccccc-3333-4333-8333-333333333333",
+    "SELF",
+    aprovacoesDe({ exigida: true, vigente: false }, { exigida: true, vigente: false })
+  );
+
+  it("A. relação GERENTE conta e permite SOMENTE GERENTE", () => {
+    expect(papelAprovadorDaRelacao(metaGerente.relacao)).toBe("GERENTE");
+    expect(pendenteDoPerfil(metaGerente)).toBe(true);
+    expect(relacaoAutorizaPapel(metaGerente.relacao, "GERENTE")).toBe(true);
+    expect(relacaoAutorizaPapel(metaGerente.relacao, "COORDENADOR")).toBe(false);
+  });
+
+  it("B. relação COORDENADOR conta e permite SOMENTE COORDENADOR", () => {
+    expect(papelAprovadorDaRelacao(metaCoordenador.relacao)).toBe("COORDENADOR");
+    expect(pendenteDoPerfil(metaCoordenador)).toBe(true);
+    expect(relacaoAutorizaPapel(metaCoordenador.relacao, "COORDENADOR")).toBe(true);
+    expect(relacaoAutorizaPapel(metaCoordenador.relacao, "GERENTE")).toBe(false);
+  });
+
+  it("C. SELF não conta como pendência e não habilita aprovação", () => {
+    expect(papelAprovadorDaRelacao(metaSelf.relacao)).toBeNull();
+    expect(pendenteDoPerfil(metaSelf)).toBe(false);
+    expect(relacaoAutorizaPapel(metaSelf.relacao, "GERENTE")).toBe(false);
+    expect(relacaoAutorizaPapel(metaSelf.relacao, "COORDENADOR")).toBe(false);
+  });
+
+  it("a relação de UMA meta NÃO habilita o papel em OUTRA meta", () => {
+    const conjunto = [metaGerente, metaCoordenador];
+
+    // O conjunto MISTO contém as duas relações congeladas...
+    expect(conjunto.some((m) => relacaoAutorizaPapel(m.relacao, "GERENTE"))).toBe(true);
+    expect(conjunto.some((m) => relacaoAutorizaPapel(m.relacao, "COORDENADOR"))).toBe(true);
+
+    // ...e ainda assim cada meta responde pela PRÓPRIA relação: nenhuma delas
+    // habilita o papel da outra (era o bug do "papel global do ator").
+    expect(relacaoAutorizaPapel(metaCoordenador.relacao, "GERENTE")).toBe(false);
+    expect(relacaoAutorizaPapel(metaGerente.relacao, "COORDENADOR")).toBe(false);
+  });
+
+  it("no conjunto MISTO o perfil conta 2 pendências (uma por meta), nunca 4", () => {
+    const conjunto = [metaGerente, metaCoordenador, metaSelf];
+
+    expect(conjunto.filter(pendenteDoPerfil)).toHaveLength(2);
+    expect(
+      conjunto.filter((m) => relacaoAutorizaPapel(m.relacao, "GERENTE"))
+    ).toHaveLength(1);
+    expect(
+      conjunto.filter((m) => relacaoAutorizaPapel(m.relacao, "COORDENADOR"))
+    ).toHaveLength(1);
   });
 });
 
@@ -214,6 +329,16 @@ describe("F5-10 P6 — proibições estruturais do cutover (leitura da fonte)", 
     expect(codigo).not.toMatch(/\.rpc\s*\(/);
     expect(codigo).not.toContain('from("evaluation_goal');
     expect(codigo).not.toContain("supabase/functions");
+  });
+
+  it("a autorização de aprovação é POR META, sem papel global do ator", () => {
+    // Achado MEDIUM da auditoria do PR #228: o CONJUNTO de metas nunca define o
+    // papel do ator — cada checkbox responde pela relação da própria meta.
+    expect(codigo).not.toContain("podeAprovarComo");
+    expect(codigo).not.toContain("papelDoAtor");
+    expect(codigo).not.toContain("metas.some(");
+    expect(codigo).toContain('relacaoAutorizaPapel(meta.relacao, "GERENTE")');
+    expect(codigo).toContain('relacaoAutorizaPapel(\n      meta.relacao,\n      "COORDENADOR"\n    )');
   });
 
   it("só entram metas cuja relação pertence ao conjunto congelado do ator", () => {
