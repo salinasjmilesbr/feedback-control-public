@@ -16,6 +16,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { corpoDeErroEdge } from "../errosEdge";
 import {
   CAPABILITY_POR_OPERACAO,
   ehUuid,
@@ -252,17 +253,17 @@ export function criarRepositorioAvaliacoesSupabase(
     });
 
     if (error) {
-      // A Edge devolve `{ error: { code, message } }`; o cliente supabase-js
-      // expõe o corpo em `error.context` quando o status não é 2xx.
-      const contexto = (error as { context?: { error?: { code?: unknown; message?: unknown } } })
-        .context;
+      // `FunctionsHttpError.context` é um `Response`: o corpo `{ error: { code,
+      // message } }` precisa ser LIDO (Issue #221). Corpo ausente/inválido/fora do
+      // contrato ⇒ fail-closed (código e mensagem padrão).
+      const corpoErro = await corpoDeErroEdge(error);
       return {
         ok: false,
         error: {
-          code: codigoPublico(contexto?.error?.code),
+          code: codigoPublico(corpoErro?.code),
           message:
-            typeof contexto?.error?.message === "string"
-              ? contexto.error.message
+            typeof corpoErro?.message === "string"
+              ? corpoErro.message
               : "Operação de avaliação recusada.",
         },
       };

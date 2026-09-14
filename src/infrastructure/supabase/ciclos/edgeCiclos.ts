@@ -12,6 +12,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { corpoDeErroEdge } from "../errosEdge";
 import type { CodigoPublico, OperacaoCiclo } from "./contrato";
 
 export const FUNCAO_CICLOS = "ciclos";
@@ -130,10 +131,10 @@ export function criarEdgeCiclos(cliente: SupabaseClient): EdgeCiclos {
     });
 
     if (error) {
-      // A Edge devolve `{ error: { code, message } }`; o supabase-js expõe o
-      // corpo em `error.context` quando o status não é 2xx.
-      const contexto = (error as { context?: RespostaEdgeCiclos }).context;
-      const corpoErro = contexto?.error;
+      // `FunctionsHttpError.context` é um `Response`: o corpo `{ error: { code,
+      // message } }` precisa ser LIDO (Issue #221). Corpo ausente/inválido/fora do
+      // contrato ⇒ fail-closed (código e mensagem padrão).
+      const corpoErro = await corpoDeErroEdge(error);
       return {
         ok: false,
         error: {
