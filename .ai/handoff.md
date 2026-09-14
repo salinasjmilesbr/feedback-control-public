@@ -39,24 +39,32 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 - **Atividade:** F5-10 **P7** (Issue #232) na branch
   `feat/f5-10-p7-validacao-integrada`, base `main` =
   `f53144ff81cc8e011e68f81b1e3f942f50decb29` (após P6 e os PRs de dependência
-  #229/#230/#231). **Commits da entrega:**
-  `1db70b986d3ce9b90f1521ad0e4d0128834baa31` (8 arquivos, +3873 linhas) e
-  `3d33f68bf51e7e46aa019c4041625a4e33794f45` (ajustes documentais); **push feito
-  com sucesso** (`origin/feat/f5-10-p7-validacao-integrada`). **PR #233 ABERTO**
-  (`Closes #232`), head da branch no SHA **`3d33f68…`**. **CI #264 (run
-  `34908000458`, evento `pull_request`) VERDE nesse SHA** — os dois jobs
+  #229/#230/#231). **Commits publicados nesta branch:** a entrega
+  `1db70b986d3ce9b90f1521ad0e4d0128834baa31` (8 arquivos, +3873 linhas) e o ajuste
+  documental `3d33f68bf51e7e46aa019c4041625a4e33794f45`, seguidos de **correções
+  documentais posteriores**; **push feito com sucesso**
+  (`origin/feat/f5-10-p7-validacao-integrada`). **PR #233 ABERTO** (`Closes #232`)
+  na branch acima. **F5-11 não iniciada.**
+- **CI (fato permanente):** o SHA `3d33f68…` teve **CI verde — #264 / run
+  `34908000458`**, evento `pull_request`, com os **dois jobs**
   (`Test, build, lint and diff-check` e `Supabase local — RLS/policy validation`,
-  esta com os 4 passos novos da P7) concluíram `success`. **F5-11 não iniciada.**
+  esta com os 4 passos novos da P7) em `success`; as **correções documentais
+  posteriores** geraram **novos SHAs e novos runs de CI**, também verdes.
+- **Regra de leitura (atemporal):** este handoff **não fixa** o "head atual" da
+  branch nem o run de CI mais recente — **cada commit gera novo SHA e novo run**.
+  Antes do fechamento/merge, **confirme o SHA final e o CI correspondente
+  diretamente no GitHub / PR #233**.
 - **Auditoria Codex do SHA `3d33f68…`: CHANGES REQUIRED / DO NOT MERGE, com
   APENAS dívida documental** — o conteúdo versionado de certificação e este handoff
   não refletiam o estado real do PR/CI. **Nenhum achado de código, SQL, workflow,
-  `src/` ou arquitetura.** Correção aplicada **somente** em
-  `docs/F5-10-p7-matriz-integrada.md` e `.ai/handoff.md` (nenhum arquivo SQL,
-  workflow, `src/` ou teste tocado; sem full gate local).
-- **Pendências antes do merge:** (1) **novo CI no SHA resultante desta correção**
-  (obrigatório — o novo commit gera novo SHA); (2) **auditoria delta GPT**;
-  (3) **auditoria delta Codex**; (4) **squash merge** (somente com solicitação
-  explícita do responsável).
+  `src/` ou arquitetura.** As correções foram aplicadas **somente em
+  documentação** (`docs/F5-10-p7-matriz-integrada.md` e este handoff), em commits
+  próprios — nenhum arquivo SQL, workflow, `src/` ou teste tocado, e sem full gate
+  local (validação por `git diff --check` + conferência de escopo).
+- **Pendências antes do merge:** (1) **auditoria delta GPT/Codex final** sobre o
+  SHA que for efetivamente fechado; (2) **squash merge** (somente com solicitação
+  explícita do responsável). O CI de cada correção é disparado automaticamente pelo
+  PR #233 (evento `pull_request`) e deve ser conferido no GitHub **no SHA final**.
 - **Natureza:** **certificação/validação integrada** — **não** é feature e **não**
   cria arquitetura: **zero** migration, RPC, capability, policy, RLS, grant, Edge ou
   página alterados.
@@ -104,18 +112,20 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   propósito** (editar 2 testes fora do inventário da Issue ou introduzir
   `.gitattributes` = manutenção oportunista/mudança transversal); registrado como
   finding para o owner.
-- **Elevações de acesso (agrupadas, DEV-02):** **5 batches** — (1) **P-0**
-  preflight obrigatório + criação da branch; (2) **P-1** gate focado (**2
-  execuções**: a 1ª revelou 3 defeitos **meus** de artefato de validação — contagem
-  da fixture, escopo do gatilho de marca e um bloco morto — corrigidos em lote com
-  causa-raiz distinta); (3) **P-3** gate final (bateria SQL completa na ordem do CI
-  + `npm` test/build/lint/tsc); (4) **diagnóstico** da falha de `npm test`
-  (mandatório por DEV-03: root-cause **antes** de nova execução, produzindo a prova
-  CRLF×LF); (5) **commit + push** do fechamento. Nenhuma elevação para tentativa
-  às cegas.
-- **Não feito (por contrato):** F5-11, **novo CI no SHA desta correção**, auditorias
-  delta GPT/Codex e squash merge (etapas externas/posteriores). **Nenhum defeito de
-  produção encontrado.**
+- **Elevações de acesso (agrupadas, DEV-02):** **6 batches acumulados na P7** —
+  (1) **P-0** preflight obrigatório + criação da branch; (2) **P-1** gate focado
+  (**2 execuções**: a 1ª revelou 3 defeitos **meus** de artefato de validação —
+  contagem da fixture, escopo do gatilho de marca e um bloco morto — corrigidos em
+  lote com causa-raiz distinta); (3) **P-3** gate final (bateria SQL completa na
+  ordem do CI + `npm` test/build/lint/tsc); (4) **diagnóstico** da falha de
+  `npm test` (mandatório por DEV-03: root-cause **antes** de nova execução,
+  produzindo a prova CRLF×LF); (5) **commit + push** do fechamento — os batches
+  **1–5** formam a decomposição original da entrega; (6) **commit + push** da
+  **correção documental pós-Codex** (batch adicional da mesma atividade). Nenhuma
+  elevação para tentativa às cegas.
+- **Não feito (por contrato):** F5-11, **auditoria delta GPT/Codex final** e
+  **squash merge** (etapas externas/posteriores). **Nenhum defeito de produção
+  encontrado.**
 
 ### 3.20 F5-10 P5.2 / P5.3 / P6 — lacunas documentais sanadas (Issues #222, #226 e #220)
 
