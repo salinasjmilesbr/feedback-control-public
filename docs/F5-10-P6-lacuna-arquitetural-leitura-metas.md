@@ -258,3 +258,93 @@ Mutações legadas x operações soberanas: `criarMeta`->`goal.criar`,
 `atualizarMeta`->`goal.editar`, `atualizarAcompanhamentoMeta`->`goal.atualizar_progresso`,
 `finalizarMeta`->`goal.finalizar`, `aprovarMeta`->`goal.aprovar`,
 `excluirMeta`->`goal.excluir` — **cobertura 1:1, nenhuma mutação falta na Edge**.
+
+## 7. ANEXO 2 — Limites da superfície soberana e defeito de transporte (recon dedicado)
+
+### 7.1 Defeito verificado no adapter — bloqueia o critério 11 ("409 tratado explicitamente")
+
+- `src/infrastructure/supabase/metas/edgeMetas.ts:180-195` lê o corpo do erro em
+  `error.context.error.code` (mesmo padrão do molde `src/infrastructure/supabase/ciclos/edgeCiclos.ts:134-140`).
+- **Verificação de primeira mão:** em `@supabase/functions-js`,
+  `FunctionsHttpError.context` é o objeto **`Response`** —
+  `node_modules/@supabase/functions-js/dist/main/FunctionsClient.js:96-97` documenta
+  `await error.context.json()` e o throw em `:274` passa `response`. Um `Response` **não
+  tem** `.error`.
+- **Consequência:** `codigoPublico(undefined)` ⇒ **toda negação da Edge chega ao
+  repositório/tela como `FORBIDDEN`** com a mensagem genérica. `CONFLICT` (409 —
+  `expected_version` divergente, ciclo não ATIVO, estado/exclusão terminal, quota,
+  `operation_id` com hash divergente, aprovação vigente duplicada) e `NOT_FOUND` (404)
+  **nunca são distinguíveis**.
+- **Por que é bloqueio da P6:** o Bloco C exige "conflito 409 tratado explicitamente;
+  refresh soberano quando aplicável; informar estado de conflito; não simular sucesso".
+  Sem corrigir o adapter, nenhuma tela consegue separar "sem permissão" de "versão
+  divergente" — e o adapter é artefato **já merged e auditado da P5** (mudança exige
+  decisão do owner).
+- O teste do P5 não detecta: `src/infrastructure/supabase/metas/edgeMetas.test.ts:323-337,349-358`
+  injeta `context` como objeto simples.
+
+### 7.2 Matriz de limites do contrato soberano (o que NÃO existe hoje)
+
+| Necessidade | Hoje | Evidência |
+|---|---|---|
+| Metas de terceiro que não é aprovador congelado | NÃO | P4:2235-2239 + P4:361-368 |
+| Metas de um colaborador específico | NÃO | P4:2154-2158 (assinatura só org/ciclo/ator) |
+| Metas de vários ciclos numa chamada | NÃO | P4:2234 (igualdade de ciclo) |
+| Metas de unidade/organização inteira | NÃO | P4:2232-2239 |
+| Agregados/contagens por tipo/status | PARCIAL | só `quantidade` do escopo (P4:2247), ignorado pelo repo (`:235-243`) |
+| Nome/matrícula/cargo do dono | PARCIAL | outra superfície (`acessoColaboradoresSoberanos.ts:102-126`), join local, sem filtro por ciclo |
+| Leitura de UMA meta por `goal_id` | NÃO | único caminho é o escopo do ciclo (P4:2154) |
+| Paginação/limite | NÃO | `jsonb_agg` de todas as autorizadas (P4:2195-2240) |
+| Histórico/trilha de eventos da meta | NÃO | `evaluation_goal_events` sem policy/grant e sem RPC de leitura |
+| Quota/limites do ciclo para a UI | NÃO | tabela deny-by-default; só eco pós-escrita (P4:1706-1708); `CicloSoberano` não tem quota (`CycleRepository.ts:34-50`) |
+| Quem aprovou | NÃO | `aprovacoes_vigentes` projeta papel/id/data/motivo, não o aprovador (P4:2221-2230) |
+| "Aprovação exigida" / "meta aprovada" | PARCIAL | fatos sim; a exigência condicional do COORDENADOR só existe em `f5_10_aprovador_congelado` (P3:329-369) |
+| Filtrar apenas não excluídas | PARCIAL | flag vem no payload; filtro é do cliente (P4:2212) |
+| Versão atual da meta / status do ciclo | SIM | P4:2213 / P4:2245 |
+| Mutações | 8 | `contrato.ts:53-62` |
+
+### 7.3 Lacunas adicionais (além de L1–L4)
+
+- **E1 — sem leitura de uma meta por `goal_id`:** deep link/notificação por meta obriga a
+  baixar o ciclo inteiro e filtrar; fora do escopo autorizado o resultado é **ausência na
+  lista** (não um 404 explícito).
+- **E2 — sem paginação:** um único `jsonb` com todas as metas autorizadas do ciclo.
+- **E3 — quota sem superfície:** o KPI legado "N de M metas" (`MinhasMetasPage.tsx:124-128`)
+  fica **sem fonte soberana**; `CicloSoberano` não carrega quota.
+- **E4 — histórico da meta órfão:** o legado exibia `historico[]` (`types/Meta.ts:26-40,80`);
+  não há leitura de eventos.
+- **E5 — aprovação sem identidade:** não há como exibir **quem** aprovou.
+- **E6 — assimetria de fronteiras na mesma tela:** metas por Edge + `service_role`; ciclos
+  por PostgREST + RLS (`20260919000000_f5_09_cycle_read_rls.sql:170-178`) — a própria P5
+  registra que `evaluation_cycles` não foi tocada (P5H:15).
+- **E7 — `relacao` é rótulo derivado** (CASE P4:2214-2220): quem é gerente **e** coordenador
+  congelado recebe sempre `GERENTE`.
+- **E8 — não existe `src/services/metasSoberanos/**`** (nenhum serviço de metas no cliente);
+  as 9 telas/serviços seguem no legado.
+- **E9 — idempotência de leitura inerte:** `goal.listar_por_escopo` exige `operation_id`
+  (`contrato.ts:286`) mas a RPC não o recebe (`index.ts:387-395`).
+- **E10 — comentário stale no D22-A:** o cabeçalho de
+  `supabase/migrations/20260927000000_f5_10_p5_d22a_hardening.sql:2` diz "PREPARADO, AINDA
+  NAO APLICADO". O estado real foi verificado no preflight desta rodada
+  (`db reset` OK; `policies_public=23`, `metas_policies=0`, `authenticated` sem `SELECT`
+  em `evaluation_goals`), ou seja, **aplicado** — o comentário precisa de correção
+  documental (arquivo já merged/auditado; não alterar sem decisão).
+- **R2 — descarte silencioso:** linha fora do contrato é descartada em
+  `repositorioMetasSoberanas.ts:231-233` e o `escopo` é derivado localmente (`:241`),
+  ignorando `relacao_ator` do servidor: drift de contrato pode virar
+  `SEM_META_AUTORIZADA` (vazio por anomalia), contra o que o próprio cabeçalho promete
+  (`:23-25`).
+- **R5 — rótulos ausentes** (`ano`/`numero`, nome, matrícula, cargo, datas) empurram a UI a
+  reintroduzir resíduo local (`cicloAvaliacaoStorage`/`colaboradorStorage`) ou a inventar
+  dado — proibido por D1/D8.
+
+### 7.4 Decisões adicionais necessárias
+
+5. **Corrigir o adapter** (ler `await error.context.json()`) antes de retomar a P6, ou
+   aceitar P6 sem discriminação de 409?
+6. **Quota do ciclo na UI:** nova leitura soberana (atividade própria) ou remover o KPI?
+7. **Histórico da meta:** remover da UI ou criar superfície de leitura?
+8. **Aprovação:** expor no servidor o fato derivado ("exigida"/"vigente", quem aprovou) ou
+   simplificar a UI para mostrar apenas os fatos que já existem?
+9. **Rótulos (`ano`/`numero`, nome do dono):** usar as superfícies soberanas existentes de
+   ciclo/colaborador e proibir rótulo legado — confirmar essa direção.
