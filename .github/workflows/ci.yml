@@ -400,6 +400,17 @@ jobs:
             < supabase/validacao/26-validar-f5-10-p4.sql
 
       # ----------------------------------------------------------------------
+      # F5-10 P5.2 (Issue #222): projecao soberana de leitura de metas.
+      # Roda logo APOS o P4 (depende da fixture deixada pelos cenarios 25/26) e
+      # ANTES das regressoes F5-06/F5-07.
+      # ----------------------------------------------------------------------
+      - name: "Run F5-10 P5.2 validation (projecao soberana de leitura de metas)"
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/28-validar-f5-10-p5-2.sql
+
+      # ----------------------------------------------------------------------
       # Regressão F5-06/F5-07 (§23.4): cenários independentes, com prefixos de
       # UUID próprios (`d6`/`d7`), reaplicados antes de cada validação.
       # ----------------------------------------------------------------------

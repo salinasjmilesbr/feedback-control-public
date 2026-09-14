@@ -35,6 +35,16 @@
  * aprovação relacional congelada, invalidação, comparação de versão, transação,
  * auditoria e autorização. Tudo isso pertence às RPCs soberanas (§13), pelas
  * quais a Edge é a única via.
+ *
+ * ## P5.2 (Issue #222) — projeção AMPLIADA, estritamente ADITIVA
+ *
+ * A operação `goal.listar_por_escopo`, o conjunto autorizado (`SELF` ∪ aprovador
+ * CONGELADO), as capabilities e a RLS NÃO mudaram (§1 do contrato
+ * `docs/F5-10-P5.2-contrato-leitura-soberana-metas.md`): o que a P5.2 acrescenta
+ * são FATOS que faltavam à projeção — as datas soberanas da linha, o estado de
+ * aprovação POR PAPEL (`aprovacoes[]`, sempre os dois papéis — §4) e a quota do
+ * CICLO/tipo (`limites[]` — §5). Nada foi removido: `aprovacoesVigentes[]`
+ * permanece para compatibilidade.
  */
 
 import type {
@@ -71,9 +81,41 @@ export interface AprovacaoVigenteSoberana {
 }
 
 /**
- * Projeção soberana da meta lida pela RPC de escopo (§11/D22): exatamente os
- * campos que a superfície devolve — nada é inventado (sem `ano`/`numero`,
- * matrícula, nome ou histórico local).
+ * Estado de aprovação POR PAPEL (§4 do contrato P5.2): a projeção traz SEMPRE os
+ * dois papéis (`GERENTE` e `COORDENADOR`), com o fato já decidido pela RPC.
+ *
+ * `papel` e `exigida` são **FATOS** — a UI NÃO reconstrói regra (D15/§4):
+ * `vigente` ⇒ *concedida*; `!vigente && exigida` ⇒ *exigida e pendente*;
+ * `!vigente && !exigida` ⇒ *não exigida*. Nenhuma decisão de autorização
+ * acontece nesta superfície.
+ *
+ * **Limitação registrada (§4), fail-closed e sem autoridade nova:** `exigida` do
+ * `COORDENADOR` é `false` tanto para "coordenador não distinto da cadeia" quanto
+ * para "estrutura congelada não reconhecida" — a fonte
+ * (`f5_10_aprovador_congelado`) devolve `NULL` nos DOIS casos, e distingui-los
+ * exigiria duplicar a regra de P3 na leitura. O caminho de MUTAÇÃO continua
+ * fail-closed (`meta_aprovar` recusa papel não reconhecido), então o estado
+ * ambíguo nunca vira aprovação.
+ *
+ * `aprovadorCollaboratorId` é a identidade SOBERANA (`collaborators.id`); o NOME
+ * é apresentação e é resolvido pela superfície soberana de colaboradores (F5-07)
+ * a partir do UUID — nunca projetado aqui (decisão 6).
+ */
+export interface AprovacaoSoberana {
+  readonly papel: PapelAprovacaoMeta;
+  readonly exigida: boolean;
+  readonly vigente: boolean;
+  /** Fato da aprovação vigente (D3); `null` quando não há decisão vigente. */
+  readonly aprovacaoId: string | null;
+  readonly decididoEm: string | null;
+  readonly motivo: string | null;
+  readonly aprovadorCollaboratorId: string | null;
+}
+
+/**
+ * Projeção soberana da meta lida pela RPC de escopo (§11/D22, AMPLIADA na
+ * P5.2/§3): exatamente os campos que a superfície devolve — nada é inventado
+ * (sem `ano`/`numero`, matrícula, nome ou histórico local).
  */
 export interface MetaSoberana {
   readonly id: string;
@@ -93,13 +135,46 @@ export interface MetaSoberana {
   /** Versão otimista da linha (base de `expectedVersion` — D12). */
   readonly version: number;
   readonly relacao: RelacaoMetaSoberana;
+  /**
+   * Datas soberanas da LINHA (§3): `created_at`/`updated_at` são `not null` no
+   * schema, então o FATO sempre existe e a projeção não as admite nulas —
+   * ausência ou forma inesperada é violação de contrato (linha descartada).
+   * `atualizadoEm` é a data da LINHA e **NÃO** significa "último acompanhamento".
+   */
+  readonly criadoEm: string;
+  readonly atualizadoEm: string;
+  /** Datas de coluna ANULÁVEL: `null` é ausência REAL do fato (§3). */
+  readonly dataUltimoAcompanhamento: string | null;
+  readonly dataFechamento: string | null;
+  readonly dataExclusao: string | null;
+  /** Estado de aprovação por papel — SEMPRE os dois papéis (§4). */
+  readonly aprovacoes: readonly AprovacaoSoberana[];
   readonly aprovacoesVigentes: readonly AprovacaoVigenteSoberana[];
 }
 
 /**
- * Recorte de escopo devolvido pela leitura (§11): o ator recebe SOMENTE as metas
- * em que é o dono (SELF) ou o aprovador CONGELADO. Conjunto vazio é ausência
- * EXPLÍCITA de meta autorizada — nunca negação silenciosa.
+ * Quota soberana do CICLO por TIPO (§5 do contrato P5.2, de
+ * `evaluation_cycle_goal_limits`): o limite é do **CICLO/tipo** — NUNCA "por
+ * colaborador" (a unicidade viva da meta é por DONO) — e `version` é a versão da
+ * LINHA de limite (base do `expectedVersion` de `goal.definir_limites_do_ciclo`,
+ * D21), não da meta.
+ *
+ * **AUSÊNCIA de linha = quota ZERO** (fail-closed, §5): `limites` vazio significa
+ * "nenhuma quota configurada" para TODOS os tipos, jamais "ilimitado". O consumo
+ * (`usado`) NÃO é projetado: é derivado no cliente das PRÓPRIAS metas lidas
+ * (relação `SELF` e `!excluida`).
+ */
+export interface LimiteSoberano {
+  readonly tipo: TipoMetaSoberana;
+  readonly quantidade: number;
+  readonly version: number;
+}
+
+/**
+ * Recorte de escopo devolvido pela leitura (§11, AMPLIADO na P5.2/§5): o ator
+ * recebe SOMENTE as metas em que é o dono (SELF) ou o aprovador CONGELADO.
+ * Conjunto vazio é ausência EXPLÍCITA de meta autorizada — nunca negação
+ * silenciosa.
  */
 export interface EscopoMetasSoberanas {
   readonly organizationId: string;
@@ -108,6 +183,8 @@ export interface EscopoMetasSoberanas {
   readonly cicloStatus: StatusCicloAvaliacao | null;
   readonly escopo: "SEM_META_AUTORIZADA" | "ESCOPO_APLICADO";
   readonly metas: readonly MetaSoberana[];
+  /** Quotas do ciclo por tipo; vazio = quota ZERO para todos (§5). */
+  readonly limites: readonly LimiteSoberano[];
 }
 
 /** Meta mutada: o `resultado` bruto da RPC projetado (sem campos inventados). */
