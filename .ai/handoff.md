@@ -34,6 +34,53 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
+### 3.22 DEV-04 — abertura de PR e disparo antecipado do CI (Issue #234)
+
+- **Atividade:** **DEV-04** (Issue #234), branch `docs/dev-04-pr-automatico`,
+  base `main` = `0b2e3feba5be39a67936a77a847aa7777f70bc0e` (squash do PR #233).
+  Atividade **exclusivamente processual/documental**: **nenhuma** mudança de
+  código, SQL, migration, RPC, RLS, capability, Edge, página, teste ou workflow de
+  CI; nenhuma credencial/PAT; `gh` **não** instalado.
+- **Regra formalizada:** com a implementação e os **gates locais planejados**
+  verdes e **sem blocker** → `commit + push` → **PR imediatamente** (vinculado com
+  `Closes #<n>`) → **CI no SHA do PR** → auditoria GPT (Codex quando aplicável) →
+  **squash merge** com solicitação explícita do responsável. O **agente de
+  implementação nunca faz merge**; correção posterior ao PR gera **novo SHA** com
+  **novo CI**; **não** se habilita CI pesado em push intermediário (integração com
+  DEV-03).
+- **Fallback agente → orquestrador (documentado):** quando o ambiente do agente
+  **não** possui mecanismo **autorizado** para abrir PR, ele entrega **branch,
+  SHA, título e corpo** e informa **explicitamente** que o PR precisa ser aberto
+  pelo **orquestrador** (integração GitHub já autorizada). É **proibido**
+  instalar `gh`, criar/usar PAT ou alterar credenciais/`git config` para
+  contornar — o orquestrador é **preferível** a nova superfície de credencial
+  (integração com DEV-02).
+- **Onde ficou registrado (conjunto mínimo auditado):**
+  `.ai/workflow.md` — **§1** (fluxo oficial completo), **§2** (fases 6–10:
+  commit/push → PR → CI no SHA → auditoria → squash merge), **§5** (nota de
+  leitura) e **§7 NOVO** (DEV-04: 7.1 fluxo de fechamento, 7.2 regras, 7.3
+  limitação do ambiente, 7.4 integração com DEV-03, 7.5 integração com DEV-02,
+  7.6 o que não altera e 7.7 rastreabilidade das regras DEV); `AGENTS.md` —
+  **§1** (ordem de leitura atualizada) e **§6** (Fluxo GitHub: PR imediato,
+  fallback, CI por SHA, proibição de merge); `.ai/git-rules.md` — **§1**
+  (branch/PR), **§3** (limitação do sandbox agora cobre `push` **e** criação de
+  PR) e **§4** (checklist DEV-04); e este handoff.
+- **Auditoria de registro (fato relevante para retomada):** **DEV-01 = Issue
+  #167**; **DEV-02 = Issue #177** (`.ai/workflow.md` §6 + `AGENTS.md` §4);
+  **DEV-03 é regra operacional vigente (gate de fechamento / gates focados) SEM
+  Issue e SEM documento normativo próprio** — está apenas citada em contratos,
+  matrizes e corpos de Issue; **não existe "Plano Mestre"** no repositório (o
+  equivalente normativo real é `.ai/workflow.md` + `AGENTS.md` +
+  `.ai/git-rules.md`). **Pendência registrada para o owner:** formalizar DEV-01 e
+  DEV-03 em documento normativo próprio, em atividade DEV futura (fora do escopo
+  da #234).
+- **Validação (atividade documental, DEV-03):** `git diff --check` e conferência
+  de escopo — **não** se executa bateria completa de produto (nenhum artefato de
+  runtime foi tocado). Nenhum gate de produto é afetado.
+- **Não feito (por contrato):** configuração de Codex Code Review automático,
+  instalação de `gh`, PAT/token, mudança de credenciais, alteração de workflow de
+  CI e qualquer mudança funcional — todos explicitamente fora de escopo.
+
 ### 3.21 F5-10 P7 — validação integrada e certificação do domínio de metas (Issue #232)
 
 - **Atividade:** F5-10 **P7** (Issue #232) na branch

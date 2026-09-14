@@ -6,13 +6,17 @@
 ## 1. Fluxo oficial
 
 ```
-Flash desenha
-  → GPT revisa e fecha decisões
+Issue
+  → branch
+  → desenho (Flash) e revisão/fechamento das decisões (GPT) — quando a atividade exigir contrato
   → desenho entra em main
-  → Pro implementa
-  → GPT audita
-  → CI
-  → squash merge
+  → implementação (Pro) e validação local
+  → commit + push
+  → PR (agente, quando houver mecanismo autorizado; senão o orquestrador — §7)
+  → CI no SHA do PR
+  → auditoria (GPT; Codex quando aplicável)
+  → squash merge (somente com solicitação explícita do responsável)
+  → atualização da main
 ```
 
 Regra mestre: **nenhuma implementação começa com decisão arquitetural aberta**.
@@ -34,17 +38,29 @@ as questões (`Q#`) como decisões (`D#`) e o documento foi para `main`.
 4. **Merge do desenho em `main`** — o contrato da atividade fica disponível.
 5. **Implementação (Pro)** — branch própria de código, fora da branch de
    desenho; segue exclusivamente o contrato fechado; inclui testes e validadores
-   proporcionais ao risco; executa as validações locais.
-6. **Auditoria (GPT)** — audita aderência ao contrato, invariantes de
-   segurança/autorização e ausência de mudanças fora do escopo.
-7. **CI verde** — `npm test`, `npm run build`, `npm run lint`,
-   `git diff --check` e validações Supabase locais quando aplicável.
-8. **Squash merge** — integra em `main` com **SHA auditado** e PR referenciando
-   a Issue (`Closes #<n>` quando resolve integralmente).
+   proporcionais ao risco; executa as validações locais planejadas.
+6. **Commit e push** — concluídas a implementação e as validações locais
+   planejadas, **sem blocker**, o agente de implementação executa `commit + push`
+   na branch da atividade (**§7.2**, regra 1).
+7. **PR** — aberto **imediatamente após o push**, com vínculo à Issue
+   (`Closes #<n>`): pelo próprio agente quando o ambiente possuir mecanismo
+   **autorizado**; caso contrário, pelo **orquestrador**, a quem o agente entrega
+   **branch, SHA, título e corpo** (**§7.2**, regras 2 a 4, e **§7.3**).
+8. **CI verde no SHA do PR** — `npm test`, `npm run build`, `npm run lint`,
+   `git diff --check` e validações Supabase locais quando aplicável; o CI fica
+   associado ao **SHA efetivamente auditado**, e toda correção posterior gera
+   **novo SHA** com **novo CI** correspondente (**§7.2**, regras 6 e 7).
+9. **Auditoria** — GPT audita aderência ao contrato, invariantes de
+   segurança/autorização e ausência de mudanças fora do escopo; Codex quando
+   aplicável.
+10. **Squash merge** — integra em `main` com **SHA auditado**, **somente com
+    solicitação explícita do responsável**; o agente de implementação **nunca**
+    faz merge (**§7.2**, regras 8 e 9).
 
 Na implementação e na validação, a distinção entre **aprovação técnica** e
 **autorização de elevação de acesso**, o trabalho em lote e o agrupamento de
-comandos privilegiados seguem **§6**.
+comandos privilegiados seguem **§6**. A abertura do PR, o disparo antecipado do CI
+e as regras de fechamento seguem **§7**.
 
 ## 3. Responsabilidades por modo
 
@@ -75,8 +91,9 @@ comandos privilegiados seguem **§6**.
 | Retomar | `AGENTS.md`, `.ai/handoff.md`, Issue/PR da atividade, branch e SHA em andamento |
 
 O ciclo de elevação de acesso durante implementar/validar e o agrupamento do gate
-privilegiado seguem **§6**; a limitação conhecida de push está em
-`.ai/git-rules.md` §3.
+privilegiado seguem **§6**; a abertura do PR, o disparo antecipado do CI e as
+regras de fechamento seguem **§7**; a limitação conhecida de push **e de criação
+de PR** no sandbox está em `.ai/git-rules.md` §3.
 
 ## 6. Elevação de acesso e economia de interrupções (DEV-02)
 
@@ -88,7 +105,7 @@ privilegiado seguem **§6**; a limitação conhecida de push está em
 
 | Decisão | De quem é | Quando acontece |
 | --- | --- | --- |
-| **Aprovação técnica/arquitetural** | fluxo oficial: revisão/fechamento no desenho (GPT) e auditoria independente após a implementação | desenho (§2, itens 3–4) e auditoria (§2, item 6) |
+| **Aprovação técnica/arquitetural** | fluxo oficial: revisão/fechamento no desenho (GPT) e auditoria independente após a implementação | desenho (§2, itens 3–4) e auditoria (§2, item 9) |
 | **Autorização de elevação de acesso** | responsável pelo ambiente/host | quando o sandbox/SO exige permissão para executar um comando |
 
 São **independentes e não se substituem**:
@@ -141,7 +158,7 @@ ler/analisar tudo o que for possível
 5. **Gate privilegiado integrado** (§6.4).
 6. **Correções em lote** para o que o gate apontar.
 7. **Gate final**, uma vez, sobre o estado consolidado.
-8. **Auditoria independente** (§2, item 6). Nenhum agente declara a própria
+8. **Auditoria independente** (§2, item 9). Nenhum agente declara a própria
    entrega aprovada.
 
 Antipadrão proibido: `editar → elevar → testar → editar → elevar → testar`
@@ -181,8 +198,101 @@ Para reduzir prompts de elevação é **proibido**:
 
 A economia de interrupções **não** modifica, em nenhuma hipótese:
 
-- merge **somente** com solicitação explícita do responsável (§2, item 8);
+- merge **somente** com solicitação explícita do responsável (§2, item 10);
 - **CI verde** e **SHA auditado** como condição de integração;
 - **fail-closed** e as trust boundaries de `.ai/architecture-rules.md`;
 - uma branch por atividade e a separação entre desenho e implementação (§2);
 - as regras de push e a limitação conhecida do sandbox (`.ai/git-rules.md`).
+
+## 7. Abertura de PR e disparo antecipado do CI (DEV-04)
+
+> Regra operacional derivada da Issue #234. Formaliza a **abertura do Pull
+> Request logo após o `commit + push`**, quando a implementação e os gates locais
+> planejados estiverem verdes e **não houver blocker**, para **disparar o CI
+> antecipadamente** e reduzir etapas manuais de fechamento. **Complementa §1–§6**
+> — em especial DEV-02 (**§6**) e DEV-03 — e **não** os substitui nem os
+> enfraquece.
+
+### 7.1 Fluxo de fechamento
+
+```
+Issue
+  → branch
+  → implementação
+  → validação local
+  → commit/push
+  → PR
+  → CI
+  → auditoria GPT
+  → Codex quando aplicável
+  → squash merge
+  → atualização da main
+```
+
+### 7.2 Regras
+
+1. **Commit + push após os gates locais.** Concluídas a implementação e as
+   **validações locais planejadas**, **sem blocker**, o agente de implementação
+   executa `commit + push` na branch da atividade.
+2. **PR imediato.** Se o ambiente do agente possuir mecanismo **autorizado** para
+   criar PR, ele abre o PR **automaticamente**, logo após o push.
+3. **Fallback para o orquestrador.** Se o ambiente **não** possuir mecanismo
+   autorizado, o agente **não contorna** a limitação (**§7.3**) e entrega
+   imediatamente: **branch**, **SHA final**, **título** e **corpo do PR** —
+   informando **explicitamente** que o PR precisa ser aberto pelo orquestrador.
+4. **Orquestrador.** O orquestrador ChatGPT pode abrir o PR pela **integração
+   GitHub já autorizada**, sem PAT nem credenciais locais adicionais.
+5. **Vínculo com a Issue.** Todo PR executável deve conter `Closes #<issue>`
+   (quando a entrega resolve integralmente a Issue).
+6. **CI por SHA.** O CI deve estar associado ao **SHA efetivamente auditado**, e o
+   SHA do CI é confirmado **antes** da auditoria e do merge.
+7. **Correção posterior ao PR.** Qualquer correção gera **novo SHA**, que exige o
+   **CI correspondente** (nova execução no novo SHA).
+8. **O agente de implementação nunca faz merge.**
+9. **Squash merge** permanece condicionado aos **gates objetivos vigentes** e à
+   **solicitação explícita do responsável**.
+
+### 7.3 Limitação do ambiente: nunca contornar
+
+Quando o ambiente do agente **não** permitir abrir PR por mecanismo autorizado, é
+**proibido** — na mesma linha de **§6.5** — **instalar `gh`** por conta própria,
+**criar ou usar PAT**, **alterar credenciais** ou `git config`, ou criar qualquer
+bypass. O caminho correto é o **fallback ao orquestrador** (**§7.2**, regra 3),
+registrando a limitação na entrega e em `.ai/git-rules.md` §3 — que cobre tanto o
+`push` quanto a **criação do PR**.
+
+### 7.4 Integração com DEV-03
+
+- **Não** habilitar CI pesado em **todo push intermediário**: o PR é aberto quando
+  a implementação e os gates locais estiverem **prontos**.
+- O **CI completo continua sendo gate de fechamento**.
+- **Não repetir** CI/gates sem mudança relevante de código, ambiente ou hipótese:
+  uma execução deve produzir **informação nova**.
+- Correções posteriores ao PR seguem a regra 7 de **§7.2** (**novo SHA → novo
+  CI**).
+
+### 7.5 Integração com DEV-02 (§6)
+
+- DEV-04 **não** cria **nenhuma superfície nova de credencial** e **não** reduz
+  sandbox nem controles de segurança.
+- O **fallback ao orquestrador** é **preferível** a PAT ou credencial adicional.
+- A abertura do PR **não** é autorização de elevação de acesso e **não** dispensa
+  os gates de **§6**.
+
+### 7.6 O que esta regra não altera
+
+- merge **somente** com solicitação explícita do responsável;
+- **CI verde** e **SHA auditado** como condição de integração;
+- **fail-closed** e as trust boundaries de `.ai/architecture-rules.md`;
+- uma branch por atividade e a separação entre desenho e implementação (§2);
+- as regras de push/PR e a limitação conhecida do sandbox (`.ai/git-rules.md` §3);
+- a **proibição de merge pelo agente de implementação**.
+
+### 7.7 Rastreabilidade das regras DEV
+
+| Regra | Origem | Onde está registrada |
+| --- | --- | --- |
+| DEV-01 | Issue #167 | `AGENTS.md` + esta camada `.ai/*` |
+| DEV-02 | Issue #177 | **§6** e `AGENTS.md` §4 |
+| DEV-03 | regra operacional vigente (gate de fechamento e uso de gates focados) | referenciada em contratos, matrizes de validação e corpos de Issue; **sem Issue e sem documento normativo próprio até esta atividade** |
+| DEV-04 | Issue #234 | **§7** e `AGENTS.md` §6 |
