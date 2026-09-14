@@ -348,3 +348,62 @@ Mutações legadas x operações soberanas: `criarMeta`->`goal.criar`,
    simplificar a UI para mostrar apenas os fatos que já existem?
 9. **Rótulos (`ano`/`numero`, nome do dono):** usar as superfícies soberanas existentes de
    ciclo/colaborador e proibir rótulo legado — confirmar essa direção.
+
+## 8. ANEXO 3 — Classificação fina dos consumidores: escopo real, órfãos e lacunas duras
+
+### 8.1 Correções de severidade (revisão do §2)
+
+- **L4 (PDF) DEIXA de ser bloqueio:** `exportarAvaliacaoPdf.ts` tem um único chamador,
+  `MinhaAvaliacaoDetalhePage.tsx:251` — **SELF**. Cabe no contrato; exige apenas virar
+  assíncrono/pré-carregar as metas antes de gerar o PDF.
+- **L2 e L3 são CÓDIGO ÓRFÃO hoje:** `cicloEquipeService.analisarPendenciasDoCiclo`
+  (`:527-629`) e `correcaoPeriodoCicloService`/`impactoCorrecaoPeriodoCiclo` **não têm
+  chamador de produção** (só testes). Não bloqueiam o cutover funcional; exigem decisão de
+  destino (remover ou reativar em superfície soberana).
+- **L1 permanece bloqueio:** `PainelCicloPage` é página viva e usa `getMetasDoCiclo` no KPI
+  de metas pendentes (`:147-167`) e no botão "Acompanhar metas".
+
+### 8.2 Lacunas que bloqueiam a rota funcional VIVA (além de L1)
+
+| # | Lacuna | Consumidores | Por que não cabe |
+|---|---|---|---|
+| G1 | **"Meta aprovada"/"pendente" é INDERIVÁVEL** | `MinhasMetasPage.tsx:133,548,550`; `AcompanhamentoMetasPage.tsx:134-136,146-157,180`; `NovoFeedbackPage.tsx:311-313`; `EditarFeedbackPage.tsx:518-520` | A regra "coordenador exigido ⇔ ocorrência congelada `GESTAO_DIRETA` distinta de `GESTAO_CADEIA`" (`docs/F5-10-desenho-tecnico.md:287,304-308`; P3:358-368) **não é projetada**; `aprovacoes_vigentes` só tem fatos **decididos** — para o ator SELF, "não exigido" e "pendente" são indistinguíveis hoje |
+| G3 | **Quota do ciclo sem leitura** | `MinhasMetasPage.tsx:124-128,480,602-620` ("X de Y", habilitar categoria e botão "Adicionar meta") | `evaluation_cycle_goal_limits` é deny-by-default e o port só tem `definirLimitesDoCiclo` (ESCRITA); `CicloSoberano` não carrega quota |
+| G4 | **Nenhuma data na projeção** | `dataUltimoAcompanhamento` (`MinhasMetasPage.tsx:544`, `AcompanhamentoMetasPage.tsx:233`), `dataFechamento` (`MinhasMetasPage.tsx:590`), `dataCriacao` (`impactoCorrecaoPeriodoCiclo.ts:55`) | `MetaSoberana` não tem campo de data; a única é `aprovacoesVigentes[].decididoEm` |
+| G5 | **Nome de quem aprovou ausente** | `AcompanhamentoMetasPage.tsx:269,297` | A projeção traz papel/id/data/motivo, sem nome/matrícula do aprovador |
+| G6 | **Escopo painel/equipe** | `PainelCicloPage.tsx:101,137-167` | Ver L1: a tela deriva acesso de `funcao`/`gestorDiretoMatricula` **vivos**, enquanto a legitimidade soberana é a ocorrência **congelada** (D14/§9.1) |
+| G12 | **Autorização de UX inexequível** | `MinhasMetasPage.tsx:82-93` (`criarProvidersMundoLocal`+`LOCAL_ORGANIZATION_ID`); `AcompanhamentoMetasPage.tsx:80-107`; `PainelCicloPage.tsx:137-197` (`can()` com `funcao`+mundo local) | Em PROD o mundo local é vazio ⇒ DENY; não existe loader de cliente para `{type:"goal", id}` (o de `contextoAutorizacao.ts:358-391` é só da Edge). A projeção traz `relacao`/`status`/`excluida`/`ciclo_status` — suficiente para habilitar ação por RELAÇÃO+ESTADO, **não** para capability |
+| G11/G2 | **Pontes de UUID** | `MinhasMetasPage.tsx:58` (`getCicloAtivo()` legado, que **fabrica** UUID em `cicloAvaliacaoStorage.ts:52-81`); `PainelCicloPage.tsx:77` e `AcompanhamentoMetasPage.tsx:55` resolvem o UUID da URL contra o array local; identidade do dono é matrícula na UI e UUID no contrato | Decisão pendente: de onde vem o `cycleId` soberano e como a UI mapeia `collaboratorId` ↔ matrícula/nome |
+| G8 | Mutações exigem `motivo` + `expectedVersion` que a UI não tem | `MinhasMetasPage.tsx:279-298` (`window.confirm`, sem motivo/versão); "Revisar fechamento" hoje reusa `finalizarMeta` (`:521`) | Cabe no contrato com mudança de UX — **mas depende de discriminar 409** (ver §7.1) |
+
+### 8.3 Órfãos / código morto (decisão de destino)
+
+- `atualizarConfiguracaoMetasCiclo` (`cicloAvaliacaoStorage.ts:327`) — **zero chamadores**;
+  `CiclosAvaliacaoPage.tsx:617` é placeholder ⇒ **não existe consumidor de
+  `definirLimitesDoCiclo`** hoje.
+- `contarMetasPorTipo` (`metaStorage.ts:74-81`) — export morto.
+- `analisarPendenciasDoCiclo`, `corrigirPeriodoCicloAtivo`,
+  `analisarImpactoCorrecaoPeriodoCicloAtivo` — órfãos.
+
+### 8.4 Confirmado que CABE no contrato (só exige virar assíncrono)
+
+`MinhaAvaliacaoDetalhePage.tsx` (SELF, 1 ciclo, campos todos na projeção);
+`exportarAvaliacaoPdf.ts` (SELF, idem); núcleo de aprovação de
+`AcompanhamentoMetasPage.tsx` (relação congelada + `status`/`excluida`/`ciclo_status` +
+`aprovacoes_vigentes[papel]`, ressalvadas G1/G5); aviso de metas sem aprovação em
+`NovoFeedbackPage.tsx`/`EditarFeedbackPage.tsx` (só quando o avaliador é o aprovador
+congelado); núcleo SELF de `MinhasMetasPage.tsx` (ressalvadas G1/G3/G4/G8/G11/G12);
+`resetBaseDesenvolvimento.ts` (só limpeza DEV).
+
+### 8.5 Decisões adicionais necessárias
+
+10. **G1:** quem responde "meta aprovada" (todos os papéis exigidos) e como a UI separa
+    "não exigido" de "pendente"?
+11. **G3:** de onde a UI lê os limites do ciclo (D20 diz que só projeta)?
+12. **G4/G5:** datas de acompanhamento/fechamento e nome do aprovador saem da UI ou vêm de
+    outra superfície?
+13. **G12:** confirmar que a decisão de UX passa a ser por RELAÇÃO+ESTADO da projeção
+    (nunca por `can()`/`localWorld`/`funcao`).
+14. **Órfãos:** `analisarPendenciasDoCiclo`, `corrigirPeriodoCicloAtivo`,
+    `analisarImpactoCorrecaoPeriodoCicloAtivo` e `atualizarConfiguracaoMetasCiclo` são
+    removidos na P6 ou reativados em superfície soberana futura?
