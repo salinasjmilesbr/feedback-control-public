@@ -191,7 +191,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!data || typeof data.userId !== "string") throw new TechnicalError();
         return { userId: data.userId };
       } catch (erro) {
-        throw mapearErroConvite(erro);
+        // Issue #224: o mapeamento lê o `Response` de `FunctionsHttpError.context`
+        // de forma assíncrona (fonte única `corpoDeErroEdge`, #221) — precisa ser
+        // aguardado para que o erro público seja lançado, e não uma `Promise`.
+        throw await mapearErroConvite(erro);
       }
     },
     [cliente]
