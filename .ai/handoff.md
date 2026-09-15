@@ -34,23 +34,38 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
-### 3.23 F5-11 — Observações soberanas e histórico auditável (Issue #238) — DESENHO
+### 3.23 F5-11 — Observações soberanas e histórico auditável (Issue #238) — P0 FECHADO
 
 - **Atividade:** **F5-11** (Issue #238), branch `docs/f5-11-observacoes-soberanas-desenho`,
   base `main` = `5889decb81d4dc3feca15ca15d37f164e2f614ea` (squash do PR #236 / Issue #224).
-  Rodada **exclusivamente documental** (reconhecimento + proposta de desenho): **nenhuma**
-  migration, RPC, Edge Function, RLS, policy, capability, alteração funcional de UI ou
-  persistência; **nenhuma** credencial/PAT; `gh` **não** instalado; **nenhum** merge.
-- **Entregável:** `docs/F5-11-desenho-tecnico.md` — inventário do legado
-  (`observacaoStorage.ts` 100% `localStorage`, chave `feedback-control-observacoes`),
-  call graph real, arquitetura reutilizável das Etapas 4/5 (F4-02/F4-08/F5-06/F5-09/F5-10),
-  modelo soberano **proposto**, matriz preliminar de autorização, ameaças/controles,
-  decisão inicial de **não migrar** dados legados, cutover, testes, decomposição **P1–P6**,
-  decisões herdadas fechadas e **Q1–Q16 ABERTAS**.
-- **NÃO é documento normativo e NÃO fecha o contrato.** É **pré-requisito de qualquer
-  implementação**: as **Q1–Q16** (§15) precisam de fechamento antes da P1
-  (`AGENTS.md` §6: nenhuma implementação começa com decisão arquitetural aberta).
-- **Achados que mudam o entendimento corrente (e exigem confirmação do responsável):**
+  PR **#239** (desenho) — **não fecha a Issue #238** (`Refs #238`): a Issue só se encerra na P6.
+  Rodadas **exclusivamente documentais**: **nenhuma** migration, RPC, Edge Function, RLS, policy,
+  capability, alteração funcional de UI, persistência ou teste funcional; **nenhuma**
+  credencial/PAT; `gh` **não** instalado; **nenhum** merge.
+- **Entregável:** `docs/F5-11-desenho-tecnico.md` — **documento NORMATIVO** (contrato da F5-11):
+  inventário do legado (`observacaoStorage.ts` 100% `localStorage`, chave
+  `feedback-control-observacoes`), call graph real, arquitetura reutilizável das Etapas 4/5
+  (F4-02/F4-08/F5-06/F5-09/F5-10), modelo soberano, matriz de autorização, segurança, decisão de
+  **não migrar** dados legados, cutover, testes, decomposição, riscos e critérios de aceite.
+- **P0 CONCLUÍDO:** a **auditoria GPT aprovou o desenho** e **fechou Q1–Q16 na alternativa A**,
+  registradas como **decisões normativas D1–D16** (§15) com rastreabilidade Q#→D#. **Nenhuma
+  questão permanece aberta.** Contrato fechado: `cycle_id` obrigatório e soberano (D2); autoria
+  **exclusivamente derivada** do contexto autenticado (D3); **só o autor soberano** edita/exclui/
+  revoga/altera comunicado, cumulativamente com os demais gates (D5); colaborador/ciclo/autoria
+  **imutáveis** após a criação (D4); histórico **append-only** imutável (D6); **comunicado é fato
+  auditável** com ator e instante, gate `observation.edit`, **sem capability nova** (D7); exclusão
+  lógica com motivo e revogação pelo autor em ciclo `ATIVO` (D8); **RLS deny-by-default integral**
+  desde a P1 (D9); `version` + row lock, **sem advisory lock** (D10); `leave` permite criar e
+  `inactive` proíbe nova criação (D11); mutação só em ciclo `ATIVO` com leitura histórica nos
+  demais (D12); **não migrar** o `localStorage` (D13); decomposição oficial **P0–P6** (D14);
+  concessão explícita de `observation.*` em **bundle/perfil de gestão distinto de `admin`** (D15);
+  texto 1..2000 e motivo obrigatório (D16).
+- **Bloqueio declarado e ativo (D15, item 3):** **antes do início da P3**, o documento **deve**
+  receber a tabela **`capability → bundle/perfil existente → escopo`**. Sua ausência **bloqueia o
+  início da P3**. Fato verificado: a única role de sistema semeada é `admin` (que **permanece sem
+  `observation.*`**, guarda `02-validar-f4-01.sql:563-578` preservada); as demais `access_roles` em
+  migração são **fixture de validação**. **É proibido inventar papel/bundle silenciosamente.**
+- **Achados que mudam o entendimento corrente:**
   1. o domínio é **inutilizável fora do DEV**: `observation` é recurso **não soberano**
      (`resourceContextReal.ts:38`) e o componente não passa `collaborators`, logo
      `can()` é sempre falso e `authorize()` lança ⇒ o botão de criar nem renderiza;
@@ -58,30 +73,34 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
      `docs/F4-09-desenho-tecnico.md:253-255` (`▸(add authorize)`) e
      `docs/F5-07-desenho-tecnico.md:1331-1338` (§20.4);
   3. editar/excluir observação **de outro autor** é **ALLOW** explícito
-     (`authorizationPolicy.test.ts:508-518`) ⇒ a F5-11 deve **inverter** esse teste;
-  4. **nenhuma** role de sistema concede `observation.*` e o bundle `admin` é **proibido** por
-     guarda de conter conteúdo confidencial (`02-validar-f4-01.sql:563-578`) ⇒ decisão de
-     concessão é a **Q15** (risco de o domínio nascer DENY em produção, análogo ao R2 da F5-10);
+     (`authorizationPolicy.test.ts:508-518`) ⇒ a F5-11 **deve inverter** esse teste (D5);
+  4. **nenhuma** role de sistema concede `observation.*` ⇒ sem concessão explícita o domínio nasce
+     **DENY em produção** (análogo ao R2 da F5-10) — resolvido por D15 com obrigação de
+     identificação prévia;
   5. **`comunicado` não tem capability**: é campo anônimo sem carimbo de quem/quando — o
-     catálogo F4-01 registrou a semântica como **futura** (`20260908000001:59-60`);
+     catálogo F4-01 registrou a semântica como **futura** (`20260908000001:59-60`); resolvido por
+     D7 **sem** capability nova;
   6. o CI **proíbe** observação no schema
      (`15-validar-f5-09-p9.sql:2121-2173`, `30-validar-f5-10-p7.sql:1401-1413`) — guardas
-     **invertidas** a substituir na P1;
+     **invertidas** a substituir na **P1**;
   7. `impactoCorrecaoPeriodoCiclo.ts`/`correcaoPeriodoCicloService.ts` foram **removidos** em
      `4868ca7` (F5-10 P6): a nota do §3.5 da F5-10 estava **desatualizada** para observações.
 - **Fronteira de escopo:** `Feedback.observacaoGerente`/`observacaoCoordenador` é **outro**
   conceito (observação de critério, já soberano em F5-06) — **fora** da F5-11.
-- **Próximo passo (quando autorizado):** fechar **Q1–Q16** do §15 do documento; a partir daí,
-  **P1** = schema `evaluation_observations` + `evaluation_observation_events`
-  (migration `20260929000000_*`, validação a partir do número livre **34**, que hoje é o
-  **34** porque o **27** é um gap). Contratos da F5-09 (D1–D28) e da F5-10 (D1–D25) **não
-  reabrem**; catálogo permanece com **31** capabilities.
-- **Fallback DEV-04:** o ambiente **não** tem mecanismo autorizado de abertura de PR
-  (sem `gh`, sem PAT/credencial — proibido contornar) ⇒ entrega de **branch + SHA + título +
-  corpo**; **o PR precisa ser aberto pelo orquestrador**.
-- **Gates desta rodada:** `git diff --check` limpo; **0** `npm test` / `npm run build` /
+- **Próximos passos (por ordem estrita, §13.1):** **P1** = schema
+  `evaluation_observations` + `evaluation_observation_events` + **substituição das guardas
+  invertidas** (migration `20260929000000_*`; validação a partir do número livre **34** — o **27**
+  é gap). Depois **P2** (RPCs `observacao_*`) → **P3** (autorização + concessões + RLS, **exige a
+  tabela de D15**) → **P4** (Edge + cliente) → **P5** (cutover + barreira contra persistência
+  local) → **P6** (validação integrada/certificação). Contratos da F5-09 (D1–D28) e da F5-10
+  (D1–D25) **não reabrem**; catálogo permanece com **31** capabilities.
+- **Fallback DEV-04 (histórico):** o ambiente **não** tem mecanismo autorizado de abertura de PR
+  (sem `gh`, sem PAT/credencial — proibido contornar) ⇒ a rodada inicial entregou **branch + SHA +
+  título + corpo** e o PR **#239** foi aberto pelo **orquestrador**. **Não abrir novo PR** para a
+  mesma branch.
+- **Gates desta atividade:** `git diff --check` limpo; **0** `npm test` / `npm run build` /
   `npm run lint` / `db reset` (nenhuma alteração funcional ⇒ bateria pesada não produziria
-  informação nova — DEV-03); **1** lote privilegiado (commit + push); **0** repetições;
+  informação nova — DEV-03); **1** lote privilegiado por rodada (commit + push); **0** repetições;
   **0** elevações de sandbox. Tempo e usage/custo **não observáveis** — não reportados.
 
 ### 3.22 DEV-04 — abertura de PR e disparo antecipado do CI (Issue #234)
