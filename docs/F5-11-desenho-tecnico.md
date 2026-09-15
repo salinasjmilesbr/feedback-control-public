@@ -9,8 +9,11 @@
 > — **nenhuma questão permanece aberta**. `DECIDE` neste documento é vinculante para a implementação e
 > não pode ser reinterpretado nas fases P1–P6.
 > **Histórico:** `91b9c61` (reconhecimento + proposta de desenho, Q1–Q16 abertas com alternativas
-> A/B/C); esta revisão (fechamento de Q1–Q16 = A, revisão transversal de matriz, modelo, riscos,
-> cutover, decomposição, critérios de aceite e dependências entre pacotes).
+> A/B/C); `6d527cc` (fechamento de Q1–Q16 = A como D1–D16, revisão transversal de matriz, modelo,
+> riscos, cutover, decomposição, critérios de aceite e dependências entre pacotes); **P1
+> implementada** — migration `20260929000000_f5_11_p1_observations_schema.sql`, cenário `34` e
+> validador `35`, com a substituição dos guards invertidos (registro em **§18**, que **não altera
+> D1–D16**).
 > **Nenhuma migration, RPC, Edge Function, policy, RLS, capability, alteração funcional de UI,
 > persistência ou teste funcional foi criada ou alterada nesta rodada.** A alteração é **documental**.
 > **Regras de leitura:** onde este documento diz **DECIDE**, a decisão está **fechada** (§15, D1–D16);
@@ -700,12 +703,23 @@ recurso (D7).
 5. A concessão é **testável no caminho de produção** (nunca via `localWorld`/DEV): o teste de ALLOW
    da P3 deve exercitar a capability efetiva concedida pelo mecanismo real.
 
-> **Fato verificado no repositório (base `5889dec`):** a única role de sistema semeada é `admin`
-> (`20260908000001_authorization_system_catalog.sql:69`); as demais `access_roles` criadas em
-> migração vivem **em fixture de validação** (`20260925000000_f5_10_p4_authorization_rls.sql:2319,2329`)
-> e não são perfis de produto. Portanto a investigação exigida pelo item 3 **deve** ser executada e
-> documentada na P3 — o produto **não** tem hoje um bundle de gestão pronto que possa receber
-> `observation.*` sem que isso seja explicitamente decidido.
+> **Fato verificado no repositório — CORRIGIDO na execução da P1 (verificação no banco após
+> `db reset`, base `6d527cc`):** o estado real tem **TRÊS** roles de sistema, e não uma:
+> `admin` (`20260908000001_authorization_system_catalog.sql:69`), **`metas_dono`** e
+> **`metas_aprovador`** — estas duas criadas pela **própria migration da F5-10 P4**
+> (`20260925000000_f5_10_p4_authorization_rls.sql:2314-2332`, de forma aditiva e idempotente) como o
+> **mecanismo de concessão explícita** do D7 da F5-10. Elas **não** são fixture de validação: são
+> perfis de produto que **persistem** após `db reset` (a versão anterior desta nota estava
+> **incorreta**). Consequências para a P3, sem alterar a decisão D15:
+>
+> 1. existe **precedente normativo** para o mecanismo de concessão por **perfil de sistema por
+>    domínio** (foi assim que a F5-10 concedeu `goal.*`), e `metas_dono`/`metas_aprovador` são
+>    perfis de **metas**, não de observações — **não** servem para `observation.*`;
+> 2. `admin` continua **proibido** de receber `observation.*` (guarda `02-validar-f4-01.sql:563-578`);
+> 3. logo **não há hoje perfil existente adequado** para receber `observation.*`, e a investigação
+>    exigida pelo item 3 permanece **obrigatória** e **bloqueante** para a P3 — com a diferença de
+>    que agora o candidato natural (perfil de sistema por domínio) já tem precedente explícito no
+>    repositório e deve ser **decidido e nomeado**, nunca criado em silêncio.
 
 ## 9. Segurança — ameaças e controles (NORMATIVO — DECIDE D3–D16)
 
@@ -1229,3 +1243,103 @@ limite) e 2000 mantém o limite tanto no banco quanto na fronteira (ameaça T15)
   **nenhum** merge.
 - **Tempo:** não medido de forma confiável nesta rodada (declarado, não estimado).
 - **Usage/custo:** não observável a partir do ambiente — não reportado.
+
+---
+
+# REGISTRO DE IMPLEMENTAÇÃO (não altera D1–D16)
+
+## 18. P1 — schema, trilha auditável e substituição dos guards invertidos (IMPLEMENTADA)
+
+> **Rastreabilidade:** a P1 é entregue sob a **Issue #240** (`F5-11/P1 — Schema soberano, audit trail
+> e substituição dos guards invertidos`), cuja **Issue-mãe é a #238** (F5-11). Esta é a issue que
+> **governa** a P1 e que o PR correspondente deve **fechar** (`Closes #240`); a #238 **permanece
+> aberta** até a P6. Os artefatos SQL citam `F5-11 P1 (Issue #238)` por já estarem **validados byte a
+> byte** (bateria de banco 47/47 verde) e **não são reeditados** apenas para trocar o número da
+> issue — a evidência vale mais que a referência cosmética.
+> **Natureza:** registro do que foi efetivamente construído na P1. **Não altera nenhuma decisão
+> D1–D16** e **não antecipa P2–P6**. Onde a implementação materializou algo que o esboço do §7.2 não
+> listava literalmente, isso está **declarado** em §18.3.
+
+### 18.1 Entregue
+
+| Artefato | Conteúdo |
+|---|---|
+| `supabase/migrations/20260929000000_f5_11_p1_observations_schema.sql` | preflight fail-closed; as duas tabelas do §7.2 com o conjunto completo de constraints; índice de alvo parcial; trigger `updated_at`; **trigger de imutabilidade estrutural (D4)**; trilha append-only com os **3 triggers (D6)**; **RLS deny-by-default integral (D9)**; ACL mínima; guarda final fail-closed |
+| `supabase/validacao/34-cenario-f5-11-p1.sql` | fixture isolada (prefixo `fd`): 2 orgs, 2 identidades com membership ativa, 3 colaboradores, 3 ciclos (Alfa `ATIVO`, Alfa `ENCERRADO`, Beta `ATIVO`), 4 observações (1 comunicada, 1 excluída com motivo, 1 em ciclo encerrado) e 6 eventos; guarda insert-once |
+| `supabase/validacao/35-validar-f5-11-p1.sql` | validador por blocos A–K com `[PASS]`/`[FAIL]` (preflight, estrutura, CHECKs comportamentais, D2, FKs cross-tenant, D4, D6, D9, idempotência, fronteira da P1/D15, higiene) |
+| `.github/workflows/ci.yml` | passos da P1 inseridos **antes** das regressões F5-06/F5-07 |
+
+### 18.2 Guards invertidos: o padrão incorreto e a substituição
+
+**Padrão incorreto encontrado (a mesma falha em três validadores):** a F5-11 era protegida por
+**proibição absoluta** — qualquer tabela ou função cujo nome casasse com `%observac%`/`%observation%`
+reprovava o CI. Esse guarda **não podia sobreviver** à P1, e **removê-lo** teria deixado o anti-escopo
+sem cobertura. A substituição aplica a **mesma doutrina já usada quando a própria F5-10 chegou**
+(proibição → **LISTA FECHADA**), de forma transversal, para não deixar variantes do mesmo defeito:
+
+| Arquivo | Antes | Depois |
+|---|---|---|
+| `supabase/validacao/15-validar-f5-09-p9.sql` | contagem de tabelas e de funções `%observa%` devia ser **0**; bloco (f) não excluía tabelas de observação | **lista fechada**: `v_tabelas_observacoes_p1` (as 2 do contrato) e `v_funcoes_observacoes_p1` (**vazio** até a P2); bloco (f) exclui as tabelas legítimas |
+| `supabase/validacao/30-validar-f5-10-p7.sql` | idem, com a mensagem "F5-11 intocada" | lista fechada com as 2 tabelas + **zero** funções + prova de que as 2 tabelas **existem** |
+| `supabase/validacao/02-validar-f4-08.sql` | inventário D16, categoria "fechada", classificação de ACL e **contagens fixas** (49 tabelas; 26 fechadas) sem as tabelas de observação | as 2 tabelas entram em `v_closed`, no inventário `v_todos`, na classificação D16 e no bloco **deny-by-default integral**; contagens **49 → 51** e **26 → 28** |
+
+**Nenhum** guarda foi enfraquecido ou removido: as três listas continuam reprovando qualquer objeto
+de observação **fora** delas, e a P2 terá de **ampliar a lista de funções explicitamente** para
+introduzir as RPCs `observacao_*`.
+
+### 18.3 Declarações explícitas (desvios do esboço, sem alterar decisão)
+
+1. **Integridade referencial completa (declarada).** O esboço do §7.2 listava colunas, CHECKs e uma
+   FK composta; a implementação materializou o **conjunto completo de FKs** do molde normativo do D6
+   (`cycle_events`/`evaluation_goal_events`): `organizations`, FKs compostas de tenant para
+   `evaluation_cycles`, `collaborators` e `user_organization_memberships`, e FKs de perfil do ator —
+   inclusive para quem **comunicou** e para quem **excluiu**. Motivo: o próprio checklist do
+   repositório exige `FK/organization_id` coerente em tabela tenant-specific e o D6 referencia
+   explicitamente aquele molde; sem elas o cross-tenant seria possível **na trilha** e o histórico
+   poderia apontar para ator inexistente. Nenhuma coluna nem CHECK do contrato foi alterado.
+2. **Imutabilidade estrutural (D4) por trigger, e não apenas por contrato de forma.** O D4 é
+   normativo; a P1 o materializa no banco (resistente a bug de RPC e a privilege drift), sem limitar
+   os campos mutáveis do contrato.
+3. **A P1 não impõe estado de ciclo no schema.** A regra "mutação só em `ATIVO`" (D12) é **gate
+   funcional** da P2/P3 — a fixture inclui, de propósito, uma observação em ciclo `ENCERRADO` para
+   provar que o schema a aceita, deixando a fronteira explícita.
+4. **`version` não é incrementada pela P1.** O `version + 1` pertence à operação soberana da P2
+   (D10); a P1 apenas garante `version >= 0`.
+
+### 18.4 Fronteira da P1 respeitada
+
+**Nenhuma** RPC `observacao_*`, **nenhuma** função funcional de observação, **nenhuma** policy de
+leitura, **nenhuma** capability nova, **nenhum** bundle/role novo, **nenhuma** concessão de
+`observation.*`, **nenhum** Edge, **nenhum** cliente, **nenhum** cutover, **nenhuma** migração de
+`localStorage`, **nenhum** advisory lock. O validador da P1 **falha** se qualquer um desses objetos
+aparecer.
+
+### 18.5 D15 continua BLOQUEANDO a P3 (estado inalterado)
+
+`observation.*` continua **sem concessão alguma**; o bundle `admin` continua com **9** capabilities e
+**sem** `observation.*` (a guarda `02-validar-f4-01.sql:563-578` foi **preservada**, não relaxada).
+**Antes do início da P3** este documento deve receber a tabela
+**`capability → bundle/perfil existente → escopo`** (D15 item 3). **A P1 não antecipa essa decisão e
+não cria role, bundle ou perfil.**
+
+### 18.6 Correção factual descoberta na execução da P1 (não altera D15)
+
+A execução do validador da P1 contra o banco **real** (após `db reset`) provou que o estado de
+concessão não era o que a nota anterior do §8 supunha: existem **três** roles de sistema —
+`admin`, **`metas_dono`** e **`metas_aprovador`** —, sendo as duas últimas criadas de forma
+**aditiva e idempotente pela migration da F5-10 P4** (`20260925000000:2314-2332`) como o mecanismo de
+concessão explícita do D7 da F5-10. Elas **persistem** após `db reset` e **não** são fixture de
+validação. O §8 foi **corrigido** e a conclusão sobre D15 foi **reforçada**, não relaxada:
+
+- existe **precedente normativo** para conceder capability por **perfil de sistema por domínio**
+  (foi assim que a F5-10 concedeu `goal.*`);
+- `metas_dono`/`metas_aprovador` são perfis de **metas** e **não servem** para `observation.*`;
+- `admin` continua **proibido** de receber `observation.*`;
+- portanto **continua não havendo** perfil existente adequado, e a identificação exigida pelo D15
+  item 3 permanece **obrigatória e bloqueante** para a P3 — agora com o mecanismo candidato
+  (**perfil de sistema por domínio**) já **precedenciado** e tendo de ser **decidido e nomeado
+  explicitamente**, nunca criado em silêncio.
+
+> **Efeito na P1:** nenhum. A P1 **não** cria role, bundle nem perfil — o validador da P1 **falha**
+> se o conjunto nomeado de roles de sistema deixar de ser exatamente
+> `admin` + `metas_aprovador` + `metas_dono`.

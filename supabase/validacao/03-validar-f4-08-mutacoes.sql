@@ -76,7 +76,11 @@ begin
       'evaluation_events','evaluation_pendencies','evaluation_aggregates','collaborator_events',
       'structure_events','cycle_events',
       'evaluation_goals','evaluation_goal_approvals','evaluation_goal_events',
-      'evaluation_cycle_goal_limits');
+      'evaluation_cycle_goal_limits',
+      -- F5-11 P1 (Issue #238): as 2 tabelas de observacoes entram no inventario
+      -- D16 (catalogacao explicita obrigatoria) e na categoria deny-by-default
+      -- integral por D9. Sem elas, a mutacao B acusaria falso positivo.
+      'evaluation_observations','evaluation_observation_events');
   if v_t is null or v_t not like '%_mut_nao_class%' then
     raise exception '[MUT FAIL] guard nao detectou tabela nao classificada (v_t=%)', v_t;
   end if;
@@ -109,7 +113,11 @@ begin
       'evaluation_events','evaluation_pendencies','evaluation_aggregates','collaborator_events',
       'structure_events','cycle_events',
       'evaluation_goals','evaluation_goal_approvals','evaluation_goal_events',
-      'evaluation_cycle_goal_limits');
+      'evaluation_cycle_goal_limits',
+      -- F5-11 P1 (Issue #238): as 2 tabelas de observacoes entram no inventario
+      -- D16 (catalogacao explicita obrigatoria) e na categoria deny-by-default
+      -- integral por D9. Sem elas, a mutacao B acusaria falso positivo.
+      'evaluation_observations','evaluation_observation_events');
   if v_t is not null then raise exception '[MUT FAIL] catalogo nao voltou ao estado limpo (%)', v_t; end if;
   raise notice '[PASS] mutacao B: tabela nao classificada detectada e revertida';
 end $$;

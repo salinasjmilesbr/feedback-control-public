@@ -459,6 +459,24 @@ jobs:
             < supabase/validacao/33-validar-f5-10-p7-concorrencia.sql
 
       # ----------------------------------------------------------------------
+      # F5-11 P1 (Issue #238): schema + trilha append-only das OBSERVAÇÕES e
+      # substituição dos guards invertidos (a proibição absoluta de objeto de
+      # observação virou LISTA FECHADA). As fases correntes rodam ANTES das
+      # regressões abaixo, para não serem mascaradas.
+      # ----------------------------------------------------------------------
+      - name: "Seed F5-11 P1 scenario (observacoes: schema/trilha)"
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/34-cenario-f5-11-p1.sql
+
+      - name: "Run F5-11 P1 validation (schema, CHECKs, FKs compostas, imutabilidade D4, trilha append-only D6, RLS D9 e D15 intacto)"
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/35-validar-f5-11-p1.sql
+
+      # ----------------------------------------------------------------------
       # Regressão F5-06/F5-07 (§23.4): cenários independentes, com prefixos de
       # UUID próprios (`d6`/`d7`), reaplicados antes de cada validação.
       # ----------------------------------------------------------------------
