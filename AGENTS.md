@@ -10,9 +10,9 @@ Antes de desenhar, implementar, revisar ou auditar qualquer atividade, leia:
 
 1. `AGENTS.md` (este arquivo);
 2. `.ai/virtus-context.md` — contexto persistente do projeto (identidade, stack, fases, mapa do repositório);
-3. `.ai/workflow.md` — fluxo oficial (Flash desenha → GPT revisa/fecha → Pro implementa → GPT audita → CI → squash merge) e responsabilidades por modo;
+3. `.ai/workflow.md` — fluxo oficial completo (Issue → branch → desenho/revisão → implementação → validação local → commit/push → PR → CI → auditoria → squash merge → main), responsabilidades por modo e as regras de processo **DEV-02** (§6) e **DEV-04** (§7);
 4. `.ai/architecture-rules.md` — regras arquiteturais e trust boundaries permanentes;
-5. `.ai/git-rules.md` — regras de Git e limitação conhecida de push do sandbox;
+5. `.ai/git-rules.md` — regras de Git (branch, commit, push, PR, CI e merge) e limitação conhecida de push/PR do sandbox;
 6. `.ai/handoff.md` — contexto operacional de retomada (estado da última entrega);
 7. A **Issue** correspondente e a discussão do **PR** (GitHub é a fonte de verdade);
 8. `docs/Fx-XX-desenho-tecnico.md` da atividade — **contrato específico da atividade**.
@@ -106,9 +106,18 @@ git diff --check
 - Desenho (documento de design) e implementação (código) **nunca** no mesmo PR;
   nenhuma implementação começa com decisão arquitetural aberta.
 - Use commits objetivos compatíveis com o histórico do repositório.
+- **DEV-04 — abertura de PR e CI antecipado:** com a implementação e os gates
+  locais planejados **verdes e sem blocker**, faça `commit + push` e **abra o PR
+  imediatamente**, vinculando a Issue (`Closes #<n>`). Se o ambiente **não** tiver
+  mecanismo **autorizado** para abrir PR, **não contorne** (nada de `gh`, PAT ou
+  credencial): entregue **branch, SHA, título e corpo** e **informe que o PR
+  precisa ser aberto pelo orquestrador**. Detalhes: `.ai/workflow.md` §7.
 - Abra Pull Request usando `.github/pull_request_template.md`; use `Closes #<n>`
   somente quando a entrega resolver integralmente o escopo da Issue.
+- **CI associado ao SHA do PR** (o SHA auditado); correção posterior ao PR gera
+  **novo SHA** com **novo CI**. Não repita CI/gates sem mudança relevante.
 - **Squash merge** em `main` com **CI verde** e **SHA auditado**.
-- Não faça merge sem solicitação explícita.
+- **O agente de implementação nunca faz merge**; não faça merge sem solicitação
+  explícita.
 - Dependabot e PRs de dependência ficam **fora** de atividades estruturais.
-- Regras de push e a limitação conhecida do sandbox DeepSeek: `.ai/git-rules.md`.
+- Regras de push/PR e a limitação conhecida do sandbox DeepSeek: `.ai/git-rules.md`.
