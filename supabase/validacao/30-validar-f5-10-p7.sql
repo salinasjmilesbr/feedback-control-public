@@ -1398,20 +1398,41 @@ begin
     end if;
   end loop;
 
-  -- (c) F5-11 (observacoes) permanece INTOCADA.
+  -- (c) F5-11 (observacoes): a PROIBICAO ABSOLUTA de objeto de observacao foi
+  --     SUBSTITUIDA pela doutrina de LISTA FECHADA (nunca removida). A F5-11 P1
+  --     (Issue #238) legitimou as DUAS tabelas do contrato (linha + trilha) e
+  --     NENHUMA funcao: a lista de funcoes e VAZIA nesta fase, porque a P2 e que
+  --     introduzira as RPCs `observacao_*` (e ampliara a lista explicitamente).
+  --     Qualquer objeto de observacao fora dessas listas continua reprovando.
   select count(*) into v_n from pg_class c
     join pg_namespace n on n.oid = c.relnamespace
    where n.nspname = 'public' and c.relkind = 'r'
-     and (c.relname like '%observation%' or c.relname like '%observac%');
+     and (c.relname like '%observation%' or c.relname like '%observac%')
+     and c.relname <> all (array[
+       'evaluation_observations','evaluation_observation_events']);
   if v_n <> 0 then
-    v_falhas := v_falhas || format('%s tabela(s) de observacoes instaladas (F5-11 antecipada)', v_n);
+    v_falhas := v_falhas || format('%s tabela(s) de observacoes FORA da lista fechada da F5-11 P1', v_n);
   end if;
   select count(*) into v_n from pg_proc p
    where p.pronamespace = 'public'::regnamespace
-     and (p.proname like '%observa%' or p.proname like '%observation%');
+     and (p.proname like '%observa%' or p.proname like '%observation%')
+     and p.proname <> all (array[
+       -- F5-11 P1: as DUAS funcoes de enforcement da propria P1 (imutabilidade
+       -- estrutural D4 e append-only da trilha D6). O nome casa com o filtro por
+       -- nome — a lista fechada precisa nomea-las, sem abrir espaco para RPC.
+       'enforce_evaluation_observations_imutaveis',
+       'enforce_evaluation_observation_events_append_only']);
   if v_n <> 0 then
-    v_falhas := v_falhas || format('%s funcao(oes) de observacoes instaladas (F5-11 antecipada)', v_n);
+    v_falhas := v_falhas || format('%s funcao(oes) de observacoes FORA da lista fechada da F5-11 P1 (nenhuma RPC observacao_* existe ate a P2)', v_n);
   end if;
+  -- As duas tabelas legitimas da F5-11 P1 precisam EXISTIR (a lista fechada nao
+  -- pode virar desculpa para ausencia).
+  foreach v_fn in array array[
+    'evaluation_observations', 'evaluation_observation_events'] loop
+    if to_regclass('public.' || v_fn) is null then
+      v_falhas := v_falhas || format('tabela legitima da F5-11 P1 ausente: %s', v_fn);
+    end if;
+  end loop;
 
   -- (d) Catalogo de capabilities e bundle `admin` intactos (D6/D28).
   select count(*) into v_n from public.capabilities;
@@ -1432,7 +1453,7 @@ begin
     raise exception '[FAIL] S15 (bloco 19): guardas invertidas incoerentes: %', array_to_string(v_falhas, '; ');
   end if;
 
-  raise notice '[PASS] S15 (bloco 19): guardas invertidas coerentes — 4 tabelas de metas com RLS e ZERO policy, NENHUM objeto de metas fora da lista fechada (tabelas e funcoes), os 4 helpers de aprovacao cujo nome NAO casa com o filtro por nome provados individualmente (INVOKER, EXECUTE so service_role), F5-11 intocada, catalogo com 31 capabilities, 5 de ciclo e bundle admin com 9';
+  raise notice '[PASS] S15 (bloco 19): guardas invertidas coerentes — 4 tabelas de metas com RLS e ZERO policy, NENHUM objeto de metas fora da lista fechada (tabelas e funcoes), os 4 helpers de aprovacao cujo nome NAO casa com o filtro por nome provados individualmente (INVOKER, EXECUTE so service_role), F5-11 em LISTA FECHADA da P1 (as 2 tabelas do contrato existem e NENHUMA funcao observacao_* foi criada), catalogo com 31 capabilities, 5 de ciclo e bundle admin com 9';
 end $$;
 
 -- ============================================================================

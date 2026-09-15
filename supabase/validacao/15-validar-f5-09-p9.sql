@@ -76,7 +76,8 @@
 --   §11 REGRESSOES P1–P8: I5/I6/I3, as 8 RPCs `SECURITY INVOKER` com
 --       `search_path` fixo e `EXECUTE` so `service_role`, catalogo com 31
 --       capabilities e bundle `admin` com 9 funcionais contendo `cycle.manage`,
---       e nenhuma antecipacao de F5-10 (metas) ou F5-11 (observacoes).
+--       metas e observacoes em LISTA FECHADA (F5-10 P1 e F5-11 P1) — a proibicao
+--       absoluta de observacao foi substituida por lista fechada, nunca removida.
 --   §12 IMUTABILIDADE da estrutura materializada: A11 (inclusao de colaborador
 --       ja materializado nao altera nem apaga nenhuma linha dos snapshots).
 --   §13 REGRESSAO DA ADMISSAO (casos centrais A1–A12): admissao elegivel
@@ -1918,7 +1919,7 @@ end $$;
 
 -- ----------------------------------------------------------------------------
 -- 11) REGRESSOES P1–P8: integridade, I5 no estado final, superficie de mutacao,
---     catalogo e ausencia de antecipacao de F5-10/F5-11
+--     catalogo e fronteira por LISTA FECHADA de F5-10/F5-11
 -- ----------------------------------------------------------------------------
 do $$
 declare
@@ -1934,12 +1935,25 @@ declare
   -- legitimados pelas fases implementadas. A guarda de "nao antecipar F5-10" NAO
   -- foi enfraquecida: passou a LISTA FECHADA (tabelas + funcoes de
   -- integridade/trilha + as 10 RPCs soberanas das P2/P3/P4 + os 3 helpers de
-  -- autorizacao da P4). Qualquer objeto de METAS fora dela continua reprovando, e
-  -- as fases seguintes (Edge, cliente, cutover) e F5-11 seguem integralmente
-  -- proibidas.
+  -- autorizacao da P4). Qualquer objeto de METAS fora dela continua reprovando.
   v_tabelas_metas_p1 text[] := array[
     'evaluation_goals','evaluation_goal_approvals','evaluation_goal_events',
     'evaluation_cycle_goal_limits'];
+  -- F5-11 P1 (Issue #238): a PROIBICAO ABSOLUTA de observacao foi SUBSTITUIDA pela
+  -- mesma doutrina de LISTA FECHADA (nunca removida). As tabelas legitimas da P1
+  -- sao exatamente as duas do contrato (D1) e a lista de FUNCOES e VAZIA nesta
+  -- fase: nenhuma RPC `observacao_*` existe ate a P2, que devera ampliar a lista
+  -- explicitamente. Qualquer objeto de observacao fora dessas listas continua
+  -- reprovando, e as fases seguintes (P2..P6) seguem nao antecipadas.
+  v_tabelas_observacoes_p1 text[] := array[
+    'evaluation_observations','evaluation_observation_events'];
+  v_funcoes_observacoes_p1 text[] := array[
+    -- F5-11 P1: as DUAS funcoes de enforcement da propria P1 (imutabilidade
+    -- estrutural do D4 e append-only da trilha do D6). O nome delas casa com o
+    -- filtro por nome (`%observa%`) exatamente como os helpers de aprovacao da
+    -- F5-10 casavam com `%meta%`: por isso a lista precisa nomea-las.
+    'enforce_evaluation_observations_imutaveis',
+    'enforce_evaluation_observation_events_append_only'];
   v_funcoes_metas_p1 text[] := array[
     'enforce_evaluation_goal_events_append_only','f5_10_validar_quota_da_meta',
     'f5_10_validar_quota_do_limite','f5_10_proteger_limite_do_ciclo',
@@ -2117,8 +2131,9 @@ begin
 
   -- (e) F5-10 P1: as tabelas/funcoes de METAS previstas pela P1 (schema,
   --     integridade e limites) sao LEGITIMAS. A guarda NAO foi removida: virou
-  --     LISTA FECHADA — qualquer objeto de metas FORA dela continua reprovando,
-  --     e observacoes (F5-11) seguem integralmente proibidas.
+  --     LISTA FECHADA — qualquer objeto de metas FORA dela continua reprovando.
+  --     F5-11 P1 (Issue #238): idem para OBSERVACOES — a proibicao absoluta foi
+  --     substituida por lista fechada (2 tabelas legitimas; ZERO funcoes ate a P2).
   select count(*) into v_n from pg_class c
     join pg_namespace n on n.oid = c.relnamespace
    where n.nspname = 'public' and c.relkind = 'r'
@@ -2130,9 +2145,10 @@ begin
   select count(*) into v_n from pg_class c
     join pg_namespace n on n.oid = c.relnamespace
    where n.nspname = 'public' and c.relkind = 'r'
-     and (c.relname like '%observation%' or c.relname like '%observac%');
+     and (c.relname like '%observation%' or c.relname like '%observac%')
+     and c.relname <> all (v_tabelas_observacoes_p1);
   if v_n <> 0 then
-    v_problemas := v_problemas || format('%s tabela(s) de observacoes no schema public', v_n);
+    v_problemas := v_problemas || format('%s tabela(s) de observacoes FORA da lista fechada da F5-11 P1', v_n);
   end if;
   select count(*) into v_n from pg_proc p
    where p.pronamespace = 'public'::regnamespace
@@ -2143,20 +2159,22 @@ begin
   end if;
   select count(*) into v_n from pg_proc p
    where p.pronamespace = 'public'::regnamespace
-     and (p.proname like '%observa%' or p.proname like '%observation%');
+     and (p.proname like '%observa%' or p.proname like '%observation%')
+     and p.proname <> all (v_funcoes_observacoes_p1);
   if v_n <> 0 then
-    v_problemas := v_problemas || format('%s RPC(s) de observacoes instaladas', v_n);
+    v_problemas := v_problemas || format('%s funcao(oes) de observacoes FORA da lista fechada da F5-11 P1 (a P2 as introduzira)', v_n);
   end if;
 
   -- (f) NENHUMA coluna de metas/observacoes ligada a ciclo/avaliacao — exceto as
-  --     colunas das tabelas legitimas da P1 (nelas o vinculo `*_goal_id` e o
-  --     proprio contrato da meta, nao antecipacao em tabela de ciclo/avaliacao).
+  --     colunas das tabelas legitimas da P1 (nelas o vinculo `*_goal_id`/`*_id` e o
+  --     proprio contrato do dominio, nao antecipacao em tabela de ciclo/avaliacao).
   select array_agg(c.table_name || '.' || c.column_name order by c.table_name, c.column_name)
     into v_cols
     from information_schema.columns c
    where c.table_schema = 'public'
      and (c.table_name like '%cycle%' or c.table_name like 'evaluation%')
      and c.table_name <> all (v_tabelas_metas_p1)
+     and c.table_name <> all (v_tabelas_observacoes_p1)
      and (c.column_name like '%goal%' or c.column_name like '%meta%'
           or c.column_name like '%observation%' or c.column_name like '%observac%');
   if v_cols is not null then
@@ -2177,7 +2195,7 @@ begin
     raise exception '[FAIL] 11/regressoes: %', array_to_string(v_problemas, '; ');
   end if;
 
-  raise notice '[PASS] 11/regressoes: I5/I6/I3 presentes (e I5 conferido no estado final: 1 ATIVO por organizacao, 1 CRIADO por ciclo, zero trilha orfa), as 8 RPCs INVOKER com search_path fixo e EXECUTE so service_role, trilha append-only com os 3 gatilhos, catalogo com 31 capabilities, bundle admin com 9 funcionais (cycle.manage dentro, excepcionais fora) e NENHUMA antecipacao de F5-10/F5-11 (metas/observacoes)';
+  raise notice '[PASS] 11/regressoes: I5/I6/I3 presentes (e I5 conferido no estado final: 1 ATIVO por organizacao, 1 CRIADO por ciclo, zero trilha orfa), as 8 RPCs INVOKER com search_path fixo e EXECUTE so service_role, trilha append-only com os 3 gatilhos, catalogo com 31 capabilities, bundle admin com 9 funcionais (cycle.manage dentro, excepcionais fora), metas em LISTA FECHADA da F5-10 P1 e observacoes em LISTA FECHADA da F5-11 P1 (2 tabelas legitimas e ZERO funcoes: nenhuma RPC observacao_* existe ate a P2)';
 end $$;
 
 -- ----------------------------------------------------------------------------
