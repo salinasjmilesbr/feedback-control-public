@@ -40,6 +40,14 @@ import type {
  * CONGELADOS** da avaliação original do dono (recebidos em `metaDoAlvo`).
  * Estrutura/hierarquia viva NUNCA é consultada para meta, e `goal.approve` não
  * implica `goal.write` (capabilities distintas ⇒ alcances distintos).
+ *
+ * F5-11 P4 (§8, D5/D7/D9/D15): o alvo `observation` também tem relações PRÓPRIAS,
+ * resolvidas sobre o **colaborador-ALVO** da observação (`donoDoAlvo` vindo da
+ * linha soberana): `SELF` = o ator é esse colaborador (leitura das próprias
+ * comunicadas) e `DIRECT_REPORTS`/`DESCENDANTS` = o colaborador-alvo está nos
+ * alvos resolvidos do escopo. `ORGANIZATION`/`ASSIGNED`/unidade são negados
+ * (fail-closed) — a leitura de terceiro exige relação de gestão, como no gate da
+ * RPC (P3).
  */
 
 export interface CapabilityComEscopos {
@@ -161,6 +169,26 @@ function alvoMetaCorresponde(
   );
 }
 
+/**
+ * F5-11 P4 (§8; D5/D9/D11): a OBSERVAÇÃO é autorizável pelo alvo
+ * `{ type: "observation", id }`, mas a relação é definida sobre o
+ * colaborador-ALVO da observação (`evaluation_observations.collaborator_id`,
+ * dono derivado da linha real) — o id da observação nunca define relação. Mesmo
+ * padrão de `alvoAvaliacaoCorresponde`/`alvoMetaCorresponde`.
+ */
+function alvoObservacaoCorresponde(
+  alvo: AlvoEscopoResolvido,
+  target: TargetRef,
+  donoDoAlvo: string | null
+): boolean {
+  if (target.type !== "observation") return false;
+  return (
+    donoDoAlvo !== null &&
+    alvo.collaboratorId !== null &&
+    alvo.collaboratorId === donoDoAlvo
+  );
+}
+
 /** Alvos pré-resolvidos de um scope (vazio ⇒ relação não satisfeita). */
 function alvosDoEscopo(
   dados: DadosProvidersReais,
@@ -208,6 +236,47 @@ function metaNoEscopoDoAtor(
     return (
       idCongeladoValido(aprovadorCongelado) &&
       aprovadorCongelado === colaboradorDoAtor
+    );
+  }
+
+  return false;
+}
+
+/**
+ * F5-11 P4 (§8; D5/D7/D9/D15) — relações do alvo OBSERVAÇÃO. A relação é SEMPRE
+ * lida sobre o colaborador-ALVO da observação (`donoDoAlvo`, derivado da linha
+ * soberana), nunca sobre o id da observação:
+ *   - `SELF` ⇒ o colaborador vinculado ao ator é o PRÓPRIO colaborador-alvo
+ *     (§8 linha 2: leitura das próprias comunicadas — a única operação sem
+ *     exigência de scope de gestão; o probe D7 nega o que não é comunicado);
+ *   - `DESCENDANTS`/`DIRECT_REPORTS` ⇒ o colaborador-alvo está entre os alvos
+ *     resolvidos do escopo (relação estrutural vigente na data, F4-02);
+ *   - `ORGANIZATION`, `ASSIGNED` e `ORGANIZATIONAL_UNIT` ⇒ `false` (fail-closed):
+ *     ler observação de terceiro NÃO decorre de alcance de tenant, de delegação
+ *     avaliativa nem de unidade — a P3 exige `DIRECT_REPORTS`/`DESCENDANTS` no
+ *     gate da RPC e a leitura SELF é a exceção normativa.
+ *
+ * Sem `donoDoAlvo` NÃO há relação possível (fail-closed). A AUTORIA (D5) NÃO é
+ * resolvida aqui: o provider não recebe o autor soberano da observação e o probe
+ * do domínio (`exigeAutoriaObservacao`) já a compõe na fronteira — o SQL
+ * (`observacao_obter`/`observacao_editar`) é a autoridade final.
+ */
+function observacaoNoEscopoDoAtor(
+  scope: ScopeType,
+  target: TargetRef,
+  dados: DadosProvidersReais
+): boolean {
+  const alvoDaObservacao = dados.donoDoAlvo ?? null;
+  if (alvoDaObservacao === null || target.type !== "observation") return false;
+
+  if (scope === "SELF") {
+    const colaboradorDoAtor = dados.collaboratorId;
+    return colaboradorDoAtor !== null && colaboradorDoAtor === alvoDaObservacao;
+  }
+
+  if (scope === "DESCENDANTS" || scope === "DIRECT_REPORTS") {
+    return alvosDoEscopo(dados, scope).some((alvo) =>
+      alvoObservacaoCorresponde(alvo, target, alvoDaObservacao)
     );
   }
 
@@ -263,6 +332,15 @@ export function criarProvidersReais(dados: DadosProvidersReais): PolicyEnginePro
         // `ASSIGNED` são negados para meta (fail-closed).
         if (target.type === "goal") {
           return metaNoEscopoDoAtor(scope, target, dados);
+        }
+
+        // F5-11 P4 (§8; D5/D7/D9/D15): o alvo OBSERVAÇÃO também tem relações
+        // PRÓPRIAS, lidas sobre o COLABORADOR-ALVO da linha soberana
+        // (`donoDoAlvo`). Sem esse ramo o engine negaria TODA operação de
+        // observação por SCOPE_INSUFFICIENT (nenhum escopo casaria o id da
+        // observação) e o P4 nunca alcançaria ALLOW real.
+        if (target.type === "observation") {
+          return observacaoNoEscopoDoAtor(scope, target, dados);
         }
 
         if (scope === "ORGANIZATION") {

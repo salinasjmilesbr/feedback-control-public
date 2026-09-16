@@ -34,7 +34,7 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
-### 3.23 F5-11 — Observações soberanas e histórico auditável — P0 FECHADO · P1 INTEGRADA · P1.1 EM FECHAMENTO
+### 3.23 F5-11 — Observações soberanas e histórico auditável — P1/P1.1/P2/P3 INTEGRADAS · P4 IMPLEMENTADA (PR E GATES FINAIS PENDENTES)
 
 - **Atividade-mãe:** **F5-11** — Issue **#238**. **P0** (desenho) entregue na branch
   `docs/f5-11-observacoes-soberanas-desenho`, base `main` = `5889decb81d4dc3feca15ca15d37f164e2f614ea`;
@@ -115,7 +115,74 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   UUID canônico, fonte única `estadoDominioObservacao`, espelho de **D5** e probe **fail-closed** na
   fronteira até o loader soberano existir (P4). 4 arquivos em `src/authorization/`.
 - **P3 — evidência:** gate focado e bateria completa na ordem do CI (contagens no relatório).
-  **P4/P5/P6 não iniciadas.**
+  **P4/P5/P6 não iniciadas** — naquele momento; **atualização P4:** a P4 foi implementada depois (ver
+  bloco P4 nesta seção).
+- **P4 — issue que a governa:** **Issue #248** (`F5-11/P4 — loader soberano Edge/cliente para
+  observações`), mãe **#238**. Branch **`feat/f5-11-p4-edge-observacoes`**, base
+  `83fb225213501c360660c2968c31f577a8a75373` (squash da P3 em `main`). **PR PENDENTE** — este host não
+  abre PR (DEV-04: `gh` ausente e nenhuma API autorizada; nenhum workaround com PAT/credencial).
+- **P4 — o que entregou:** Edge **`observacoes`** (trio
+  `supabase/functions/observacoes/{index,core,contrato}.ts`: `core.ts` é o núcleo testável com
+  dependências injetadas, sem APIs de runtime, e `contrato.ts` apenas **reexporta**
+  `src/infrastructure/supabase/observacoes/contrato.ts`, molde `supabase/functions/metas/contrato.ts`) e
+  `[functions.observacoes]` em `supabase/config.toml` (`verify_jwt = true`,
+  `entrypoint = "./functions/observacoes/index.ts"`).
+- **P4 — contrato transportável único:** `src/infrastructure/supabase/observacoes/contrato.ts` com as **8
+  operações** `observacao.*`, `DEFINICAO_POR_OPERACAO` (gate/capability, sem fallback),
+  `RPC_POR_OPERACAO` em paridade **1:1** com as RPCs `observacao_*` da P2, `CHAVES_POR_OPERACAO` e
+  `validarEntradaObservacao`; **nenhuma** cópia de operações/gates/capabilities/forma na Edge.
+- **P4 — adapter fail-closed:** `src/infrastructure/supabase/observacoes/edgeObservacoes.ts` chama
+  `functions.invoke("observacoes")` e devolve o `resultado` **bruto** da RPC; cobre os **três** caminhos
+  (`error`, `data.error` e `data.ok !== true`/ausência da chave `resultado`, com `resultado: null` aceito
+  como sucesso); código público desconhecido ⇒ `FORBIDDEN`; **sem** `.rpc(`, **sem** `SERVICE_ROLE_KEY`,
+  **sem** `localStorage`/fallback.
+- **P4 — gate por operação:** **7 funcionais** (`criar` com alvo funcional = **colaborador-ALVO** — a
+  observação ainda não existe, molde `goal.criar`; `editar`/`definir_comunicado`/`excluir`/`revogar`/
+  `obter`/`historico` com alvo `{type:"observation", id}`) e **`observacao.listar_por_escopo`
+  ADMINISTRATIVA** (`observation.read`; §8 linha 1 + molde F5-10 `goal.listar_por_escopo`): a listagem não
+  tem alvo único autorizável e o escopo/relação são decididos pela RPC. **Correção dentro da fase:** o
+  contrato nasceu com a listagem **funcional** (exigiria UUID inexistente ⇒ `INVALID_INPUT`, matando a
+  listagem) e foi corrigido antes do congelamento.
+- **P4 — allowlist estrita e instante soberano:** `CHAVES_COMUNS = {organization_id, operacao,
+  operation_id}` + chaves por operação; **nunca** transportáveis autoria/tenant/estado/`capability`/
+  `scope`/`version`/`domainState`/`payload_hash`; `cycle_id`/`collaborator_id` só na **criação** (D4);
+  `expected_version` só nas 4 mutações de linha existente; `motivo` só em `excluir`/`revogar`; **`data`
+  não é transportável em nenhuma operação** (D21: o F4-02 resolve escopos "na data" e o instante da
+  decisão é soberano, nunca declarado pelo chamador).
+- **P4 — loader/fronteira:** `src/authorization/estadoDominioObservacao.ts` (novo módulo **Edge-safe** com
+  a matriz + `exigeAutoriaObservacao`, dependendo só de tipos do Policy Engine, molde
+  `estadoDominioMeta.ts`/`estadoDominioCiclo.ts`); `authorizationPolicy.ts` passou a **importar e
+  reexportar** (`estadoDominioObservacao`, `EstadoObservacaoSoberano`) — superfície pública da P3
+  preservada. **Motivo:** `authorizationPolicy.ts` importa `config/ambiente` (`import.meta.env` no topo) e
+  `colaboradorStorage`/localStorage, e `contextoAutorizacao.ts` está no grafo das Edge Functions
+  (`avaliacoes`, `ciclos`, `colaboradores`, `metas`, `observacoes`) — arrastá-los quebraria o boot Deno.
+- **P4 — probe soberano e criação:** em `contextoAutorizacao.ts` o placeholder **fail-closed** da P3 foi
+  substituído pelo probe derivado da **linha soberana** (`comunicado`/`excluida`/`cicloStatus`/
+  `colaboradorStatus`/`author_collaborator_id` × vínculo do ator) composto com D5 e com a leitura
+  SELF-comunicada; **ramo novo de CRIAÇÃO** (`observation.create` + alvo `collaborator`, §8 linha 4) com
+  **SELF = DENY** (invariante 4) e **status não resolvido ⇒ DENY** (D11), usando dois campos **opcionais**
+  novos em `ContextoAvaliacaoSoberano` (`colaboradorStatus`, `cicloStatus`) fornecidos pelo loader da Edge.
+- **P4 — provider (`reais.ts`):** `alvoObservacaoCorresponde` + `observacaoNoEscopoDoAtor` (**SELF** = o
+  ator é o colaborador-alvo, via `donoDoAlvo`; **DIRECT_REPORTS**/**DESCENDANTS** = alvo ∈ escopos
+  resolvidos; sem `donoDoAlvo` ⇒ DENY; o id da observação nunca define relação). **Necessário** porque
+  `contextoAutorizacao.ts` monta os providers com `criarProvidersReais`: sem esse ramo o gate negaria por
+  scope e **nenhum ALLOW real** seria alcançável (§17.1/P4).
+- **P4 — testes da fase:** `src/authorization/observacoesEdgeImportGraph.test.ts`,
+  `src/authorization/observacoesContratoRpc.test.ts`,
+  `src/authorization/observacaoRecursoSoberano.test.ts`,
+  `src/infrastructure/supabase/observacoes/contrato.test.ts` e
+  `src/infrastructure/supabase/observacoes/edgeObservacoes.test.ts`.
+- **P4 — dívidas declaradas (para P5/P6):** (i) **autoria como relação no provider** não é resolvida (não
+  há análogo a `metaDoAlvo`): um autor fora do escopo "na data" pode ser negado pelo engine onde o SQL
+  permitiria — divergência **fail-closed** (nunca permissiva); corrigir exige campo novo em
+  `ResourceContext`/`DadosProvidersReais`; (ii) **quem concede `observation.read` ao avaliado (SELF) segue
+  decisão da P5** (a P3 entregou só `observacoes_gestor` com `DIRECT_REPORTS`/`DESCENDANTS`); (iii)
+  `localStorage`/cutover de UI (P5) e certificação (P6) **não iniciados**; nenhuma migração de
+  `localStorage` (D13); (iv) SQL da P1/P2/P3 **intocado** nesta fase (nenhuma migration nova).
+- **P4 — GATES PENDENTES (orquestrador):** `npm test`, `npm run build`, `npm run lint` e
+  `git diff --check` **não foram executados** na produção deste registro (runner de shell do host
+  quebrado e escopo de subagente sem elevação); são executados pelo **orquestrador** no gate privilegiado
+  da fase. **Nenhum resultado de gate é afirmado aqui** — substituir este marcador pelo resultado real.
 - **P2 — issue que a governa:** **Issue #244** (`F5-11/P2 — RPCs soberanas observacao_*`), mãe
   **#238**. Branch **`feat/f5-11-p2-rpcs-observacoes`**, base `e7aecf27532948d21b97d04d9c15aa7478442cca`.
 - **P2 — o que entregou:** migration `20260931000000_f5_11_p2_observacoes_rpc.sql` com **8 RPCs

@@ -8,6 +8,8 @@ import { alvosPermitidos } from "./autorizacaoFuncional";
 import { canonicalizarCapability } from "./canonical";
 import type { Capability } from "./Capability";
 import { estadoDominioCiclo } from "./estadoDominioCiclo";
+import { estadoDominioObservacao, exigeAutoriaObservacao } from "./estadoDominioObservacao";
+import type { EstadoObservacaoSoberano } from "./estadoDominioObservacao";
 import {
   criarProvidersMundoFuncional,
   estaNaCadeiaDeGestao,
@@ -34,75 +36,19 @@ function dominioPermite(permite: boolean): DomainStateProbe {
   return { allows: () => permite };
 }
 
-/** Status de colaborador que impede NOVA observação (D11; `inactive` do §7.9). */
-const STATUS_COLABORADOR_INATIVO = "DESLIGADO";
-
-/** Projeção mínima do estado REAL do recurso OBSERVAÇÃO consumida pelo probe. */
-export interface EstadoObservacaoSoberano {
-  /** Status da LINHA do ciclo da observação (`ATIVO` libera mutação — D12). */
-  readonly cicloStatus?: string | null;
-  /** Status do colaborador-ALVO da observação (D11). */
-  readonly colaboradorStatus?: string | null;
-}
-
-function statusNormalizado(valor: unknown): string {
-  return typeof valor === "string" ? valor.trim().toUpperCase() : "";
-}
-
 /**
- * F5-11 P3 (§8; D5, D11, D12) — ESTADO DE DOMÍNIO do recurso OBSERVAÇÃO.
+ * F5-11 P3/P4 (§8; D5, D11, D12) — a matriz de estado da OBSERVAÇÃO e o
+ * predicado de AUTORIA vivem na fonte ÚNICA `estadoDominioObservacao.ts`: um
+ * módulo sem dependência de runtime do cliente, para que a fronteira soberana
+ * (Edge Function) também possa consumi-lo sem arrastar `config/ambiente` nem
+ * serviços do browser ao grafo da Edge.
  *
- * O Policy Engine decide **QUEM** pode agir (identidade, membership, capability,
- * escopo e relação); este helper declara **SE** a ação é possível no estado atual
- * do recurso. É a ÚNICA declaração dessa matriz para a observação, consumida
- * pelo adaptador funcional (`case "observation"` de `requisicaoEngine`), ao lado
- * do fato de AUTORIA imposto pela D5 — que NÃO é estado e por isso é composto
- * pelo chamador.
- *
- * Matriz contratada (§8; D11/D12) — fonte única:
- *
- * | capability           | exige                                                       |
- * | `observation.create` | ciclo `ATIVO` **e** colaborador-alvo ≠ `DESLIGADO` (D11)     |
- * | `observation.edit`   | ciclo `ATIVO` (editar, comunicar/descomunicar e revogar)     |
- * | `observation.delete` | ciclo `ATIVO`                                                |
- * | `observation.read`   | nada — leitura histórica em QUALQUER estado                  |
- *
- * `LICENCA` **permite** criar (paridade com `authorizationPolicy.test.ts` e com
- * §7.9). Capability fora da matriz ⇒ NEGADO (`default: false`, fail-closed).
+ * Este adaptador apenas a CONSOME no `case "observation"` e mantém a MESMA
+ * superfície exportada da P3 (`estadoDominioObservacao`,
+ * `EstadoObservacaoSoberano`) — nenhuma cópia local da matriz existe aqui.
  */
-export function estadoDominioObservacao(
-  entrada: EstadoObservacaoSoberano
-): DomainStateProbe {
-  const cicloAtivo = statusNormalizado(entrada?.cicloStatus) === "ATIVO";
-  const colaboradorInativo =
-    statusNormalizado(entrada?.colaboradorStatus) === STATUS_COLABORADOR_INATIVO;
-
-  return {
-    allows: (capability: Capability): boolean => {
-      switch (capability) {
-        case "observation.create":
-          return cicloAtivo && !colaboradorInativo;
-        case "observation.edit":
-        case "observation.delete":
-          return cicloAtivo;
-        case "observation.read":
-          return true;
-        default:
-          return false;
-      }
-    },
-  };
-}
-
-/**
- * F5-11 P3 (§8; D5/D7) — capabilities de observação que exigem que o ATOR seja o
- * AUTOR do recurso. Editar, marcar/desmarcar comunicado e revogar a exclusão são
- * `observation.edit`; excluir é `observation.delete`. Criar e ler não exigem
- * autoria (quem cria passa a ser o autor; a leitura tem matriz própria).
- */
-function exigeAutoriaObservacao(capability: Capability): boolean {
-  return capability === "observation.edit" || capability === "observation.delete";
-}
+export { estadoDominioObservacao };
+export type { EstadoObservacaoSoberano };
 
 function resolverAtor(
   context: AuthorizationContext,
