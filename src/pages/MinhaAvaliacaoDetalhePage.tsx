@@ -12,6 +12,7 @@ import {
 import { getColaboradores } from "../services/colaboradorStorage";
 import { useAuth } from "../auth/AuthContext";
 import { obterRepositorioMetasSoberanas } from "../services/acessoMetasSoberanas";
+import { obterRepositorioObservacoesSoberanas } from "../services/acessoObservacoesSoberanas";
 import { metasDoAvaliadoSoberanas } from "./useMetasSoberanasDaAvaliacao";
 import { obterRepositorioCiclosSoberanos } from "../services/acessoCiclosSoberanos";
 import type { MetaSoberana } from "../application/ports/GoalRepository";
@@ -121,6 +122,41 @@ function MinhaAvaliacaoDetalhePage() {
   const carregandoMetas = resultadoDasMetas.carregando;
   const erroMetas = resultadoDasMetas.erro;
 
+  /** Chave funcional da leitura SELF de observações (organização + ator). */
+  const chaveDasObservacoes = `${organizacaoId ?? "sem-organizacao"}|${
+    matriculaDoAtor ?? "sem-ator"
+  }`;
+
+  const [leituraObservacoes, setLeituraObservacoes] = useState<{
+    readonly chave: string;
+    readonly observacoes: readonly ObservacaoSoberana[];
+    readonly carregando: boolean;
+    readonly erro: string;
+  } | null>(null);
+
+  const semEntradaParaObservacoes =
+    !organizacaoId || matriculaDoAtor === undefined;
+
+  // Exibição DERIVADA da chave vigente: nunca mostra fotografia de outra entrada
+  // nem depende de `setState` síncrono dentro do efeito (padrão da P5).
+  const resultadoDasObservacoes = semEntradaParaObservacoes
+    ? {
+        observacoes: [] as readonly ObservacaoSoberana[],
+        carregando: false,
+        erro: "",
+      }
+    : leituraObservacoes?.chave === chaveDasObservacoes
+    ? leituraObservacoes
+    : {
+        observacoes: [] as readonly ObservacaoSoberana[],
+        carregando: true,
+        erro: "",
+      };
+
+  const observacoesComunicadas = resultadoDasObservacoes.observacoes;
+  const carregandoObservacoes = resultadoDasObservacoes.carregando;
+  const erroObservacoes = resultadoDasObservacoes.erro;
+
   // Leitura SOBERANA das metas do próprio colaborador (relação SELF) no ciclo da
   // avaliação. O ciclo é resolvido pelo UUID soberano (ano/número são rótulos) e
   // o dono, pelo UUID da ponte estrutural; nada é decidido no cliente.
@@ -227,6 +263,78 @@ function MinhaAvaliacaoDetalhePage() {
     numeroDoCicloDaAvaliacao,
   ]);
 
+  // Leitura SOBERANA das observações COMUNICADAS ao próprio avaliado (escopo SELF)
+  // pela porta existente: `listarObservacoesPorEscopo(organização, "SELF")`. O
+  // filtro `comunicado = true and not excluida`, a relação SELF, o tenant e o
+  // vínculo são decididos SERVER-SIDE (Edge + Policy Engine + RPC soberana); aqui
+  // só se APRESENTA o que a fronteira devolve. Ausência de caminho soberano ou
+  // erro do backend ⇒ fail-closed explícito, sem acervo local e sem fallback.
+  useEffect(() => {
+    let vigente = true;
+
+    const publicar = (resultado: {
+      readonly observacoes: readonly ObservacaoSoberana[];
+      readonly carregando: boolean;
+      readonly erro: string;
+    }) => {
+      if (vigente) {
+        setLeituraObservacoes({ chave: chaveDasObservacoes, ...resultado });
+      }
+    };
+
+    void (async () => {
+      // Rechecagem explícita: é ela que ESTREITA os tipos dentro do fluxo.
+      if (!organizacaoId || matriculaDoAtor === undefined) {
+        publicar({ observacoes: [], carregando: false, erro: "" });
+        return;
+      }
+
+      const repositorio = obterRepositorioObservacoesSoberanas();
+      if (!repositorio) {
+        publicar({
+          observacoes: [],
+          carregando: false,
+          erro: "As observações comunicadas não estão disponíveis pelo caminho soberano neste ambiente.",
+        });
+        return;
+      }
+
+      try {
+        const resultado = await repositorio.listarObservacoesPorEscopo(
+          organizacaoId,
+          "SELF"
+        );
+        if (!vigente) return;
+
+        if (!resultado.ok) {
+          publicar({
+            observacoes: [],
+            carregando: false,
+            erro: "Não foi possível carregar as observações comunicadas.",
+          });
+          return;
+        }
+
+        const comunicadas = [...resultado.data.itens].sort(
+          (a, b) =>
+            new Date(a.criadoEm).getTime() - new Date(b.criadoEm).getTime()
+        );
+
+        publicar({ observacoes: comunicadas, carregando: false, erro: "" });
+      } catch {
+        publicar({
+          observacoes: [],
+          carregando: false,
+          erro: "Não foi possível carregar as observações comunicadas.",
+        });
+      }
+    })();
+
+    return () => {
+      vigente = false;
+    };
+  }, [chaveDasObservacoes, organizacaoId, matriculaDoAtor]);
+
   if (!usuarioAtual) {
     return (
       <main className="virtus-page">
@@ -277,19 +385,16 @@ function MinhaAvaliacaoDetalhePage() {
   const criterios = feedback.criteriosDetalhados ?? [];
 
   /**
-   * F5-11 P5 (Issue #250) — fluxo SELF **fail-closed e sem autoridade local**.
+   * F5-11 P5.1 (Issue #252) — SELF/read SOBERANO das observações comunicadas.
    *
-   * A visão do avaliado NÃO lê mais observação do acervo do navegador: a lista
-   * entregue à tela e ao PDF é VAZIA e o estado é explicitamente indisponível
-   * (o bloco de observações e o atalho da navegação simplesmente não aparecem —
-   * mesmo padrão de ausência já usado nesta página).
-   *
-   * A leitura SELF soberana depende da concessão mínima de `observation.read`
-   * ao avaliado, decidida para a fase P5.1: nesta fase não há caminho autorizado
-   * para o próprio avaliado ler as comunicadas, e NENHUMA capability, grant,
-   * escopo ou papel é presumido aqui.
+   * A visão do avaliado lê, pela porta soberana, `listarObservacoesPorEscopo(
+   * organização, "SELF")`: o backend devolve SOMENTE as observações COMUNICADAS
+   * (`comunicado = true`) e NÃO excluídas do próprio colaborador-alvo, com o
+   * vínculo ativo resolvido server-side. Nenhuma decisão de autorização, tenant
+   * ou identidade acontece aqui, e NÃO há leitura do acervo do navegador nem
+   * fallback: ausência de caminho soberano ou erro do backend permanecem
+   * fail-closed (lista vazia + erro público exibido).
    */
-  const observacoesComunicadas: readonly ObservacaoSoberana[] = [];
 
   const cicloDaAvaliacao = getCiclosAvaliacao().find(
     (ciclo) =>
@@ -744,6 +849,19 @@ function MinhaAvaliacaoDetalhePage() {
         <section className="evaluation-alert evaluation-alert--warning" role="alert">
           <strong>Metas do ciclo indisponíveis.</strong>
           <p>{erroMetas}</p>
+        </section>
+      )}
+
+      {carregandoObservacoes && (
+        <section className="evaluation-alert evaluation-alert--warning" role="status">
+          <strong>Carregando observações comunicadas…</strong>
+        </section>
+      )}
+
+      {erroObservacoes && (
+        <section className="evaluation-alert evaluation-alert--warning" role="alert">
+          <strong>Observações comunicadas indisponíveis.</strong>
+          <p>{erroObservacoes}</p>
         </section>
       )}
 

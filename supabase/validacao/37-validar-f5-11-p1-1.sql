@@ -142,32 +142,50 @@ begin
   if v_n <> 8 then
     v_falhas := v_falhas || format('goal.%% + observation.%% = %s (esperado 8)', v_n);
   end if;
-  -- F5-11 P3 (Issue #246): D15 resolvida — `observation.*` existe em EXATAMENTE
-  -- UMA role de sistema (`observacoes_gestor`, 4 capabilities) e em ZERO no
-  -- bundle `admin` (a proibicao da P1.1 virou LISTA FECHADA explicita).
+  -- F5-11 P3 (Issue #246) + P5.1 (Issue #252): D15 resolvida e EMENDADA —
+  -- `observation.*` existe em EXATAMENTE DUAS roles de sistema
+  -- (`observacoes_gestor`, 4 capabilities; `observacoes_avaliado`, EXATAMENTE
+  -- `observation.read`) e em ZERO no bundle `admin`. A proibicao da P1.1 virou
+  -- LISTA FECHADA de PARES (role, capability): nada foi relaxado.
   select count(*) into v_n
     from public.access_role_capabilities rc
     join public.capabilities c on c.id = rc.capability_id
    where c.code like 'observation.%';
-  if v_n <> 4 then
-    v_falhas := v_falhas || format('observation.* com %s concessao(oes) (esperado 4)', v_n);
+  if v_n <> 5 then
+    v_falhas := v_falhas || format('observation.* com %s concessao(oes) (esperado 5)', v_n);
   end if;
   select count(*) into v_n
     from public.access_role_capabilities rc
     join public.capabilities c on c.id = rc.capability_id
     join public.access_roles r on r.id = rc.access_role_id
    where c.code like 'observation.%'
-     and (r.name <> 'observacoes_gestor' or r.is_system = false);
+     and (r.is_system is not true
+          or (r.name, c.code) not in (
+            ('observacoes_gestor', 'observation.read'),
+            ('observacoes_gestor', 'observation.create'),
+            ('observacoes_gestor', 'observation.edit'),
+            ('observacoes_gestor', 'observation.delete'),
+            ('observacoes_avaliado', 'observation.read')
+          ));
   if v_n <> 0 then
-    v_falhas := v_falhas || format('%s concessao(oes) de observation.* FORA de observacoes_gestor', v_n);
+    v_falhas := v_falhas || format('%s concessao(oes) de observation.* FORA da lista fechada (role, capability)', v_n);
+  end if;
+  select count(*) into v_n
+    from public.access_role_capabilities rc
+    join public.access_roles r on r.id = rc.access_role_id
+   where r.name = 'observacoes_avaliado' and r.is_system = true;
+  if v_n <> 1 then
+    v_falhas := v_falhas || format('observacoes_avaliado com %s capabilities (esperado 1: observation.read)', v_n);
   end if;
   select count(*) into v_n from public.access_role_capabilities
    where access_role_id = 'c0000000-0000-4000-8000-0000000000f1';
   if v_n <> 9 then
     v_falhas := v_falhas || format('bundle admin com %s capabilities (esperado 9)', v_n);
   end if;
+  -- F5-11 P5.1 (Issue #252): o 5o perfil de sistema (`observacoes_avaliado`) e
+  -- criado por decisao explicita da P5.1; o conjunto NOMEADO acompanha a emenda.
   if (select array_agg(r.name order by r.name) from public.access_roles r where r.is_system = true)
-     is distinct from array['admin', 'metas_aprovador', 'metas_dono', 'observacoes_gestor'] then
+     is distinct from array['admin', 'metas_aprovador', 'metas_dono', 'observacoes_avaliado', 'observacoes_gestor'] then
     v_falhas := v_falhas || 'conjunto de roles de SISTEMA mudou (a P1.1 nao cria role/bundle/perfil)';
   end if;
   -- F5-11 P2 (Issue #244): a superficie `observacao_*` passou a existir e e'

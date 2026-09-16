@@ -24,6 +24,24 @@
 -- ============================================================================
 
 -- Remover o cenário anterior (somente os UUIDs fixos desta validação).
+-- F5-11 P5.1 (Issue #252): as ATRIBUICOES saem antes das memberships — a FK
+-- `fk_membership_access_role_assignments_memberships` é ON DELETE RESTRICT e o
+-- provisionamento automatico do perfil SELF cria uma linha por membership elegivel.
+delete from public.membership_access_role_assignments a
+ using public.user_organization_memberships m
+ where m.id = a.membership_id
+   and (m.user_profile_id in (
+     'b0000000-0000-0000-0000-000000000001',
+     'b0000000-0000-0000-0000-00000000000a',
+     'b0000000-0000-0000-0000-00000000000b',
+     'b0000000-0000-0000-0000-00000000000c',
+     'b0000000-0000-0000-0000-00000000000d',
+     'b0000000-0000-0000-0000-00000000000e'
+   ) or m.organization_id in (
+     'c0000000-0000-0000-0000-0000000000a1',
+     'c0000000-0000-0000-0000-0000000000b1'
+   ));
+
 delete from public.user_organization_memberships
 where user_profile_id in (
   'b0000000-0000-0000-0000-000000000001',

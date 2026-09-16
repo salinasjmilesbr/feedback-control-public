@@ -20,7 +20,17 @@
 
 -- ----------------------------------------------------------------------------
 -- Limpeza do cenário anterior (ordem respeita FKs ON DELETE RESTRICT)
+-- F5-11 P5.1 (Issue #252): as ATRIBUICOES precisam sair ANTES das memberships —
+-- o provisionamento automatico do perfil SELF `observacoes_avaliado` cria uma
+-- linha por membership elegivel e a FK `..._assignments_memberships` e RESTRICT
+-- (nao ha cascade). Sem esta limpeza a remocao da membership falharia.
 -- ----------------------------------------------------------------------------
+delete from public.membership_access_role_assignments
+ where organization_id in (
+   'd2a00000-0000-0000-0000-0000000000a1',
+   'd2a00000-0000-0000-0000-0000000000b1'
+ );
+
 delete from public.membership_collaborator_links
  where organization_id in (
    'd2a00000-0000-0000-0000-0000000000a1',

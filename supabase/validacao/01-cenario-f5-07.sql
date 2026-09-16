@@ -399,10 +399,19 @@ begin
     raise exception '[FAIL] cenario F5-07: vinculos ativos esperados=4, encontrados=%', v_n;
   end if;
 
-  select count(*) into v_n from public.membership_access_role_assignments
-   where organization_id::text like 'd7a00000%' and status = 'active';
+  -- F5-11 P5.1 (Issue #252): o provisionamento AUTOMATICO do perfil de sistema
+  -- `observacoes_avaliado` cria UMA atribuicao por membership ELEGIVEL (membership
+  -- + perfil + vinculo ativos) desta organizacao. A contagem deste cenario mede as
+  -- atribuicoes do PROPRIO fixture; as automaticas do perfil SELF sao excluidas
+  -- explicitamente. Nada foi relaxado: QUALQUER outra atribuicao ativa (role que
+  -- nao seja o perfil SELF automatico) continua reprovando.
+  select count(*) into v_n
+    from public.membership_access_role_assignments a
+    join public.access_roles r on r.id = a.access_role_id
+   where a.organization_id::text like 'd7a00000%' and a.status = 'active'
+     and r.name <> 'observacoes_avaliado';
   if v_n <> 2 then
-    raise exception '[FAIL] cenario F5-07: atribuicoes ativas esperadas=2, encontradas=%', v_n;
+    raise exception '[FAIL] cenario F5-07: atribuicoes ativas (fora do perfil automatico SELF) esperadas=2, encontradas=%', v_n;
   end if;
 
   select count(*) into v_n from public.access_role_assignment_scopes

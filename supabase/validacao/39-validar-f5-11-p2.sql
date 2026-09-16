@@ -10,8 +10,10 @@
 --   A  preflight: 8 RPCs + 6 helpers INVOKER, search_path fixo, EXECUTE so
 --      service_role, lista FECHADA da superficie, catalogo 31, D15 intacto,
 --      D4/D6/D9 e a coerencia da P1.1 preservados;
---   B  ESTADO DE PRODUCAO (sem concessao): o MESMO create que o bloco C aceita e'
---      NEGADO por capability (D15: sem concessao o dominio nasce DENY) + ACL
+--   B  ESTADO DE PRODUCAO (ator INELEGIVEL): o MESMO create que o bloco C aceita e'
+--      NEGADO por capability — na P5.1 a elegibilidade (membership + perfil +
+--      vinculo ATIVOS) concede `observacoes_avaliado` AUTOMATICAMENTE, logo a
+--      prova de DENY por capability exige ator inelegivel — + ACL
 --      (authenticated/anon nao executam nem leem: 42501);
 --   C  (begin/rollback, com concessao TRANSITORIA de fixture) a matriz completa:
 --      positivos de criar/editar/comunicar/descomunicar/excluir/revogar com
@@ -21,8 +23,11 @@
 --      cross-tenant, override de identidade (auth.uid()), perfil inativo,
 --      membership revogada, capability ausente, operacao desconhecida; leitura
 --      (obter/listar_por_escopo/historico) e rollback por falha injetada;
---   D  POS-ROLLBACK: NADA persistiu (zero concessao de observation.*, nenhuma
---      role/bundle de fixture, zero observacao/evento, zero residuo `_mut_`).
+--   D  POS-ROLLBACK: NADA persistiu do CENARIO (zero concessao de fixture; os 2
+--      perfis de sistema com observation.* vem das migrations P3/P5.1 — 4 de
+--      gestao + 1 SELF automatica aos elegiveis, admin sempre ZERO — e nao deste
+--      cenario), nenhuma role/bundle de fixture, zero observacao/evento e zero
+--      residuo `_mut_`.
 --
 -- NOTA DE RIGOR (D15 x testes funcionais): a P2 NAO concede `observation.*` (a
 -- concessao e' artefato da P3). Para exercitar o caminho ALLOW sem conceder nada,
@@ -179,17 +184,31 @@ begin
     from public.access_role_capabilities rc
     join public.capabilities c on c.id = rc.capability_id
    where c.code like 'observation.%';
-  if v_n <> 4 then
-    v_falhas := v_falhas || format('%s concessao(oes) de observation.* (esperado 4 em observacoes_gestor)', v_n);
+  if v_n <> 5 then
+    v_falhas := v_falhas || format('%s concessao(oes) de observation.* (esperado 5: 4 em observacoes_gestor + 1 em observacoes_avaliado)', v_n);
   end if;
   select count(*) into v_n
     from public.access_role_capabilities rc
     join public.capabilities c on c.id = rc.capability_id
     join public.access_roles r on r.id = rc.access_role_id
    where c.code like 'observation.%'
-     and (r.name <> 'observacoes_gestor' or r.is_system = false);
+     and (r.is_system is not true
+          or (r.name, c.code) not in (
+            ('observacoes_gestor', 'observation.read'),
+            ('observacoes_gestor', 'observation.create'),
+            ('observacoes_gestor', 'observation.edit'),
+            ('observacoes_gestor', 'observation.delete'),
+            ('observacoes_avaliado', 'observation.read')
+          ));
   if v_n <> 0 then
-    v_falhas := v_falhas || format('%s concessao(oes) de observation.* FORA de observacoes_gestor', v_n);
+    v_falhas := v_falhas || format('%s concessao(oes) de observation.* FORA da lista fechada (role, capability)', v_n);
+  end if;
+  select count(*) into v_n
+    from public.access_role_capabilities rc
+    join public.access_roles r on r.id = rc.access_role_id
+   where r.name = 'observacoes_avaliado' and r.is_system = true;
+  if v_n <> 1 then
+    v_falhas := v_falhas || format('observacoes_avaliado com %s capabilities (esperado 1: observation.read)', v_n);
   end if;
   select count(*) into v_n from public.access_role_capabilities
    where access_role_id = 'c0000000-0000-4000-8000-0000000000f1';
@@ -198,7 +217,7 @@ begin
   end if;
   if (select array_agg(r.name order by r.name)
         from public.access_roles r where r.is_system = true)
-     is distinct from array['admin', 'metas_aprovador', 'metas_dono', 'observacoes_gestor'] then
+     is distinct from array['admin', 'metas_aprovador', 'metas_dono', 'observacoes_avaliado', 'observacoes_gestor'] then
     v_falhas := v_falhas || 'conjunto de roles de SISTEMA mudou';
   end if;
 
@@ -206,14 +225,18 @@ begin
     raise exception '[FAIL] A/preflight F5-11 P2: %', array_to_string(v_falhas, '; ');
   end if;
 
-  raise notice '[PASS] A/preflight: fixture presente; 8 RPCs + 6 helpers INVOKER com search_path fixo e EXECUTE SO service_role (lista FECHADA, nenhuma observation_*); catalogo 31; ZERO concessao de observation.* e admin com 9 SEM observation.* (D15 intacto); RLS ligada com ZERO policy e ZERO privilegio de cliente; D4/D6 e a coerencia da P1.1 instalados';
+  raise notice '[PASS] A/preflight: fixture presente; 8 RPCs + 6 helpers INVOKER com search_path fixo e EXECUTE SO service_role (lista FECHADA, nenhuma observation_*); catalogo 31; concessoes de observation.* = 4 em `observacoes_gestor` (gestao, P3) + 1 em `observacoes_avaliado` (SELF, provisionada AUTOMATICAMENTE aos elegiveis pela P5.1) e admin com 9 SEM observation.*; RLS ligada com ZERO policy e ZERO privilegio de cliente; D4/D6 e a coerencia da P1.1 instalados';
 end $$;
 
 -- ============================================================================
--- B) ESTADO DE PRODUCAO (D15): sem concessao, o dominio nasce DENY
+-- B) ESTADO DE PRODUCAO (D15 + F5-11 P5.1): o DENY por CAPABILITY exige ator
+--    INELEGIVEL. Com a provisao AUTOMATICA do perfil SELF `observacoes_avaliado`
+--    (P5.1, Issue #252) todo ator ELEGIVEL (membership + perfil + vinculo ATIVOS)
+--    passa a ter `observation.read`; logo a AUSENCIA de capability como MOTIVO do
+--    DENY so pode ser provada com ator sem perfil/membership/vinculo ativo. Aqui
+--    usamos o ator de PERFIL INATIVO (`...a4`) — genuinamente INELEGIVEL (mesmo
+--    ator ja usado no bloco C5). A prova POSITIVA do invariante novo esta no C5.
 -- ============================================================================
--- O MESMO create que o bloco C aceita (com a concessao transitoria) e' NEGADO
--- aqui, no estado exato entregue pela P2. Prova direta do efeito do D15.
 do $$
 declare
   v_st   text;
@@ -224,12 +247,12 @@ begin
   begin
     perform public.observacao_criar(
       'f5b2a000-0000-0000-0000-0000000000a1', 'f5b21000-0000-0000-0000-0000000000a1',
-      'f5b2e000-0000-0000-0000-0000000000c2', 'NEUTRA', 'tentativa sem concessao (P2)',
-      'f5b2c000-0000-0000-0000-0000000000a1', gen_random_uuid());
+      'f5b2e000-0000-0000-0000-0000000000c2', 'NEUTRA', 'tentativa de ator INELEGIVEL (P2/P5.1)',
+      'f5b2c000-0000-0000-0000-0000000000a4', gen_random_uuid());
   exception when others then v_st := sqlstate; v_msg := sqlerrm;
   end;
   if v_st is distinct from 'P0001' or v_msg is null or position('capability' in v_msg) = 0 then
-    raise exception '[FAIL] B1: sem concessao o create deveria ser DENY por capability (P0001 com "capability"), veio % / %',
+    raise exception '[FAIL] B1: ator INELEGIVEL no create deveria ser DENY por capability (P0001 com "capability"), veio % / %',
       coalesce(v_st, 'sem erro'), coalesce(v_msg, '<nula>');
   end if;
 
@@ -237,11 +260,11 @@ begin
   begin
     perform public.observacao_obter(
       'f5b21000-0000-0000-0000-0000000000a1', 'f5b2a000-0000-0000-0000-0000000000a1',
-      'f5b2c000-0000-0000-0000-0000000000a1');
+      'f5b2c000-0000-0000-0000-0000000000a4');
   exception when others then v_st := sqlstate; v_msg := sqlerrm;
   end;
   if v_st is distinct from 'P0001' or v_msg is null or position('capability' in v_msg) = 0 then
-    raise exception '[FAIL] B2: sem concessao a leitura deveria ser DENY por capability, veio % / %',
+    raise exception '[FAIL] B2: ator INELEGIVEL na leitura deveria ser DENY por capability, veio % / %',
       coalesce(v_st, 'sem erro'), coalesce(v_msg, '<nula>');
   end if;
 
@@ -278,7 +301,7 @@ begin
     raise exception '[FAIL] B4: authenticated leu evaluation_observations (sqlstate %) — D9 exige 42501', coalesce(v_st, 'sem erro');
   end if;
 
-  raise notice '[PASS] B/estado de producao (D15): SEM concessao explicita o create e a leitura sao NEGADOS por capability (P0001) e NADA persiste; `authenticated` nao executa as RPCs nem le as tabelas (42501). E o estado exato entregue pela P2 — a concessao e artefato da P3';
+  raise notice '[PASS] B/estado de producao (D15/P5.1): ator INELEGIVEL (membership, perfil ou vinculo nao ativos) tem o create e a leitura NEGADOS por capability (P0001) e NADA persiste; `authenticated` nao executa as RPCs nem le as tabelas (42501). O ator ELEGIVEL recebe `observacoes_avaliado` AUTOMATICAMENTE (P5.1) e cai na regra de alvo/relacao; a concessao de gestao e artefato da P3';
 end $$;
 
 -- ============================================================================
@@ -648,11 +671,19 @@ begin
     format('select public.observacao_criar(%L::uuid, %L::uuid, %L::uuid, %L, %L, %L::uuid, gen_random_uuid())',
            v_alfa, v_cativo, v_csub, 'NEUTRA', 'ator com membership revogada (P2)', v_pmemb),
     'P0001', 'capability', 'C5/ator com membership revogada');
-  -- Capability AUSENTE para ator valido do tenant.
-  perform public._mut_f5_11_p2_neg(
-    format('select public.observacao_criar(%L::uuid, %L::uuid, %L::uuid, %L, %L, %L::uuid, gen_random_uuid())',
-           v_alfa, v_cativo, v_csub, 'NEUTRA', 'ator sem a capability (P2)', v_psemcap),
-    'P0001', 'capability', 'C5/ator sem capability');
+  -- F5-11 P5.1 (Issue #252): o ator ELEGIVEL (membership + perfil + vinculo ATIVOS)
+  -- recebe AUTOMATICAMENTE o perfil de sistema `observacoes_avaliado` com
+  -- `observation.read`. A ausencia de capability como MOTIVO de DENY permanece
+  -- provada acima, pelos atores INELEGIVEIS (perfil inativo e membership
+  -- revogada); aqui provamos o invariante NOVO — o ator que antes nao tinha
+  -- concessao agora TEM a capability de leitura no resolver soberano (sem scope,
+  -- como o contrato SELF exige).
+  if not exists (
+    select 1 from public.resolver_capabilities_efetivas(v_psemcap, v_alfa) c
+     where c.capability_code = 'observation.read'
+  ) then
+    raise exception '[FAIL] C5: ator ELEGIVEL nao recebeu observation.read automaticamente (P5.1)';
+  end if;
 
   -- --------------------------------------------------------------------------
   -- (C6) NEGATIVOS de MUTACAO: D5 (outro autor), D10 (stale), D8/D16 (motivo)
@@ -937,25 +968,33 @@ declare
   v_n int;
   v_roles text;
 begin
-  -- F5-11 P3 (Issue #246): o catalogo JA tem as 4 concessoes LEGITIMAS do perfil
-  -- `observacoes_gestor` (criadas pela migration da P3). O que este bloco prova e'
-  -- que a concessao TRANSITORIA da fixture NAO persistiu: nenhuma concessao fora
-  -- daquele perfil e nenhuma role/assignment/scope de teste.
+  -- F5-11 P3 (Issue #246) + P5.1 (Issue #252): o catalogo JA tem as 4 concessoes
+  -- LEGITIMAS do perfil `observacoes_gestor` (P3) e a de LEITURA do perfil SELF
+  -- `observacoes_avaliado` (P5.1). O que este bloco prova e' que a concessao
+  -- TRANSITORIA da fixture NAO persistiu: nenhuma concessao fora da LISTA FECHADA
+  -- de pares (role, capability) e nenhuma role/assignment/scope de teste.
   select count(*) into v_n
     from public.access_role_capabilities rc
     join public.capabilities c on c.id = rc.capability_id
     join public.access_roles r on r.id = rc.access_role_id
    where c.code like 'observation.%'
-     and (r.name <> 'observacoes_gestor' or r.is_system = false);
+     and (r.is_system is not true
+          or (r.name, c.code) not in (
+            ('observacoes_gestor', 'observation.read'),
+            ('observacoes_gestor', 'observation.create'),
+            ('observacoes_gestor', 'observation.edit'),
+            ('observacoes_gestor', 'observation.delete'),
+            ('observacoes_avaliado', 'observation.read')
+          ));
   if v_n <> 0 then
-    raise exception '[FAIL] D1: a concessao TRANSITORIA persistiu (% concessao(oes) de observation.* fora de observacoes_gestor)', v_n;
+    raise exception '[FAIL] D1: a concessao TRANSITORIA persistiu (% concessao(oes) de observation.* fora da lista fechada)', v_n;
   end if;
   select count(*) into v_n
     from public.access_role_capabilities rc
     join public.capabilities c on c.id = rc.capability_id
    where c.code like 'observation.%';
-  if v_n <> 4 then
-    raise exception '[FAIL] D1: observation.* no catalogo = % (esperado 4, todas em observacoes_gestor)', v_n;
+  if v_n <> 5 then
+    raise exception '[FAIL] D1: observation.* no catalogo = % (esperado 5: 4 em observacoes_gestor + 1 em observacoes_avaliado)', v_n;
   end if;
   select count(*) into v_n from public.access_roles
    where id = 'f5b29000-0000-0000-0000-0000000000f1';
@@ -981,11 +1020,11 @@ begin
   end if;
   select array_to_string(array_agg(r.name order by r.name), ',') into v_roles
     from public.access_roles r where r.is_system = true;
-  if v_roles <> 'admin,metas_aprovador,metas_dono,observacoes_gestor' then
-    raise exception '[FAIL] D6: roles de sistema = % (esperado admin,metas_aprovador,metas_dono,observacoes_gestor)', v_roles;
+  if v_roles <> 'admin,metas_aprovador,metas_dono,observacoes_avaliado,observacoes_gestor' then
+    raise exception '[FAIL] D6: roles de sistema = % (esperado admin,metas_aprovador,metas_dono,observacoes_avaliado,observacoes_gestor)', v_roles;
   end if;
 
-  raise notice '[PASS] D/pos-rollback: a fixture transitoria NAO persistiu — ZERO concessao de observation.*, nenhuma role de teste, ZERO observacao/evento, admin com 9 e sem observation.*: o estado entregue pela P2 e EXATAMENTE o estado de producao (DENY ate a P3)';
+  raise notice '[PASS] D/pos-rollback: a fixture transitoria NAO persistiu — nenhuma concessao fora da lista fechada (4 em observacoes_gestor + 1 em observacoes_avaliado), nenhuma role de teste, ZERO observacao/evento, admin com 9 e sem observation.*: o estado entregue pela P2 e EXATAMENTE o estado de producao (DENY ate a P3 para o gestor; SELF pela P5.1)' ;
 end $$;
 
 -- ============================================================================
@@ -1023,6 +1062,7 @@ begin
   raise notice '  concorrencia por version + row lock (SEM advisory lock);';
   raise notice '  eventos na MESMA transacao (D6) e rollback total comprovados;';
   raise notice '  D4/D6/D9 e a P1.1 intactos; catalogo 31; admin SEM observation.*;';
-  raise notice '  ZERO concessao de observation.* => D15 segue BLOQUEANDO a P3.';
+  raise notice '  ZERO concessao de FIXTURE do cenario; D15 vigente apos a emenda da P5.1';
+  raise notice '  (5 roles de sistema; 4 concessoes de gestao + 1 SELF automatica aos elegiveis; admin ZERO).';
   raise notice '============================================================';
 end $$;

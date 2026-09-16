@@ -33,6 +33,10 @@ delete from public.evaluation_config_scale_bands where organization_id::text lik
 delete from public.evaluation_config_subcriteria where organization_id::text like 'd6a00000%';
 delete from public.evaluation_config_criteria where organization_id::text like 'd6a00000%';
 delete from public.evaluation_config_versions where organization_id::text like 'd6a00000%';
+-- F5-11 P5.1 (Issue #252): as ATRIBUICOES saem antes das memberships — a FK
+-- `fk_membership_access_role_assignments_memberships` e ON DELETE RESTRICT e o
+-- provisionamento automatico do perfil SELF cria uma linha por membership elegivel.
+delete from public.membership_access_role_assignments where organization_id::text like 'd6a00000%';
 delete from public.membership_collaborator_links where organization_id::text like 'd6a00000%';
 delete from public.user_organization_memberships where organization_id::text like 'd6a00000%';
 delete from public.cycle_evaluation_responsibilities where organization_id::text like 'd6a00000%';

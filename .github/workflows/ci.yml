@@ -528,6 +528,24 @@ jobs:
             < supabase/validacao/41-validar-f5-11-p3.sql
 
       # ----------------------------------------------------------------------
+      # F5-11 P5.1 (Issue #252): SELF/read de observacoes COMUNICADAS — 5o system
+      # role `observacoes_avaliado` (EXATAMENTE observation.read, SEM scope),
+      # provisionamento AUTOMATICO por elegibilidade (triggers de tabela +
+      # backfill idempotente) e autoria SISTEMA distinguivel (origin / D18).
+      # ----------------------------------------------------------------------
+      - name: "Seed F5-11 P5.1 scenario (perfil SELF automatico: elegibilidade, transferencia, inativacao/reativacao, backfill idempotente e autoria SISTEMA)"
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/42-cenario-f5-11-p5-1.sql
+
+      - name: "Run F5-11 P5.1 validation (SELF le comunicada; nao le nao-comunicada/excluida; ZERO mutacao SELF; cross-tenant; gestor inalterado; admin sem observation.*; autoria SISTEMA e idempotencia)"
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/43-validar-f5-11-p5-1.sql
+
+      # ----------------------------------------------------------------------
       # Regressão F5-06/F5-07 (§23.4): cenários independentes, com prefixos de
       # UUID próprios (`d6`/`d7`), reaplicados antes de cada validação.
       # ----------------------------------------------------------------------

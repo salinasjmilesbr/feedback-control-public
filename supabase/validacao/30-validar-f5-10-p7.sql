@@ -1429,9 +1429,15 @@ begin
     'observacao_listar_por_escopo','observacao_historico',
     'f5_11_ator_efetivo_observacao','f5_11_ator_valido_observacao',
     'f5_11_vinculo_observacao_do_ator','f5_11_relacao_observacao_do_ator',
-    'f5_11_exigir_autorizacao_observacao',    'f5_11_ator_tem_escopo_observacao'       ]);
+    'f5_11_exigir_autorizacao_observacao',    'f5_11_ator_tem_escopo_observacao',
+    -- F5-11 P5.1 (Issue #252): provisionamento automatico do perfil SELF
+    -- (`observacoes_avaliado`) — 1 funcao de provisionamento/backfill + 2 funcoes
+    -- de trigger. Lista FECHADA e EXATA: acrescentadas por nome, sem curinga.
+    'f5_11_p5_1_provisionar_observacoes_avaliado',
+    'f5_11_p5_1_trigger_vinculo_observacoes_avaliado',
+    'f5_11_p5_1_trigger_membership_observacoes_avaliado'       ]);
   if v_n <> 0 then
-    v_falhas := v_falhas || format('%s funcao(oes) de observacoes FORA da lista fechada da F5-11 P1 (nenhuma RPC observacao_* existe ate a P2)', v_n);
+    v_falhas := v_falhas || format('%s funcao(oes) de observacoes FORA da lista fechada da F5-11 P1/P2/P5.1', v_n);
   end if;
   -- As duas tabelas legitimas da F5-11 P1 precisam EXISTIR (a lista fechada nao
   -- pode virar desculpa para ausencia).
