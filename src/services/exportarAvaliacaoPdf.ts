@@ -2,11 +2,11 @@ import jsPDF from "jspdf";
 import type { Colaborador } from "../types/Colaborador";
 import type { Feedback } from "../types/Feedback";
 import { getColaboradores } from "./colaboradorStorage";
-import { getObservacoesComunicadasByCiclo } from "./observacaoStorage";
 
 
 import { formatarNota } from "./escalaAvaliacaoStorage";
 import type { MetaSoberana } from "../application/ports/GoalRepository";
+import type { ObservacaoSoberana } from "../application/ports/ObservationRepository";
 
 function limparNomeArquivo(valor: string) {
   return valor
@@ -90,19 +90,21 @@ function obterAvaliadores(colaborador: Colaborador) {
 export function exportarAvaliacaoPdf(
   colaborador: Colaborador,
   feedback: Feedback,
-  metasDoCiclo: readonly MetaSoberana[] = []
+  metasDoCiclo: readonly MetaSoberana[] = [],
+  observacoesComunicadas: readonly ObservacaoSoberana[] = []
 ): void {
   const avaliadores = obterAvaliadores(colaborador);
-
-  const observacoesComunicadas = getObservacoesComunicadasByCiclo(
-    colaborador.matricula,
-    feedback.ano,
-    feedback.ciclo
-  );
 
   // F5-10 P6 (Issue #220): as metas chegam JÁ LIDAS da superfície soberana pelo
   // chamador (relação SELF, `!excluida`, ordenadas por `criadoEm`). Este serviço
   // NÃO lê storage local, NÃO resolve ciclo por rótulo e NÃO decide autorização.
+  //
+  // F5-11 P5 (Issue #250), L5: as observações COMUNICADAS seguem o MESMO molde —
+  // chegam JÁ LIDAS da porta soberana pelo chamador (`ObservacaoSoberana[]`) e
+  // este serviço NÃO lê storage local, NÃO resolve identidade (a projeção
+  // soberana não traz matrícula/nome de autor: nada é inventado no PDF) e NÃO
+  // decide autorização. Lista vazia é ausência EXPLÍCITA de comunicada — o
+  // documento é gerado sem a seção, nunca com observação presumida.
 
   const dataConclusao =
     feedback.dataConclusao ??
@@ -393,10 +395,11 @@ export function exportarAvaliacaoPdf(
           ? "Negativa"
           : "Neutra";
 
+      // Tipo e data SOBERANOS da linha. O autor NÃO é impresso: a projeção
+      // soberana identifica o autor por UUID e este serviço não resolve
+      // identidade (sem matrícula/nome local) — nada é inventado no documento.
       escreverTexto(
-        `${tipoObservacao} | ${formatarData(
-          observacao.dataCriacao
-        )} | ${observacao.autorNome}`,
+        `${tipoObservacao} | ${formatarData(observacao.criadoEm)}`,
         9,
         true,
         1

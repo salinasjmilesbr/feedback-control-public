@@ -218,6 +218,29 @@ export const TIPOS_OBSERVACAO: readonly TipoObservacaoSoberana[] = [
 ];
 
 /**
+ * Conjunto FECHADO de eventos da trilha (`CHECK
+ * ck_evaluation_observation_events_event_type`, P1 §7.2/D6). Espelha o SQL: um
+ * `event_type` fora desta lista é FORA DO CONTRATO e a linha é descartada pelo
+ * repositório — nunca normalizada nem traduzida.
+ */
+export type TipoEventoObservacao =
+  | "CRIADA"
+  | "EDITADA"
+  | "COMUNICADO"
+  | "COMUNICACAO_REMOVIDA"
+  | "EXCLUIDA"
+  | "REVOGADA";
+
+export const TIPOS_EVENTO_OBSERVACAO: readonly TipoEventoObservacao[] = [
+  "CRIADA",
+  "EDITADA",
+  "COMUNICADO",
+  "COMUNICACAO_REMOVIDA",
+  "EXCLUIDA",
+  "REVOGADA",
+];
+
+/**
  * Escopos de LISTAGEM aceitos (allowlist FECHADA da P3 no gate
  * `f5_11_exigir_autorizacao_observacao`/`observacao_listar_por_escopo`).
  *

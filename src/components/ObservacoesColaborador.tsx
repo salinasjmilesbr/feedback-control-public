@@ -1,39 +1,114 @@
-import { useEffect, useState } from "react";
-import { authorize, can } from "../authorization/authorizationPolicy";
-import type { Colaborador } from "../types/Colaborador";
-import type {
-  Observacao,
-  TipoObservacao,
-} from "../types/Observacao";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { CicloSoberano } from "../application/ports/CycleRepository";
+import type { ObservacaoSoberana } from "../application/ports/ObservationRepository";
+import type { TipoObservacao } from "../types/Observacao";
 import {
-  atualizarObservacao,
-  criarObservacao,
-  excluirObservacao,
-  getObservacoesByColaborador,
-} from "../services/observacaoStorage";
-import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
-import "../styles/observacoes.css";
-import {
-  getCicloAtivo,
-  getCiclosAvaliacao,
-  formatarPeriodoCiclo,
-} from "../services/cicloAvaliacaoStorage";
-import {
-  filtrarObservacoesPorCiclo,
-  getChaveCicloObservacoes,
-  ordenarCiclosParaFiltro,
-  type FiltroCicloObservacoes,
+  contarObservacoesSoberanasPorTipo,
+  FILTRO_OBSERVACOES_TODOS,
+  filtrarObservacoesSoberanasPorCiclo,
+  ordenarCiclosSoberanosParaFiltro,
+  type FiltroCicloObservacoesSoberano,
 } from "./filtroObservacoesPorCiclo";
+import {
+  eventoTimelineDeUi,
+  observacaoDeUi,
+  type EventoTimelineUi,
+  type FonteDeRotulosDeColaborador,
+  type ObservacaoDeUi,
+  type RotulosTimelineObservacao,
+} from "../services/observacoesSoberanas/mapeadorObservacaoUi";
+import type { ControladorObservacoes } from "../services/observacoesSoberanas/controladorObservacoes";
+import {
+  criarObservacaoSoberana,
+  editarObservacaoSoberana,
+  excluirObservacaoSoberana,
+  mensagemDaFalha,
+} from "../services/observacoesSoberanas/fluxoMutacaoObservacao";
+import type {
+  CodigoPublico,
+  EscopoObservacao,
+} from "../infrastructure/supabase/observacoes/contrato";
+import "../styles/observacoes.css";
 
-type Props = {
-  colaborador: Colaborador;
-  abrirNovaObservacaoToken?: number;
-  filtroCiclo: FiltroCicloObservacoes;
-  onFiltroCicloChange: (filtro: FiltroCicloObservacoes) => void;
-  mostrarExcluidas: boolean;
-  onMostrarExcluidasChange: (mostrar: boolean) => void;
-  onObservacoesChange: () => void;
-};
+/**
+ * F5-11 P5 (Issue #250), L3 — CUTOVER do painel de observações do gestor.
+ *
+ * ## O que mudou de dono
+ *
+ * - a fonte é a PORTA/CONTROLADOR soberanos, recebidos por PROPS: este
+ *   componente **não** cria repositório, **não** fala com Supabase, **não** lê
+ *   `observacaoStorage`/`localStorage` e **não** tem fallback nem dual-read
+ *   (D13). Toda leitura/mutação atravessa a Edge `observacoes` → RPC
+ *   `observacao_*`;
+ * - a AUTORIZAÇÃO saiu do componente: o antigo gate local decidia com alvo e
+ *   contexto FABRICADOS no browser e foi REMOVIDO no cutover; a decisão é sempre
+ *   server-side e o componente não chama o Policy Engine.
+ *   Os controles são renderizados como INTENÇÃO de UX e a decisão é sempre
+ *   server-side: mutação negada exibe o CÓDIGO PÚBLICO e a mensagem do
+ *   controlador (fail-closed) sem alterar a lista exibida;
+ * - o HISTÓRICO/timeline deixou de ser um array local: vem de
+ *   `observacao.historico` (trilha append-only, D6) e é apresentado por
+ *   `EventoTimelineUi` — tipo NOVO, sem `ano`/`ciclo`, sem matrícula derivada de
+ *   UUID e sem "ação" textual inventada.
+ *
+ * ## Identidade (UUID) e rótulos (parâmetro)
+ *
+ * O `colaborador` prop é a INTENÇÃO de alvo (`id` = `collaborators.id`); nome e
+ * matrícula são rótulos de apresentação. `rotulos` resolve o alvo e o autor das
+ * LINHAS e `rotulosTimeline` resolve o ator dos EVENTOS; sem o rótulo do alvo, o
+ * item não é apresentado pelo mapeador (`null`) e a contagem de itens não
+ * apresentáveis é informada — nada é inventado.
+ *
+ * O desenho visual (layout, classes, ordem dos blocos, KPIs/tags) é PRESERVADO:
+ * o cutover troca a FONTE e o dono da decisão, não o desenho.
+ */
+
+export interface ObservacoesColaboradorProps {
+  /**
+   * Colaborador-ALVO do painel. A identidade é `id` (`collaborators.id`, UUID) e
+   * é o ÚNICO campo consumido pelo painel (alvo da criação e filtro da leitura);
+   * `nome`/`matricula` entram para deixar explícito que a página pode passar a
+   * projeção SOBERANA (`ColaboradorSoberano`) — a apresentação das LINHAS vem de
+   * `rotulos`, por UUID, e nunca daqui (nada de identidade por matrícula — D1/D3).
+   */
+  readonly colaborador: {
+    readonly id: string;
+    readonly nome: string;
+    readonly matricula: number;
+  };
+  /** Organização ativa — INTENÇÃO de UX (a Edge/RPC revalida o tenant). */
+  readonly organizationId: string;
+  /** Escopo de leitura da listagem (`DIRECT_REPORTS` | `DESCENDANTS`). */
+  readonly escopo: EscopoObservacao;
+  /** Ciclos soberanos da organização (rótulos `ano`/`numero` da projeção). */
+  readonly ciclos: readonly CicloSoberano[];
+  /** Porta/controlador soberanos injetados pela página (nunca criados aqui). */
+  readonly controlador: ControladorObservacoes;
+  /** Rótulos de alvo/autor das LINHAS por UUID (superfície de colaboradores). */
+  readonly rotulos: FonteDeRotulosDeColaborador;
+  /** Rótulos do ATOR dos eventos da timeline (por perfil ou mapa já enriquecido). */
+  readonly rotulosTimeline?: RotulosTimelineObservacao;
+  /** Filtro corrente do painel (estado do consumidor). */
+  readonly filtroCiclo: FiltroCicloObservacoesSoberano;
+  readonly onFiltroCicloChange: (filtro: FiltroCicloObservacoesSoberano) => void;
+  readonly mostrarExcluidas: boolean;
+  readonly onMostrarExcluidasChange: (mostrar: boolean) => void;
+  /** Aviso ao consumidor de que houve mutação soberana bem-sucedida. */
+  readonly onObservacoesChange: () => void;
+  /** Token que abre o formulário de nova observação (mesma UX anterior). */
+  readonly abrirNovaObservacaoToken?: number;
+  /**
+   * Semente da LEITURA (SSR/teste determinístico): quando presente, o efeito de
+   * leitura soberana NÃO dispara e o estado exibido é esta semente — mesmo padrão
+   * de `useEstruturaSoberana`/`estadoInicial` do repositório. Nada é decidido
+   * aqui: a semente é um recorte já devolvido pela porta.
+   */
+  readonly estadoInicial?: EstadoLista;
+  /** Semente da TRILHA (SSR/teste determinístico): desliga a leitura de histórico. */
+  readonly timelineInicial?: EstadoTimeline | null;
+  /** Semente da timeline ABERTA (SSR/teste determinístico). */
+  readonly historicoAbertoInicial?: string | null;
+}
 
 const labelsTipo: Record<TipoObservacao, string> = {
   POSITIVA: "Positiva",
@@ -59,6 +134,19 @@ const estiloTipo: Record<
   },
 };
 
+/**
+ * Rótulo do evento da timeline a partir do `event_type` FECHADO do contrato
+ * (`CRIADA`/`EDITADA`/`COMUNICADO`/`COMUNICACAO_REMOVIDA`/`EXCLUIDA`/`REVOGADA`).
+ */
+const labelsEvento: Readonly<Record<EventoTimelineUi["evento"], string>> = {
+  CRIADA: "Criação",
+  EDITADA: "Edição",
+  COMUNICADO: "Comunicado ao colaborador",
+  COMUNICACAO_REMOVIDA: "Comunicação removida",
+  EXCLUIDA: "Exclusão",
+  REVOGADA: "Revogação da exclusão",
+};
+
 function formatarData(data: string) {
   return new Date(data).toLocaleString("pt-BR", {
     dateStyle: "short",
@@ -66,39 +154,137 @@ function formatarData(data: string) {
   });
 }
 
+/** Falha soberana exibida: código público + mensagem do controlador (fail-closed). */
+interface ErroSoberano {
+  readonly origem: "lista" | "mutacao" | "historico";
+  readonly codigo: CodigoPublico;
+  readonly mensagem: string;
+}
+
+type EstadoLista =
+  | { readonly fase: "carregando" }
+  | { readonly fase: "pronta"; readonly escopo: string; readonly itens: readonly ObservacaoSoberana[] }
+  | { readonly fase: "erro"; readonly erro: ErroSoberano };
+
+type EstadoTimeline =
+  | { readonly fase: "carregando"; readonly observationId: string }
+  | { readonly fase: "pronta"; readonly observationId: string; readonly itens: readonly EventoTimelineUi[] }
+  | { readonly fase: "erro"; readonly observationId: string; readonly erro: ErroSoberano };
+
 function ObservacoesColaborador({
   colaborador,
-  abrirNovaObservacaoToken,
+  organizationId,
+  escopo,
+  ciclos,
+  controlador,
+  rotulos,
+  rotulosTimeline,
   filtroCiclo,
   onFiltroCicloChange,
   mostrarExcluidas,
   onMostrarExcluidasChange,
   onObservacoesChange,
-}: Props) {
-  const { usuarioAtual } = useUsuarioAtual();
-  const cicloAtivo = getCicloAtivo();
-  const ciclosDisponiveis = getCiclosAvaliacao();
-  const ciclosAtivos = ciclosDisponiveis.filter(
-    (item) => item.status === "ATIVO"
-  );
-  const ciclosDoFiltro = ordenarCiclosParaFiltro(ciclosDisponiveis);
-
+  abrirNovaObservacaoToken,
+  estadoInicial,
+  timelineInicial,
+  historicoAbertoInicial,
+}: ObservacoesColaboradorProps) {
   const [versao, setVersao] = useState(0);
   const [formAberto, setFormAberto] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [tipo, setTipo] = useState<TipoObservacao>("NEUTRA");
   const [texto, setTexto] = useState("");
   const [comunicado, setComunicado] = useState(false);
-  const [ano, setAno] = useState(
-    cicloAtivo?.ano ?? new Date().getFullYear()
-  );
-  const [ciclo, setCiclo] = useState<1 | 2 | 3>(
-    cicloAtivo?.ciclo ?? 1
-  );
+  /** Ciclo da CRIAÇÃO: UUID soberano (`evaluation_cycles.id`), nunca `ano`/`ciclo`. */
+  const [cicloSelecionado, setCicloSelecionado] = useState<string | null>(null);
   const [historicoAberto, setHistoricoAberto] = useState<string | null>(
-    null
+    historicoAbertoInicial ?? null
   );
   const [erro, setErro] = useState("");
+  const [listaEstado, setLista] = useState<EstadoLista & { readonly chave?: string }>(
+    estadoInicial ?? { fase: "carregando" }
+  );
+  const [timelineEstado, setTimeline] = useState<
+    (EstadoTimeline & { readonly chave?: string }) | null
+  >(timelineInicial ?? null);
+
+  /**
+   * Chave de ENTRADA de cada leitura soberana. O estado guarda a chave da
+   * fotografia RECEBIDA; a exibição é DERIVADA dela: quando a chave guardada não
+   * é a vigente, exibimos `carregando` enquanto o efeito relê. Assim não existe
+   * `setState` síncrono dentro de efeito (render em cascata) nem `setState`
+   * durante o render — a entrada é a fonte da verdade.
+   */
+  const chaveDaLeitura = `${organizationId}\u0000${escopo}\u0000${versao}`;
+  const chaveDaTimeline = historicoAberto ?? "";
+
+  const lista: EstadoLista =
+    estadoInicial !== undefined || listaEstado.chave === chaveDaLeitura
+      ? listaEstado
+      : { fase: "carregando" };
+
+  const timeline: EstadoTimeline | null =
+    timelineInicial !== undefined
+      ? timelineEstado
+      : chaveDaTimeline === ""
+        ? null
+        : timelineEstado !== null && timelineEstado.chave === chaveDaTimeline
+          ? timelineEstado
+          : { fase: "carregando", observationId: chaveDaTimeline };
+
+  const ciclosDoFiltro = ordenarCiclosSoberanosParaFiltro(ciclos);
+  const ciclosAtivos = ciclosDoFiltro.filter((item) => item.status === "ATIVO");
+  const cicloAtivo = ciclosAtivos[0] ?? null;
+  const cicloDaCriacao =
+    ciclos.find((item) => item.id === cicloSelecionado) ?? cicloAtivo;
+
+  // A LEITURA é sempre soberana: nenhuma chamada local, nenhum cache e nenhuma
+  // completude otimista. `operationId` e escopo ficam no controlador/porta.
+  // Com SEMENTE (`estadoInicial`) o efeito não dispara: o SSR/teste determinístico
+  // exibe exatamente a fotografia recebida, como em `useEstruturaSoberana`.
+  useEffect(() => {
+    if (estadoInicial) return;
+
+    let vigente = true;
+    void controlador
+      .listarPorEscopo(organizationId, escopo)
+      .then((resultado) => {
+        if (!vigente) return;
+        setLista(
+          resultado.ok
+            ? {
+                fase: "pronta",
+                escopo: resultado.data.escopo,
+                itens: resultado.data.itens,
+                chave: chaveDaLeitura,
+              }
+            : {
+                fase: "erro",
+                erro: {
+                  origem: "lista",
+                  codigo: resultado.error.code,
+                  mensagem: resultado.error.mensagem,
+                },
+                chave: chaveDaLeitura,
+              }
+        );
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [controlador, organizationId, escopo, versao, estadoInicial, chaveDaLeitura]);
+
+  const recarregar = useCallback(() => setVersao((valor) => valor + 1), []);
+
+  function limparFormulario() {
+    setEditandoId(null);
+    setTipo("NEUTRA");
+    setTexto("");
+    setComunicado(false);
+    setCicloSelecionado(null);
+    setErro("");
+    setFormAberto(false);
+  }
 
   useEffect(() => {
     if (!abrirNovaObservacaoToken) return;
@@ -108,166 +294,194 @@ function ObservacoesColaborador({
       setTipo("NEUTRA");
       setTexto("");
       setComunicado(false);
-      setAno(cicloAtivo?.ano ?? new Date().getFullYear());
-      setCiclo(cicloAtivo?.ciclo ?? 1);
+      setCicloSelecionado(null);
       setErro("");
       setFormAberto(true);
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [abrirNovaObservacaoToken, cicloAtivo?.ano, cicloAtivo?.ciclo]);
+  }, [abrirNovaObservacaoToken]);
 
-  void versao;
-
-  const observacoes = filtrarObservacoesPorCiclo(
-    getObservacoesByColaborador(
-      colaborador.matricula,
-      mostrarExcluidas
-    ),
-    filtroCiclo
-  );
-
-  const authorizationContext = usuarioAtual
-    ? {
-        actor: {
-          matricula: usuarioAtual.matricula,
-          funcao: usuarioAtual.funcao,
-          status: usuarioAtual.status,
-        },
-      }
-    : undefined;
-  const cicloDoFormulario = ciclosDisponiveis.find(
-    (item) => item.ano === ano && item.ciclo === ciclo
-  );
-  const cicloFiltrado = ciclosDisponiveis.find(
-    (item) => getChaveCicloObservacoes(item) === filtroCiclo
-  );
-  const podeCriarObservacao = authorizationContext
-    ? can(authorizationContext, "observation.create", {
-        kind: "observation",
-        collaborator: colaborador,
-        cycle: cicloFiltrado,
-      })
-    : false;
-
-  function podeEditarObservacao(observacao?: Observacao) {
-    const cicloDaObservacao = ciclosDisponiveis.find(
-      (item) =>
-        item.ano === observacao?.ano && item.ciclo === observacao?.ciclo
-    );
-    return authorizationContext
-      ? can(authorizationContext, "observation.edit", {
-          kind: "observation",
-          collaborator: colaborador,
-          observation: observacao,
-          cycle: cicloDaObservacao,
-        })
-      : false;
-  }
-
-  function podeExcluirObservacao(observacao: Observacao) {
-    const cicloDaObservacao = ciclosDisponiveis.find(
-      (item) =>
-        item.ano === observacao.ano && item.ciclo === observacao.ciclo
-    );
-    return authorizationContext
-      ? can(authorizationContext, "observation.delete", {
-          kind: "observation",
-          collaborator: colaborador,
-          observation: observacao,
-          cycle: cicloDaObservacao,
-        })
-      : false;
-  }
-
-  function limparFormulario() {
-    setEditandoId(null);
-    setTipo("NEUTRA");
-    setTexto("");
-    setComunicado(false);
-    setAno(cicloAtivo?.ano ?? new Date().getFullYear());
-    setCiclo(cicloAtivo?.ciclo ?? 1);
-    setErro("");
-    setFormAberto(false);
-  }
-
-  function iniciarEdicao(observacao: Observacao) {
+  function iniciarEdicao(observacao: ObservacaoDeUi) {
     setEditandoId(observacao.id);
     setTipo(observacao.tipo);
     setTexto(observacao.texto);
     setComunicado(observacao.comunicado);
-    setAno(observacao.ano ?? new Date().getFullYear());
-    setCiclo(observacao.ciclo ?? 1);
     setErro("");
     setFormAberto(true);
   }
 
-  function salvar() {
-    const observacaoEmEdicao = editandoId
-      ? observacoes.find((observacao) => observacao.id === editandoId)
-      : undefined;
-    const podeSalvar = editandoId
-      ? podeEditarObservacao(observacaoEmEdicao)
-      : podeCriarObservacao;
-    if (!usuarioAtual || !authorizationContext || !podeSalvar) return;
-
+  async function salvar() {
     if (!texto.trim()) {
       setErro("Digite o texto da observação.");
       return;
     }
 
-    try {
-      if (editandoId) {
-        atualizarObservacao(
-          editandoId,
-          tipo,
-          texto,
-          comunicado,
-          ano,
-          ciclo,
-          usuarioAtual
-        );
-      } else {
-        authorize(authorizationContext, "observation.create", {
-          kind: "observation",
-          collaborator: colaborador,
-          cycle: cicloDoFormulario,
-        });
-        criarObservacao(
-          colaborador.matricula,
-          tipo,
-          texto,
-          comunicado,
-          ano,
-          ciclo,
-          usuarioAtual
-        );
-      }
+    setErro("");
 
-      limparFormulario();
-      setVersao((valor) => valor + 1);
-      onObservacoesChange();
-    } catch (error) {
-      setErro(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível salvar a observação."
-      );
+    // A intenção é delegada ao fluxo soberano (`fluxoMutacaoObservacao`): a versão
+    // esperada vem da LEITURA soberana no controlador e NENHUMA autoridade é
+    // transportada daqui.
+    const contexto = {
+      controlador,
+      organizationId,
+      collaboratorId: colaborador.id,
+      ...(cicloDaCriacao ? { cycleId: cicloDaCriacao.id } : {}),
+    };
+
+    const resultado = editandoId
+      ? await editarObservacaoSoberana(
+          contexto,
+          { id: editandoId },
+          { tipo, texto, comunicado }
+        )
+      : await criarObservacaoSoberana(contexto, { tipo, texto });
+
+    if (!resultado.ok) {
+      // Negação/erro do servidor: a LISTA EXIBIDA permanece intacta.
+      setErro(mensagemDaFalha(resultado.error));
+      return;
     }
+
+    limparFormulario();
+    setVersao((valor) => valor + 1);
+    onObservacoesChange();
   }
 
-  function excluir(observacao: Observacao) {
-    if (!usuarioAtual || !podeExcluirObservacao(observacao)) return;
-
+  async function excluir(observacao: ObservacaoDeUi) {
     const confirmar = window.confirm(
       "Deseja realmente excluir esta observação? Ela permanecerá no histórico."
     );
-
     if (!confirmar) return;
 
-    excluirObservacao(observacao.id, usuarioAtual);
+    // D8/D16: a exclusão soberana é LÓGICA e exige MOTIVO — sem motivo não há
+    // intenção válida e nada é enviado.
+    const motivo = window.prompt("Motivo da exclusão (obrigatório):") ?? "";
+
+    setErro("");
+    const resultado = await excluirObservacaoSoberana(
+      { controlador, organizationId, collaboratorId: colaborador.id },
+      { id: observacao.id },
+      motivo
+    );
+
+    if (!resultado.ok) {
+      setErro(mensagemDaFalha(resultado.error));
+      return;
+    }
+
     setVersao((valor) => valor + 1);
     onObservacoesChange();
+  }
+
+  function alternarHistorico(observationId: string) {
+    setHistoricoAberto((atual) => (atual === observationId ? null : observationId));
+  }
+
+  // Os rótulos da timeline NÃO entram nas dependências do efeito: um objeto
+  // recriado pelo consumidor a cada render dispararia releitura infinita. O ref
+  // mantém o valor corrente sem tornar a identidade do objeto uma dependência.
+  const rotulosTimelineRef = useRef(rotulosTimeline);
+  // O ref é atualizado em EFEITO (nunca durante o render, que é proibido porque
+  // o render precisa ser puro). O valor corrente continua disponível para a
+  // leitura da trilha sem que a identidade do objeto vire dependência do efeito.
+  useEffect(() => {
+    rotulosTimelineRef.current = rotulosTimeline;
+  }, [rotulosTimeline]);
+
+  // A timeline é lida da TRILHA soberana quando (e só quando) é exibida. Com
+  // semente de trilha (`timelineInicial`) o efeito NÃO dispara (SSR/teste).
+  useEffect(() => {
+    if (timelineInicial !== undefined) return;
+    if (!historicoAberto) return;
+
+    let vigente = true;
+    void controlador.historico(organizationId, historicoAberto).then((resultado) => {
+      if (!vigente) return;
+      setTimeline(
+        resultado.ok
+          ? {
+              fase: "pronta",
+              observationId: historicoAberto,
+              chave: chaveDaTimeline,
+              itens: resultado.data.eventos
+                .map((evento) => eventoTimelineDeUi(evento, rotulosTimelineRef.current))
+                .filter((item): item is EventoTimelineUi => item !== null),
+            }
+          : {
+              fase: "erro",
+              observationId: historicoAberto,
+              chave: chaveDaTimeline,
+              erro: {
+                origem: "historico",
+                codigo: resultado.error.code,
+                mensagem: resultado.error.mensagem,
+              },
+            }
+      );
+    });
+    return () => {
+      vigente = false;
+    };
+  }, [controlador, organizationId, historicoAberto, timelineInicial, chaveDaTimeline]);
+
+  const itensSoberanos =
+    lista.fase === "pronta"
+      ? filtrarObservacoesSoberanasPorCiclo(
+          mostrarExcluidas
+            ? lista.itens
+            : lista.itens.filter((observacao) => !observacao.excluida),
+          filtroCiclo
+        )
+      : [];
+
+  // O mapeador é a fronteira de apresentação: item sem rótulo do ALVO não é
+  // exibido (`null`) e a contagem é informada — nunca se inventa identidade.
+  const observacoes: ObservacaoDeUi[] = [];
+  const timelinePorObservacao = new Map<string, readonly EventoTimelineUi[]>();
+  if (timeline?.fase === "pronta") {
+    timelinePorObservacao.set(timeline.observationId, timeline.itens);
+  }
+  let naoApresentaveis = 0;
+  for (const soberana of itensSoberanos) {
+    const mapeada = observacaoDeUi(
+      soberana,
+      rotulos,
+      timelinePorObservacao.get(soberana.id) ?? []
+    );
+    if (mapeada) observacoes.push(mapeada);
+    else naoApresentaveis += 1;
+  }
+
+  const cicloDaObservacaoEmEdicao = editandoId
+    ? ciclos.find(
+        (item) =>
+          item.id === itensSoberanos.find((o) => o.id === editandoId)?.cycleId
+      ) ?? null
+    : null;
+
+  const erroLista = lista.fase === "erro" ? lista.erro : null;
+  const erroForaDoFormulario =
+    erroLista ?? (timeline?.fase === "erro" ? timeline.erro : null) ?? null;
+
+  /** KPI por tipo das observações soberanas do recorte (sem `ano`/`ciclo`). */
+  const resumo = contarObservacoesSoberanasPorTipo(itensSoberanos);
+
+  /** `cycleId` por observação: a única ponte para o RÓTULO do ciclo na tela. */
+  const cycleIdPorObservacao = new Map(
+    itensSoberanos.map((item) => [item.id, item.cycleId] as const)
+  );
+
+  /**
+   * Rótulo do botão da trilha. O `total` de eventos NÃO está na projeção da
+   * listagem (só a RPC de histórico o devolve), então o contador aparece quando a
+   * trilha já foi lida — nunca é estimado nem preenchido com número inventado.
+   */
+  function rotuloHistorico(observationId: string): string {
+    if (historicoAberto === observationId) return "Ocultar histórico";
+    return timeline?.observationId === observationId && timeline.fase === "pronta"
+      ? `Ver histórico (${timeline.itens.length})`
+      : "Ver histórico";
   }
 
   return (
@@ -284,17 +498,19 @@ function ObservacoesColaborador({
           <label className="observation-cycle-filter">
             <span>Ciclo:</span>
             <select
-              value={filtroCiclo}
+              value={filtroCiclo === "TODOS" ? "TODOS" : filtroCiclo.cycleId}
               onChange={(event) => {
                 limparFormulario();
                 onFiltroCicloChange(
-                  event.target.value as FiltroCicloObservacoes
+                  event.target.value === "TODOS"
+                    ? FILTRO_OBSERVACOES_TODOS
+                    : { cycleId: event.target.value }
                 );
               }}
             >
               {ciclosDoFiltro.map((item) => (
-                <option key={item.id} value={getChaveCicloObservacoes(item)}>
-                  {item.ano} · Ciclo {item.ciclo}
+                <option key={item.id} value={item.id}>
+                  {item.ano} · Ciclo {item.numero}
                   {item.status === "ATIVO" ? " (Atual)" : ""}
                 </option>
               ))}
@@ -313,37 +529,52 @@ function ObservacoesColaborador({
               Mostrar excluídas
           </label>
 
-          {podeCriarObservacao && (
-            <button
-              type="button"
-              onClick={() => {
-                if (formAberto && !editandoId) {
-                  limparFormulario();
-                } else {
-                  setEditandoId(null);
-                  setTipo("NEUTRA");
-                  setTexto("");
-                  setComunicado(false);
-                  setAno(cicloAtivo?.ano ?? new Date().getFullYear());
-                  setCiclo(cicloAtivo?.ciclo ?? 1);
-                  setErro("");
-                  setFormAberto(true);
-                }
-              }}
-              className="virtus-btn virtus-btn--primary"
-            >
-              + Nova observação
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => {
+              if (formAberto && !editandoId) {
+                limparFormulario();
+              } else {
+                setEditandoId(null);
+                setTipo("NEUTRA");
+                setTexto("");
+                setComunicado(false);
+                setCicloSelecionado(null);
+                setErro("");
+                setFormAberto(true);
+              }
+            }}
+            className="virtus-btn virtus-btn--primary"
+          >
+            + Nova observação
+          </button>
         </div>
       </div>
 
-      {formAberto &&
-        (editandoId
-          ? podeEditarObservacao(
-              observacoes.find((observacao) => observacao.id === editandoId)
-            )
-          : podeCriarObservacao) && (
+      {erroForaDoFormulario && (
+        <div className="observation-form__error" style={{ marginTop: "12px" }}>
+          {erroForaDoFormulario.origem === "lista"
+            ? "Não foi possível carregar as observações. "
+            : erroForaDoFormulario.origem === "historico"
+              ? "Não foi possível carregar o histórico. "
+              : ""}
+          <strong>{erroForaDoFormulario.codigo}</strong>
+          {" — "}
+          {erroForaDoFormulario.mensagem}
+          {erroForaDoFormulario.origem === "lista" && (
+            <button
+              type="button"
+              onClick={recarregar}
+              className="virtus-btn virtus-btn--outline"
+              style={{ marginLeft: "10px" }}
+            >
+              Tentar novamente
+            </button>
+          )}
+        </div>
+      )}
+
+      {formAberto && (
         <div className="observation-form">
           <div className="observation-form__grid">
             <label>
@@ -364,32 +595,21 @@ function ObservacoesColaborador({
             <label>
               <strong>Ciclo da observação</strong>
               <select
-                value={`${ano}-${ciclo}`}
+                value={cicloDaCriacao?.id ?? ""}
                 disabled={Boolean(editandoId)}
                 onChange={(event) => {
-                  const [anoSelecionado, cicloSelecionado] =
-                    event.target.value.split("-");
-
-                  setAno(Number(anoSelecionado));
-                  setCiclo(Number(cicloSelecionado) as 1 | 2 | 3);
+                  setCicloSelecionado(event.target.value);
                 }}
                 className="observation-control"
               >
                 {(editandoId
-                  ? ciclosDisponiveis.filter(
-                      (item) => item.ano === ano && item.ciclo === ciclo
+                  ? ciclosDoFiltro.filter(
+                      (item) => item.id === cicloDaObservacaoEmEdicao?.id
                     )
                   : ciclosAtivos
                 ).map((item) => (
-                  <option
-                    key={item.id}
-                    value={`${item.ano}-${item.ciclo}`}
-                  >
-                    {item.ano} • Ciclo {item.ciclo} —{" "}
-                    {formatarPeriodoCiclo(
-                      item.dataInicio,
-                      item.dataFim
-                    )}
+                  <option key={item.id} value={item.id}>
+                    {item.ano} • Ciclo {item.numero}
                     {item.status === "ATIVO" ? " (Ativo)" : ""}
                   </option>
                 ))}
@@ -431,7 +651,9 @@ function ObservacoesColaborador({
 
               <button
                 type="button"
-                onClick={salvar}
+                onClick={() => {
+                  void salvar();
+                }}
                 className="virtus-btn virtus-btn--primary"
               >
                 {editandoId ? "Salvar alterações" : "Salvar observação"}
@@ -442,7 +664,22 @@ function ObservacoesColaborador({
       )}
 
       <div className="observation-list">
-        {observacoes.length === 0 ? (
+        <div
+          className="collaborator-observation-summary"
+          style={{ display: "flex", gap: "8px", flexWrap: "wrap", fontSize: "12px", color: "#555" }}
+        >
+          <span>Positivas: {resumo.POSITIVA}</span>
+          <span>Neutras: {resumo.NEUTRA}</span>
+          <span>Negativas: {resumo.NEGATIVA}</span>
+        </div>
+
+        {lista.fase === "carregando" ? (
+          <div className="observation-empty">Carregando observações…</div>
+        ) : lista.fase === "erro" ? (
+          <div className="observation-empty">
+            Observações indisponíveis: {lista.erro.codigo} — {lista.erro.mensagem}
+          </div>
+        ) : observacoes.length === 0 ? (
           <div className="observation-empty">Nenhuma observação registrada.</div>
         ) : (
           observacoes.map((observacao) => (
@@ -501,9 +738,10 @@ function ObservacoesColaborador({
                       color: "#0078D4",
                     }}
                   >
-                    {observacao.ano && observacao.ciclo
-                      ? `${observacao.ano} • Ciclo ${observacao.ciclo}`
-                      : "Sem ciclo"}
+                    {rotuloCicloDaObservacao(
+                      cycleIdPorObservacao.get(observacao.id),
+                      ciclos
+                    )}
                   </span>
 
                   <span
@@ -541,16 +779,14 @@ function ObservacoesColaborador({
                   )}
                 </div>
 
-                {!observacao.excluida &&
-                  (podeEditarObservacao(observacao) ||
-                    podeExcluirObservacao(observacao)) && (
+                {!observacao.excluida && (
                   <div
                     style={{
                       display: "flex",
                       gap: "8px",
                     }}
                   >
-                    {podeEditarObservacao(observacao) && <button
+                    <button
                       type="button"
                       onClick={() => iniciarEdicao(observacao)}
                       style={{
@@ -562,11 +798,13 @@ function ObservacoesColaborador({
                       }}
                     >
                       Editar
-                    </button>}
+                    </button>
 
-                    {podeExcluirObservacao(observacao) && <button
+                    <button
                       type="button"
-                      onClick={() => excluir(observacao)}
+                      onClick={() => {
+                        void excluir(observacao);
+                      }}
                       style={{
                         border: "none",
                         backgroundColor: "transparent",
@@ -576,7 +814,7 @@ function ObservacoesColaborador({
                       }}
                     >
                       Excluir
-                    </button>}
+                    </button>
                   </div>
                 )}
               </div>
@@ -586,7 +824,11 @@ function ObservacoesColaborador({
               </div>
 
 <div className="observation-card__meta">
-                Registrada por <strong>{observacao.autorNome}</strong>{" "}
+                {observacao.autorNome !== null && (
+                  <>
+                    Registrada por <strong>{observacao.autorNome}</strong>{" "}
+                  </>
+                )}
                 em {formatarData(observacao.dataCriacao)}
                 {observacao.dataUltimaAtualizacao !==
                   observacao.dataCriacao && (
@@ -602,44 +844,55 @@ function ObservacoesColaborador({
 
               <button
                 type="button"
-                onClick={() =>
-                  setHistoricoAberto((atual) =>
-                    atual === observacao.id ? null : observacao.id
-                  )
-                }
+                onClick={() => alternarHistorico(observacao.id)}
                 className="observation-history-toggle"
               >
-                {historicoAberto === observacao.id
-                  ? "Ocultar histórico"
-                  : `Ver histórico (${observacao.historico.length})`}
+                {rotuloHistorico(observacao.id)}
               </button>
 
               {historicoAberto === observacao.id && (
 <div className="observation-history">
-                  {[...observacao.historico]
-                    .reverse()
-                    .map((evento) => (
-                      <div
-                        key={evento.id}
-                        style={{
-                          fontSize: "12px",
-                          color: "#555",
-                        }}
-                      >
-                        <strong>
-                          {evento.acao === "CRIACAO"
-                            ? "Criação"
-                            : evento.acao === "EDICAO"
-                            ? "Edição"
-                            : "Exclusão"}
-                        </strong>
-                        {" • "}
-                        {formatarData(evento.data)}
-                        {" • "}
-                        {evento.autorNome}
+                  {timeline === null || timeline.fase === "carregando" ? (
+                    <div style={{ fontSize: "12px", color: "#555" }}>
+                      Carregando histórico…
+                    </div>
+                  ) : timeline.fase === "erro" ? (
+                    <div style={{ fontSize: "12px", color: "#a4262c" }}>
+                      Histórico indisponível: {timeline.erro.codigo} —{" "}
+                      {timeline.erro.mensagem}
+                    </div>
+                  ) : timeline.itens.length === 0 ? (
+                    <div style={{ fontSize: "12px", color: "#555" }}>
+                      Nenhum evento registrado na trilha.
+                    </div>
+                  ) : (
+                    [...timeline.itens]
+                      .reverse()
+                      .map((evento) => (
+                        <div
+                          key={evento.eventId}
+                          style={{
+                            fontSize: "12px",
+                            color: "#555",
+                          }}
+                        >
+                          <strong>{labelsEvento[evento.evento]}</strong>
+                          {" • "}
+                          {formatarData(evento.dataEfetiva)}
+                          {evento.actorNome !== null && (
+                            <>
+                              {" • "}
+                              {evento.actorNome}
+                            </>
+                          )}
 
-                        {evento.acao === "EDICAO" &&
-                          evento.textoAnterior && (
+                          {evento.motivo && (
+                            <div style={{ marginTop: "4px" }}>
+                              Motivo: {evento.motivo}
+                            </div>
+                          )}
+
+                          {evento.textoAnterior && (
                             <div
                               style={{
                                 marginTop: "4px",
@@ -651,16 +904,38 @@ function ObservacoesColaborador({
                               Texto anterior: {evento.textoAnterior}
                             </div>
                           )}
-                      </div>
-                    ))}
+                        </div>
+                      ))
+                  )}
                 </div>
               )}
             </div>
           ))
         )}
+
+        {naoApresentaveis > 0 && (
+          <div className="observation-empty">
+            {naoApresentaveis} observação(ões) do servidor sem rótulo de
+            colaborador na tela e por isso não exibida(s).
+          </div>
+        )}
       </div>
     </div>
   );
+}
+
+/**
+ * Rótulo do ciclo da observação a partir do `cycleId` SOBERANO — usa o `ano` e o
+ * `numero` da projeção de `CicloSoberano` (rótulos, não derivação do UUID).
+ * Ciclo fora da projeção recebe "Ciclo não disponível" explícito em vez de um
+ * número inventado.
+ */
+function rotuloCicloDaObservacao(
+  cycleId: string | undefined,
+  ciclos: readonly CicloSoberano[]
+): string {
+  const ciclo = ciclos.find((item) => item.id === cycleId);
+  return ciclo ? `${ciclo.ano} • Ciclo ${ciclo.numero}` : "Ciclo não disponível";
 }
 
 export default ObservacoesColaborador;

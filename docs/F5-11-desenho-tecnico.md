@@ -1844,3 +1844,136 @@ cliente sem `.rpc(`), contrato × SQL real da P2/P3 (nomes, ordem e tipos dos 8 
 `p_actor_user_profile_id` sempre e `p_payload_hash` nunca; `p_operation_id` apenas nas mutações), forma e
 allowlist do contrato, adapter fail-closed nos três caminhos e o recurso soberano da observação na
 fronteira (incluindo o ramo de criação com SELF = DENY).
+
+> **Nota de atualização (P5 — §23):** os gates da P4 **foram executados** pelo orquestrador no gate
+> privilegiado: `npm test` **2209/2211** (apenas as **2 falhas pré-existentes** de Windows/CRLF —
+> `AcompanhamentoMetasPage.test.tsx` e `MinhasMetasPage.test.tsx`), `npm run build` exit 0,
+> `npm run lint` exit 0 e `git diff --check` exit 0, com commits `df3defe` (implementação), `47777fb`
+> (registro dos gates) e `ea3ad43` (correção pré-merge da ligação Edge→schema) publicados em
+> `feat/f5-11-p4-edge-observacoes`. O parágrafo acima é o registro da época do congelamento.
+
+## 23. P5 — cutover soberano da UI (IMPLEMENTADA · Issue #250)
+
+> **Rastreabilidade:** base **`8e88e3752b9ea3467a94c53fdd58b5eca9b92edc`** (squash da P4 em `main`),
+> Issues **#250** (fase) e **#238** (mãe). **SQL intocado nesta fase** (nenhuma migration, nenhum RPC
+> novo, nenhuma alteração de RLS/ACL); **nenhuma migração de dados de `localStorage`** (D13); **P6 não
+> antecipada**. Registro da P3 em §21 e da P4 em §22. Decisões `D1–D16/D21/D22` **permanecem fechadas** —
+> a P5 não reabriu nenhuma e **não** criou capability, grant, role, scope ou exceção de autorização.
+
+### 23.1 Escopo entregue
+
+- **Porta soberana (nova):** `src/application/ports/ObservationRepository.ts` — contrato de leitura por
+  escopo, leitura de uma observação, **leitura da TRILHA** (`observacao.historico`) e as cinco mutações
+  idempotentes; identidade por **UUID**; `ResultadoObservacoes<T>` e `ErroObservacoesSoberanas`
+  (fail-closed, sem valor default permissivo).
+- **Repositório soberano (novo):** `src/infrastructure/supabase/observacoes/repositorioObservacoesSoberanas.ts`
+  — implementado **exclusivamente** sobre o adapter da P4 (`criarEdgeObservacoes`); sem `.rpc(`, sem
+  credencial de serviço, sem `.from(`, sem `localStorage`/`sessionStorage` e sem fallback local.
+- **Controlador de mutações (novo):** `src/services/observacoesSoberanas/controladorObservacoes.ts` —
+  gera o `operation_id` (idempotência, D6/D10) e obtém o `expected_version` **sempre da leitura
+  soberana**, nunca do browser; traduz o `CodigoPublico` em mensagem de UI e **não** transporta autoria,
+  tenant, estado nem instante.
+- **View-model (novo):** `src/services/observacoesSoberanas/mapeadorObservacaoUi.ts` — `ObservacaoDeUi`
+  com identidade por UUID e rótulos (matrícula/nome) **injetados por parâmetro**; o mapeador devolve
+  `null` quando falta o rótulo do colaborador-alvo (nunca completa dado inexistente). O tipo legado
+  `src/types/Observacao.ts` ficou **intocado** (§23.3).
+- **Cutover da UI gerencial:** `src/components/ObservacoesColaborador.tsx` (sem `observacaoStorage`, sem
+  gate de autorização com alvo/contexto fabricados — o componente **não decide** autorização),
+  `src/components/filtroObservacoesPorCiclo.ts`, `src/pages/ColaboradorDetalhePage.tsx` (observações do
+  colaborador-alvo pela porta, alimentando o KPI), `src/services/exportarAvaliacaoPdf.ts` (lista
+  soberana recebida por parâmetro, no molde já usado por `metasDoCiclo`, **sem leitura local**),
+  `src/services/acessoObservacoesSoberanas.ts` e `src/pages/observacoesSoberanasDaPagina.ts`
+  (`src/services/observacoesSoberanas/fluxoMutacaoObservacao.ts` para o fluxo de mutação).
+- **Barreira D13 (legado somente leitura):** `src/services/observacaoStorage.ts` — as três mutações
+  (`criarObservacao`/`atualizarObservacao`/`excluirObservacao`) passaram a **LANÇAR**
+  (`ERRO_ESCRITA_LOCAL_OBSERVACOES`, retorno `never`); removidos o `persistir`, o gate de ciclo LOCAL
+  `validarCicloAtivo` (D12 é do servidor) e o id fabricado no browser (`crypto.randomUUID`); as quatro
+  leituras permanecem como **legado fora do caminho funcional**, sem dual-read. O segundo produtor da
+  chave foi cortado (`src/services/geradorDadosTeste.ts` — a semente DEV deixa de produzir observações
+  locais); `src/services/resetBaseDesenvolvimento.ts` permanece como **removedor** de DEV. A guarda
+  `src/authorization/estruturaUiSeguranca.test.ts` passou a incluir o módulo em `CAMINHOS_LEGADO_LEITURA`
+  e ganhou prova de que o acervo legado é **somente leitura**.
+- **Dívidas da P4 fechadas:** (i) a **autoria como relação** chega ao provider —
+  `observacaoDoAlvo?: ObservacaoRecursoContext` em `src/authorization/providers/reais.ts`, repassado por
+  `src/authorization/contextoAutorizacao.ts` a partir do bloco soberano `resourceContext.observacao`
+  (montado pela P4), de modo que o **autor** da LINHA lê a própria observação ainda que o alvo esteja
+  fora do escopo "na data", e não-autor/autor ausente continuam DENY; (ii) o **vocabulário de status**
+  foi normalizado na fronteira pelo normalizador canônico já existente (`statusColaboradorDoSoberano`:
+  `active|leave|inactive` → `ATIVO|LICENCA|DESLIGADO`, desconhecido ⇒ `""` ⇒ fail-closed), sem criar
+  segundo vocabulário no loader/Edge e sem duplicar a matriz de `estadoDominioObservacao.ts`.
+
+### 23.2 Funil e autoridade preservada
+
+`UI → porta soberana → adapter da P4 (functions.invoke("observacoes")) → Edge → RPC observacao_*`. A
+P5 **não** criou autoridade no cliente: o browser não declara tenant, autoria, estado, versão,
+capability nem instante; o `expected_version` vem da leitura e o `operation_id` é a única chave de
+idempotência. Toda negação continua vindo do gate soberano (capability + escopo + relação + autoria +
+D11/D12) e a RLS permanece a última barreira. **Gate de UI local foi REMOVIDO**: o painel antes decidia
+com alvo/contexto fabricados no browser (`{kind:"observation",…}` + `usuarioAtual`), o que não é
+autorização efetiva (§11 itens 3–5); agora a tela renderiza o resultado soberano e a mutação negada
+exibe o código público — comportamento **fail-closed**, sem caminho permissivo novo.
+
+### 23.3 Identidade por UUID (e por que o tipo legado não foi reaproveitado)
+
+A projeção soberana devolve UUIDs (`observacao_obter`, `observacao_listar_por_escopo` e
+`observacao_historico`), enquanto o tipo legado `src/types/Observacao.ts` exige matrícula **numérica**
+(`colaboradorMatricula`/`autorMatricula`). Reaproveitá-lo exigiria derivar identidade no cliente — o que
+seria criar **autoridade local de identidade** e um mapeamento não soberano UUID↔matrícula. A P5 optou
+por um view-model **novo e independente** (`ObservacaoDeUi`), com UUID como identidade e rótulos
+injetados por parâmetro a partir dos dados de colaborador que a própria página já carrega; o tipo legado
+permanece intocado (nenhum consumidor novo o usa para autorização).
+
+### 23.4 Barreira D13, ausência de migração e ausência de fallback
+
+- **Sem migração de dados locais** (D13, §13.1): o acervo legado fica **invisível** após a barreira; não
+  há importação, espelhamento nem dual-read.
+- **Sem fallback produtivo**: nenhum caminho funcional cai para `observacaoStorage`/`localStorage`
+  quando a chamada soberana falha — a falha é exposta como negação/erro público.
+- **Sem autoridade local**: leitura local não decide nada; o gate de ciclo local foi removido do caminho
+  de escrita e o id deixou de ser fabricado no browser.
+
+### 23.5 SELF/read — **ADIADO para a fase corretiva P5.1 (BLOCKER registrado)**
+
+**Decisão do orquestrador nesta fase:** o fluxo do avaliado (`src/pages/MinhaAvaliacaoDetalhePage.tsx`)
+ficou **fail-closed e sem autoridade local** — lista de observações comunicadas vazia de forma explícita
+(constante), sem bloco/atalho na tela e sem seção no PDF, com comentário no código apontando a
+dependência. **Nenhuma** capability, grant, role, scope ou exceção de autorização foi criada; **D15 e o
+mapa fechado da P3 permanecem inalterados**; `observacoes_gestor` permanece como está.
+
+**Motivo técnico (fato verificado):** a exceção normativa de **escopo** para a leitura SELF-comunicada
+já existe no gate da P3 (a exigência de escopo de gestão é dispensada quando `v_escopo = 'SELF'`), mas a
+**capability** `observation.read` é exigida **antes** dela e o avaliado **não possui a concessão** — o
+D15 concedeu `observation.*` apenas a `observacoes_gestor`, com escopos `DIRECT_REPORTS`/`DESCENDANTS`.
+Logo, habilitar a leitura SELF exige uma **decisão de concessão**, território de D15, que esta fase não
+pode tomar sozinha.
+
+**Escopo fixado pelo orquestrador para a P5.1:** leitura **somente SELF**; somente observações
+`comunicado = true`; observações **excluídas não visíveis**; **zero mutações SELF**; `observacoes_gestor`
+**inalterado**; **fail-closed** e **isolamento cross-tenant** preservados; nenhuma reutilização de
+capability de outro domínio (`evaluation.read` ou equivalente) e nenhuma alteração do mapa fechado da P3.
+
+### 23.6 Dívidas restantes (P5.1 e P6)
+
+1. **P5.1 (bloqueante):** concessão mínima de `observation.read` ao avaliado, com o escopo acima, e o
+   consequente cutover da leitura SELF na UI/PDF.
+2. **Resíduo morto de observações (não removido nesta fase, para decisão):**
+   `ImpactoTemporalPeriodoCiclo.observacoes`, `persistirCorrecaoPeriodoCicloAtivoInterno` e
+   `confirmarCorrecaoPeriodoCiclo.ts` — nenhum comportamento de ciclo foi alterado.
+3. **P6 (certificação):** validação integrada/certificação da F5-11 com o SQL real, incluindo o caminho
+   ALLOW do `observacoes_gestor` e a ausência de oráculo de tenant.
+4. **Item de verificação** recomendado na P5.1/P6: a guarda de conexão entre Edge e schema (nomes e
+   assinaturas dos `resolver_*` e das `observacao_*`) deve continuar derivada do **fonte real**, nunca de
+   lista digitada — foi assim que um typo de comentário gerou um falso positivo de auditoria na P4.
+
+### 23.7 Evidência
+
+**GATES PENDENTES (orquestrador):** `npm test`, `npm run build`, `npm run lint` e `git diff --check` são
+executados pelo orquestrador no **gate privilegiado** desta fase, depois do congelamento dos arquivos
+deste PR. Nenhum resultado de gate é afirmado neste registro.
+
+Os artefatos de teste da fase cobrem: porta/repositório (operação e chaves derivadas do contrato real,
+fail-closed nos três caminhos, varredura `?raw` contra `.rpc(`/credencial/storage), controlador
+(idempotência, versão lida da leitura, ausência de campo de autoridade), view-model (rótulo ausente ⇒
+`null`), painel/timeline, detalhe do gestor + KPI, PDF sem leitura local, barreira D13 (as três mutações
+lançam, chave byte a byte inalterada, nenhum estado de ciclo libera escrita local) e as guardas de
+estrutura de UI (acervo legado **somente leitura**).

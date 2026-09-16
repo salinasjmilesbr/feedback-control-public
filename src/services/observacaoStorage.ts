@@ -7,9 +7,37 @@ import {
   ordenarPorAnoECiclo,
   type OrdemPorCiclo,
 } from "../utils/ordenacaoPorCiclo";
-import { getCiclosAvaliacao } from "./cicloAvaliacaoStorage";
 
+/**
+ * F5-11 P5 (Issue #250) — ACERVO LEGADO de observações, agora **somente leitura**
+ * e FORA do caminho funcional.
+ *
+ * A autoridade de observações é soberana: `src/application/ports/ObservationRepository`
+ * → `src/infrastructure/supabase/observacoes/repositorioObservacoesSoberanas`
+ * (adapter fail-closed) → Edge `observacoes` → RPCs `observacao_*` (capability +
+ * escopo + relação + autoria + estado no Postgres).
+ *
+ * Regras preservadas nesta fase:
+ * - **D13 — sem migração:** os dados que já estavam neste acervo local NÃO são
+ *   migrados nem lidos para decidir nada; após a barreira eles ficam invisíveis.
+ * - **Sem dual-read/dual-write:** nenhuma leitura daqui alimenta o caminho
+ *   funcional e nenhuma falha soberana cai para este armazenamento.
+ * - **Escrita proibida:** as três mutações LANÇAM (barreira de fase). O ciclo
+ *   local deixa de decidir autorização (o gate de ciclo é do servidor: D12).
+ */
 const STORAGE_KEY = "feedback-control-observacoes";
+
+/**
+ * Mensagem pública da barreira de escrita local (D13). Explícita quanto à
+ * substituição (gravação soberana) e quanto à ausência de migração.
+ */
+export const ERRO_ESCRITA_LOCAL_OBSERVACOES =
+  "A gravação local de observações foi desativada (F5-11 P5): a escrita é feita pelo repositório soberano de observações (Edge `observacoes` → RPC `observacao_*`). Os dados locais NÃO são migrados (D13) e não há fallback local.";
+
+/** Barreira única de escrita: nenhuma mutação local é permitida nesta fase. */
+function barreiraDeEscritaLocal(): never {
+  throw new Error(ERRO_ESCRITA_LOCAL_OBSERVACOES);
+}
 
 function getTodasObservacoes(): Observacao[] {
   const data = localStorage.getItem(STORAGE_KEY);
@@ -20,21 +48,6 @@ function getTodasObservacoes(): Observacao[] {
     return JSON.parse(data) as Observacao[];
   } catch {
     return [];
-  }
-}
-
-function persistir(observacoes: Observacao[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(observacoes));
-}
-
-function validarCicloAtivo(ano?: number, ciclo?: 1 | 2 | 3): void {
-  const cicloPersistido = getCiclosAvaliacao().find(
-    (item) => item.ano === ano && item.ciclo === ciclo
-  );
-  if (cicloPersistido?.status !== "ATIVO") {
-    throw new Error(
-      "Observações só podem ser alteradas enquanto o ciclo estiver ativo."
-    );
   }
 }
 
@@ -95,6 +108,11 @@ export function getObservacoesByCiclo(
   );
 }
 
+/**
+ * BARREIRA (D13): criação local desativada. A assinatura é preservada apenas
+ * para compatibilidade de chamada durante o cutover — os parâmetros são inertes
+ * por desenho (identidade, tenant, autoria, ciclo e id agora são soberanos).
+ */
 export function criarObservacao(
   colaboradorMatricula: number,
   tipo: TipoObservacao,
@@ -103,39 +121,14 @@ export function criarObservacao(
   ano: number,
   ciclo: 1 | 2 | 3,
   autor: Colaborador
-): Observacao {
-  validarCicloAtivo(ano, ciclo);
-  const agora = new Date().toISOString();
-
-  const observacao: Observacao = {
-    id: crypto.randomUUID(),
-    colaboradorMatricula,
-    tipo,
-    texto: texto.trim(),
-    comunicado,
-    ano,
-    ciclo,
-    autorMatricula: autor.matricula,
-    autorNome: autor.nome,
-    dataCriacao: agora,
-    dataUltimaAtualizacao: agora,
-    excluida: false,
-    historico: [
-      {
-        id: crypto.randomUUID(),
-        acao: "CRIACAO",
-        data: agora,
-        autorMatricula: autor.matricula,
-        autorNome: autor.nome,
-      },
-    ],
-  };
-
-  persistir([...getTodasObservacoes(), observacao]);
-
-  return observacao;
+): never {
+  void [colaboradorMatricula, tipo, texto, comunicado, ano, ciclo, autor];
+  return barreiraDeEscritaLocal();
 }
 
+/**
+ * BARREIRA (D13): edição local desativada (mesma preservação de assinatura).
+ */
 export function atualizarObservacao(
   id: string,
   tipo: TipoObservacao,
@@ -144,91 +137,18 @@ export function atualizarObservacao(
   ano: number,
   ciclo: 1 | 2 | 3,
   autor: Colaborador
-): void {
-  const observacoes = getTodasObservacoes();
-  const atual = observacoes.find((item) => item.id === id);
-
-  if (!atual || atual.excluida) {
-    throw new Error("Observação não encontrada.");
-  }
-  if (atual.ano !== ano || atual.ciclo !== ciclo) {
-    throw new Error("O ciclo de uma observação existente não pode ser alterado.");
-  }
-  validarCicloAtivo(atual.ano, atual.ciclo);
-
-  const agora = new Date().toISOString();
-
-  persistir(
-    observacoes.map((item) =>
-      item.id === id
-        ? {
-            ...item,
-            tipo,
-            texto: texto.trim(),
-            comunicado,
-            ano,
-            ciclo,
-            dataUltimaAtualizacao: agora,
-            historico: [
-              ...item.historico,
-              {
-                id: crypto.randomUUID(),
-                acao: "EDICAO",
-                data: agora,
-                autorMatricula: autor.matricula,
-                autorNome: autor.nome,
-                textoAnterior: item.texto,
-                tipoAnterior: item.tipo,
-                comunicadoAnterior: item.comunicado,
-                anoAnterior: item.ano,
-                cicloAnterior: item.ciclo,
-              },
-            ],
-          }
-        : item
-    )
-  );
+): never {
+  void [id, tipo, texto, comunicado, ano, ciclo, autor];
+  return barreiraDeEscritaLocal();
 }
 
+/**
+ * BARREIRA (D13): exclusão local desativada (mesma preservação de assinatura).
+ */
 export function excluirObservacao(
   id: string,
   autor: Colaborador
-): void {
-  const observacoes = getTodasObservacoes();
-  const atual = observacoes.find((item) => item.id === id);
-
-  if (!atual || atual.excluida) {
-    throw new Error("Observação não encontrada.");
-  }
-  validarCicloAtivo(atual.ano, atual.ciclo);
-
-  const agora = new Date().toISOString();
-
-  persistir(
-    observacoes.map((item) =>
-      item.id === id
-        ? {
-            ...item,
-            excluida: true,
-            dataExclusao: agora,
-            excluidaPorMatricula: autor.matricula,
-            excluidaPorNome: autor.nome,
-            dataUltimaAtualizacao: agora,
-            historico: [
-              ...item.historico,
-              {
-                id: crypto.randomUUID(),
-                acao: "EXCLUSAO",
-                data: agora,
-                autorMatricula: autor.matricula,
-                autorNome: autor.nome,
-                textoAnterior: item.texto,
-                tipoAnterior: item.tipo,
-                comunicadoAnterior: item.comunicado,
-              },
-            ],
-          }
-        : item
-    )
-  );
+): never {
+  void [id, autor];
+  return barreiraDeEscritaLocal();
 }

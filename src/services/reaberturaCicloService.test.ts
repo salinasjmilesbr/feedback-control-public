@@ -11,6 +11,7 @@ import {
   getCiclosAvaliacao,
 } from "./cicloAvaliacaoStorage";
 import {
+  ERRO_ESCRITA_LOCAL_OBSERVACOES,
   atualizarObservacao,
   criarObservacao,
   excluirObservacao,
@@ -140,33 +141,31 @@ describe("reabrirCiclo", () => {
     expect(gravouRegistroLegado).toBe(false);
     expect(leuRegistroLegado).toBe(false);
 
-    atualizarObservacao(
-      observacao.id,
-      "POSITIVA",
-      "Atualizada após reabertura",
-      true,
-      2026,
-      1,
-      gerente
+    // F5-11 P5 (Issue #250): o acervo local de observações está sob barreira D13
+    // — a escrita local é PROIBIDA e a reabertura não muda isso (a autoridade é a
+    // porta soberana). Nenhuma das três mutações grava: o acervo fica intacto.
+    expect(() =>
+      atualizarObservacao(
+        observacao.id,
+        "POSITIVA",
+        "Atualizada após reabertura",
+        true,
+        2026,
+        1,
+        gerente
+      )
+    ).toThrow(ERRO_ESCRITA_LOCAL_OBSERVACOES);
+    expect(() => excluirObservacao(observacao.id, gerente)).toThrow(
+      ERRO_ESCRITA_LOCAL_OBSERVACOES
     );
-    excluirObservacao(observacao.id, gerente);
-    criarObservacao(3, "POSITIVA", "Nova observação", false, 2026, 1, gerente);
+    expect(() =>
+      criarObservacao(3, "POSITIVA", "Nova observação", false, 2026, 1, gerente)
+    ).toThrow(ERRO_ESCRITA_LOCAL_OBSERVACOES);
     expect(JSON.parse(localStorage.getItem("feedback-control-feedbacks")!)[0]).toEqual(feedback);
     expect(localStorage.getItem(CHAVE_METAS_LEGADA)).toBeNull();
-    const observacoes = JSON.parse(
-      localStorage.getItem("feedback-control-observacoes")!
-    ) as Observacao[];
-    expect(observacoes).toHaveLength(2);
-    expect(observacoes[0]).toMatchObject({
-      id: observacao.id,
-      texto: "Atualizada após reabertura",
-      excluida: true,
-      dataCriacao: observacao.dataCriacao,
-    });
-    expect(observacoes[0].historico.map((evento) => evento.acao)).toEqual([
-      "EDICAO",
-      "EXCLUSAO",
-    ]);
+    expect(
+      JSON.parse(localStorage.getItem("feedback-control-observacoes")!)
+    ).toEqual([observacao]);
   });
 
   it("mantém regressão bloqueada pela atualização genérica", () => {

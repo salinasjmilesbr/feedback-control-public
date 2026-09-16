@@ -474,6 +474,143 @@ describe("F5-11 P4 — observação na fronteira soberana (probe da linha)", () 
   });
 });
 
+describe("F5-11 P5 — AUTORIA como relação no provider (§8 linha 3; D5)", () => {
+  it("(a) ALLOW: o AUTOR lê a própria observação mesmo com o alvo FORA do escopo na data", async () => {
+    const { decisao } = await decidir({
+      capability: "observation.read",
+      capabilitiesAtor: ["observation.read"],
+      scopes: ["DIRECT_REPORTS", "DESCENDANTS"],
+      alvos: ALVOS_GESTAO_FORA,
+      vinculo: AUTOR,
+      authorCollaboratorId: AUTOR,
+      comunicado: false,
+    });
+
+    // O cenário é IDÊNTICO ao caso (d) do bloco P4 (`SCOPE_INSUFFICIENT`); a única
+    // diferença é o autor soberano da LINHA chegar ao provider (`observacaoDoAlvo`).
+    expect(decisao.allowed).toBe(true);
+  });
+
+  it("(b) DENY: NÃO-autor fora do escopo continua sem alcance (fail-closed)", async () => {
+    const { decisao } = await decidir({
+      capability: "observation.read",
+      capabilitiesAtor: ["observation.read"],
+      scopes: ["DIRECT_REPORTS", "DESCENDANTS"],
+      alvos: ALVOS_GESTAO_FORA,
+      vinculo: FORA,
+      authorCollaboratorId: AUTOR,
+      comunicado: true,
+    });
+
+    expect(decisao.allowed).toBe(false);
+    expect(decisao.denial?.reason).toBe("SCOPE_INSUFFICIENT");
+  });
+
+  it("(c) DENY: autor AUSENTE na LINHA ou ator SEM vínculo não provam autoria", async () => {
+    const semAutor = await decidir({
+      capability: "observation.read",
+      capabilitiesAtor: ["observation.read"],
+      scopes: ["DIRECT_REPORTS"],
+      alvos: ALVOS_GESTAO_FORA,
+      vinculo: AUTOR,
+      authorCollaboratorId: null,
+      comunicado: true,
+    });
+    expect(semAutor.decisao.allowed).toBe(false);
+    expect(semAutor.decisao.denial?.reason).toBe("SCOPE_INSUFFICIENT");
+
+    const semVinculo = await decidir({
+      capability: "observation.read",
+      capabilitiesAtor: ["observation.read"],
+      scopes: ["DIRECT_REPORTS"],
+      alvos: ALVOS_GESTAO_FORA,
+      vinculo: null,
+      authorCollaboratorId: AUTOR,
+      comunicado: true,
+    });
+    expect(semVinculo.decisao.allowed).toBe(false);
+    expect(semVinculo.decisao.denial?.reason).toBe("SCOPE_INSUFFICIENT");
+  });
+
+  it("(d) NÃO vaza para a CRIAÇÃO (§8 linha 4): autoria na LINHA não dispensa a relação de gestão", async () => {
+    const base = {
+      capability: "observation.create" as Capability,
+      capabilitiesAtor: ["observation.create" as Capability],
+      scopes: ["DIRECT_REPORTS"],
+      alvos: { DIRECT_REPORTS: [{ collaboratorId: ALVO, positionId: null }] },
+      contextoAvaliacao: { colaboradorStatus: "active", cicloStatus: "ATIVO" },
+    };
+
+    // Ator é o AUTOR da LINHA e o próprio colaborador-alvo do pedido ⇒ SELF=DENY.
+    const self = await decidir({
+      ...base,
+      alvo: { type: "collaborator", id: AUTOR },
+      vinculo: AUTOR,
+      authorCollaboratorId: AUTOR,
+    });
+    expect(self.decisao.allowed).toBe(false);
+
+    // Mesmo ator, alvo DENTRO do escopo de gestão ⇒ ALLOW (relação normal).
+    const gestao = await decidir({
+      ...base,
+      alvo: { type: "collaborator", id: ALVO },
+      vinculo: AUTOR,
+      authorCollaboratorId: AUTOR,
+    });
+    expect(gestao.decisao.allowed).toBe(true);
+  });
+});
+
+describe("F5-11 P5 — vocabulário SOBERANO de status no alvo `observation` (D11)", () => {
+  /** Mesma operação/relação: varia SÓ o vocabulário do status do colaborador-alvo. */
+  async function criarSobreObservacao(colaboradorStatus?: string) {
+    return decidir({
+      capability: "observation.create",
+      capabilitiesAtor: ["observation.create"],
+      scopes: ["DIRECT_REPORTS"],
+      alvos: ALVOS_GESTAO_ALVO,
+      vinculo: FORA,
+      comunicado: true,
+      ...(colaboradorStatus === undefined ? {} : { colaboradorStatus }),
+    });
+  }
+
+  it("`inactive` (vocabulário do banco) é reconhecido como `DESLIGADO`", async () => {
+    const banco = await criarSobreObservacao("inactive");
+    const probe = await criarSobreObservacao("DESLIGADO");
+
+    expect(banco.decisao.allowed).toBe(false);
+    expect(banco.decisao.denial?.reason).toBe("DOMAIN_STATE_INVALID");
+    // Paridade EXATA entre o vocabulário entregue pelo loader e o do probe.
+    expect(banco.decisao.allowed).toBe(probe.decisao.allowed);
+    expect(banco.decisao.denial?.reason).toBe(probe.decisao.denial?.reason);
+  });
+
+  it("`active`/`leave` não mudaram de comportamento (paridade com `ATIVO`/`LICENCA`)", async () => {
+    const ativo = await criarSobreObservacao("active");
+    const ativoProbe = await criarSobreObservacao("ATIVO");
+    expect(ativo.decisao.allowed).toBe(true);
+    expect(ativoProbe.decisao.allowed).toBe(true);
+
+    const licenca = await criarSobreObservacao("leave");
+    const licencaProbe = await criarSobreObservacao("LICENCA");
+    expect(licenca.decisao.allowed).toBe(true);
+    expect(licencaProbe.decisao.allowed).toBe(true);
+  });
+
+  it("valor ausente/desconhecido NÃO é confundido com `DESLIGADO`", async () => {
+    const ausente = await criarSobreObservacao(undefined);
+    const desconhecido = await criarSobreObservacao("em_transferencia");
+
+    // No alvo `observation` a matriz distingue APENAS o colaborador `DESLIGADO`
+    // (e o ciclo não `ATIVO`); status não resolvido segue a regra do ciclo. O
+    // fail-closed para status NÃO resolvido (D11/invariante 6) vive no ramo de
+    // CRIAÇÃO sobre o COLABORADOR-ALVO — coberto pelo caso (e) do bloco P4.
+    expect(ausente.decisao.allowed).toBe(true);
+    expect(desconhecido.decisao.allowed).toBe(true);
+  });
+});
+
 describe("F5-11 P4 — probe de domínio da observação (fonte única)", () => {
   it("matriz capability × estado, com fail-closed para dado soberano ausente", () => {
     const ativo = estadoDominioObservacao({

@@ -925,3 +925,63 @@
 #observacoes-detalhe {
   scroll-margin-top: 22px;
 }
+
+/* F5-11 P5 (L4) — lista SOBERANA de observações do alvo (mesmo visual do painel
+   que existia antes do cutover; nenhuma cor ou métrica nova). */
+.collaborator-observations-list {
+  display: grid;
+  gap: 10px;
+}
+
+.collaborator-observation-card {
+  padding: 12px 14px;
+  border: 1px solid var(--brand-border);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.collaborator-observation-card.is-positive {
+  border-left: 3px solid #107c41;
+}
+
+.collaborator-observation-card.is-neutral {
+  border-left: 3px solid #c77700;
+}
+
+.collaborator-observation-card.is-negative {
+  border-left: 3px solid #a4262c;
+}
+
+.collaborator-observation-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.collaborator-observation-card__header strong {
+  color: var(--brand-text);
+  font-size: 13px;
+}
+
+.collaborator-observation-card__header span,
+.collaborator-observation-card__meta {
+  color: var(--brand-text-muted);
+  font-size: 11px;
+}
+
+.collaborator-observation-card__text {
+  margin: 8px 0 0;
+  color: var(--brand-text);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.collaborator-observation-card__meta {
+  display: block;
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid #eeeaf0;
+}

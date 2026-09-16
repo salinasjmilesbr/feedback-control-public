@@ -8,7 +8,10 @@ import type {
   TargetRef,
   TemporaryProvider,
 } from "../policyEngine/types.ts";
-import type { MetaRecursoContext } from "../resourceContextReal.ts";
+import type {
+  MetaRecursoContext,
+  ObservacaoRecursoContext,
+} from "../resourceContextReal.ts";
 import {
   isCollegiateAssigned,
   isEvaluationAssigned,
@@ -110,6 +113,14 @@ export interface DadosProvidersReais {
    * satisfeita (fail-closed). NUNCA se lê estrutura viva para o alvo meta.
    */
   readonly metaDoAlvo?: MetaRecursoContext;
+  /**
+   * F5-11 P5 (§8 linha 3; D5): bloco SOBERANO da OBSERVAÇÃO — o AUTOR da LINHA
+   * (`author_collaborator_id`) é o ÚNICO caminho pelo qual o provider conhece a
+   * autoria (nunca estrutura viva, nunca o chamador). Ausente/`null` ⇒ a relação
+   * de AUTORIA não é satisfeita (fail-closed); a D5 continua composta também no
+   * probe do domínio (`exigeAutoriaObservacao`) e no SQL (`observacao_obter`).
+   */
+  readonly observacaoDoAlvo?: ObservacaoRecursoContext;
   /** Origens independentes (D11) — repassadas sem alteração. */
   readonly temporary?: TemporaryProvider;
   readonly exceptional?: ExceptionalProvider;
@@ -256,9 +267,10 @@ function metaNoEscopoDoAtor(
  *     avaliativa nem de unidade — a P3 exige `DIRECT_REPORTS`/`DESCENDANTS` no
  *     gate da RPC e a leitura SELF é a exceção normativa.
  *
- * Sem `donoDoAlvo` NÃO há relação possível (fail-closed). A AUTORIA (D5) NÃO é
- * resolvida aqui: o provider não recebe o autor soberano da observação e o probe
- * do domínio (`exigeAutoriaObservacao`) já a compõe na fronteira — o SQL
+ * Sem `donoDoAlvo` NÃO há relação possível (fail-closed) — EXCETO a AUTORIA, que
+ * se prova pela própria LINHA (§8 linha 3; F5-11 P5): o AUTOR soberano
+ * (`observacaoDoAlvo.authorCollaboratorId`) é o vínculo do ator. O probe do
+ * domínio (`exigeAutoriaObservacao`) segue compondo a D5 e o SQL
  * (`observacao_obter`/`observacao_editar`) é a autoridade final.
  */
 function observacaoNoEscopoDoAtor(
@@ -266,8 +278,23 @@ function observacaoNoEscopoDoAtor(
   target: TargetRef,
   dados: DadosProvidersReais
 ): boolean {
+  if (target.type !== "observation") return false;
+
+  // AUTORIA (§8 linha 3; D5): o AUTOR lê o que escreveu mesmo que o alvo tenha
+  // saído do escopo dele na data. Prova POSITIVA da LINHA soberana — ausência de
+  // qualquer um dos ids ⇒ cai nas regras de escopo abaixo (fail-closed).
+  const autorDaObservacao = dados.observacaoDoAlvo?.authorCollaboratorId ?? null;
+  const vinculoDoAtor = dados.collaboratorId;
+  if (
+    autorDaObservacao !== null &&
+    vinculoDoAtor !== null &&
+    autorDaObservacao === vinculoDoAtor
+  ) {
+    return true;
+  }
+
   const alvoDaObservacao = dados.donoDoAlvo ?? null;
-  if (alvoDaObservacao === null || target.type !== "observation") return false;
+  if (alvoDaObservacao === null) return false;
 
   if (scope === "SELF") {
     const colaboradorDoAtor = dados.collaboratorId;
