@@ -179,10 +179,7 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   decisão da P5** (a P3 entregou só `observacoes_gestor` com `DIRECT_REPORTS`/`DESCENDANTS`); (iii)
   `localStorage`/cutover de UI (P5) e certificação (P6) **não iniciados**; nenhuma migração de
   `localStorage` (D13); (iv) SQL da P1/P2/P3 **intocado** nesta fase (nenhuma migration nova).
-- **P4 — GATES PENDENTES (orquestrador):** `npm test`, `npm run build`, `npm run lint` e
-  `git diff --check` **não foram executados** na produção deste registro (runner de shell do host
-  quebrado e escopo de subagente sem elevação); são executados pelo **orquestrador** no gate privilegiado
-  da fase. **Nenhum resultado de gate é afirmado aqui** — substituir este marcador pelo resultado real.
+- **P4 — GATES EXECUTADOS (orquestrador, gate privilegiado agrupado):** `git diff --check` exit 0; `npm test` com 2184 de 2186 testes passando e **apenas as 2 falhas PRÉ-EXISTENTES** de Windows/CRLF (`AcompanhamentoMetasPage.test.tsx`, `MinhasMetasPage.test.tsx`) — nenhuma falha nova; `npm run build` exit 0; `npm run lint` exit 0; invariantes de fronteira conferidos (`.rpc(` = 0 e `SERVICE_ROLE_KEY` = 0 nos módulos de cliente, trio Edge presente). Commit **`df3defe1422d6227e41478552dd07152c433f87a`** (19 arquivos, +5597/-85) publicado em **`feat/f5-11-p4-edge-observacoes`** (`push` exit 0), base `83fb225213501c360660c2968c31f577a8a75373`. **Sem merge** — PR a abrir pelo orquestrador (DEV-04; `gh` ausente no ambiente). Correções autônomas dentro da fase: contrato (`observacao.listar_por_escopo` passou a GATE ADMINISTRATIVO conforme §8 linha 1 / molde F5-10 e `data` saiu da allowlist por D21), ramo de relação do alvo `observation` em `providers/reais.ts` e probe de criação (§8 linha 4) — todos com testes discriminantes próprios.
 - **P2 — issue que a governa:** **Issue #244** (`F5-11/P2 — RPCs soberanas observacao_*`), mãe
   **#238**. Branch **`feat/f5-11-p2-rpcs-observacoes`**, base `e7aecf27532948d21b97d04d9c15aa7478442cca`.
 - **P2 — o que entregou:** migration `20260931000000_f5_11_p2_observacoes_rpc.sql` com **8 RPCs
