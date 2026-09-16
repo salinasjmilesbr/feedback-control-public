@@ -291,7 +291,7 @@ begin
   insert into public.access_role_assignment_scopes (assignment_id, organization_id, scope_type, status, created_by)
   select a.id, a.organization_id, 'ASSIGNED', 'active', 'd1b00000-0000-0000-0000-0000000000a5'
     from public.membership_access_role_assignments a
-   where a.membership_id = 'd1d00000-0000-0000-0000-0000000000a5';
+   where a.membership_id = 'd1d00000-0000-0000-0000-0000000000a5' and a.access_role_id = 'c0000000-0000-4000-8000-0000000000f1';
 
   select count(*) into v_n
   from public.resolver_alvos_escopo(
