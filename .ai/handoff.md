@@ -58,17 +58,21 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   **Classes de erro preservadas:** ausência → 23502/23514; inexistente **ou cross-tenant** → 23503
   (todo lookup é filtrado por `organization_id`); existente **incoerente** → **P0001**.
 - **P1.1 — `author_collaborator_id` (regra determinada, não inventada):** o modelo canônico é
-  **`public.resolver_collaborador_vinculado(profile, org)`** (F5-02, hardening
-  `20260909000000`), que resolve membership ATIVA → `membership_collaborator_links.status = 'active'`
-  (vínculo `disabled` é histórico e **não** resolve). O gatilho impõe **exatamente** essa paridade;
-  valor **nulo** segue legítimo (ator sem vínculo).
+  **`public.resolver_collaborador_vinculado(profile, org)`** (F5-02, hardening `20260909000000`), que exige
+  **cumulativamente** perfil **ATIVO** (`user_profiles.status = 'active'`), membership **ATIVA**
+  (`user_organization_memberships.status = 'active'`) e vínculo **ATIVO**
+  (`membership_collaborator_links.status = 'active'`; vínculo `disabled` é histórico e **não** resolve).
+  O gatilho impõe **exatamente** essa paridade **integral**; valor **nulo** segue legítimo (ator sem
+  vínculo).
 - **P1.1 — fixtures/validadores:** **`34` foi enriquecido** com os 2 vínculos membership↔colaborador
   (sem eles as observações da própria fixture seriam incoerentes com o D3) — por isso a evidência de
   **34/35 foi reexecutada e segue verde** (`34` 1 PASS, `35` 11 PASS); **`36-cenario-f5-11-p1-1.sql`**
-  cria **UMA** organização com **3 identidades e 3 memberships ATIVAS na MESMA organização** (A e B com
-  vínculo ativo, C com vínculo **`disabled`**) e **`37-validar-f5-11-p1-1.sql`** (blocos A–H, **8 PASS**)
-  prova: paridade com o resolvedor (B), **negativos intra-tenant dos 4 pares** (C), negativos de
-  `author_collaborator_id` incluindo vínculo `disabled` (D), negativos no **UPDATE** com verificação da
+  cria **UMA** organização com **5 identidades na MESMA organização** (A e B com perfil e membership
+  ativos e vínculo ativo; C com vínculo **`disabled`**; **D com membership `disabled` e vínculo ATIVO**
+  — a metade ausente do *finding*; **E com perfil `disabled`**) e **`37-validar-f5-11-p1-1.sql`**
+  (blocos A–H, **8 PASS**) prova: paridade **integral** com o resolvedor (B, inclusive B4/B5),
+  **negativos intra-tenant dos 4 pares** (C), negativos de `author_collaborator_id` incluindo vínculo,
+  **membership** e **perfil** `disabled` (D4/D5/D6), negativos no **UPDATE** com verificação da
   **mensagem** do mecanismo (E), **positivos** (F), separação de classes de erro + D4/D6/D9 intactos (G)
   e higiene (H).
 - **P1.1 — defeitos encontrados na própria execução (registrados):** (1) `text[] || '<literal com
@@ -79,6 +83,13 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   é **pré-existente** em `20260922000000:68,76,794`, `20260929000000:89,97` e `02-validar-f5-09.sql:1257-1266`
   — nesses pontos o guard **continua fail-closed**, mas abortaria com `22P02` em vez da mensagem
   diagnóstica. Registrado em `docs/F5-11-desenho-tecnico.md` §19.7.
+- **P1.1 — correção PRÉ-MERGE (auditoria Codex do PR #243: REPROVADO com 1 finding MEDIUM):** a
+  verificação de `author_collaborator_id` exigia só o **vínculo** ativo e **aceitava** `membership
+  disabled + link active`, combinação que o resolvedor soberano **não** reconhece. Corrigida **antes do
+  merge**, na **mesma** migration (ainda não versionada no PR aberto ⇒ editada no lugar, sem migration
+  nova), repetindo o **join integral do resolvedor**; a fixture `36` ganhou **D** e **E** e o validador
+  `37` ganhou **B4/B5**, **D4/D5/D6**. Registrado em `docs/F5-11-desenho-tecnico.md` §19.8. **Nenhum**
+  outro item do escopo foi alterado; a dívida pré-existente `22P02` **não** foi tocada.
 - **P1 — issue que a governa:** **Issue #240** (`F5-11/P1 — Schema soberano, audit trail e
   substituição dos guards invertidos`), **Issue-mãe #238**. O PR da P1 fecha **#240** (`Closes #240`)
   e **não** fecha a #238. Branch: **`feat/f5-11-p1-observacoes-schema`**, base `6d527cc…`
@@ -128,6 +139,17 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   os nomes das funções novas **não** casam com nenhuma lista fechada de `15`/`30`/`35` (sem
   `observa`/`meta`/`goal`), então a evidência anterior segue válida por construção; o CI do PR roda a
   bateria completa no ambiente autoritativo.
+- **Evidências da correção pré-merge do PR #243 (executadas; não repetir):** gate **foco da correção**
+  = `db reset` + **4 etapas verdes** — `34` 1 PASS, `35` 11 PASS, `36` 1 PASS e `37` **8 PASS** (agora
+  com `A1b`, `B4/B5` e `D4/D5/D6`). As etapas `01/02/03` (F4-08) **não** foram repetidas: a correção
+  altera apenas o **corpo** de uma função `SECURITY INVOKER` já existente — nenhum objeto, grant,
+  policy, RLS ou **forma** de gatilho mudou (o próprio `37` reprova se a forma dos gatilhos mudar).
+- **Gates de código desta correção (executados):** `git diff HEAD --stat -- src/` **vazio** (nada de
+  TS/JS foi tocado), `git diff --check` exit 0, `npm run build` exit 0 e `npm run lint` exit 0.
+  `npm test` registra **2 falhas PRÉ-EXISTENTES e idênticas** às da rodada da P1
+  (`AcompanhamentoMetasPage` e `MinhasMetasPage`), ambas asserts de **fonte multilinha** que quebram
+  no **Windows** por **CRLF** (`src/` intocado): **2075 testes passam** e o CI (ubuntu) é o ambiente
+  autoritativo.
 - **D15 continua BLOQUEANDO a P3 (estado inalterado):** `observation.*` **sem concessão alguma**;
   **`admin` continua SEM `observation.*`** (guarda `02-validar-f4-01.sql:563-578` **preservada**, e o
   validador da P1 **falha** se o bundle deixar de ter 9 ou se qualquer role de sistema receber

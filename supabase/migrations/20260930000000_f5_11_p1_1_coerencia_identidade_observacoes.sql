@@ -226,10 +226,20 @@ begin
     end if;
   end loop;
 
-  -- (4) author_collaborator_id: quando informado, tem de ser o colaborador do
-  --     vinculo ATIVO da membership, no tenant da linha (paridade com
-  --     `resolver_collaborador_vinculado`, F5-02 Q4=A / Q6=B). NULO continua
-  --     legitimo (ator sem vinculo de colaborador).
+  -- (4) author_collaborator_id: quando informado, tem de ser EXATAMENTE o que o
+  --     resolvedor soberano reconheceria para este perfil nesta organizacao.
+  --     PARIDADE INTEGRAL com `public.resolver_collaborador_vinculado(profile, org)`
+  --     (F5-02 Q4=A / Q6=B), que exige CUMULATIVAMENTE as TRES condicoes:
+  --       (i)   `user_profiles.status = 'active'`;
+  --       (ii)  `user_organization_memberships.status = 'active'`;
+  --       (iii) `membership_collaborator_links.status = 'active'`.
+  --     A consulta abaixo repete o MESMO join do resolvedor, ancorado na membership
+  --     informada e reafirmando que ela pertence ao perfil informado.
+  --     [CORRECAO PRE-MERGE do finding MEDIUM da auditoria Codex do PR #243: a versao
+  --     anterior exigia apenas o link ativo e ACEITAVA membership `disabled` com link
+  --     `active` - combinacao que o resolvedor NAO reconhece.]
+  --     NULO continua legitimo (ator sem vinculo de colaborador): a completude da
+  --     derivacao e responsabilidade da operacao soberana da P2.
   if new.author_collaborator_id is not null then
     if exists (
       select 1 from public.collaborators c
@@ -237,15 +247,23 @@ begin
          and c.organization_id = new.organization_id
     ) then
       select l.collaborator_id into v_vinculado
-        from public.membership_collaborator_links l
-       where l.membership_id = new.author_membership_id
-         and l.organization_id = new.organization_id
-         and l.status = 'active';
+        from public.user_organization_memberships m
+        join public.user_profiles up
+          on up.id = m.user_profile_id
+         and up.status = 'active'
+        join public.membership_collaborator_links l
+          on l.membership_id = m.id
+         and l.status = 'active'
+       where m.id = new.author_membership_id
+         and m.organization_id = new.organization_id
+         and m.user_profile_id = new.author_user_profile_id
+         and m.status = 'active';
 
       if v_vinculado is distinct from new.author_collaborator_id then
         raise exception
-          'F5-11 (Issue #242): author_collaborator_id % nao e o colaborador do vinculo ATIVO da membership % no tenant %',
-          new.author_collaborator_id, new.author_membership_id, new.organization_id;
+          'F5-11 (Issue #242): author_collaborator_id % nao e o colaborador reconhecido pelo resolvedor soberano para o perfil % (perfil ativo + membership % ativa + vinculo ativo) no tenant %',
+          new.author_collaborator_id, new.author_user_profile_id,
+          new.author_membership_id, new.organization_id;
       end if;
     end if;
   end if;
@@ -258,8 +276,10 @@ comment on function public.f5_11_validar_coerencia_identidade() is
   'F5-11 P1.1 (Issue #242, finding MEDIUM do Codex): invariante de COERENCIA da '
   'autoria da observacao — o perfil informado tem de ser o perfil da membership '
   'informada, no tenant da linha, para autor, comunicado e exclusao; e '
-  'author_collaborator_id, quando informado, tem de ser o colaborador do vinculo '
-  'ATIVO da membership (paridade com resolver_collaborador_vinculado, F5-02). '
+  'author_collaborator_id, quando informado, tem de ser o colaborador reconhecido '
+  'pelo resolvedor soberano para o perfil (paridade INTEGRAL com '
+  'resolver_collaborador_vinculado, F5-02 Q4=A / Q6=B: perfil ATIVO + membership '
+  'ATIVA + vinculo ATIVO). '
   'Nao decide legitimidade funcional (isso e P2/P3): impede apenas combinacoes '
   'intra-tenant INCOERENTES. SECURITY INVOKER, search_path = public.';
 

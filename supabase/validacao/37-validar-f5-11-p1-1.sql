@@ -13,15 +13,17 @@
 --     e perfil B -> membership B, a combinacao A+B tem de ser RECUSADA nos QUATRO
 --     pares perfil<->membership, e a coerente tem de continuar valida;
 --   - prova a paridade de `author_collaborator_id` com o resolvedor canonico
---     (`resolver_collaborador_vinculado`), inclusive o vinculo `disabled`;
+--     (`resolver_collaborador_vinculado`) na MATRIZ INTEGRAL: perfil ATIVO +
+--     membership ATIVA + vinculo ATIVO (C: vinculo disabled; D: membership
+--     disabled com vinculo ativo - o finding do Codex; E: perfil disabled);
 --   - prova a SEPARACAO DE CLASSES DE ERRO: incoerencia => P0001; ausencia =>
 --     NOT NULL/CHECK; inexistencia/cross-tenant => FK (23503).
 --
 -- Blocos:
 --   A  preflight (fixture, mecanismo instalado, D15 intacto, fronteira preservada)
---   B  paridade com o resolvedor canonico do vinculo
+--   B  paridade INTEGRAL com o resolvedor canonico do vinculo (as 3 condicoes)
 --   C  NEGATIVOS intra-tenant dos 4 pares perfil<->membership
---   D  NEGATIVOS de author_collaborator_id (incluindo vinculo disabled)
+--   D  NEGATIVOS de author_collaborator_id (vinculo, membership e perfil disabled)
 --   E  NEGATIVOS no caminho de UPDATE (a linha e mutavel)
 --   F  POSITIVOS (combinacoes legitimas continuam validas)
 --   G  separacao de classes de erro + invariantes da P1 preservados (D4/D6/D9)
@@ -47,8 +49,40 @@ begin
   end if;
   select count(*) into v_n from public.user_organization_memberships
    where organization_id = 'fea00000-0000-0000-0000-0000000000a1' and status = 'active';
-  if v_n <> 3 then
-    v_falhas := v_falhas || format('memberships ativas na MESMA org = %s (esperado 3)', v_n);
+  if v_n <> 4 then
+    v_falhas := v_falhas || format('memberships ativas na MESMA org = %s (esperado 4)', v_n);
+  end if;
+
+  -- (A1b) as TRES negativas da matriz de paridade estao MESMO na fixture:
+  --       D = membership DISABLED com vinculo ATIVO (o finding do Codex);
+  --       E = perfil DISABLED com membership e vinculo ATIVOS;
+  --       C = vinculo DISABLED. Sem elas os testes negativos do bloco D nao
+  --       provariam nada (poderiam estar recusando por outro motivo).
+  select count(*) into v_n from public.user_organization_memberships
+   where id = 'fed00000-0000-0000-0000-000000000004' and status = 'disabled';
+  if v_n <> 1 then
+    v_falhas := v_falhas || format('membership DISABLED do perfil D = %s (esperado 1)', v_n);
+  end if;
+  select count(*) into v_n from public.user_profiles
+   where id = 'fec00000-0000-0000-0000-000000000005' and status = 'disabled';
+  if v_n <> 1 then
+    v_falhas := v_falhas || format('perfil DISABLED E = %s (esperado 1)', v_n);
+  end if;
+  select count(*) into v_n from public.membership_collaborator_links
+   where membership_id = 'fed00000-0000-0000-0000-000000000004'
+     and organization_id = 'fea00000-0000-0000-0000-0000000000a1'
+     and collaborator_id = 'feb00000-0000-0000-0000-000000000004'
+     and status = 'active';
+  if v_n <> 1 then
+    v_falhas := v_falhas || format('vinculo ATIVO D->colaborador D = %s (esperado 1)', v_n);
+  end if;
+  select count(*) into v_n from public.membership_collaborator_links
+   where membership_id = 'fed00000-0000-0000-0000-000000000005'
+     and organization_id = 'fea00000-0000-0000-0000-0000000000a1'
+     and collaborator_id = 'feb00000-0000-0000-0000-000000000005'
+     and status = 'active';
+  if v_n <> 1 then
+    v_falhas := v_falhas || format('vinculo ATIVO E->colaborador E = %s (esperado 1)', v_n);
   end if;
 
   -- (A2) o mecanismo estrutural da P1.1 esta instalado, e INVOKER e com search_path fixo.
@@ -135,7 +169,7 @@ begin
     raise exception '[FAIL] A/preflight F5-11 P1.1: %', array_to_string(v_falhas, '; ');
   end if;
 
-  raise notice '[PASS] A/preflight: fixture intra-tenant presente (3 perfis e 3 memberships ATIVAS na MESMA organizacao), as 2 funcoes de coerencia instaladas (INVOKER, search_path fixo) com os 2 gatilhos BEFORE ROW corretos, catalogo 31, admin com 9 SEM observation.*, nenhuma concessao de observation.* (D15 intacto) e NENHUMA RPC observacao_*';
+  raise notice '[PASS] A/preflight: fixture intra-tenant presente (5 identidades na MESMA organizacao: A/B/C com perfil e membership ATIVOS, D com membership DISABLED + vinculo ATIVO e E com perfil DISABLED - a matriz INTEGRAL de paridade; 4 memberships ativas), as 2 funcoes de coerencia instaladas (INVOKER, search_path fixo) com os 2 gatilhos BEFORE ROW corretos, catalogo 31, admin com 9 SEM observation.*, nenhuma concessao de observation.* (D15 intacto) e NENHUMA RPC observacao_*';
 end $$;
 
 -- ============================================================================
@@ -170,7 +204,25 @@ begin
     raise exception '[FAIL] B3: vinculo disabled resolveu no resolvedor canonico (% linha(s)) — premissa do teste invalida', v_n;
   end if;
 
-  raise notice '[PASS] B/paridade: o resolvedor canonico (F5-02) resolve perfil A -> colaborador A, perfil B -> colaborador B e NAO resolve o vinculo DISABLED do perfil C — a regra de author_collaborator_id do gatilho e a MESMA do resolvedor, nao uma regra inventada';
+  -- (B4) FINDING DO CODEX (metade ausente): perfil D tem membership DISABLED e
+  --      vinculo ATIVO - o resolvedor NAO resolve (ele exige membership ativa).
+  select count(*) into v_n
+    from public.resolver_collaborador_vinculado('fec00000-0000-0000-0000-000000000004',
+                                                'fea00000-0000-0000-0000-0000000000a1');
+  if v_n <> 0 then
+    raise exception '[FAIL] B4 (finding do Codex): membership DISABLED com vinculo ATIVO resolveu no resolvedor canonico (% linha(s)) - premissa do teste invalida', v_n;
+  end if;
+
+  -- (B5) perfil E tem PERFIL DISABLED e vinculo ATIVO - o resolvedor NAO resolve
+  --      (ele exige user_profiles.status = active).
+  select count(*) into v_n
+    from public.resolver_collaborador_vinculado('fec00000-0000-0000-0000-000000000005',
+                                                'fea00000-0000-0000-0000-0000000000a1');
+  if v_n <> 0 then
+    raise exception '[FAIL] B5: perfil DISABLED resolveu no resolvedor canonico (% linha(s)) - premissa do teste invalida', v_n;
+  end if;
+
+  raise notice '[PASS] B/paridade INTEGRAL: o resolvedor canonico (F5-02) resolve perfil A -> colaborador A e perfil B -> colaborador B, e NAO resolve NENHUMA das tres negativas (C: vinculo DISABLED; D: membership DISABLED com vinculo ativo, o finding do Codex; E: perfil DISABLED) - a regra de author_collaborator_id do gatilho e a MESMA do resolvedor, nao uma regra inventada';
 end $$;
 
 -- ============================================================================
@@ -266,12 +318,14 @@ begin
 end $$;
 
 -- ============================================================================
--- D) NEGATIVOS de author_collaborator_id (regra = resolvedor canonico)
+-- D) NEGATIVOS de author_collaborator_id (regra = resolvedor canonico INTEGRAL)
 -- ============================================================================
 do $$
 declare
-  v_st text;
-  v_ok boolean;
+  v_st  text;
+  v_msg text;
+  v_ok  boolean;
+  v_n   int;
 begin
   -- (D1) colaborador B informado para a membership A.
   v_ok := false; v_st := null;
@@ -322,7 +376,57 @@ begin
     raise exception '[FAIL] D3: author_collaborator_id com vinculo DISABLED foi ACEITO ou recusado com sqlstate errado (%) — esperado P0001 (paridade com o resolvedor)', coalesce(v_st, 'sem erro');
   end if;
 
-  raise notice '[PASS] D/negativos de author_collaborator_id: colaborador de OUTRA membership (D1, D2) e colaborador de vinculo DISABLED (D3) sao RECUSADOS com P0001 — a regra e exatamente a do resolvedor canonico F5-02';
+  -- (D4) FINDING DO CODEX (metade ausente): membership D DISABLED + vinculo D ATIVO
+  --      + colaborador correto do vinculo. O perfil esta ATIVO e a membership
+  --      pertence a ele, logo o par perfil<->membership e coerente: quem TEM de
+  --      recusar e o enforcement de author_collaborator_id.
+  v_ok := false; v_st := null; v_msg := null;
+  begin
+    insert into public.evaluation_observations
+      (organization_id, collaborator_id, cycle_id, tipo, texto,
+       author_user_profile_id, author_membership_id, author_collaborator_id)
+    values ('fea00000-0000-0000-0000-0000000000a1', 'feb00000-0000-0000-0000-000000000001',
+            'fed10000-0000-0000-0000-0000000000a1', 'NEUTRA', 'tentativa com membership disabled e vinculo ativo (P1.1)',
+            'fec00000-0000-0000-0000-000000000004', 'fed00000-0000-0000-0000-000000000004',
+            'feb00000-0000-0000-0000-000000000004');
+  exception when others then v_st := sqlstate; v_msg := sqlerrm; if v_st = 'P0001' then v_ok := true; end if;
+  end;
+  if not v_ok then
+    raise exception '[FAIL] D4 (finding do Codex): membership DISABLED com vinculo ATIVO aceitou author_collaborator_id (sqlstate=%) - esperado P0001', coalesce(v_st, 'sem erro');
+  end if;
+  if v_msg is null or v_msg not like '%Issue #242%' or v_msg not like '%author_collaborator_id%' then
+    raise exception '[FAIL] D4: a recusa nao veio do enforcement de COERENCIA de author_collaborator_id (mensagem=%)', coalesce(v_msg, '<nula>');
+  end if;
+
+  -- (D5) TERCEIRA condicao do resolvedor: perfil E DISABLED com membership ATIVA e
+  --      vinculo ATIVO e colaborador correto do vinculo - tambem tem de ser recusado.
+  v_ok := false; v_st := null; v_msg := null;
+  begin
+    insert into public.evaluation_observations
+      (organization_id, collaborator_id, cycle_id, tipo, texto,
+       author_user_profile_id, author_membership_id, author_collaborator_id)
+    values ('fea00000-0000-0000-0000-0000000000a1', 'feb00000-0000-0000-0000-000000000001',
+            'fed10000-0000-0000-0000-0000000000a1', 'NEUTRA', 'tentativa com perfil disabled (P1.1)',
+            'fec00000-0000-0000-0000-000000000005', 'fed00000-0000-0000-0000-000000000005',
+            'feb00000-0000-0000-0000-000000000005');
+  exception when others then v_st := sqlstate; v_msg := sqlerrm; if v_st = 'P0001' then v_ok := true; end if;
+  end;
+  if not v_ok then
+    raise exception '[FAIL] D5: perfil DISABLED aceitou author_collaborator_id (sqlstate=%) - esperado P0001', coalesce(v_st, 'sem erro');
+  end if;
+  if v_msg is null or v_msg not like '%Issue #242%' or v_msg not like '%author_collaborator_id%' then
+    raise exception '[FAIL] D5: a recusa nao veio do enforcement de COERENCIA de author_collaborator_id (mensagem=%)', coalesce(v_msg, '<nula>');
+  end if;
+
+  -- (D6) NENHUMA das tentativas D1..D5 pode ter persistido linha: a fixture tem
+  --      exatamente UMA observacao (a linha de base legitima do bloco 6).
+  select count(*) into v_n from public.evaluation_observations
+   where organization_id = 'fea00000-0000-0000-0000-0000000000a1';
+  if v_n <> 1 then
+    raise exception '[FAIL] D6: tentativa de author_collaborator_id incoerente PERSISTIU linha (observacoes da fixture = %, esperado 1)', v_n;
+  end if;
+
+  raise notice '[PASS] D/negativos de author_collaborator_id (paridade INTEGRAL com o resolvedor): colaborador de OUTRA membership (D1, D2), vinculo DISABLED (D3), membership DISABLED com vinculo ATIVO (D4 - o finding do Codex) e PERFIL DISABLED (D5) sao RECUSADOS com P0001 pelo enforcement de coerencia, e NENHUMA tentativa persistiu linha (D6)';
 end $$;
 
 -- ============================================================================
@@ -632,8 +736,9 @@ begin
   raise notice 'F5-11 P1.1 (Issue #242): FINDING MEDIUM DO CODEX CORRIGIDO.';
   raise notice '  Os 4 pares perfil<->membership (autoria, comunicado, exclusao e ator';
   raise notice '  do evento) recusam combinacoes INTRA-TENANT incoerentes com P0001;';
-  raise notice '  author_collaborator_id segue o resolvedor canonico F5-02 (inclusive';
-  raise notice '  vinculo disabled); as combinacoes legitimas continuam validas;';
+  raise notice '  author_collaborator_id segue o resolvedor canonico F5-02 com paridade';
+  raise notice '  INTEGRAL (perfil ativo + membership ativa + vinculo ativo); as';
+  raise notice '  combinacoes legitimas continuam validas;';
   raise notice '  D4/D6/D9 intactas; D15 continua bloqueando a P3; P2 nao iniciada.';
   raise notice '============================================================';
 end $$;
