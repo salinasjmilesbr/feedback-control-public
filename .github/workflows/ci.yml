@@ -494,6 +494,23 @@ jobs:
             < supabase/validacao/37-validar-f5-11-p1-1.sql
 
       # ----------------------------------------------------------------------
+      # F5-11 P2 (Issue #244): RPCs soberanas `observacao_*`. A fixture usa o
+      # prefixo `f5b2`; o validador exercita o caminho ALLOW com uma concessão
+      # TRANSITÓRIA (begin/rollback) e prova o DENY de produção sem concessão.
+      # ----------------------------------------------------------------------
+      - name: "Seed F5-11 P2 scenario (observacoes: RPCs soberanas)"
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/38-cenario-f5-11-p2.sql
+
+      - name: "Run F5-11 P2 validation (criar/editar/comunicado/excluir/revogar/obter/listar/historico: gate funcional, D11/D12, version+row lock, eventos, idempotencia e rollback)"
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/39-validar-f5-11-p2.sql
+
+      # ----------------------------------------------------------------------
       # Regressão F5-06/F5-07 (§23.4): cenários independentes, com prefixos de
       # UUID próprios (`d6`/`d7`), reaplicados antes de cada validação.
       # ----------------------------------------------------------------------

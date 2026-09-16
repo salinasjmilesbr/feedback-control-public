@@ -158,18 +158,30 @@ begin
      is distinct from array['admin', 'metas_aprovador', 'metas_dono'] then
     v_falhas := v_falhas || 'conjunto de roles de SISTEMA mudou (a P1.1 nao cria role/bundle/perfil)';
   end if;
+  -- F5-11 P2 (Issue #244): a superficie `observacao_*` passou a existir e e'
+  -- EXATAMENTE a lista fechada das 8 RPCs (a P1.1 nao cria nem esconde nenhuma).
   select count(*) into v_n from pg_proc p
    where p.pronamespace = 'public'::regnamespace
-     and (p.proname like 'observacao\_%' or p.proname like 'observation\_%');
+     and p.proname like 'observacao\_%'
+     and p.proname <> all (array[
+       'observacao_criar', 'observacao_editar', 'observacao_definir_comunicado',
+       'observacao_excluir', 'observacao_revogar', 'observacao_obter',
+       'observacao_listar_por_escopo', 'observacao_historico']);
   if v_n <> 0 then
-    v_falhas := v_falhas || format('%s RPC(s) observacao_* (a P2 nao pode ser antecipada)', v_n);
+    v_falhas := v_falhas || format('%s funcao(oes) observacao_* FORA da lista fechada da P2', v_n);
+  end if;
+  select count(*) into v_n from pg_proc p
+   where p.pronamespace = 'public'::regnamespace
+     and p.proname like 'observation\_%';
+  if v_n <> 0 then
+    v_falhas := v_falhas || format('%s funcao(oes) observation_* (prefixo proibido pelo D1)', v_n);
   end if;
 
   if array_length(v_falhas, 1) is not null then
     raise exception '[FAIL] A/preflight F5-11 P1.1: %', array_to_string(v_falhas, '; ');
   end if;
 
-  raise notice '[PASS] A/preflight: fixture intra-tenant presente (5 identidades na MESMA organizacao: A/B/C com perfil e membership ATIVOS, D com membership DISABLED + vinculo ATIVO e E com perfil DISABLED - a matriz INTEGRAL de paridade; 4 memberships ativas), as 2 funcoes de coerencia instaladas (INVOKER, search_path fixo) com os 2 gatilhos BEFORE ROW corretos, catalogo 31, admin com 9 SEM observation.*, nenhuma concessao de observation.* (D15 intacto) e NENHUMA RPC observacao_*';
+  raise notice '[PASS] A/preflight: fixture intra-tenant presente (5 identidades na MESMA organizacao: A/B/C com perfil e membership ATIVOS, D com membership DISABLED + vinculo ATIVO e E com perfil DISABLED - a matriz INTEGRAL de paridade; 4 memberships ativas), as 2 funcoes de coerencia instaladas (INVOKER, search_path fixo) com os 2 gatilhos BEFORE ROW corretos, catalogo 31, admin com 9 SEM observation.*, nenhuma concessao de observation.* (D15 intacto, e a concessao e artefato da P3) e a superficie observacao_* EXATAMENTE com as 8 RPCs da P2 (nem uma a mais)';
 end $$;
 
 -- ============================================================================

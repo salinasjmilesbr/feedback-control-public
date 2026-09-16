@@ -113,15 +113,23 @@ begin
      and (p.proname like '%observa%' or p.proname like '%observation%')
      and p.proname <> all (array[
        'enforce_evaluation_observations_imutaveis',
-       'enforce_evaluation_observation_events_append_only']);
+       'enforce_evaluation_observation_events_append_only',    -- F5-11 P2 (Issue #244): as RPCs soberanas `observacao_*` e os helpers do
+    -- gate funcional. A fase AMPLIA a lista explicitamente (a proibicao absoluta
+    -- virou lista fechada na P1 e nunca e' removida); nenhum `observation_*`.
+    'observacao_criar','observacao_editar','observacao_definir_comunicado',
+    'observacao_excluir','observacao_revogar','observacao_obter',
+    'observacao_listar_por_escopo','observacao_historico',
+    'f5_11_ator_efetivo_observacao','f5_11_ator_valido_observacao',
+    'f5_11_vinculo_observacao_do_ator','f5_11_relacao_observacao_do_ator',
+    'f5_11_exigir_autorizacao_observacao'       ]);
   if v_n <> 0 then
-    v_falhas := v_falhas || format('%s funcao(oes) de observacoes FORA da lista fechada da P1 (nenhuma RPC existe ate a P2)', v_n);
+    v_falhas := v_falhas || format('%s funcao(oes) de observacoes FORA da lista fechada (P1 + P2)', v_n);
   end if;
   select count(*) into v_n from pg_proc p
    where p.pronamespace = 'public'::regnamespace
      and (p.proname like 'observacao\_%' or p.proname like 'observation\_%');
-  if v_n <> 0 then
-    v_falhas := v_falhas || format('%s RPC(s) observacao_*/observation_* instalada(s) (P2 antecipada)', v_n);
+  if v_n <> 8 then
+    v_falhas := v_falhas || format('%s RPC(s) observacao_* (esperado exatamente 8 na P2)', v_n);
   end if;
 
   -- (A5) as 2 tabelas existem, com RLS ligada e ZERO policy (D9).
@@ -1054,10 +1062,18 @@ declare
   v_tabelas_observacoes_p1 text[] := array[
     'evaluation_observations', 'evaluation_observation_events'];
   v_funcoes_observacoes_p1 text[] := array[
-    -- Somente as DUAS funcoes de enforcement da P1 (D4 e D6). Nenhuma RPC: a P2
-    -- introduzira as `observacao_*` e ampliara esta lista explicitamente.
+    -- As DUAS funcoes de enforcement da P1 (D4 e D6) e, da F5-11 P2 (Issue #244),
+    -- as 8 RPCs `observacao_*` e os 5 helpers do gate funcional.
     'enforce_evaluation_observations_imutaveis',
-    'enforce_evaluation_observation_events_append_only'];
+    'enforce_evaluation_observation_events_append_only',    -- F5-11 P2 (Issue #244): as RPCs soberanas `observacao_*` e os helpers do
+    -- gate funcional. A fase AMPLIA a lista explicitamente (a proibicao absoluta
+    -- virou lista fechada na P1 e nunca e' removida); nenhum `observation_*`.
+    'observacao_criar','observacao_editar','observacao_definir_comunicado',
+    'observacao_excluir','observacao_revogar','observacao_obter',
+    'observacao_listar_por_escopo','observacao_historico',
+    'f5_11_ator_efetivo_observacao','f5_11_ator_valido_observacao',
+    'f5_11_vinculo_observacao_do_ator','f5_11_relacao_observacao_do_ator',
+    'f5_11_exigir_autorizacao_observacao'    ];
   v_tab  text;
   v_n    int;
   v_cols text;
