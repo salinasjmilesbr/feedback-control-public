@@ -125,16 +125,72 @@ begin
     raise exception '[FAIL] access_role_capabilities: colunas fora do contrato';
   end if;
 
+  -- F5-11 P5.1 (Issue #252): a P5.1 acrescenta `origin` ('human' | 'system') a
+  -- esta tabela (autoria SISTEMA para o provisionamento automatico do perfil
+  -- `observacoes_avaliado`), com `created_by` NULLABLE apenas quando
+  -- `origin = 'system'`. A lista fechada de colunas acompanha a emenda.
   select array_agg(column_name order by column_name) into v_cols
   from information_schema.columns
   where table_schema = 'public' and table_name = 'membership_access_role_assignments';
   if v_cols is distinct from
-     array['access_role_id','created_at','created_by','id','membership_id','organization_id','status','updated_at','version']::text[]
+     array['access_role_id','created_at','created_by','id','membership_id','organization_id','origin','status','updated_at','version']::text[]
   then
     raise exception '[FAIL] membership_access_role_assignments: colunas fora do contrato';
   end if;
 
   raise notice '[PASS] colunas exatas das quatro tabelas F4-01 (contrato docs/F4-01)';
+end $$;
+
+-- ============================================================================
+-- 2.1) F5-11 P5.1 (Issue #252) — AUTORIA SISTEMA na tabela de assignments.
+--      A guarda e ESTRUTURAL e AGNOSTICA AO NOME dos CHECKs (nenhum nome
+--      inventado aqui): exige `origin` NOT NULL com default 'human', `created_by`
+--      NULLABLE (a autoria humana continua obrigatoria) e a existencia do CHECK
+--      de COERENCIA entre `origin` e `created_by`. Nada foi relaxado: a FK de
+--      autor e as demais constraints seguem exigidas no bloco anterior.
+-- ============================================================================
+do $$
+declare
+  v_n     int;
+  v_def   text;
+  v_null  text;
+begin
+  select column_default, is_nullable into v_def, v_null
+  from information_schema.columns
+  where table_schema = 'public' and table_name = 'membership_access_role_assignments'
+    and column_name = 'origin';
+  if v_null is distinct from 'NO' or v_def is null or v_def not like '%human%' then
+    raise exception '[FAIL] F5-11 P5.1: origin deve ser NOT NULL com default human (nullable=%, default=%)', v_null, v_def;
+  end if;
+
+  select is_nullable into v_null
+  from information_schema.columns
+  where table_schema = 'public' and table_name = 'membership_access_role_assignments'
+    and column_name = 'created_by';
+  if v_null is distinct from 'YES' then
+    raise exception '[FAIL] F5-11 P5.1: created_by deve ser NULLABLE (autoria SISTEMA sem identidade humana sintetica)';
+  end if;
+
+  select count(*) into v_n
+  from pg_constraint c
+  where c.conrelid = 'public.membership_access_role_assignments'::regclass
+    and c.contype = 'c'
+    and pg_get_constraintdef(c.oid) like '%origin%';
+  if v_n < 2 then
+    raise exception '[FAIL] F5-11 P5.1: CHECKs de origin esperados >= 2 (dominio + coerencia), encontrados=%', v_n;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint c
+    where c.conrelid = 'public.membership_access_role_assignments'::regclass
+      and c.contype = 'c'
+      and pg_get_constraintdef(c.oid) like '%origin%'
+      and pg_get_constraintdef(c.oid) like '%created_by%'
+  ) then
+    raise exception '[FAIL] F5-11 P5.1: ausente CHECK de COERENCIA entre origin e created_by';
+  end if;
+
+  raise notice '[PASS] F5-11 P5.1: autoria SISTEMA coerente na tabela de assignments (origin NOT NULL default human; created_by nullable; CHECK de coerencia presente)';
 end $$;
 
 -- ============================================================================

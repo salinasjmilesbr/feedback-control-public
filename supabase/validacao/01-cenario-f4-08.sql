@@ -316,19 +316,19 @@ insert into public.membership_collaborator_links (membership_id, organization_id
 insert into public.access_role_assignment_scopes (assignment_id, organization_id, scope_type, status, created_by)
 select a.id, a.organization_id, 'ORGANIZATIONAL_UNIT', 'active', 'd8b00000-0000-0000-0000-0000000000a6'
   from public.membership_access_role_assignments a
- where a.membership_id = 'd8d00000-0000-0000-0000-0000000000a1';
+ where a.membership_id = 'd8d00000-0000-0000-0000-0000000000a1' and a.access_role_id = 'd8f00000-0000-0000-0000-0000000000f1';
 
 insert into public.access_role_assignment_scopes (assignment_id, organization_id, scope_type, status, created_by)
 select a.id, a.organization_id, 'ORGANIZATIONAL_UNIT', 'active', 'd8b00000-0000-0000-0000-0000000000a6'
   from public.membership_access_role_assignments a
- where a.membership_id = 'd8d00000-0000-0000-0000-0000000000a2';
+ where a.membership_id = 'd8d00000-0000-0000-0000-0000000000a2' and a.access_role_id = 'd8f00000-0000-0000-0000-0000000000f2';
 
 insert into public.access_role_assignment_unit_targets (scope_id, organization_id, organizational_unit_id)
 select s.id, s.organization_id, 'd8f00000-0000-0000-0000-0000000000a1'
   from public.access_role_assignment_scopes s
  where s.assignment_id = (
    select a.id from public.membership_access_role_assignments a
-   where a.membership_id = 'd8d00000-0000-0000-0000-0000000000a1'
+   where a.membership_id = 'd8d00000-0000-0000-0000-0000000000a1' and a.access_role_id = 'd8f00000-0000-0000-0000-0000000000f1'
  );
 
 insert into public.access_role_assignment_unit_targets (scope_id, organization_id, organizational_unit_id)
@@ -336,5 +336,5 @@ select s.id, s.organization_id, 'd8f00000-0000-0000-0000-0000000000b1'
   from public.access_role_assignment_scopes s
  where s.assignment_id = (
    select a.id from public.membership_access_role_assignments a
-   where a.membership_id = 'd8d00000-0000-0000-0000-0000000000a2'
+   where a.membership_id = 'd8d00000-0000-0000-0000-0000000000a2' and a.access_role_id = 'd8f00000-0000-0000-0000-0000000000f2'
  );

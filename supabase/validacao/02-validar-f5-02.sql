@@ -434,7 +434,17 @@ end $$;
 
 -- ============================================================================
 -- 5) Limpeza do cenário F5-02
+-- F5-11 P5.1 (Issue #252): ATRIBUICOES antes das memberships — a FK
+-- `fk_membership_access_role_assignments_memberships` e ON DELETE RESTRICT e o
+-- provisionamento automatico do perfil SELF cria uma linha por membership
+-- elegivel. Ordem exigida pela propria doutrina da limpeza.
 -- ============================================================================
+
+delete from public.membership_access_role_assignments
+ where organization_id in (
+   'd2a00000-0000-0000-0000-0000000000a1',
+   'd2a00000-0000-0000-0000-0000000000b1'
+ );
 
 delete from public.membership_collaborator_links
  where organization_id in (

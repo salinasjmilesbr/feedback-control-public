@@ -68,26 +68,45 @@ begin
     v_falhas := v_falhas || 'capability nova de comunicado criada (D7 proibe)';
   end if;
 
-  -- (A3) D15 RESOLVIDA NA P3 (Issue #246): `observation.*` existe em EXATAMENTE
-  --      UMA role de sistema — o perfil funcional `observacoes_gestor` com as 4
-  --      capabilities canonicas — e continua em ZERO no bundle `admin`. A
-  --      proibicao absoluta das fases P1/P1.1 foi INVERTIDA em LISTA FECHADA
-  --      (nunca removida): qualquer concessao FORA do perfil reprova.
+  -- (A3) D15 RESOLVIDA NA P3 (Issue #246) e EMENDADA NA P5.1 (Issue #252):
+  --      `observation.*` existe em EXATAMENTE DUAS roles de sistema — o perfil de
+  --      gestao `observacoes_gestor` (4 capabilities canonicas) e o perfil SELF
+  --      `observacoes_avaliado` (EXATAMENTE `observation.read`, SEM scope) — e
+  --      continua em ZERO no bundle `admin`. A proibicao absoluta das fases
+  --      P1/P1.1 foi INVERTIDA em LISTA FECHADA de PARES (role, capability):
+  --      qualquer concessao FORA dela reprova (nenhuma verificacao foi relaxada).
   select count(*) into v_n
     from public.access_role_capabilities rc
     join public.capabilities c on c.id = rc.capability_id
    where c.code like 'observation.%';
-  if v_n <> 4 then
-    v_falhas := v_falhas || format('observation.* com %s concessao(oes) (esperado 4, em observacoes_gestor)', v_n);
+  if v_n <> 5 then
+    v_falhas := v_falhas || format(
+      'observation.* com %s concessao(oes) (esperado 5: 4 em observacoes_gestor + 1 em observacoes_avaliado)', v_n);
   end if;
   select count(*) into v_n
     from public.access_role_capabilities rc
     join public.capabilities c on c.id = rc.capability_id
     join public.access_roles r on r.id = rc.access_role_id
    where c.code like 'observation.%'
-     and (r.name <> 'observacoes_gestor' or r.is_system = false);
+     and (r.is_system is not true
+          or (r.name, c.code) not in (
+            ('observacoes_gestor', 'observation.read'),
+            ('observacoes_gestor', 'observation.create'),
+            ('observacoes_gestor', 'observation.edit'),
+            ('observacoes_gestor', 'observation.delete'),
+            ('observacoes_avaliado', 'observation.read')
+          ));
   if v_n <> 0 then
-    v_falhas := v_falhas || format('%s concessao(oes) de observation.* FORA do perfil observacoes_gestor', v_n);
+    v_falhas := v_falhas || format('%s concessao(oes) de observation.* FORA da lista fechada (role, capability)', v_n);
+  end if;
+  -- O perfil SELF tem EXATAMENTE 1 capability no TOTAL: nenhuma de outro dominio
+  -- (anti privilege creep) e nenhuma capability de mutacao de observacao.
+  select count(*) into v_n
+    from public.access_role_capabilities rc
+    join public.access_roles r on r.id = rc.access_role_id
+   where r.name = 'observacoes_avaliado' and r.is_system = true;
+  if v_n <> 1 then
+    v_falhas := v_falhas || format('observacoes_avaliado com %s capabilities (esperado 1)', v_n);
   end if;
   select count(*) into v_n from public.access_role_capabilities
    where access_role_id = 'c0000000-0000-4000-8000-0000000000f1';
@@ -105,12 +124,13 @@ begin
   -- (A3b) a P1 NAO cria role/bundle/perfil algum (D15 e decisao da P3). O baseline
   --       de roles de SISTEMA e NOMEADO: `admin` (F4-01/F5-09 P7) e os dois perfis
   --       de dominio criados pela propria F5-10 P4 como seu mecanismo de concessao
-  --       (`metas_dono`, `metas_aprovador`) MAIS o perfil funcional de observacoes
-  --       criado pela P3 (`observacoes_gestor`, Issue #246). O conjunto tem de ser
-  --       EXATAMENTE esse: role de sistema fora dele significa papel inventado.
+  --       (`metas_dono`, `metas_aprovador`) MAIS os dois perfis de observacoes: o de
+  --       gestao criado pela P3 (`observacoes_gestor`, Issue #246) e o perfil SELF
+  --       criado pela P5.1 (`observacoes_avaliado`, Issue #252). O conjunto tem de
+  --       ser EXATAMENTE esse: role de sistema fora dele significa papel inventado.
   if (select array_agg(r.name order by r.name)
         from public.access_roles r where r.is_system = true)
-     is distinct from array['admin', 'metas_aprovador', 'metas_dono', 'observacoes_gestor'] then
+     is distinct from array['admin', 'metas_aprovador', 'metas_dono', 'observacoes_avaliado', 'observacoes_gestor'] then
     v_falhas := v_falhas || format(
       'conjunto de roles de SISTEMA mudou (%s) — a P1 nao cria role/bundle/perfil: D15 e decisao da P3',
       coalesce((select array_to_string(array_agg(r.name order by r.name), ',')
@@ -135,9 +155,17 @@ begin
     'observacao_listar_por_escopo','observacao_historico',
     'f5_11_ator_efetivo_observacao','f5_11_ator_valido_observacao',
     'f5_11_vinculo_observacao_do_ator','f5_11_relacao_observacao_do_ator',
-    'f5_11_exigir_autorizacao_observacao',    'f5_11_ator_tem_escopo_observacao'       ]);
+    'f5_11_exigir_autorizacao_observacao',    'f5_11_ator_tem_escopo_observacao',
+    -- F5-11 P5.1 (Issue #252): o provisionamento AUTOMATICO do perfil SELF
+    -- `observacoes_avaliado` acrescenta DUAS funcoes de trigger e UMA de
+    -- provisionamento/backfill. A lista continua FECHADA e EXATA: os nomes entram
+    -- explicitamente (nada de curinga) e qualquer outra funcao de observacao
+    -- permanece reprovando.
+    'f5_11_p5_1_provisionar_observacoes_avaliado',
+    'f5_11_p5_1_trigger_vinculo_observacoes_avaliado',
+    'f5_11_p5_1_trigger_membership_observacoes_avaliado'       ]);
   if v_n <> 0 then
-    v_falhas := v_falhas || format('%s funcao(oes) de observacoes FORA da lista fechada (P1 + P2)', v_n);
+    v_falhas := v_falhas || format('%s funcao(oes) de observacoes FORA da lista fechada (P1 + P2 + P5.1)', v_n);
   end if;
   select count(*) into v_n from pg_proc p
    where p.pronamespace = 'public'::regnamespace
@@ -164,7 +192,7 @@ begin
     raise exception '[FAIL] A/preflight F5-11 P1: %', array_to_string(v_falhas, '; ');
   end if;
 
-  raise notice '[PASS] A/preflight: fixture presente (2 orgs, 4 observacoes, 6 eventos), catalogo intacto (31; 8 de metas/observacoes; nenhuma capability de comunicado), D15 INTACTO (zero concessao de observation.%%; admin com 9 e SEM observation.%%; 1 role de sistema), NENHUMA funcao de observacao (fronteira da P1) e as 2 tabelas com RLS ligada e ZERO policy';
+  raise notice '[PASS] A/preflight: fixture presente (2 orgs, 4 observacoes, 6 eventos), catalogo intacto (31; 8 de metas/observacoes; nenhuma capability de comunicado), D15 vigente apos a emenda da P5.1 (5 roles de sistema; 2 perfis com observation.%%: `observacoes_gestor` com as 4 de gestao e `observacoes_avaliado` com EXATAMENTE observation.read, concedida AUTOMATICAMENTE aos elegiveis; 4 concessoes de gestao + 1 SELF automatica; admin com 9 e SEM observation.%%), NENHUMA funcao de observacao (fronteira da P1) e as 2 tabelas com RLS ligada e ZERO policy';
 end $$;
 
 -- ============================================================================
@@ -1087,7 +1115,13 @@ declare
     'observacao_listar_por_escopo','observacao_historico',
     'f5_11_ator_efetivo_observacao','f5_11_ator_valido_observacao',
     'f5_11_vinculo_observacao_do_ator','f5_11_relacao_observacao_do_ator',
-    'f5_11_exigir_autorizacao_observacao',    'f5_11_ator_tem_escopo_observacao'    ];
+    'f5_11_exigir_autorizacao_observacao',    'f5_11_ator_tem_escopo_observacao',
+    -- F5-11 P5.1 (Issue #252): provisionamento automatico do perfil SELF
+    -- (`observacoes_avaliado`) — 1 funcao de provisionamento/backfill + 2 funcoes
+    -- de trigger. Lista FECHADA e EXATA: acrescentadas por nome, sem curinga.
+    'f5_11_p5_1_provisionar_observacoes_avaliado',
+    'f5_11_p5_1_trigger_vinculo_observacoes_avaliado',
+    'f5_11_p5_1_trigger_membership_observacoes_avaliado'    ];
   v_tab  text;
   v_n    int;
   v_cols text;
@@ -1142,23 +1176,38 @@ begin
     v_falhas := v_falhas || 'coluna de observacao em tabela de nota/agregado (nao escopo)';
   end if;
 
-  -- (J5) D15 RESOLVIDA NA P3 (reconferida no estado final): 4 concessoes, TODAS
-  --      no perfil funcional `observacoes_gestor`.
+  -- (J5) D15 RESOLVIDA NA P3 (reconferida no estado final) e EMENDADA NA P5.1:
+  --      5 concessoes — as 4 do perfil de gestao `observacoes_gestor` e a de
+  --      LEITURA do perfil SELF `observacoes_avaliado` (Issue #252).
   select count(*) into v_n
     from public.access_role_capabilities rc
     join public.capabilities c on c.id = rc.capability_id
    where c.code like 'observation.%';
-  if v_n <> 4 then
-    v_falhas := v_falhas || format('D15: observation.* com %s concessao(oes) (esperado 4)', v_n);
+  if v_n <> 5 then
+    v_falhas := v_falhas || format('D15: observation.* com %s concessao(oes) (esperado 5)', v_n);
   end if;
   select count(*) into v_n
     from public.access_role_capabilities rc
     join public.capabilities c on c.id = rc.capability_id
     join public.access_roles r on r.id = rc.access_role_id
    where c.code like 'observation.%'
-     and (r.name <> 'observacoes_gestor' or r.is_system = false);
+     and (r.is_system is not true
+          or (r.name, c.code) not in (
+            ('observacoes_gestor', 'observation.read'),
+            ('observacoes_gestor', 'observation.create'),
+            ('observacoes_gestor', 'observation.edit'),
+            ('observacoes_gestor', 'observation.delete'),
+            ('observacoes_avaliado', 'observation.read')
+          ));
   if v_n <> 0 then
-    v_falhas := v_falhas || format('D15: %s concessao(oes) de observation.* FORA de observacoes_gestor', v_n);
+    v_falhas := v_falhas || format('D15: %s concessao(oes) de observation.* FORA da lista fechada (role, capability)', v_n);
+  end if;
+  select count(*) into v_n
+    from public.access_role_capabilities rc
+    join public.access_roles r on r.id = rc.access_role_id
+   where r.name = 'observacoes_avaliado' and r.is_system = true;
+  if v_n <> 1 then
+    v_falhas := v_falhas || format('D15: observacoes_avaliado com %s capabilities (esperado 1)', v_n);
   end if;
   select count(*) into v_n
     from public.access_role_capabilities rc
@@ -1169,13 +1218,14 @@ begin
     v_falhas := v_falhas || 'D15: admin com observation.*';
   end if;
   -- O conjunto NOMEADO de roles de sistema e a prova de que nenhuma fase inventou
-  -- papel: `admin` + os dois perfis de dominio da F5-10 P4 + o perfil funcional de
-  -- observacoes criado pela P3 (`observacoes_gestor`, Issue #246).
+  -- papel: `admin` + os dois perfis de dominio da F5-10 P4 + o perfil de gestao de
+  -- observacoes criado pela P3 (`observacoes_gestor`, Issue #246) + o perfil SELF
+  -- criado pela P5.1 (`observacoes_avaliado`, Issue #252).
   if (select array_agg(r.name order by r.name)
         from public.access_roles r where r.is_system = true)
-     is distinct from array['admin', 'metas_aprovador', 'metas_dono', 'observacoes_gestor'] then
+     is distinct from array['admin', 'metas_aprovador', 'metas_dono', 'observacoes_avaliado', 'observacoes_gestor'] then
     v_falhas := v_falhas || format(
-      'D15: conjunto de roles de SISTEMA mudou (%s) — nenhuma role/bundle/perfil novo na P1',
+      'D15: conjunto de roles de SISTEMA mudou (%s) — nenhuma role/bundle/perfil novo fora da emenda da P5.1',
       coalesce((select array_to_string(array_agg(r.name order by r.name), ',')
                   from public.access_roles r where r.is_system = true), '<vazio>'));
   end if;
@@ -1184,7 +1234,7 @@ begin
     raise exception '[FAIL] J/fronteira da P1: %', array_to_string(v_falhas, '; ');
   end if;
 
-  raise notice '[PASS] J/fronteira da P1: as tabelas de observacao sao EXATAMENTE as 2 do contrato (lista FECHADA), NENHUMA funcao de observacao FORA da lista fechada da P1 existe (nenhuma RPC observacao_* ate a P2), nenhuma coluna de observacao se derrama em ciclo/avaliacao/nota e D15 permanece INTACTO (zero concessao de observation.%%; admin sem observation.%%; nenhuma role/bundle novo)';
+  raise notice '[PASS] J/fronteira da P1: as tabelas de observacao sao EXATAMENTE as 2 do contrato (lista FECHADA), NENHUMA funcao de observacao FORA da lista fechada da P1 existe (nenhuma RPC observacao_* ate a P2), nenhuma coluna de observacao se derrama em ciclo/avaliacao/nota e D15 permanece vigente apos a emenda da P5.1 (5 roles de sistema; 4 concessoes de gestao + 1 concessao SELF automatica aos elegiveis em `observacoes_avaliado`; admin SEM observation.%%; nenhum bundle/role de FIXTURE)';
 end $$;
 
 -- ============================================================================
@@ -1225,7 +1275,7 @@ begin
   raise notice '  D7 comunicado como FATO (ator + instante) e sem capability nova;';
   raise notice '  D8/D16 exclusao logica com motivo obrigatorio;';
   raise notice '  D9 RLS DENY-BY-DEFAULT INTEGRAL (zero policy, zero privilegio de cliente);';
-  raise notice '  D15 INTACTO (blocker da P3): nenhuma concessao de observation.*;';
+  raise notice '  D15 EMENDADO NA P5.1: 5 roles de sistema; observation.* = 4 em observacoes_gestor (gestao) + 1 em observacoes_avaliado (SELF, automatica aos elegiveis); admin ZERO;';
   raise notice '  FRONTEIRA DA P1 respeitada: nenhuma RPC, nenhum Edge, nenhum cutover.';
   raise notice '============================================================';
 end $$;

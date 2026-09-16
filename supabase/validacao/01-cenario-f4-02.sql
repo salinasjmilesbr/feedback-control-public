@@ -266,25 +266,25 @@ select a.id, a.organization_id, 'ORGANIZATION', 'active', 'd1b00000-0000-0000-00
 insert into public.access_role_assignment_scopes (assignment_id, organization_id, scope_type, status, created_by)
 select a.id, a.organization_id, 'DIRECT_REPORTS', 'active', 'd1b00000-0000-0000-0000-0000000000a5'
   from public.membership_access_role_assignments a
- where a.membership_id = 'd1d00000-0000-0000-0000-0000000000a2';
+ where a.membership_id = 'd1d00000-0000-0000-0000-0000000000a2' and a.access_role_id = 'd1f00000-0000-0000-0000-0000000000f1';
 
 insert into public.access_role_assignment_scopes (assignment_id, organization_id, scope_type, status, created_by)
 select a.id, a.organization_id, 'DESCENDANTS', 'active', 'd1b00000-0000-0000-0000-0000000000a5'
   from public.membership_access_role_assignments a
- where a.membership_id = 'd1d00000-0000-0000-0000-0000000000a2';
+ where a.membership_id = 'd1d00000-0000-0000-0000-0000000000a2' and a.access_role_id = 'd1f00000-0000-0000-0000-0000000000f1';
 
 -- MANAGER <- ORGANIZATIONAL_UNIT sobre U_ROOT (target tipado; sem subunidades)
 insert into public.access_role_assignment_scopes (assignment_id, organization_id, scope_type, status, created_by)
 select a.id, a.organization_id, 'ORGANIZATIONAL_UNIT', 'active', 'd1b00000-0000-0000-0000-0000000000a5'
   from public.membership_access_role_assignments a
- where a.membership_id = 'd1d00000-0000-0000-0000-0000000000a2';
+ where a.membership_id = 'd1d00000-0000-0000-0000-0000000000a2' and a.access_role_id = 'd1f00000-0000-0000-0000-0000000000f1';
 
 insert into public.access_role_assignment_unit_targets (scope_id, organization_id, organizational_unit_id)
 select s.id, s.organization_id, 'd1e00000-0000-0000-0000-0000000000c1'
   from public.access_role_assignment_scopes s
  where s.assignment_id = (
    select a.id from public.membership_access_role_assignments a
-   where a.membership_id = 'd1d00000-0000-0000-0000-0000000000a2'
+   where a.membership_id = 'd1d00000-0000-0000-0000-0000000000a2' and a.access_role_id = 'd1f00000-0000-0000-0000-0000000000f1'
  )
    and s.scope_type = 'ORGANIZATIONAL_UNIT';
 
@@ -292,10 +292,10 @@ select s.id, s.organization_id, 'd1e00000-0000-0000-0000-0000000000c1'
 insert into public.access_role_assignment_scopes (assignment_id, organization_id, scope_type, status, created_by)
 select a.id, a.organization_id, 'DESCENDANTS', 'active', 'd1b00000-0000-0000-0000-0000000000a5'
   from public.membership_access_role_assignments a
- where a.membership_id = 'd1d00000-0000-0000-0000-0000000000a3';
+ where a.membership_id = 'd1d00000-0000-0000-0000-0000000000a3' and a.access_role_id = 'd1f00000-0000-0000-0000-0000000000f1';
 
 -- MULTI_USER <- DESCENDANTS (união de múltiplas positions)
 insert into public.access_role_assignment_scopes (assignment_id, organization_id, scope_type, status, created_by)
 select a.id, a.organization_id, 'DESCENDANTS', 'active', 'd1b00000-0000-0000-0000-0000000000a5'
   from public.membership_access_role_assignments a
- where a.membership_id = 'd1d00000-0000-0000-0000-0000000000a4';
+ where a.membership_id = 'd1d00000-0000-0000-0000-0000000000a4' and a.access_role_id = 'd1f00000-0000-0000-0000-0000000000f1';

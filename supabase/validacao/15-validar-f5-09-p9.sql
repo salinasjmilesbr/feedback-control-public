@@ -1962,7 +1962,13 @@ declare
     'observacao_listar_por_escopo','observacao_historico',
     'f5_11_ator_efetivo_observacao','f5_11_ator_valido_observacao',
     'f5_11_vinculo_observacao_do_ator','f5_11_relacao_observacao_do_ator',
-    'f5_11_exigir_autorizacao_observacao',    'f5_11_ator_tem_escopo_observacao'    ];
+    'f5_11_exigir_autorizacao_observacao',    'f5_11_ator_tem_escopo_observacao',
+    -- F5-11 P5.1 (Issue #252): provisionamento automatico do perfil SELF
+    -- (`observacoes_avaliado`) — 1 funcao de provisionamento/backfill + 2 funcoes
+    -- de trigger. Lista FECHADA e EXATA: acrescentadas por nome, sem curinga.
+    'f5_11_p5_1_provisionar_observacoes_avaliado',
+    'f5_11_p5_1_trigger_vinculo_observacoes_avaliado',
+    'f5_11_p5_1_trigger_membership_observacoes_avaliado'    ];
   v_funcoes_metas_p1 text[] := array[
     'enforce_evaluation_goal_events_append_only','f5_10_validar_quota_da_meta',
     'f5_10_validar_quota_do_limite','f5_10_proteger_limite_do_ciclo',

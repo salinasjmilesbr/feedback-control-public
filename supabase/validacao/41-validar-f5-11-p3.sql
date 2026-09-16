@@ -72,8 +72,38 @@ begin
     from public.access_role_capabilities rc
     join public.capabilities c on c.id = rc.capability_id
    where c.code like 'observation.%';
-  if v_n <> 4 then
-    v_falhas := v_falhas || format('%s concessao(oes) de observation.* (esperado 4)', v_n);
+  if v_n <> 5 then
+    v_falhas := v_falhas || format('%s concessao(oes) de observation.* (esperado 5)', v_n);
+  end if;
+
+  -- (A1b) F5-11 P5.1 (Issue #252): perfil de sistema SELF `observacoes_avaliado`
+  --       com EXATAMENTE `observation.read` (SEM scope e SEM nenhuma capability
+  --       de mutacao/outro dominio — anti privilege creep).
+  select id into v_role
+    from public.access_roles
+   where name = 'observacoes_avaliado' and is_system = true
+     and organization_id is null and status = 'active';
+  if v_role is null then
+    v_falhas := v_falhas || 'perfil de sistema observacoes_avaliado ausente/inativo/com organizacao';
+  else
+    select count(*) into v_n from public.access_role_capabilities where access_role_id = v_role;
+    if v_n <> 1 then
+      v_falhas := v_falhas || format('observacoes_avaliado com %s capabilities (esperado 1)', v_n);
+    end if;
+    select count(*) into v_n
+      from public.access_role_capabilities m
+      join public.capabilities c on c.id = m.capability_id
+     where m.access_role_id = v_role and c.code = 'observation.read';
+    if v_n <> 1 then
+      v_falhas := v_falhas || 'observacoes_avaliado sem observation.read';
+    end if;
+    select count(*) into v_n
+      from public.access_role_assignment_scopes s
+      join public.membership_access_role_assignments a on a.id = s.assignment_id
+     where a.access_role_id = v_role;
+    if v_n <> 0 then
+      v_falhas := v_falhas || 'observacoes_avaliado com scope assignment (o SELF nao usa scope)';
+    end if;
   end if;
 
   -- (A2) admin com 9 e ZERO observation.*.
