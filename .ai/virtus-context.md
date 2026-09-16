@@ -79,6 +79,18 @@ não existe contrato sem documento fechado correspondente.
   (`docs/F5-11-certificacao.md`, Issue #254), com PR e merge pendentes (`.ai/handoff.md` §3);
   o **fluxo SELF do avaliado lê as observações comunicadas** por via soberana (role automática
   `observacoes_avaliado`, sem mutações SELF).
+  A **certificação transversal da Etapa 5 (Issue #256)** foi produzida em
+  `docs/etapa-5-certificacao.md`, **sem lacuna material bloqueante**: os três blockers históricos
+  (ciclos, colaboradores, metas/observações) estão demonstradamente resolvidos e as obrigações
+  transversais têm evidência citável. **A Issue #256 é a própria F5-12** — a validação integrada e o
+  **fechamento formal da Etapa 5 são essa entrega**, não uma fase posterior. O item **R1 foi
+  verificado e fechado** ali: nenhum leitor legado de ciclo é autoridade de decisão de
+  autorização/segurança (`permissaoAvaliacao.ts` não tem consumidor de produção; a autoridade é
+  server-side e prevalece), restando apenas resíduo de apresentação (o ciclo local entra como insumo
+  do gate de UI em `EditarFeedbackPage`/`FeedbackDetalhePage`/`NovoFeedbackPage`, com o soberano
+  prevalecendo). Restam **dívidas não bloqueantes** (`localCycleRepository` LEGADO declarado,
+  fixtures com chaves legadas, prova literal de transferência entre organizações, defeito latente de
+  diagnóstico no validador 41 e o cenário 42 derivando tenant da P2).
   As atividades seguintes da fase seguem o roadmap do GitHub.
 - **F6+** — hardening geral e trabalhos futuros (fora de escopo das fases
   anteriores).
