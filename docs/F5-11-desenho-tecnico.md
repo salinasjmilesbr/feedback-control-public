@@ -1971,9 +1971,46 @@ capability de outro domínio (`evaluation.read` ou equivalente) e nenhuma altera
 executados pelo orquestrador no **gate privilegiado** desta fase, depois do congelamento dos arquivos
 deste PR. Nenhum resultado de gate é afirmado neste registro.
 
+> **Nota de atualização (P6 — certificação, §24):** os gates da P5 **foram executados** pelo orquestrador
+> no gate privilegiado: `npm test` **2296/2298** (apenas as **2 falhas pré-existentes** de Windows/CRLF),
+> `npm run build` exit 0, `npm run lint` exit 0 e `git diff --check` exit 0, com os commits `6fd020d`
+> (implementação) e `5dedc1f` (registro dos gates) publicados em
+> `feat/f5-11-p5-cutover-observacoes`. O parágrafo acima é o registro da época do congelamento.
+> Os gates locais da **certificação** (F5-11 inteira) estão em `docs/F5-11-certificacao.md` §3 —
+> pendente apenas o **CI oficial do PR/SHA**.
+
 Os artefatos de teste da fase cobrem: porta/repositório (operação e chaves derivadas do contrato real,
 fail-closed nos três caminhos, varredura `?raw` contra `.rpc(`/credencial/storage), controlador
 (idempotência, versão lida da leitura, ausência de campo de autoridade), view-model (rótulo ausente ⇒
 `null`), painel/timeline, detalhe do gestor + KPI, PDF sem leitura local, barreira D13 (as três mutações
 lançam, chave byte a byte inalterada, nenhum estado de ciclo libera escrita local) e as guardas de
 estrutura de UI (acervo legado **somente leitura**).
+
+## 24. P5.1–P5.4 — SELF/read automático, autoridade por role e lifecycle da role automática (IMPLEMENTADAS · Issues #252/#253; certificação na Issue #254)
+
+> **EMENDA DE D15 (registrada).** O §8 (D15) exigia "concessão **EXPLÍCITA** em bundle/perfil de gestão" e
+> a P3 registrou `observacoes_gestor` como a **única** role com `observation.*`. A partir da P5.1 existem
+> **DOIS** perfis de sistema com `observation.*`: `observacoes_gestor` (gestão, as 4 capabilities,
+> **inalterado**) e `observacoes_avaliado` (**exatamente `observation.read`**, **sem scope assignment**),
+> concedido **AUTOMATICAMENTE** por elegibilidade. `admin` permanece **sem** `observation.*`; `metas_dono`
+> e `metas_aprovador` seguem exclusivos do domínio de metas. A guarda interna da migration da P3
+> ("`observation.*` em OUTRA role de sistema") é *point-in-time* e fica **superseded** por esta emenda —
+> reaplicar a P3 depois da P5.1 falharia nessa guarda.
+>
+> **Decisão do orquestrador (P5, Issue #250):** SELF/read foi **adiado** para a fase corretiva P5.1 (a
+> capability é exigida antes da exceção normativa de escopo), com o fluxo do avaliado **fail-closed** até
+> a P5.1. O escopo fixado — leitura **somente SELF**, **somente `comunicado = true`**, excluídas
+> invisíveis, **zero mutações SELF**, `observacoes_gestor` inalterado — foi implementado e certificado.
+
+| Fase | Migration | Entrega | Evidência de banco |
+|---|---|---|---|
+| P5.1 | `20260933000000_f5_11_p5_1_self_read_observacoes.sql` | 5º system role `observacoes_avaliado`; triggers de tabela (`membership_collaborator_links`, `user_organization_memberships`); backfill idempotente; **D18** com `system_grant`/`system_revoke` (ator NULL + constraint discriminante) e coluna `origin` em `membership_access_role_assignments` | `42-cenario`/`43-validar-f5-11-p5-1.sql`; `ci.yml:531-547` |
+| P5.2 | `20260934000000_f5_11_p5_2_admin_authority_por_role.sql` | `usuario_eh_administrador` passa a exigir a role **`admin`** (fecha a escalada de privilégio que a P5.1 amplificava) | bloco 7.1 de `02-validar-f5-04.sql` |
+| P5.3 | `20260935000000_f5_11_p5_3_lifecycle_perfil_avaliado.sql` | trigger em `user_profiles` reavalia **cada** membership pela **mesma** função (nenhuma duplicação da regra de elegibilidade) | bloco `I` de `43-validar-f5-11-p5-1.sql` |
+| P5.4 | `20260936000000_f5_11_p5_4_avaliado_exclusivo_e_corrida.sql` | role automática **exclusiva** (grant/revoke humano bloqueados nas duas RPCs administrativas; colisão `origin='human'` falha fail-closed) e **upsert único** antirracismo (sem advisory lock) | bloco `J` de `43-validar-f5-11-p5-1.sql` |
+
+**Elegibilidade (fonte única):** membership ativa + `user_profiles` ativo + vínculo ativo. Inelegível ⇒
+assignment `revoked` (**nunca** DELETE físico); reativação na **mesma** assignment; evento
+`system_grant`/`system_revoke` **somente** em transição real, com `actor_user_profile_id` **NULL**.
+
+**Certificação, dívidas classificadas e gates exigidos:** `docs/F5-11-certificacao.md` (Issue #254).
