@@ -334,7 +334,7 @@ segundo conceito para a F5-11.
 
 ### 6.2 Relações estruturais e avaliativas
 
-- `resolver_collaborator_vinculado(user_profile, org) returns table(collaborator_id)` —
+- `resolver_collaborador_vinculado(user_profile, org) returns table(collaborator_id)` —
   `20260908010000:263` (endurecido em `20260909000000:22`) ⇒ **raiz do SELF**.
 - `resolver_alvos_escopo(user_profile, org, scope, unit, data) returns table(collaborator_id, position_id)`
   — `20260908010000:337`; implementa os 6 escopos.
@@ -1475,7 +1475,7 @@ com 9 e sem `observation.*`). **P2 e P3 não iniciadas.**
    pretendido. As 10 ocorrências da migration da P1.1 receberam cast explícito `::text`.
 2. **Corrigido neste artefato:** o resolvedor canônico chama-se
    **`resolver_collaborador_vinculado`** (híbrido: a **tabela** usa "collaborator" e a **função** usa
-   "collaborador"), e não `resolver_collaborator_vinculado`. A grafia dos artefatos da P1.1 foi
+   "collaborador"), e não `resolver_collaborador_vinculado`. A grafia dos artefatos da P1.1 foi
    fixada por **igualdade de hash** com o identificador do banco (`md5 = a7539481ed2bbe7e8003cd2febef8d18`).
 3. **Não corrigido (fora do escopo, apenas registrado):** o padrão do item 1 é **pré-existente** no
    repositório, em ramos que só executam em caso de falha — `20260922000000_f5_10_p1_goals_schema.sql:68,76,794`,
@@ -1540,7 +1540,7 @@ nenhum `SECURITY DEFINER`.
 - **`auth.uid()` é a raiz:** `f5_11_ator_efetivo_observacao` **amarra** o ator informado pela
   fronteira ao JWT — com JWT presente, divergência ⇒ `F5_11_FORBIDDEN` (override de identidade
   negado). Campos de autoria **nunca** vêm do corpo (D3/D4 + regra da P1.1, com paridade INTEGRAL
-  com `resolver_colaborador_vinculado`).
+  com `resolver_collaborador_vinculado`).
 - **Capability:** mapa **FECHADO** operação → capability — CRIAR→`observation.create`;
   EDITAR/COMUNICAR/DESCOMUNICAR/REVOGAR→`observation.edit`; EXCLUIR→`observation.delete`;
   OBTER/HISTORICO/LISTAR_ESCOPO→`observation.read`; operação desconhecida ⇒ **raise** (fail-closed).

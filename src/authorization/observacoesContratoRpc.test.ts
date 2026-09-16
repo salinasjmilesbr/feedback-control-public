@@ -1014,3 +1014,102 @@ describe("F5-11 P4 — adapter de cliente espelha o contrato (fail-closed)", () 
     expect(rejeitadas).toEqual([]);
   });
 });
+
+/**
+ * F5-11 P4 (correção pré-merge do PR #249) — a LIGAÇÃO REAL Edge → schema.
+ *
+ * Um auditor externo suspeitou que a Edge chamaria o resolver de VÍNCULO com a
+ * grafia errada. A suspeita nasceu de uma variante que existe APENAS em comentários
+ * de outras migrations: as duas formas diferem por UM caractere do sufixo da
+ * palavra ("-ador" x "-ator") e um literal digitado à mão pode consagrar justamente
+ * o erro que se quer impedir. Por isso estes testes NÃO escrevem o nome: eles
+ * derivam os DOIS lados da FONTE — os nomes CHAMADOS saem do texto cru do wiring da
+ * Edge e os DECLARADOS saem do SQL real do schema — e exigem IGUALDADE entre os
+ * valores extraídos.
+ */
+describe("F5-11 P4 — a ligação real Edge → schema soberano (resolvedores)", () => {
+  /** Declarações `create [or replace] function public.resolver_*(` do SQL REAL. */
+  function resolvedoresDeclarados(): ReadonlySet<string> {
+    const padrao = /create (?:or replace )?function public\.(resolver_[a-z0-9_]+)\s*\(/g;
+    const nomes = new Set<string>();
+    let achado: RegExpExecArray | null;
+    while ((achado = padrao.exec(SQL_DO_SCHEMA)) !== null) nomes.add(achado[1]!);
+    return nomes;
+  }
+
+  /** Resolvedores CHAMADOS pelo wiring (`admin.rpc("resolver_…"`) no TEXTO CRU. */
+  function resolvedoresChamados(): ReadonlySet<string> {
+    const padrao = /\.rpc\(\s*["'](resolver_[a-z0-9_]+)["']/g;
+    const nomes = new Set<string>();
+    let achado: RegExpExecArray | null;
+    while ((achado = padrao.exec(edgeObservacoesFonte as string)) !== null) {
+      nomes.add(achado[1]!);
+    }
+    return nomes;
+  }
+
+  it("os resolvedores CHAMADOS pela Edge são EXATAMENTE os três soberanos (derivados do fonte)", () => {
+    const chamados = Array.from(resolvedoresChamados()).sort();
+    expect(chamados).toEqual([...RESOLVEDORES_ESPERADOS].sort());
+    // A MESMA derivação pelo extrator do arquivo (chamadas sem prefixo
+    // `observacao_`) — duas leituras independentes, nenhuma lista à mão.
+    expect(
+      Array.from(new Set(chamadasResolvedores.map((chamada) => chamada.funcao))).sort()
+    ).toEqual(chamados);
+  });
+
+  it("TODO resolvedor chamado existe DECLARADO no schema (nome divergente quebraria o PostgREST)", () => {
+    const declarados = resolvedoresDeclarados();
+    expect(declarados.size).toBeGreaterThan(0);
+    for (const nome of resolvedoresChamados()) {
+      expect(declarados.has(nome), `${nome} não é declarado no schema`).toBe(true);
+      expect(declaracaoDaFuncao(nome).test(SQL_DO_SCHEMA), nome).toBe(true);
+    }
+  });
+
+  /** Nome do resolver de VÍNCULO declarado no schema (derivado — nunca literal). */
+  function nomeVinculadoDeclarado(): string | undefined {
+    return Array.from(resolvedoresDeclarados()).find((nome) => nome.endsWith("vinculado"));
+  }
+
+  /** Nome do resolver de VÍNCULO chamado pela Edge (derivado — nunca literal). */
+  function nomeVinculadoChamado(): string | undefined {
+    return Array.from(resolvedoresChamados()).find((nome) => nome.endsWith("vinculado"));
+  }
+
+  it("o resolver de VÍNCULO tem UM nome e é o MESMO nos dois lados (derivado do fonte)", () => {
+    const declarado = nomeVinculadoDeclarado();
+    const chamado = nomeVinculadoChamado();
+    expect(declarado, "schema sem resolver de vínculo").toBeDefined();
+    expect(chamado, "Edge sem resolver de vínculo").toBeDefined();
+    // Igualdade entre DOIS valores EXTRAÍDOS da fonte: nenhum literal digitado
+    // pode consagrar o erro de grafia que o auditor suspeitou existir.
+    expect(chamado).toBe(declarado);
+    expect(declaracaoDaFuncao(declarado as string).test(SQL_DO_SCHEMA)).toBe(true);
+    // Exatamente UM nome de vínculo de cada lado: uma SEGUNDA grafia falharia aqui.
+    expect(
+      Array.from(resolvedoresDeclarados()).filter((nome) => nome.endsWith("vinculado"))
+    ).toHaveLength(1);
+    expect(
+      Array.from(resolvedoresChamados()).filter((nome) => nome.endsWith("vinculado"))
+    ).toHaveLength(1);
+  });
+
+  it("REGRESSÃO: a variante de sufixo trocado não é chamada pela Edge nem declarada", () => {
+    const canonico = nomeVinculadoDeclarado() as string;
+    // Variante derivada por TROCA DE SUFIXO ('-ador' ⇄ '-ator') — sem literal: o
+    // teste não pode depender de qual das duas formas é a correta.
+    const variante = canonico.endsWith("ador_vinculado")
+      ? canonico.replace(/ador_vinculado$/, "ator_vinculado")
+      : canonico.replace(/ator_vinculado$/, "ador_vinculado");
+    // Autoverificação: a derivação precisa produzir uma string DIFERENTE.
+    expect(variante).not.toBe(canonico);
+    expect(edgeObservacoesFonte as string).not.toContain(variante);
+    expect(resolvedoresChamados().has(variante)).toBe(false);
+    expect(resolvedoresDeclarados().has(variante)).toBe(false);
+    // E a chamada REAL do vínculo existe no wiring, com argumentos nomeados.
+    const chamada = chamadasResolvedores.find((item) => item.funcao === canonico);
+    expect(chamada).toBeDefined();
+    expect(chamada?.argumentos.length ?? 0).toBeGreaterThan(0);
+  });
+});
