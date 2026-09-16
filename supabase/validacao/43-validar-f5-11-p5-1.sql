@@ -30,6 +30,18 @@ declare
   v_antes        integer;
   v_depois       integer;
   v_ok           boolean;
+  v_mem2         uuid;
+  v_org2         uuid;
+  v_assign_id    uuid;
+  v_assign_id2   uuid;
+  v_antes2       integer;
+  v_depois2      integer;
+  v_humanos      integer;
+  v_humanos_dep  integer;
+  v_rev_antes    integer;
+  v_rev_depois   integer;
+  v_gestor_antes integer;
+  v_gestor_dep   integer;
 begin
   -- ==========================================================================
   -- A) BUNDLE do perfil novo (conjunto EXATO) e coerencia de dominio
@@ -526,6 +538,210 @@ begin
   end if;
 
   -- ==========================================================================
+  -- I) P5.3 — LIFECYCLE por `user_profiles.status` (propagacao MATERIALIZADA)
+  -- ==========================================================================
+  -- A elegibilidade tem TRES fatores (membership + perfil + vinculo); a P5.1
+  -- criou triggers apenas para membership e vinculo. Aqui provamos que a
+  -- mudanca ISOLADA de `user_profiles.status` propaga para CADA membership:
+  -- (a) active->disabled REVOGA; (b) replay NAO gera evento/linha; (c) a
+  -- reativacao reusa a MESMA assignment; (d) evento SO' em transicao real, com
+  -- ator NULL; (e) multiplas memberships reavaliadas individualmente; (f)
+  -- inelegivel segue inelegivel apos reativar o perfil; (g) resolvedor
+  -- fail-closed; (h) ZERO impacto em humanos/admin/gestor/metas_*.
+  if v_profile is not null and v_membership is not null and v_role is not null then
+    -- ESCOPO DA PROVA: o AVALIADO PURO da fixture dedicada (prefixo f5c1) — o
+    -- MESMO ator das provas E. As variaveis externas apontam para a fixture de
+    -- GESTAO das fases anteriores (outro perfil, sem segunda membership), e usar
+    -- aquele ator mediria outro papel. A partir daqui, TODA a prova do bloco I
+    -- (e a higiene correspondente) opera sobre este perfil e suas memberships.
+    v_profile    := 'f5c1c000-0000-0000-0000-0000000000a1';
+    v_membership := 'f5c1d000-0000-0000-0000-0000000000a1';
+    select m.organization_id into v_org
+      from public.user_organization_memberships m
+     where m.id = v_membership;
+
+    -- Descoberta DETERMINISTICA da segunda membership do MESMO perfil (fixture
+    -- f5c1 do cenario 42): nao e' truncamento de consulta de negocio.
+    select m.id, m.organization_id into v_mem2, v_org2
+      from public.user_organization_memberships m
+     where m.user_profile_id = v_profile and m.id <> v_membership
+     order by m.id
+     limit 1;
+    if v_mem2 is null then
+      v_falhas := v_falhas || text 'I0: fixture sem segunda membership do MESMO perfil (caso (e) nao e'' testavel)';
+    end if;
+
+    select a.id into v_assign_id
+      from public.membership_access_role_assignments a
+     where a.membership_id = v_membership and a.access_role_id = v_role;
+    if v_mem2 is not null then
+      select a.id into v_assign_id2
+        from public.membership_access_role_assignments a
+       where a.membership_id = v_mem2 and a.access_role_id = v_role;
+    end if;
+
+    -- (h) fotografia ANTES: humano (grant/revoke) e roles nao-avaliado.
+    select count(*) into v_humanos
+      from public.privilege_mutation_audit a where a.action in ('grant','revoke');
+    select count(*) into v_gestor_antes
+      from public.membership_access_role_assignments a
+      join public.access_roles r on r.id = a.access_role_id
+     where r.is_system = true
+       and r.name in ('observacoes_gestor','metas_dono','metas_aprovador','admin');
+
+    -- Pre-condicao: as duas memberships estao ativas (provisionadas).
+    select count(*) into v_n
+      from public.membership_access_role_assignments a
+     where a.access_role_id = v_role and a.status = 'active'
+       and a.membership_id in (v_membership, coalesce(v_mem2, v_membership));
+    if v_n <> (case when v_mem2 is null then 1 else 2 end) then
+      v_falhas := v_falhas || format('I1: pre-condicao falhou — esperava % assignment(s) ativa(s) do perfil SELF (tem %s)', (case when v_mem2 is null then 1 else 2 end), v_n);
+    end if;
+
+    -- Fotografia da trilha ANTES da transicao provocada por ESTE teste: as
+    -- transicoes dos blocos de lifecycle anteriores JA' deixaram eventos de
+    -- `system_revoke` para o mesmo role/membership, logo a assercao e' por DELTA.
+    select count(*) into v_rev_antes
+      from public.privilege_mutation_audit a
+     where a.access_role_id = v_role and a.action = 'system_revoke'
+       and a.membership_id in (v_membership, coalesce(v_mem2, v_membership))
+       and a.actor_user_profile_id is null;
+
+    -- (a) active -> disabled: REVOGA em TODAS as memberships do perfil.
+    update public.user_profiles set status = 'disabled' where id = v_profile;
+
+    select count(*) into v_rev_depois
+      from public.privilege_mutation_audit a
+     where a.access_role_id = v_role and a.action = 'system_revoke'
+       and a.membership_id in (v_membership, coalesce(v_mem2, v_membership))
+       and a.actor_user_profile_id is null;
+
+    select count(*) into v_n
+      from public.membership_access_role_assignments a
+     where a.access_role_id = v_role and a.status = 'active'
+       and a.membership_id in (v_membership, coalesce(v_mem2, v_membership));
+    if v_n <> 0 then
+      v_falhas := v_falhas || format('I2/a: perfil disabled manteve %s assignment(s) do perfil SELF ativa(s) (deveria revogar todas)', v_n);
+    end if;
+
+    -- (g) inelegivel => o resolvedor NAO entrega observation.read (fail-closed).
+    if exists (
+      select 1 from public.resolver_capabilities_efetivas(v_profile, v_org) c
+       where c.capability_code = 'observation.read'
+    ) then
+      v_falhas := v_falhas || text 'I3/g: resolvedor entregou observation.read com perfil disabled (fail-closed violado)';
+    end if;
+
+    -- (d) a transicao REAL registrou system_revoke com ator NULL: EXATAMENTE um
+    --     por membership AFETADA POR ESTE TESTE (delta), nunca eventos falsos.
+    if v_rev_depois - v_rev_antes <> (case when v_mem2 is null then 1 else 2 end) then
+      v_falhas := v_falhas || format('I4/d: a transicao de perfil deveria gerar EXATAMENTE %s system_revoke (uma por membership) com ator NULL; delta observado=%s',
+        (case when v_mem2 is null then 1 else 2 end), v_rev_depois - v_rev_antes);
+    end if;
+
+    -- (b) REPLAY da inativacao: nenhum evento/linha nova.
+    select count(*) into v_antes2
+      from public.privilege_mutation_audit a
+     where a.access_role_id = v_role
+       and a.membership_id in (v_membership, coalesce(v_mem2, v_membership));
+    select count(*) into v_gestor_dep
+      from public.membership_access_role_assignments a where a.access_role_id = v_role;
+
+    update public.user_profiles set status = 'disabled' where id = v_profile;
+
+    select count(*) into v_depois2
+      from public.privilege_mutation_audit a
+     where a.access_role_id = v_role
+       and a.membership_id in (v_membership, coalesce(v_mem2, v_membership));
+    if v_depois2 <> v_antes2 then
+      v_falhas := v_falhas || format('I5/b: replay da inativacao gerou evento FALSO (%s -> %s)', v_antes2, v_depois2);
+    end if;
+    select count(*) into v_n
+      from public.membership_access_role_assignments a where a.access_role_id = v_role;
+    if v_n <> v_gestor_dep then
+      v_falhas := v_falhas || format('I5/b: replay da inativacao criou/removeu assignment (%s -> %s)', v_gestor_dep, v_n);
+    end if;
+
+    -- (f) inelegibilidade por VINCULO: com o vinculo disabled, reativar o
+    --     perfil NAO pode reprovisionar aquela membership.
+    if v_mem2 is not null then
+      update public.membership_collaborator_links set status = 'disabled' where membership_id = v_mem2;
+      update public.user_profiles set status = 'active' where id = v_profile;
+      select count(*) into v_n
+        from public.membership_access_role_assignments a
+       where a.membership_id = v_mem2 and a.access_role_id = v_role and a.status = 'active';
+      if v_n <> 0 then
+        v_falhas := v_falhas || text 'I6/f: membership com vinculo disabled foi provisionada ao reativar o perfil (elegibilidade de vinculo ignorada)';
+      end if;
+      -- Volta o vinculo: a MESMA assignment deve ser reativada (nunca nova linha).
+      update public.membership_collaborator_links set status = 'active' where membership_id = v_mem2;
+    else
+      update public.user_profiles set status = 'active' where id = v_profile;
+    end if;
+
+    -- (c) reativacao: a MESMA assignment (mesmo id) volta a 'active', sem
+    --     duplicar linha.
+    select count(*) into v_n
+      from public.membership_access_role_assignments a
+     where a.membership_id = v_membership and a.access_role_id = v_role and a.status = 'active';
+    if v_n <> 1 then
+      v_falhas := v_falhas || format('I7/c: reativacao nao devolveu a assignment ativa da membership principal (ativas=%s)', v_n);
+    end if;
+    if v_assign_id is not null and not exists (
+      select 1 from public.membership_access_role_assignments a
+       where a.id = v_assign_id and a.status = 'active'
+    ) then
+      v_falhas := v_falhas || text 'I7/c: a reativacao NAO reusou a MESMA assignment (id original nao esta ativo)';
+    end if;
+    if v_mem2 is not null then
+      if v_assign_id2 is not null and not exists (
+        select 1 from public.membership_access_role_assignments a
+         where a.id = v_assign_id2 and a.status = 'active'
+      ) then
+        v_falhas := v_falhas || text 'I7/c: a segunda membership nao reusou a MESMA assignment apos reativacao';
+      end if;
+      select count(*) into v_n
+        from public.membership_access_role_assignments a
+       where a.membership_id = v_mem2 and a.access_role_id = v_role;
+      if v_n <> 1 then
+        v_falhas := v_falhas || format('I7/c: segunda membership deveria ter EXATAMENTE 1 assignment do perfil SELF (tem %s)', v_n);
+      end if;
+    end if;
+
+    -- (d) a reativacao real registrou system_grant com ator NULL.
+    select count(*) into v_n
+      from public.privilege_mutation_audit a
+     where a.access_role_id = v_role and a.action = 'system_grant'
+       and a.membership_id = v_membership and a.actor_user_profile_id is null;
+    if v_n < 1 then
+      v_falhas := v_falhas || text 'I8/d: reativacao nao registrou system_grant com ator NULL';
+    end if;
+
+    -- (g) elegivel novamente => o resolvedor volta a entregar observation.read.
+    if not exists (
+      select 1 from public.resolver_capabilities_efetivas(v_profile, v_org) c
+       where c.capability_code = 'observation.read'
+    ) then
+      v_falhas := v_falhas || text 'I9/g: resolvedor NAO entregou observation.read com perfil ativo (fail-closed invertido)';
+    end if;
+
+    -- (h) ZERO impacto em humanos, admin, gestor e metas.
+    select count(*) into v_humanos_dep
+      from public.privilege_mutation_audit a where a.action in ('grant','revoke');
+    if v_humanos_dep <> v_humanos then
+      v_falhas := v_falhas || format('I10/h: a propagacao tocou a trilha HUMANA (%s -> %s)', v_humanos, v_humanos_dep);
+    end if;
+    select count(*) into v_n
+      from public.membership_access_role_assignments a
+      join public.access_roles r on r.id = a.access_role_id
+     where r.is_system = true
+       and r.name in ('observacoes_gestor','metas_dono','metas_aprovador','admin');
+    if v_n <> v_gestor_antes then
+      v_falhas := v_falhas || format('I11/h: a propagacao tocou assignments de outros perfis de sistema (%s -> %s)', v_gestor_antes, v_n);
+    end if;
+  end if;
+
+  -- ==========================================================================
   -- H) RESULTADO + HIGIENE
   -- ==========================================================================
   if array_length(v_falhas, 1) > 0 then
@@ -535,12 +751,38 @@ begin
 
   -- Higiene: remove as linhas de trilha criadas por ESTE validador (o DELETE e'
   -- do proprietario; o runtime de aplicacao continua sem DELETE — D18).
-  if v_org is not null and v_membership is not null then
+  -- Higiene da trilha AUTOMATICA criada durante ESTE validador (blocos C e I):
+  -- escopo por ROLE + janela temporal + ator NULL (eventos `system_*`), cobrindo
+  -- TODAS as memberships tocadas pelas transicoes do proprio validador — antes
+  -- o escopo era uma unica membership, o que deixaria residuo dos outros blocos.
+  if v_role is not null then
     delete from public.privilege_mutation_audit
-     where organization_id = v_org and membership_id = v_membership
-       and access_role_id = v_role and action = 'system_grant'
+     where access_role_id = v_role
+       and action in ('system_grant','system_revoke')
        and actor_user_profile_id is null
        and created_at >= now() - interval '5 minutes';
+  end if;
+
+  -- Higiene da P5.3: o perfil e o vinculo JA' foram restaurados para 'active'
+  -- nas provas do bloco I; aqui removemos a fixture EXTRA (segunda membership em
+  -- outra organizacao, criada pelo cenario 42) e a trilha que este validador
+  -- gerou para ela — o pipeline seguinte (F5-06/F5-07) nao ve residuo.
+  if v_mem2 is not null then
+    delete from public.privilege_mutation_audit
+     where membership_id = v_mem2 and access_role_id = v_role
+       and created_at >= now() - interval '5 minutes';
+    delete from public.membership_access_role_assignments where membership_id = v_mem2;
+    delete from public.membership_collaborator_links where membership_id = v_mem2;
+    delete from public.user_organization_memberships where id = v_mem2;
+  end if;
+  if v_org2 is not null then
+    delete from public.collaborators c
+     where c.organization_id = v_org2
+       and not exists (select 1 from public.membership_collaborator_links l where l.collaborator_id = c.id)
+       and not exists (select 1 from public.evaluation_observations o where o.collaborator_id = c.id);
+    delete from public.organizations o
+     where o.id = v_org2
+       and not exists (select 1 from public.user_organization_memberships m where m.organization_id = o.id);
   end if;
 
   raise notice '[PASS] F5-11 P5.1: bundle do 5o perfil (1 capability, zero scope), provisionamento automatico (origin=system), lifecycle/backfill idempotentes, D18 discriminado e append-only, SELF le/nao muta/cross-tenant fail-closed, observacoes_gestor e admin intactos';

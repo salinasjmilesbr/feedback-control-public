@@ -125,10 +125,17 @@ declare
   v_self_membership constant uuid := 'f5c1d000-0000-0000-0000-0000000000a1';
   v_self_colab      constant uuid := 'f5c1e000-0000-0000-0000-0000000000c1';
   v_terceiro_colab  constant uuid := 'f5c1e000-0000-0000-0000-0000000000c2';
+  -- Fixture de MULTIPLAS MEMBERSHIPS do MESMO perfil (caso (e) do lifecycle da
+  -- P5.3): a segunda membership vive em OUTRA organizacao porque a unicidade e'
+  -- por `(user_profile_id, organization_id)` (`20260906203358:69-70`).
+  v_org2             constant uuid := 'f5c1a000-0000-0000-0000-0000000000a2';
+  v_self_membership2 constant uuid := 'f5c1d000-0000-0000-0000-0000000000a2';
+  v_self_colab2      constant uuid := 'f5c1e000-0000-0000-0000-0000000000c3';
   v_org      uuid;
   v_ciclo    uuid;
   v_role     uuid;
   v_assign   int;
+  v_assign2  int;
   v_obs_com  uuid;
   v_obs_nao  uuid;
   v_obs_exc  uuid;
@@ -221,6 +228,43 @@ begin
     raise exception '[FAIL] cenario P5.1 (SELF): avaliado puro sem assignment automatica ativa (achou %)', v_assign;
   end if;
 
+  -- (6.5.b) SEGUNDA membership do MESMO perfil (em outra organizacao) — prova
+  --         de que a propagacao da P5.3 reavalia CADA membership do perfil
+  --         individualmente (caso (e)). O INSERT do vinculo e' novamente a
+  --         prova do provisionamento automatico, sem concessao manual.
+  if not exists (select 1 from public.organizations o where o.id = v_org2) then
+    insert into public.organizations (id, name)
+    values (v_org2, 'Organizacao ficticia P5.1 f5c1 (segunda membership do mesmo perfil)');
+  end if;
+  if not exists (
+    select 1 from public.user_organization_memberships m where m.id = v_self_membership2
+  ) then
+    insert into public.user_organization_memberships
+      (id, user_profile_id, organization_id, status)
+    values (v_self_membership2, v_self_profile, v_org2, 'active');
+  end if;
+  if not exists (select 1 from public.collaborators c where c.id = v_self_colab2) then
+    insert into public.collaborators (id, organization_id) values (v_self_colab2, v_org2);
+  end if;
+  if not exists (
+    select 1 from public.membership_collaborator_links l where l.membership_id = v_self_membership2
+  ) then
+    insert into public.membership_collaborator_links
+      (membership_id, organization_id, collaborator_id, status)
+    values (v_self_membership2, v_org2, v_self_colab2, 'active');
+  end if;
+
+  select count(*) into v_assign2
+    from public.membership_access_role_assignments a
+   where a.membership_id = v_self_membership2
+     and a.access_role_id = v_role
+     and a.status = 'active'
+     and a.origin = 'system'
+     and a.created_by is null;
+  if v_assign2 <> 1 then
+    raise exception '[FAIL] cenario P5.1 (SELF): segunda membership do MESMO perfil sem assignment automatica ativa (achou %)', v_assign2;
+  end if;
+
   -- (6.6) observacoes do AVALIADO PURO: COMUNICADA, NAO COMUNICADA e EXCLUIDA.
   --       Os carimbos de comunicado/exclusao sao exigidos pelos CHECKs da P1 (D7).
   select o.id into v_obs_com
@@ -295,7 +339,8 @@ begin
     returning id into v_obs_ter;
   end if;
 
-  raise notice '[PASS] cenario P5.1 (SELF): fixture dedicada pronta (org=%, avaliado=%, membro=%, colab=%, terceiro=%, comunicada=%, nao_comunicada=%, excluida=%, obs_terceiro=%, assignment_automatica=%)',
+  raise notice '[PASS] cenario P5.1 (SELF): fixture dedicada pronta (org=%, avaliado=%, membro=%, colab=%, terceiro=%, comunicada=%, nao_comunicada=%, excluida=%, obs_terceiro=%, assignment_automatica=%, org2=%, membro2=%, colab2=%, assignment2=%)',
     v_org, v_self_profile, v_self_membership, v_self_colab, v_terceiro_colab,
-    v_obs_com, v_obs_nao, v_obs_exc, v_obs_ter, v_assign;
+    v_obs_com, v_obs_nao, v_obs_exc, v_obs_ter, v_assign,
+    v_org2, v_self_membership2, v_self_colab2, v_assign2;
 end $selffix$;
