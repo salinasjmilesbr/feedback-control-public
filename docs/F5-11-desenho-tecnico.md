@@ -334,7 +334,7 @@ segundo conceito para a F5-11.
 
 ### 6.2 Relações estruturais e avaliativas
 
-- `resolver_collaborator_vinculado(user_profile, org) returns table(collaborator_id)` —
+- `resolver_collaborador_vinculado(user_profile, org) returns table(collaborator_id)` —
   `20260908010000:263` (endurecido em `20260909000000:22`) ⇒ **raiz do SELF**.
 - `resolver_alvos_escopo(user_profile, org, scope, unit, data) returns table(collaborator_id, position_id)`
   — `20260908010000:337`; implementa os 6 escopos.
@@ -1475,7 +1475,7 @@ com 9 e sem `observation.*`). **P2 e P3 não iniciadas.**
    pretendido. As 10 ocorrências da migration da P1.1 receberam cast explícito `::text`.
 2. **Corrigido neste artefato:** o resolvedor canônico chama-se
    **`resolver_collaborador_vinculado`** (híbrido: a **tabela** usa "collaborator" e a **função** usa
-   "collaborador"), e não `resolver_collaborator_vinculado`. A grafia dos artefatos da P1.1 foi
+   "collaborador"), e não `resolver_collaborador_vinculado`. A grafia dos artefatos da P1.1 foi
    fixada por **igualdade de hash** com o identificador do banco (`md5 = a7539481ed2bbe7e8003cd2febef8d18`).
 3. **Não corrigido (fora do escopo, apenas registrado):** o padrão do item 1 é **pré-existente** no
    repositório, em ramos que só executam em caso de falha — `20260922000000_f5_10_p1_goals_schema.sql:68,76,794`,
@@ -1540,7 +1540,7 @@ nenhum `SECURITY DEFINER`.
 - **`auth.uid()` é a raiz:** `f5_11_ator_efetivo_observacao` **amarra** o ator informado pela
   fronteira ao JWT — com JWT presente, divergência ⇒ `F5_11_FORBIDDEN` (override de identidade
   negado). Campos de autoria **nunca** vêm do corpo (D3/D4 + regra da P1.1, com paridade INTEGRAL
-  com `resolver_colaborador_vinculado`).
+  com `resolver_collaborador_vinculado`).
 - **Capability:** mapa **FECHADO** operação → capability — CRIAR→`observation.create`;
   EDITAR/COMUNICAR/DESCOMUNICAR/REVOGAR→`observation.edit`; EXCLUIR→`observation.delete`;
   OBTER/HISTORICO/LISTAR_ESCOPO→`observation.read`; operação desconhecida ⇒ **raise** (fail-closed).
@@ -1686,6 +1686,11 @@ bundle padrão e `ORGANIZATION` não o satisfaz.
   legada em `authorizationPolicy.test.ts`. Na fronteira (`contextoAutorizacao`), o probe da
   observação é **fail-closed** até o loader soberano existir (P4) — o `domainState` declarado pelo
   chamador **nunca** é autoridade para recurso soberano (invariante 1 do §8).
+- **Atualização da P4 (§22) — nota de estado, sem reescrever o registro da P3:** o loader soberano foi
+  implementado; o probe da fronteira passou a ser **derivado da linha carregada** (§22.4) e a matriz de
+  estado foi extraída para o módulo Edge-safe `estadoDominioObservacao.ts` (§22.5) para não arrastar
+  `import.meta.env`/`localStorage` ao grafo Deno compartilhado pelas Edge Functions. O parágrafo acima
+  permanece legível como o registro da P3 **na época**.
 - **Não** antecipa P4 (Edge/cliente), P5 (cutover/UI) nem P6 (certificação); nenhuma migração de
   `localStorage` (D13).
 
@@ -1699,3 +1704,143 @@ F5-04); DENY sem grant / **sem scope** / com scope **incompatível**; ALLOW com 
 `DESCENDANTS` (e `DIRECT_REPORTS` **não** alcançando o descendente); relação ainda obrigatória mesmo
 com scope; SELF pela regra do domínio; cross-tenant/IDOR `NOT_FOUND`; escopo fora da allowlist
 `INVALID_INPUT`; RLS/ACL intactos (ZERO policy, cliente `42501`); nenhum negativo persistido.
+
+## 22. P4 — Edge e cliente: loader soberano de observações (IMPLEMENTADA · Issue #248)
+
+> **Rastreabilidade:** base `83fb225213501c360660c2968c31f577a8a75373` (`main` pós-P3), mãe **#238**.
+> A P4 **não altera SQL**: as migrations da P1/P2/P3 permanecem intocadas. Os gates finais desta fase
+> (`npm test`, `npm run build`, `npm run lint`, `git diff --check`) são executados pelo **orquestrador**
+> no gate privilegiado — ver o marcador `GATES PENDENTES (orquestrador)` em §22.8.
+
+### 22.1 Escopo entregue
+
+**Edge `observacoes` (trio, molde §6.7):** `supabase/functions/observacoes/index.ts` é o **único** arquivo
+que lê `SUPABASE_SERVICE_ROLE_KEY` e cria o cliente privilegiado (`Deno.serve`); `core.ts` é o núcleo
+**testável** (sem APIs de runtime, dependências injetadas) e declara a ordem inegociável
+identidade soberana (`auth.getUser`) → forma da intenção com **allowlist estrita** → tenant **revalidado**
+contra membership ativa → `avaliarGate` por operação → execução privilegiada **sem propagar o JWT**; e
+`contrato.ts` é apenas **reexportação** do contrato-fonte (nenhuma cópia de operações, gates,
+capabilities ou validação de forma — molde `supabase/functions/metas/contrato.ts`). `supabase/config.toml`
+registra `[functions.observacoes]` com `verify_jwt = true` e
+`entrypoint = "./functions/observacoes/index.ts"`.
+
+**Contrato transportável único:** `src/infrastructure/supabase/observacoes/contrato.ts` — as **8
+operações** `observacao.*` (`criar`, `editar`, `definir_comunicado`, `excluir`, `revogar`, `obter`,
+`listar_por_escopo`, `historico`), `DEFINICAO_POR_OPERACAO` (operação → gate/capability, **sem
+fallback**), `RPC_POR_OPERACAO` em paridade **1:1** com as RPCs `observacao_*` da P2, `CHAVES_POR_OPERACAO`
+e `validarEntradaObservacao` (forma fail-closed). Edge, adapter de cliente e testes consomem **a mesma**
+fonte — nenhuma segunda verdade sobre operações/gates/capabilities/forma.
+
+**Adapter fail-closed:** `src/infrastructure/supabase/observacoes/edgeObservacoes.ts` chama
+`functions.invoke("observacoes")` e devolve o `resultado` **bruto** da RPC (a fronteira não inventa
+campos). Cobre os **três** caminhos de falha exigidos pelo §17.1/P4: `error` de transporte, `data.error`
+e `data.ok !== true` / ausência da própria chave `resultado` (com `resultado: null` **aceito** como
+sucesso). Código público desconhecido ⇒ `FORBIDDEN` (fail-closed). **Sem** `.rpc(`, **sem**
+`SERVICE_ROLE_KEY`, **sem** `localStorage` e **sem** fallback.
+
+**Guardas e testes da fase:** `src/authorization/observacoesEdgeImportGraph.test.ts` (resolve o grafo
+**real** de imports a partir de `supabase/functions/observacoes/index.ts`, espelho de
+`metasEdgeImportGraph`), `src/authorization/observacoesContratoRpc.test.ts` (contrato × SQL **real** das
+migrations da P2/P3), `src/authorization/observacaoRecursoSoberano.test.ts`,
+`src/infrastructure/supabase/observacoes/contrato.test.ts` e
+`src/infrastructure/supabase/observacoes/edgeObservacoes.test.ts`.
+
+### 22.2 Mapa operação → gate: 7 funcionais + `listar_por_escopo` administrativa
+
+**Sete operações são FUNCIONAIS** (Policy Engine com recurso REAL): `criar` (alvo funcional =
+**colaborador-ALVO** — a observação ainda não existe; molde `goal.criar`), `editar`,
+`definir_comunicado`, `excluir`, `revogar`, `obter` e `historico` (alvo `{type:"observation", id}`, a
+identidade canônica do D1). **`observacao.listar_por_escopo` é ADMINISTRATIVA** (`observation.read`): a
+listagem **não tem um alvo único autorizável** e o escopo/relação são decididos pela RPC soberana
+`observacao_listar_por_escopo` (fonte única), exatamente como `goal.listar_por_escopo` na F5-10.
+Fundamento: **§8 linha 1** (normativa) + molde da F5-10.
+Declaração honesta de execução: a primeira versão do contrato nasceu com essa operação **funcional** e foi
+**corrigida dentro da própria fase** — funcional exigiria um UUID de alvo que a listagem não possui, e a
+fronteira devolveria `INVALID_INPUT` antes mesmo do gate (a listagem morreria).
+
+### 22.3 Allowlist estrita e instante soberano (D21)
+
+`CHAVES_COMUNS = {organization_id, operacao, operation_id}` é a base de todas as operações e qualquer
+chave fora da allowlist da operação é `INVALID_INPUT`. **Nunca** são transportáveis: autoria
+(`actor_*`/`author_*`/`membership_id`), tenant (`tenant_id`), estado (`status`, `excluida*`,
+`comunicado_*`, `motivo_exclusao`), `version`/`domainState`/`capability`/`scope`/`payload_hash`.
+`cycle_id` e `collaborator_id` existem **apenas na criação** (D4 — a mutação de linha existente não os
+aceita); `expected_version` apenas nas **4** mutações de linha existente; `motivo` apenas em
+`excluir`/`revogar` (D16).
+**`data` não é transportável em nenhuma operação:** o instante da decisão é **soberano** (D21) — o F4-02
+resolve os alvos de escopo "na data" e uma data escolhida pelo cliente seria **autoridade declarada pelo
+chamador**. O relógio usado é o da fronteira/RPC.
+
+### 22.4 Probe soberano da fronteira (alvo `observation`) e ramo de CRIAÇÃO
+
+O probe **fail-closed** deixado pela P3 foi **substituído** pelo probe derivado da **linha soberana**
+carregada em `contextoAutorizacao.ts`: a matriz vem da fonte única (`estadoDominioObservacao`) composta
+com (a) a **AUTORIA D5** (`exigeAutoriaObservacao`; o autor autorizável é `author_collaborator_id`
+comparado ao **vínculo** do ator — nunca a `usuarioAtual`/payload) e (b) a regra de **leitura
+SELF-comunicada** (§8 linha 2; D7/D9). O `domainState` declarado pelo chamador **não** participa
+(invariante 1 do §8).
+
+**Ramo novo de criação (§8 linha 4):** para `observation.create` com alvo `collaborator`, o probe é
+`probeObservacaoSoberanaDeCriacao`, composto de
+`estadoDominioObservacao({cicloStatus, colaboradorStatus})` — ciclo `ATIVO` (D12) **e** colaborador-alvo
+≠ `DESLIGADO` (D11) — com **SELF = DENY** (invariante 4: criar/editar/excluir são atos de **gestão**; o
+avaliado não cria sobre si) e **status não resolvido ⇒ DENY** (fail-closed). O
+`ContextoAvaliacaoSoberano` ganhou dois campos **opcionais** (`colaboradorStatus`, `cicloStatus`)
+fornecidos pelo loader da Edge para o alvo `collaborator` (status **soberano** do colaborador-alvo e
+`status` da linha do ciclo validado no payload); ausência ⇒ string vazia ⇒ o probe **NEGA**. O ramo exige
+**simultaneamente** a capability `observation.create` e o alvo `collaborator`, de modo que nenhum outro
+domínio muda de comportamento (`evaluation.*`/`goal.*` intactos).
+
+### 22.5 `estadoDominioObservacao.ts` — módulo Edge-safe, e por quê
+
+A P3 declarou a matriz de estado **dentro de `authorizationPolicy.ts`**. A P4 a **extraiu** para
+`src/authorization/estadoDominioObservacao.ts` **sem mudança de semântica**, porque o adaptador de
+compatibilidade importa `config/ambiente` (`import.meta.env` no **topo** do módulo) e serviços de cliente
+(`colaboradorStorage`/`localStorage`), e `contextoAutorizacao.ts` está no grafo das Edge Functions
+(`avaliacoes`, `ciclos`, `colaboradores`, `metas` e `observacoes`): um import estático daquele módulo
+levaria `import.meta.env`/`localStorage` ao runtime **Deno** e **quebraria o boot** das Edges. O novo
+módulo depende **apenas** de tipos do Policy Engine — mesmo padrão de `estadoDominioMeta.ts` e
+`estadoDominioCiclo.ts` — e `authorizationPolicy.ts` passou a **importar e REEXPORTAR**
+(`estadoDominioObservacao`, `EstadoObservacaoSoberano`), preservando a **superfície pública da P3** e
+mantendo a matriz em **fonte única** (nada duplicado nos dois caminhos).
+
+### 22.6 Ramo `observation` no provider (`reais.ts`) — condição para ALLOW real
+
+`contextoAutorizacao.ts` monta os providers com **`criarProvidersReais`** (`providers/reais.ts`), logo o
+tradutor de relação por escopo (`isTargetInScope`) está no caminho da **fronteira**. Sem um ramo para o
+alvo `observation`, `SELF`/`DIRECT_REPORTS`/`DESCENDANTS` retornavam `false` e o gate negava por **scope
+insuficiente** mesmo com capability, probe e concessão corretos: **nenhum ALLOW real** seria alcançável —
+e o §17.1/P4 exige o ALLOW no caminho de **produção**. Foram adicionados `alvoObservacaoCorresponde` (a
+relação é definida sobre o **colaborador-ALVO** da observação, `evaluation_observations.collaborator_id`;
+o **id** da observação nunca define relação) e `observacaoNoEscopoDoAtor`: **SELF** = o ator é o
+colaborador-alvo (via `donoDoAlvo`, derivado da linha real); **DIRECT_REPORTS**/**DESCENDANTS** = o
+colaborador-alvo ∈ alvos resolvidos do escopo; **sem `donoDoAlvo` ⇒ DENY** (fail-closed). `ORGANIZATION`
+não satisfaz — a P3 exige `DIRECT_REPORTS`/`DESCENDANTS` no gate, com a leitura SELF-comunicada como
+exceção normativa do domínio.
+
+### 22.7 Dívidas declaradas (NÃO resolvidas na P4)
+
+1. **Autoria como relação no provider:** não existe análogo a `metaDoAlvo` para o **autor soberano** da
+   observação, então o provider **não** a resolve: a autoria D5 é composta pelo probe do domínio e o SQL
+   (`observacao_obter`/`observacao_editar`) é a autoridade final. Consequência assumida e declarada: um
+   **autor fora do escopo "na data"** pode ser negado pelo engine onde o SQL permitiria — divergência
+   **fail-closed** (nunca permissiva). A correção exige campo novo em
+   `ResourceContext`/`DadosProvidersReais`, fora do escopo desta fase.
+2. **Quem concede `observation.read` ao AVALIADO (SELF):** segue **decisão da P5**. A P3 entregou apenas
+   o perfil `observacoes_gestor` com escopos `DIRECT_REPORTS`/`DESCENDANTS`; o bundle padrão **não** tem
+   scope `SELF` — por isso a leitura SELF-comunicada é uma **exceção normativa do gate**, não uma
+   concessão.
+3. **`localStorage`/cutover de UI (P5) e certificação (P6):** não iniciados. Nenhuma migração de dados
+   legados (D13) e **nenhum** call site de produção migrado nesta fase.
+
+### 22.8 Evidência
+
+**GATES PENDENTES (orquestrador):** `npm test`, `npm run build`, `npm run lint` e `git diff --check` são
+executados pelo orquestrador no **gate privilegiado** desta fase, depois do congelamento dos arquivos
+deste PR. Nenhum resultado de gate é afirmado neste registro.
+Os artefatos de teste da fase estão listados em §22.1 e cobrem: grafo real de imports da Edge (nenhum
+import relativo quebrado, `service_role` **só** em `index.ts`, `core.ts` sem runtime e o caminho de
+cliente sem `.rpc(`), contrato × SQL real da P2/P3 (nomes, ordem e tipos dos 8 RPCs;
+`p_actor_user_profile_id` sempre e `p_payload_hash` nunca; `p_operation_id` apenas nas mutações), forma e
+allowlist do contrato, adapter fail-closed nos três caminhos e o recurso soberano da observação na
+fronteira (incluindo o ramo de criação com SELF = DENY).

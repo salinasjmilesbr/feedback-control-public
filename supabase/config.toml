@@ -93,3 +93,12 @@ entrypoint = "./functions/avaliacoes/index.ts"
 enabled = true
 verify_jwt = true
 entrypoint = "./functions/metas/index.ts"
+
+# F5-11 P4 (Issue #248): caminho server-side das observacoes soberanas.
+# verify_jwt = true porque toda operacao exige identidade autenticada; a funcao
+# AINDA resolve a identidade soberana com auth.getUser e passa pelo gate/RPC
+# (D3/D5/D9/D11/D12/D15) - o cliente nunca fala RPC direto.
+[functions.observacoes]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/observacoes/index.ts"

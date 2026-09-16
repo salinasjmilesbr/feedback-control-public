@@ -13,6 +13,10 @@ import {
 } from "./estadoDominioAvaliacao.ts";
 import { estadoDominioCiclo } from "./estadoDominioCiclo.ts";
 import { estadoDominioMeta } from "./estadoDominioMeta.ts";
+import {
+  estadoDominioObservacao,
+  exigeAutoriaObservacao,
+} from "./estadoDominioObservacao.ts";
 import type {
   AuthorizationDecision,
   AuthorizationRequest,
@@ -69,6 +73,15 @@ import {
  * confiável a partir da avaliação ORIGINAL do dono e propagadas ao provider pelo
  * bloco `meta` do `ResourceContext`. Nenhuma estrutura viva participa da
  * autorização de meta.
+ *
+ * F5-11 P4 (§8; D3/D5/D7/D9/D11/D12): a OBSERVAÇÃO também é recurso SOBERANO
+ * (`evaluation_observations`). O `domainState` do alvo `observation` é DERIVADO
+ * da LINHA carregada em (7) — `comunicado`, `excluida`, status do CICLO e status
+ * do colaborador-ALVO — pela fonte única `estadoDominioObservacao`, composta com
+ * a AUTORIA D5 (autor da LINHA × vínculo do ator) e com a leitura
+ * SELF-comunicada (D7/D9). O `domainState` declarado pelo chamador nunca é
+ * autoridade nesse alvo (invariante 1 do §8) e a ausência de dado soberano é
+ * fail-closed.
  */
 
 function negar(reason: DenialReason): AuthorizationDecision {
@@ -206,6 +219,20 @@ export interface ContextoAvaliacaoSoberano {
   readonly encerradaComPendencias?: boolean;
   readonly cicloPermiteNovaAvaliacao?: boolean;
   readonly avaliadoApto?: boolean;
+  /**
+   * F5-11 P4 (D11): status VIGENTE do colaborador-alvo, lido da fonte soberana
+   * (`collaborator_status_periods`: `active`/`leave`/`inactive`). Campo OPCIONAL
+   * e retrocompatível — ausente ⇒ o probe da criação de observação trata como
+   * status NÃO resolvido e NEGA (fail-closed). NUNCA é estado declarado pelo
+   * cliente.
+   */
+  readonly colaboradorStatus?: string;
+  /**
+   * F5-11 P4 (D12): status da LINHA soberana do CICLO da operação (mutação de
+   * observação exige `ATIVO`). Campo OPCIONAL e retrocompatível — ausente ⇒ o
+   * probe NEGA a mutação (fail-closed).
+   */
+  readonly cicloStatus?: string;
 }
 
 export interface DepsContextoAutorizacao {
@@ -289,6 +316,138 @@ export interface EntradaOperacaoAutorizacao {
   readonly domainState?: DomainStateProbe;
 }
 
+/** Id soberano normalizado (`trim` + não vazio) ou `null` — comparação fail-closed. */
+function identificadorSoberano(valor: unknown): string | null {
+  if (typeof valor !== "string") return null;
+  const limpo = valor.trim();
+  return limpo.length > 0 ? limpo : null;
+}
+
+/**
+ * F5-11 P4 (§8; D3/D5/D7/D9/D11/D12) — probe SOBERANO do recurso OBSERVAÇÃO.
+ *
+ * Composição de TRÊS fatos, todos derivados da LINHA soberana carregada em (7) —
+ * nenhum deles é declarado pelo chamador:
+ *
+ * 1. **estado do domínio** (fonte ÚNICA `estadoDominioObservacao`): status do
+ *    CICLO da observação (mutação exige `ATIVO` — D12) e status do
+ *    colaborador-ALVO (D11 — `DESLIGADO` nega criação); status ausente/fora do
+ *    domínio só permite o que a matriz do domínio autoriza (fail-closed);
+ * 2. **AUTORIA D5** (`exigeAutoriaObservacao`): editar, definir comunicado,
+ *    revogar e excluir são atos do AUTOR — e o autor autorizável é o
+ *    `author_collaborator_id` da LINHA comparado ao vínculo do ator. Sem autoria
+ *    PROVADA (autor ausente ou ator sem vínculo) o probe NEGA (fail-closed). A
+ *    autoria NUNCA vem do chamador nem de `usuarioAtual`/payload;
+ * 3. **leitura SELF-comunicada** (§8 linha 2; D7/D9): quando o PRÓPRIO
+ *    colaborador-alvo é o ator, a leitura só é permitida para observação
+ *    `comunicado` e NÃO excluída. Para os demais atores a leitura segue a matriz
+ *    do domínio (leitura histórica em qualquer estado) e quem decide a relação é
+ *    o engine/providers — o probe não amplia nem substitui aquele alcance.
+ *
+ * `entrada.domainState` NUNCA participa deste alvo: para recurso soberano o
+ * estado declarado pelo chamador não é autoridade (invariante 1 do §8).
+ */
+function probeObservacaoSoberana(
+  recurso: RecursoSoberanoCarregado,
+  colaboradorDoAtor: string | null
+): DomainStateProbe {
+  const comunicado = recurso.comunicado === true;
+  const excluida = recurso.excluida === true;
+
+  const estado = estadoDominioObservacao({
+    cicloStatus: recurso.cicloStatus ?? "",
+    colaboradorStatus: recurso.colaboradorStatus ?? "",
+  });
+
+  const autorDaObservacao = identificadorSoberano(recurso.authorCollaboratorId);
+  const ator = identificadorSoberano(colaboradorDoAtor);
+  const alvoDaObservacao = identificadorSoberano(recurso.ownerCollaboratorId);
+
+  const autorSoberano = autorDaObservacao !== null && ator !== null && autorDaObservacao === ator;
+  const atorEhOProprioAlvo =
+    ator !== null && alvoDaObservacao !== null && ator === alvoDaObservacao;
+  const leituraSelfPermitida = !atorEhOProprioAlvo || (comunicado && !excluida);
+
+  return {
+    allows: (capability: Capability): boolean => {
+      if (!estado.allows(capability)) return false;
+      if (exigeAutoriaObservacao(capability)) return autorSoberano;
+      if (capability === "observation.read") return leituraSelfPermitida;
+      // Demais capabilities da matriz (`observation.create`): o estado do domínio
+      // (ciclo `ATIVO` + colaborador-alvo apto) já decidiu — nada é ampliado aqui.
+      return true;
+    },
+  };
+}
+
+/**
+ * F5-11 P4 (§8 linha 4; D11/D12, invariante 4) — vocabulário SOBERANO de
+ * `collaborator_status_periods` (`active`/`leave`/`inactive`, CHECK da F3-01) →
+ * vocabulário do probe de domínio do cliente (`ATIVO`/`LICENCA`/`DESLIGADO`).
+ * O mapeamento é DOCUMENTADO no comentário da própria coluna soberana — a
+ * fronteira apenas o aplica. Status ausente/desconhecido devolve `""` (NÃO
+ * resolvido) e o probe da criação NEGA (fail-closed, invariante 6).
+ */
+const STATUS_SOBERANO_PARA_PROBE: Readonly<Record<string, string>> = {
+  active: "ATIVO",
+  leave: "LICENCA",
+  inactive: "DESLIGADO",
+};
+
+function statusColaboradorDoSoberano(valor: unknown): string {
+  if (typeof valor !== "string") return "";
+  return STATUS_SOBERANO_PARA_PROBE[valor.trim().toLowerCase()] ?? "";
+}
+
+/**
+ * F5-11 P4 (§8 linha 4; D11/D12) — probe SOBERANO da CRIAÇÃO de observação.
+ *
+ * A observação AINDA NÃO EXISTE: o alvo funcional da criação é o
+ * COLABORADOR-ALVO (molde `goal.criar`, cujo alvo funcional é o dono/ciclo). O
+ * estado vem do contexto soberano do alvo — status do CICLO e status VIGENTE do
+ * colaborador, ambos resolvidos server-side — pela fonte única
+ * `estadoDominioObservacao`, composto com:
+ *
+ * - **SELF = DENY** (§8 invariante 4): criar/editar/excluir observação são atos
+ *   EXCLUSIVOS de gestão — o próprio colaborador-alvo nunca age sobre a
+ *   observação de si, ainda que o estado permita;
+ * - **status NÃO resolvido ⇒ DENY** (D11/invariante 6): sem status vigente do
+ *   colaborador-alvo a criação é negada, nunca "permitida por default" (o probe
+ *   do cliente não distingue "ausente" de "desconhecido" porque o vocabulário
+ *   soberano é fechado).
+ *
+ * `entrada.domainState` NUNCA é consultado neste ramo.
+ */
+function probeObservacaoSoberanaDeCriacao(entrada: {
+  readonly cicloStatus: unknown;
+  readonly colaboradorStatus: unknown;
+  readonly atorEhOColaboradorAlvo: boolean;
+}): DomainStateProbe {
+  const statusColaborador = statusColaboradorDoSoberano(entrada.colaboradorStatus);
+  const statusResolvido = statusColaborador !== "";
+
+  const estado = estadoDominioObservacao({
+    cicloStatus: typeof entrada.cicloStatus === "string" ? entrada.cicloStatus : "",
+    colaboradorStatus: statusColaborador,
+  });
+
+  return {
+    allows: (capability: Capability): boolean => {
+      if (!estado.allows(capability)) return false;
+      if (
+        entrada.atorEhOColaboradorAlvo &&
+        (capability === "observation.create" || exigeAutoriaObservacao(capability))
+      ) {
+        return false;
+      }
+      if (capability === "observation.create") return statusResolvido;
+      // As demais capabilities da matriz (`observation.read`) não são ampliadas
+      // por este ramo: quem as decide é o alcance do engine/providers.
+      return true;
+    },
+  };
+}
+
 /**
  * Avaliação de autorização NA FRONTEIRA CONFIÁVEL (D20), por operação.
  *
@@ -362,7 +521,7 @@ export async function avaliarOperacaoAutorizacao(
   if (!recurso) return negar("TARGET_INVALID");
 
   // 7.1) ESTADO DE DOMÍNIO derivado server-side: avaliação/criação (F5-06 §8.1),
-  // CICLO (F5-09 P6 §8) e META (F5-10 P4 §10).
+  // CICLO (F5-09 P6 §8), META (F5-10 P4 §10) e OBSERVAÇÃO (F5-11 P4 §8).
   //
   // P6: para o alvo `cycle` o probe vem SEMPRE da LINHA SOBERANA carregada em
   // (7) — `evaluation_cycles.status`. Um estado declarado pelo chamador
@@ -395,17 +554,31 @@ export async function avaliarOperacaoAutorizacao(
       : entrada.alvo.type === "cycle"
         ? estadoDominioCiclo({ status: recurso.status ?? "" })
         : entrada.alvo.type === "observation"
-          ? // F5-11 P3 (D15/§8, invariante 1): recurso SOBERANO cuja matriz de estado
-            // tem fonte unica (`estadoDominioObservacao`). O probe NUNCA vem do
-            // chamador: enquanto o loader soberano da observacao nao existir
-            // (P4/Edge, que populara `comunicado`/`authorCollaboratorId`/`cicloStatus`),
-            // o probe e' FAIL-CLOSED para mutacao e a LEITURA segue permitida — a
-            // visibilidade real e' decidida pelo RPC soberano.
-            {
-              allows: (capability: Capability): boolean =>
-                capability === "observation.read",
-            }
-          : contextoAvaliacao
+          ? // F5-11 P4 (§8; D3/D5/D7/D9/D11/D12): a OBSERVAÇÃO é recurso SOBERANO e o
+            // probe passa a ser DERIVADO da LINHA carregada em (7) — `comunicado`,
+            // `excluida`, status do CICLO e status do colaborador-ALVO — pela fonte
+            // única `estadoDominioObservacao`, composta com a AUTORIA D5 (autor da
+            // própria LINHA × vínculo do ator) e com a leitura SELF-comunicada.
+            // O estado declarado pelo chamador (`entrada.domainState`) NUNCA é
+            // autoridade neste alvo (invariante 1 do §8) e nada além da regra do
+            // domínio é liberado (fail-closed).
+            probeObservacaoSoberana(recurso, atorComVinculo.actorContext.collaboratorId)
+          : // F5-11 P4 (§8 linha 4; D11/D12): a CRIAÇÃO de observação é FUNCIONAL
+            // sobre o COLABORADOR-ALVO (a observação ainda não existe — `criar` não
+            // tem `observation_id`). O probe vem do contexto SOBERANO do alvo
+            // (status do CICLO + status vigente do colaborador, ambos resolvidos
+            // server-side) e compõe a regra SELF = DENY do invariante 4.
+            // `entrada.domainState` NUNCA é consultado neste ramo.
+            entrada.capability === "observation.create" &&
+            entrada.alvo.type === "collaborator"
+            ? probeObservacaoSoberanaDeCriacao({
+                cicloStatus: contextoAvaliacao?.cicloStatus,
+                colaboradorStatus: contextoAvaliacao?.colaboradorStatus,
+                atorEhOColaboradorAlvo:
+                  atorComVinculo.actorContext.collaboratorId !== null &&
+                  atorComVinculo.actorContext.collaboratorId === entrada.alvo.id,
+              })
+            : contextoAvaliacao
           ? entrada.alvo.type === "evaluation"
             ? estadoDominioAvaliacao({
                 status: contextoAvaliacao.status,

@@ -153,6 +153,14 @@ export interface RecursoSoberanoCarregado {
   readonly excluida?: boolean;
   /** F5-10 P4/F5-11 P3: status da linha SOBERANA do ciclo (meta/observação). */
   readonly cicloStatus?: string;
+  /**
+   * F5-11 P4 (D11): status VIGENTE do colaborador-ALVO da observação
+   * (`collaborator_status_periods`, fonte soberana — nunca do cliente). Campo
+   * OPCIONAL e retrocompatível: ausente ⇒ o probe da observação trata como
+   * status não resolvido e só permite o que a regra do domínio autoriza
+   * (fail-closed na criação).
+   */
+  readonly colaboradorStatus?: string;
   /** F5-10 P4: ids congelados dos aprovadores (§9.1/D14). */
   readonly aprovadoresCongelados?: AprovadoresCongeladosMeta;
   /** F5-11 P3: a observação está marcada como COMUNICADA (fato soberano, D7). */
