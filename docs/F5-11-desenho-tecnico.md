@@ -1971,6 +1971,14 @@ capability de outro domínio (`evaluation.read` ou equivalente) e nenhuma altera
 executados pelo orquestrador no **gate privilegiado** desta fase, depois do congelamento dos arquivos
 deste PR. Nenhum resultado de gate é afirmado neste registro.
 
+> **Nota de atualização (P6 — certificação, §24):** os gates da P5 **foram executados** pelo orquestrador
+> no gate privilegiado: `npm test` **2296/2298** (apenas as **2 falhas pré-existentes** de Windows/CRLF),
+> `npm run build` exit 0, `npm run lint` exit 0 e `git diff --check` exit 0, com os commits `6fd020d`
+> (implementação) e `5dedc1f` (registro dos gates) publicados em
+> `feat/f5-11-p5-cutover-observacoes`. O parágrafo acima é o registro da época do congelamento.
+> Os gates locais da **certificação** (F5-11 inteira) estão em `docs/F5-11-certificacao.md` §3 —
+> pendente apenas o **CI oficial do PR/SHA**.
+
 Os artefatos de teste da fase cobrem: porta/repositório (operação e chaves derivadas do contrato real,
 fail-closed nos três caminhos, varredura `?raw` contra `.rpc(`/credencial/storage), controlador
 (idempotência, versão lida da leitura, ausência de campo de autoridade), view-model (rótulo ausente ⇒

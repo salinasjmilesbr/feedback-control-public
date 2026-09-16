@@ -16,9 +16,11 @@
   Portanto todo critério aqui foi **extraído do desenho técnico** (§8, §17.1 e registros §18–§23);
   qualquer requisito que exista **apenas** no texto das Issues e não no desenho está marcado como
   **NÃO VERIFICADO** (§5).
-- **Gates de banco/CI não foram executados nesta rodada** (sem shell). O que se certifica aqui é a
-  **existência e a coerência da evidência**; os números de execução citados vêm dos gates/CI já
-  registrados e devem ser **reproduzidos no SHA final** pelo orquestrador (§3).
+- **Gates locais EXECUTADOS nesta árvore** (pelo orquestrador, com shell): pipeline CI-equivalente
+  completo **56/56 verdes**, `git diff --check` **exit 0**, `npm test` **2301/2303** (apenas as 2 falhas
+  PRÉ-EXISTENTES de Windows/CRLF), `npm run build` e `npm run lint` **exit 0** — resultados exatos em §3.
+  **Pendente apenas o CI oficial do PR/SHA** (execução do orquestrador no GitHub), autoridade para os
+  pares de concorrência.
 
 ## 1. Critérios de aceite × evidência × status
 
@@ -34,7 +36,7 @@
 | **P5.2** | Autoridade administrativa por role: `usuario_eh_administrador` exige a role `admin` (não qualquer role de sistema) — fecha escalada amplificada pela P5.1 | `20260934000000_f5_11_p5_2_admin_authority_por_role.sql`; prova discriminante em `supabase/validacao/02-validar-f5-04.sql` (bloco 7.1) | **CERTIFICADO** |
 | **P5.3** | Lifecycle completo: mudança isolada de `user_profiles.status` reavalia **cada** membership pela **mesma** função (sem duplicar a regra), com evento só em transição real | `20260935000000_f5_11_p5_3_lifecycle_perfil_avaliado.sql`; bloco `I` de `43-validar-f5-11-p5-1.sql` | **CERTIFICADO** |
 | **P5.4** | `observacoes_avaliado` **exclusivamente automática**: grant/revoke humano bloqueado nas duas RPCs administrativas; colisão `origin='human'` falha fail-closed sem alterar histórico; corrida do primeiro provisionamento eliminada por upsert único (sem advisory lock) | `20260936000000_f5_11_p5_4_avaliado_exclusivo_e_corrida.sql`; bloco `J` de `43-validar-f5-11-p5-1.sql` | **CERTIFICADO** |
-| **P6** | Matriz SQL integrada + **concorrência real entre duas sessões**; cross-tenant/IDOR/membership revogada/perfil inativo/capability ausente/relação ausente; idempotência e rollback; regressões P1–P8/F5-06/F5-07; **relatório de gates executados × não executados**; certificação (linha 1233) | **este documento** + os validadores 34–43 e o pipeline CI-equivalente (56 steps, com os 2 pares de concorrência reais) descrito em §3 | **CERTIFICADO DOCUMENTALMENTE** (execução dos gates é do orquestrador — §3) |
+| **P6** | Matriz SQL integrada + **concorrência real entre duas sessões**; cross-tenant/IDOR/membership revogada/perfil inativo/capability ausente/relação ausente; idempotência e rollback; regressões P1–P8/F5-06/F5-07; **relatório de gates executados × não executados**; certificação (linha 1233) | **este documento** + os validadores 34–43 e o pipeline CI-equivalente (56 steps, com os 2 pares de concorrência reais) descrito em §3 | **CERTIFICADO DOCUMENTALMENTE** (gates locais executados — §3; CI oficial do PR/SHA pendente) |
 
 ## 2. Inventário das entregas F5-11 (com caminho)
 
@@ -80,17 +82,17 @@ consumidores cortados: `src/components/ObservacoesColaborador.tsx`,
 `src/pages/MinhaAvaliacaoDetalhePage.selfFailClosed.test.tsx`,
 `src/services/{observacaoStorage,exportarAvaliacaoPdf}.test.ts`.
 
-## 3. Gates exigidos para o fechamento (execução do orquestrador)
+## 3. Gates executados nesta árvore (resultados reais)
 
-| # | Gate | Resultado esperado | Observação |
+| # | Gate | Resultado | Observação |
 |---|---|---|---|
-| 1 | `supabase db reset --local --yes` + cadeia `34…43` (fail-fast) | **10/10 etapas verdes**, zero `[FAIL]` | as 8 migrations F5-11 aplicam sem erro |
-| 2 | Pipeline CI-equivalente **completo** (56 steps, ordem do CI, incluindo a reaplicação da migration D28 ×2 e os **dois pares de concorrência reais**) | **56/56 verdes** | reproduz o job `Supabase local — RLS/policy validation` |
-| 3 | `npm test` | **2301/2303**, com **apenas** as 2 falhas pré-existentes de Windows/CRLF | nenhuma falha nova |
-| 4 | `npm run build` | exit 0 | — |
-| 5 | `npm run lint` | exit 0 | sem `eslint-disable` novo |
-| 6 | `git diff --check` | exit 0 | — |
-| 7 | CI do SHA final (GitHub) | SUCCESS | **autoridade** para os pares de concorrência |
+| 1 | `supabase db reset --local --yes` + cadeia `34…43` (fail-fast) | **10/10 etapas verdes**, zero `[FAIL]` (34:1, 35:11, 36:1, 37:8, 38:1, 39:7, 40:3, 41:4, 42:2, 43:1) | as 8 migrations F5-11 aplicam sem erro |
+| 2 | Pipeline CI-equivalente **completo** (56 steps, ordem exata do CI, incluindo a reaplicação da migration D28 ×2 e os **dois pares de concorrência reais**) | **56/56 verdes** — sessões A/B com `A=5/B=5` e `A=5/B=4` | reproduz o job `Supabase local — RLS/policy validation`. **Duas execuções**: a primeira parou num *flake do harness local* no par 16/17 (sessão B mediu **1,954 s** de espera contra o limiar de 2 s) e a segunda fechou **56/56** — a árvore é a mesma |
+| 3 | `npm test` | **2301/2303** — **apenas** as 2 falhas PRÉ-EXISTENTES de Windows/CRLF (`src/pages/AcompanhamentoMetasPage.test.tsx`, `src/pages/MinhasMetasPage.test.tsx`) | nenhuma falha nova |
+| 4 | `npm run build` | **exit 0** | — |
+| 5 | `npm run lint` | **exit 0** | sem `eslint-disable` novo |
+| 6 | `git diff --check` | **exit 0** | — |
+| 7 | **CI oficial do PR/SHA (GitHub)** | **PENDENTE — execução do orquestrador** | **autoridade** para os pares de concorrência; nenhum resultado de CI é afirmado aqui |
 
 ## 4. Dívidas classificadas
 
@@ -111,8 +113,9 @@ consumidores cortados: `src/components/ObservacoesColaborador.tsx`,
    no desenho fica **não verificado**.
 2. **SHA/HEAD e comparação com `origin/main`**: esta sessão não tem shell; o orquestrador deve
    confirmar a base auditada.
-3. **Execução real dos gates** (§3): não executados nesta rodada por ausência de shell — os números
-   citados (§1) vêm dos gates/CI já registrados nas fases e precisam ser reproduzidos no SHA final.
+3. **CI oficial do PR/SHA**: os gates locais de §3 **foram executados** nesta árvore, com os resultados
+   registrados; o que permanece pendente é o **CI oficial do PR/SHA** no GitHub (execução do
+   orquestrador), autoridade para os pares de concorrência.
 4. **Registro das fases P5.1–P5.4 no desenho técnico:** os registros §-numerados do desenho param na
    **§23 (P5)**; a família P5.1–P5.4 está registrada no handoff, no CI e nas migrations, mas **não** em
    uma seção própria do desenho (lacuna **documental**, não funcional — ver §6).
@@ -122,7 +125,8 @@ consumidores cortados: `src/components/ObservacoesColaborador.tsx`,
 **Não.** Na evidência disponível (fonte, SQL, validadores, CI e registros de fase), **nenhuma lacuna
 bloqueante** foi encontrada para o fechamento da F5-11: todas as fases têm critério de aceite
 atendido com evidência citável, e as pendências remanescentes são **dívidas não bloqueantes** ou
-**fora de escopo** (§4). As duas ressalvas que impedem uma certificação "cega" são de **verificação**,
-não de mérito: (i) os gates de §3 precisam ser reproduzidos no SHA final pelo orquestrador (incluindo
-o CI, autoridade dos pares de concorrência); e (ii) o texto das Issues #238/#254 não pôde ser lido,
-de modo que qualquer critério exclusivo delas permanece **não verificado**.
+**fora de escopo** (§4). A ressalva que impede uma certificação "cega" é de **verificação**, não de
+mérito: (i) os gates locais de §3 **foram executados** nesta árvore, com os resultados registrados,
+restando **pendente apenas o CI oficial do PR/SHA** (execução do orquestrador no GitHub, autoridade
+dos pares de concorrência); e (ii) o texto das Issues #238/#254 não pôde ser lido, de modo que
+qualquer critério exclusivo delas permanece **não verificado**.
