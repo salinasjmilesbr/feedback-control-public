@@ -1400,9 +1400,9 @@ begin
 
   -- (c) F5-11 (observacoes): a PROIBICAO ABSOLUTA de objeto de observacao foi
   --     SUBSTITUIDA pela doutrina de LISTA FECHADA (nunca removida). A F5-11 P1
-  --     (Issue #238) legitimou as DUAS tabelas do contrato (linha + trilha) e
-  --     NENHUMA funcao: a lista de funcoes e VAZIA nesta fase, porque a P2 e que
-  --     introduzira as RPCs `observacao_*` (e ampliara a lista explicitamente).
+  --     (Issue #238) legitimou as DUAS tabelas do contrato (linha + trilha) e as duas
+  --     funcoes de enforcement; a F5-11 P2 (Issue #244) acrescentou as 8 RPCs
+  --     `observacao_*` e os 5 helpers do gate, ampliando a lista explicitamente.
   --     Qualquer objeto de observacao fora dessas listas continua reprovando.
   select count(*) into v_n from pg_class c
     join pg_namespace n on n.oid = c.relnamespace
@@ -1421,7 +1421,15 @@ begin
        -- estrutural D4 e append-only da trilha D6). O nome casa com o filtro por
        -- nome — a lista fechada precisa nomea-las, sem abrir espaco para RPC.
        'enforce_evaluation_observations_imutaveis',
-       'enforce_evaluation_observation_events_append_only']);
+       'enforce_evaluation_observation_events_append_only',    -- F5-11 P2 (Issue #244): as RPCs soberanas `observacao_*` e os helpers do
+    -- gate funcional. A fase AMPLIA a lista explicitamente (a proibicao absoluta
+    -- virou lista fechada na P1 e nunca e' removida); nenhum `observation_*`.
+    'observacao_criar','observacao_editar','observacao_definir_comunicado',
+    'observacao_excluir','observacao_revogar','observacao_obter',
+    'observacao_listar_por_escopo','observacao_historico',
+    'f5_11_ator_efetivo_observacao','f5_11_ator_valido_observacao',
+    'f5_11_vinculo_observacao_do_ator','f5_11_relacao_observacao_do_ator',
+    'f5_11_exigir_autorizacao_observacao'       ]);
   if v_n <> 0 then
     v_falhas := v_falhas || format('%s funcao(oes) de observacoes FORA da lista fechada da F5-11 P1 (nenhuma RPC observacao_* existe ate a P2)', v_n);
   end if;

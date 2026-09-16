@@ -90,6 +90,41 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   nova), repetindo o **join integral do resolvedor**; a fixture `36` ganhou **D** e **E** e o validador
   `37` ganhou **B4/B5**, **D4/D5/D6**. Registrado em `docs/F5-11-desenho-tecnico.md` §19.8. **Nenhum**
   outro item do escopo foi alterado; a dívida pré-existente `22P02` **não** foi tocada.
+- **P2 — registro completo (Issue #244):** os bullets acima foram consolidados na entrega da P2.
+- **P2 — issue que a governa:** **Issue #244** (`F5-11/P2 — RPCs soberanas observacao_*`), mãe
+  **#238**. Branch **`feat/f5-11-p2-rpcs-observacoes`**, base `e7aecf27532948d21b97d04d9c15aa7478442cca`.
+- **P2 — o que entregou:** migration `20260931000000_f5_11_p2_observacoes_rpc.sql` com **8 RPCs
+  `observacao_*`** (`criar`, `editar`, `definir_comunicado`, `excluir`, `revogar`, `obter`,
+  `listar_por_escopo`, `historico`) + **6 helpers** do gate — todas `SECURITY INVOKER`,
+  `search_path = public`, `EXECUTE` só `service_role`. Gate funcional com mapa **FECHADO**
+  operação→capability (`observation.create/edit/delete/read`), **auth.uid() × parâmetro** (D3),
+  autoria **D5**, relação DIRECT_REPORTS/DESCENDANTS, ciclo **ATIVO** (D12) e matriz do colaborador
+  (**D11**); concorrência por `expected_version` + `FOR UPDATE` **sem advisory lock** (D10); eventos
+  na **MESMA** transação (D6) com `payload_hash` server-side e idempotência dupla; `observation.*`
+  segue com **ZERO concessão** (D15 **continua BLOQUEANDO a P3**) e `admin` sem `observation.*`.
+- **P2 — fixtures/validadores:** `38-cenario-f5-11-p2.sql` (prefixo **`f5b2`**: 2 organizações, 7
+  identidades, 10 colaboradores, hierarquia viva para DIRECT_REPORTS, 5 ciclos e a matriz D11 com
+  `active`/`leave`/`inactive` + 1 colaborador SEM status) e `39-validar-f5-11-p2.sql` (blocos A–E; o
+  caminho ALLOW usa concessão **transitória** `begin`/`rollback`, provada **não persistente**). As
+  listas fechadas de `15`/`30`/`35`/`37` foram **ampliadas explicitamente** (nenhuma guarda removida)
+  e o `ci.yml` ganhou as duas etapas da P2.
+- **P2 — evidência (executada; não repetir):** gate focado verde (**34** 1, **35** 11, **36** 1,
+  **37** 8, **38** 1, **39** 7 PASS) e **bateria completa na ordem do CI: 52/52 etapas verdes**
+  (2 concorrências reais A=0/B=0), com o `39` verde **no ambiente em que a fixture antiga `f2`
+  (F5-10 P4) está presente**.
+- **P2 — colisão de fixture (finding real, fechado):** a fixture da P2 nasceu com o prefixo `f2`,
+  IGUAL ao da F5-10 P4 (`25-cenario-f5-10-p4.sql`, org `f2a…-a1`); como o guard insert-once usava só
+  o id, ele confundiu "fixture de outra fase" com "já carregado" e **pulou a fixture inteira** — o
+  full gate reprovou no bloco A do `39` (contou 7 colaboradores / 3 ciclos alheios). Correção:
+  prefixo **`f5b2`** (família verificada livre), guard pelo **nome** da organização, **erro explícito
+  de colisão** e contagens por **prefixo** de id (imunes à vizinhança).
+- **P2 — defeitos intermediários da própria execução (registrados):** guarda comparando superfície
+  por TEXTO de assinatura (→ OID); vírgula final nas listas fechadas injetadas; fixture com
+  `valid_to < valid_from` (CHECK do F3-05) e validade fora da posição; `uuid ~~ text`; `$$` aninhado
+  dentro de bloco `DO`; expectativa de trilha da edição com transição (grava **2** eventos);
+  argumento `NULL` do teste do gate; e a colisão de prefixo acima. **Nove execuções privilegiadas**
+  ocorreram antes da pausa de controle (DEV-02/DEV-03) — todas registradas para avaliação de
+  aderência.
 - **P1 — issue que a governa:** **Issue #240** (`F5-11/P1 — Schema soberano, audit trail e
   substituição dos guards invertidos`), **Issue-mãe #238**. O PR da P1 fecha **#240** (`Closes #240`)
   e **não** fecha a #238. Branch: **`feat/f5-11-p1-observacoes-schema`**, base `6d527cc…`

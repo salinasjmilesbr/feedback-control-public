@@ -1941,10 +1941,11 @@ declare
     'evaluation_cycle_goal_limits'];
   -- F5-11 P1 (Issue #238): a PROIBICAO ABSOLUTA de observacao foi SUBSTITUIDA pela
   -- mesma doutrina de LISTA FECHADA (nunca removida). As tabelas legitimas da P1
-  -- sao exatamente as duas do contrato (D1) e a lista de FUNCOES e VAZIA nesta
-  -- fase: nenhuma RPC `observacao_*` existe ate a P2, que devera ampliar a lista
-  -- explicitamente. Qualquer objeto de observacao fora dessas listas continua
-  -- reprovando, e as fases seguintes (P2..P6) seguem nao antecipadas.
+  -- sao exatamente as duas do contrato (D1) e a lista de FUNCOES contem as duas
+  -- funcoes de enforcement da P1 mais as 8 RPCs e os 5 helpers da P2 (Issue #244),
+  -- ampliada EXPLICITAMENTE por esta fase. Qualquer objeto de observacao fora
+  -- dessas listas continua reprovando, e as fases seguintes (P3..P6) seguem nao
+  -- antecipadas.
   v_tabelas_observacoes_p1 text[] := array[
     'evaluation_observations','evaluation_observation_events'];
   v_funcoes_observacoes_p1 text[] := array[
@@ -1953,7 +1954,15 @@ declare
     -- filtro por nome (`%observa%`) exatamente como os helpers de aprovacao da
     -- F5-10 casavam com `%meta%`: por isso a lista precisa nomea-las.
     'enforce_evaluation_observations_imutaveis',
-    'enforce_evaluation_observation_events_append_only'];
+    'enforce_evaluation_observation_events_append_only',    -- F5-11 P2 (Issue #244): as RPCs soberanas `observacao_*` e os helpers do
+    -- gate funcional. A fase AMPLIA a lista explicitamente (a proibicao absoluta
+    -- virou lista fechada na P1 e nunca e' removida); nenhum `observation_*`.
+    'observacao_criar','observacao_editar','observacao_definir_comunicado',
+    'observacao_excluir','observacao_revogar','observacao_obter',
+    'observacao_listar_por_escopo','observacao_historico',
+    'f5_11_ator_efetivo_observacao','f5_11_ator_valido_observacao',
+    'f5_11_vinculo_observacao_do_ator','f5_11_relacao_observacao_do_ator',
+    'f5_11_exigir_autorizacao_observacao'    ];
   v_funcoes_metas_p1 text[] := array[
     'enforce_evaluation_goal_events_append_only','f5_10_validar_quota_da_meta',
     'f5_10_validar_quota_do_limite','f5_10_proteger_limite_do_ciclo',

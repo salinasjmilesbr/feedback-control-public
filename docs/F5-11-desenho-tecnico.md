@@ -1470,3 +1470,136 @@ linha. Sem redesenho do mecanismo, sem alterar os **quatro pares** já aprovados
 que **nenhuma** das tentativas persistiu linha. O bloco **B** ganhou **B4/B5**, provando que o
 **resolvedor canônico também não resolve** D e E — a premissa dos negativos. A fixture `36` ganhou as
 identidades **D** e **E**, e o preflight (A1b) passou a exigir a presença das três negativas.
+
+## 20. P2 — RPCs soberanas `observacao_*` (IMPLEMENTADA · Issue #244)
+
+> **Rastreabilidade:** entregue sob a **Issue #244** (`F5-11/P2 — RPCs soberanas observacao_*`),
+> mãe **#238**, base `e7aecf27532948d21b97d04d9c15aa7478442cca`. **Não altera D1–D16**, **não
+> resolve o D15** e **não antecipa P3**. A P1 e a P1.1 seguem intactas.
+
+### 20.1 Superfície entregue
+
+`supabase/migrations/20260931000000_f5_11_p2_observacoes_rpc.sql` — **14 funções `SECURITY
+INVOKER`** com `search_path = public` e `EXECUTE` **somente `service_role`**: **8 RPCs** e **6
+helpers** internos. Nenhuma policy, nenhum grant ao cliente, nenhuma capability/role/bundle novo,
+nenhum `SECURITY DEFINER`.
+
+| RPC | Assinatura (parâmetros) | Derivado soberanamente |
+|---|---|---|
+| `observacao_criar` | `(p_organization_id, p_cycle_id, p_collaborator_id, p_tipo, p_texto, p_actor_user_profile_id, p_operation_id)` | `id`, `author_user_profile_id`, `author_membership_id`, `author_collaborator_id`, `version = 0`, `comunicado = false`, carimbos, evento `CRIADA` |
+| `observacao_editar` | `(p_observation_id, p_organization_id, p_tipo, p_texto, p_comunicado, p_expected_version, p_actor_user_profile_id, p_operation_id)` | autoria conferida, carimbos do comunicado, `version + 1`, evento `EDITADA` (+ `COMUNICADO`/`COMUNICACAO_REMOVIDA` na transição) |
+| `observacao_definir_comunicado` | `(p_observation_id, p_organization_id, p_comunicado, p_expected_version, p_actor_user_profile_id, p_operation_id)` | carimbos do comunicado, `version + 1`, evento da transição |
+| `observacao_excluir` | `(p_observation_id, p_organization_id, p_motivo, p_expected_version, p_actor_user_profile_id, p_operation_id)` | `excluida_em`, `excluida_por_*`, `motivo_exclusao`, `version + 1`, evento `EXCLUIDA` (motivo = `reason`) |
+| `observacao_revogar` | `(p_observation_id, p_organization_id, p_motivo, p_expected_version, p_actor_user_profile_id, p_operation_id)` | carimbos de exclusão limpos, `version + 1`, evento `REVOGADA` |
+| `observacao_obter` | `(p_observation_id, p_organization_id, p_actor_user_profile_id)` | projeção com visibilidade soberana (autor, relação ou SELF-comunicada) |
+| `observacao_listar_por_escopo` | `(p_organization_id, p_actor_user_profile_id, p_escopo, p_organizational_unit_id, p_data)` | alvos por `resolver_alvos_escopo` (allowlist fechada `SELF`/`DIRECT_REPORTS`/`DESCENDANTS`) |
+| `observacao_historico` | `(p_observation_id, p_organization_id, p_actor_user_profile_id)` | trilha append-only (mesma visibilidade de `obter`) |
+
+**Helpers:** `f5_11_ator_efetivo_observacao` (amarra o ator a `auth.uid()`), `f5_11_ator_valido_observacao`
+(allowlist fechada + capability efetiva), `f5_11_vinculo_observacao_do_ator` (SELF único),
+`f5_11_relacao_observacao_do_ator` (DIRECT_REPORTS ∪ DESCENDANTS), `f5_11_status_vigente_do_colaborador`
+(D11) e `f5_11_exigir_autorizacao_observacao` (gate funcional único).
+
+### 20.2 Identidade (D3) e gates soberanos
+
+- **`auth.uid()` é a raiz:** `f5_11_ator_efetivo_observacao` **amarra** o ator informado pela
+  fronteira ao JWT — com JWT presente, divergência ⇒ `F5_11_FORBIDDEN` (override de identidade
+  negado). Campos de autoria **nunca** vêm do corpo (D3/D4 + regra da P1.1, com paridade INTEGRAL
+  com `resolver_colaborador_vinculado`).
+- **Capability:** mapa **FECHADO** operação → capability — CRIAR→`observation.create`;
+  EDITAR/COMUNICAR/DESCOMUNICAR/REVOGAR→`observation.edit`; EXCLUIR→`observation.delete`;
+  OBTER/HISTORICO/LISTAR_ESCOPO→`observation.read`; operação desconhecida ⇒ **raise** (fail-closed).
+  A capability vem sempre do mapa, nunca do chamador, e é conferida em
+  `resolver_capabilities_efetivas` (F4-01/F5-04).
+- **Author gate (D5):** somente o **autor persistido** (`author_user_profile_id = ator`) edita,
+  comunica, descomunica, exclui e revoga — inclusive contra outro ator do **mesmo** tenant.
+- **Relation gate:** o alvo tem de pertencer a `DIRECT_REPORTS` ∪ `DESCENDANTS` do colaborador do
+  ator (F4-02, resolvido na data); **SELF não cria observação sobre si**.
+- **Cycle gate (D12):** toda mutação exige ciclo **`ATIVO`** lido da linha soberana; a leitura
+  histórica permanece nos demais estados.
+- **Collaborator gate (D11):** matriz do §20.3.
+
+### 20.3 Matrizes de decisão (mínimas, provadas por SQL)
+
+**D11 — estado do colaborador** (fonte soberana `collaborator_status_periods`, meio-aberto):
+
+| operação | `active` | `leave` | `inactive` | status não resolvido |
+|---|---|---|---|---|
+| criar | PERMITE | PERMITE | **NEGA** (`F5_11_CONFLICT`) | **NEGA** (`F5_11_FORBIDDEN`, fail-closed) |
+| marcar comunicado | PERMITE | PERMITE | **NEGA** (`F5_11_CONFLICT`) | **NEGA** (`F5_11_FORBIDDEN`) |
+| editar / descomunicar / excluir / revogar | PERMITE (sem gate de status — §8 linhas 5/7/8/9) | idem | idem | idem |
+
+**D12 — estado do ciclo:** `ATIVO` ⇒ mutação permitida (com os demais gates);
+`PLANEJADO`/`ENCERRADO`/`CANCELADO` ⇒ `F5_11_CONFLICT` nas cinco mutações; `obter`/`listar`/`historico`
+seguem permitidos em qualquer estado.
+
+**Tenant × autoria:** observação/alvo de outro tenant ⇒ `F5_11_NOT_FOUND` **indistinguível**; outro
+ator do mesmo tenant ⇒ `F5_11_FORBIDDEN` (autoria).
+
+**D10 — concorrência:** `expected_version` + `SELECT … FOR UPDATE` **sem advisory lock**; replay
+idêntico (`operation_id` + `payload_hash`) devolve o **mesmo** resultado (idempotência dupla: caminho
+rápido + sob o lock); hash divergente ⇒ `CONFLICT`; a criação é idempotente pela unicidade
+`(organization_id, operation_id)` com **savepoint** (retry concorrente não deixa resíduo).
+
+### 20.4 Eventos por operação (D6/D7)
+
+| operação | evento(s) | observações |
+|---|---|---|
+| criar | `CRIADA` | `after` com tipo/texto/ciclo/colaborador/versão; `before` nulo |
+| editar (conteúdo) | `EDITADA` | before/after completos (preserva o "texto anterior") |
+| editar (com transição de comunicado) | `EDITADA` **+** `COMUNICADO`/`COMUNICACAO_REMOVIDA` | o sub-evento usa `operation_id` **derivado** (`f5_10_derivar_operation_id`) |
+| definir comunicado | `COMUNICADO`/`COMUNICACAO_REMOVIDA` | ator e instante **do servidor** |
+| excluir | `EXCLUIDA` | `reason` = motivo obrigatório |
+| revogar | `REVOGADA` | `reason` = motivo obrigatório; a trilha preserva `EXCLUIDA` |
+
+### 20.5 Declarações explícitas (desvios do esboço, sem alterar decisão)
+
+1. **D11 é avaliado no gate ANTES da relação.** Fundamento estrutural: colaborador `inactive` não
+   possui occupation vigente (invariante do F3-05), logo **jamais** resolveria relação alguma; sem
+   essa precedência a recusa do D11 não seria atribuível ao mecanismo pretendido.
+2. **`observacao_editar` carrega a definição completa** (§7.5: tipo/texto/comunicado) e, quando o
+   comunicado transiciona, grava **`EDITADA` e** o evento dedicado (§7.7) — o sub-evento recebe
+   `operation_id` derivado porque a trilha tem `unique (organization_id, operation_id)`.
+3. **`observacao_listar_por_escopo`:** escopos **fechados** (`SELF`, `DIRECT_REPORTS`,
+   `DESCENDANTS`); `SELF` devolve somente `comunicado and not excluida` (§8 linha 2); os escopos de
+   gestão devolvem as **não excluídas** dos alvos resolvidos; sem paginação (P2).
+4. **Caminho ALLOW sem concessão:** como o D15 mantém `observation.*` sem concessão, o validador
+   exercita o ALLOW com uma concessão **transitória** dentro de `begin`/`rollback` — o bloco D prova
+   que **nada** persistiu (zero concessão, nenhuma role de teste, zero linha/evento).
+
+### 20.6 Evidência
+
+- **Gate focado:** `34` 1 PASS, `35` 11 PASS, `36` 1 PASS, `37` 8 PASS, `38` 1 PASS, **`39` 7 PASS**
+  (blocos A, B, C, C10, C11, D e E).
+- **Bateria completa na ordem do CI: 52/52 etapas verdes**, incluindo as **duas concorrências
+  reais** (A=0 / B=0) e o `39` verde **no ambiente em que a fixture antiga `f2` (F5-10 P4) está
+  presente**.
+- Provas de ambiente: **8** funções `observacao_*`, **zero** concessão de `observation.*`, `admin`
+  com 9 e sem `observation.*`, **zero** resíduo `_mut_*`.
+
+### 20.7 Fronteira e estado
+
+**D15 continua BLOQUEANDO a P3** (nenhuma concessão de `observation.*`, nenhuma role/bundle/perfil
+criado, `admin` permanece sem `observation.*`). **A P3 não foi iniciada.** Nenhuma UI/Edge/cliente/
+cutover/localStorage foi tocado (P4/P5 não antecipadas) e **nenhuma migração de `localStorage`** foi
+feita (D13). A dívida diagnóstica pré-existente `22P02` **não foi tocada**.
+
+### 20.8 Defeitos encontrados na própria execução (registrados, sem ampliar escopo)
+
+Todos de **andaime de teste/guarda** (nenhum de lógica das RPCs), corrigidos em rodada consolidada:
+
+1. a guarda final da migration comparava a superfície `observacao_*` por **texto** de assinatura
+   (`pg_get_function_identity_arguments`) — formato não é contrato; passou a comparar **OIDs**
+   (`to_regprocedure`);
+2. **vírgula final** nas listas fechadas injetadas em `15`/`30`/`35` (erro de script de edição);
+3. fixture com `valid_to < valid_from` (CHECK do F3-05) e validade fora da posição/unidade;
+4. comparação `uuid ~~ text` na consistência da fixture;
+5. **`$$` aninhado**: o corpo da função de injeção encerrava o bloco `DO` que o continha (artefato
+   movido para o nível da transação, com tag `$fn$`);
+6. expectativa de trilha incompleta (a edição com transição grava **dois** eventos);
+7. teste do gate passava a organização em vez de `NULL`;
+8. **colisão de identificadores de fixture**: o prefixo `f2` da P2 era o mesmo da F5-10 P4
+   (`25-cenario-f5-10-p4.sql`, org `f2a…-a1`); o guard insert-once usava só o id e **pulou a fixture
+   inteira em silêncio** (o bloco A do `39` contou dados alheios: 7 colaboradores / 3 ciclos).
+   Correção: prefixo **`f5b2`** (família verificada livre no repositório), guard identificado pelo
+   **nome** da organização, **erro explícito de colisão** e contagens por **prefixo** de id.
