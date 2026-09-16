@@ -720,6 +720,41 @@ recurso (D7).
 >    exigida pelo item 3 permanece **obrigatória** e **bloqueante** para a P3 — com a diferença de
 >    que agora o candidato natural (perfil de sistema por domínio) já tem precedente explícito no
 >    repositório e deve ser **decidido e nomeado**, nunca criado em silêncio.
+>
+> **D15 — DECISÃO FECHADA (orquestrador, 2026-09-16; registrada ANTES do código funcional da P3,
+> como o item 3 exige).** O domínio passa a ser **decidível em produção** por um **perfil de sistema
+> funcional dedicado**, criado por migration como os perfis de domínio da F5-10 P4 — e **não** por
+> concessão ao `admin`:
+>
+> | capability | bundle/perfil (perfil de sistema, `organization_id` nulo) | scope (na assignment) |
+> |---|---|---|
+> | `observation.read` | **`observacoes_gestor`** | `DIRECT_REPORTS` / `DESCENDANTS` |
+> | `observation.create` | **`observacoes_gestor`** | `DIRECT_REPORTS` / `DESCENDANTS` |
+> | `observation.edit` | **`observacoes_gestor`** | `DIRECT_REPORTS` / `DESCENDANTS` |
+> | `observation.delete` | **`observacoes_gestor`** | `DIRECT_REPORTS` / `DESCENDANTS` |
+>
+> **Normas da decisão:** (a) `admin` continua com **ZERO** `observation.*`; (b) `metas_dono` e
+> `metas_aprovador` permanecem **exclusivos de metas**; (c) `observation.write` permanece
+> **deprecada e não-concedível**; (d) **SELF não pertence ao bundle padrão** — a leitura
+> SELF-comunicada segue a **regra específica do domínio** (§8 linha 2 / D7), sem exigir scope de
+> gestão; (e) **ORGANIZATION não pertence ao bundle padrão** e não satisfaz o enforcement;
+> (f) **custom roles continuam possíveis** pelo mecanismo soberano existente
+> (`conceder_acesso_role` + `access_role_assignment_scopes`); (g) **o scope participa do enforcement
+> REAL**, cumulativamente com a capability e com a relação estrutural — não é metadado declarativo;
+> (h) **nenhuma autorização deriva de cargo ou nome textual**.
+>
+> **Fundamento (investigação documental, §21.1):** após `db reset` existem exatamente 3 roles de
+> sistema — `admin` (9 capabilities, nenhuma de conteúdo), `metas_dono` (`goal.read`+`goal.write`) e
+> `metas_aprovador` (`goal.read`+`goal.approve`) — e **zero** assignments/scopes semeados (toda
+> concessão é runtime pelo caminho soberano). **Nenhum perfil existente é adequado:** `admin` é
+> proibido pela guarda dura `02-validar-f4-01.sql:562-578` (que nomeia as 4 `observation.*`) e pelo
+> item 2 acima; `metas_*` têm conjuntos **exatos** provados por guarda fail-closed
+> (`20260925000000:2355-2396`) e `metas_dono` é o perfil do **avaliado** (conceder-lhe
+> `observation.*` inverteria o invariante 4 do §8); F4-01 D14 proíbe roles de "manager"/
+> "collaborator" por cargo. As 4 capabilities canônicas são `grantable_via_role = true` e
+> `deprecated = false` (F5-04 D14), e o plano administrativo/controle (`membership.manage`,
+> `access_role.manage`, `exceptional_access.grant`, `pilot_full_access.grant`) permanece **fora** do
+> concedível por role — logo a concessão de `observation.*` é, por contrato, uma **role funcional**.
 
 ## 9. Segurança — ameaças e controles (NORMATIVO — DECIDE D3–D16)
 
@@ -1603,3 +1638,64 @@ Todos de **andaime de teste/guarda** (nenhum de lógica das RPCs), corrigidos em
    inteira em silêncio** (o bloco A do `39` contou dados alheios: 7 colaboradores / 3 ciclos).
    Correção: prefixo **`f5b2`** (família verificada livre no repositório), guard identificado pelo
    **nome** da organização, **erro explícito de colisão** e contagens por **prefixo** de id.
+
+## 21. P3 — autorização, concessão (D15) e scope soberano (IMPLEMENTADA · Issue #246)
+
+> **Rastreabilidade:** base `0f7bcf625052ad3c07113962cfd8997cffb9245b`, mãe **#238**. A decisão
+> **D15** foi registrada no §8 **antes** do código funcional (item 3 do próprio D15).
+
+### 21.1 Concessão explícita (D15)
+
+`supabase/migrations/20260932000000_f5_11_p3_authorization_observacoes.sql` cria o **perfil de
+sistema funcional `observacoes_gestor`** (`is_system = true`, `organization_id` nulo) com
+**EXATAMENTE** as 4 capabilities canônicas (`observation.read/create/edit/delete`) e guarda
+fail-closed do conjunto exato — molde normativo da F5-10 P4 (`20260925000000:2265-2399`).
+**Não** cria capability nova (catálogo **31**), **não** toca `admin`/`metas_dono`/`metas_aprovador`,
+**não** cria policy nem privilégio de cliente e **não** semeia assignments: a atribuição é
+configuração administrativa server-side pelo caminho soberano existente (`conceder_acesso_role` +
+linha em `access_role_assignment_scopes`), como nas fases F4-02/F4-08/F5-07/F5-08.
+
+### 21.2 Scope é enforcement real (não metadado)
+
+O gate `f5_11_exigir_autorizacao_observacao` e a RPC `observacao_listar_por_escopo` foram
+**reescritos por `create or replace`** (a migration da P2 **não** é editada) e passam a exigir
+**cumulativamente**: (1) **capability** efetiva (allowlist fechada, `auth.uid()` amarrado);
+(2) **SCOPE** do único resolver soberano escopado (`resolver_capabilities_escopos_efetivas`, F4-02 —
+assignment **ativa** *e* scope **ativo**): mutações e leitura de terceiros exigem
+`scope_type ∈ {DIRECT_REPORTS, DESCENDANTS}`; um assignment **sem** scope tem a capability (resolver
+sem scope) mas **não** passa o gate — é essa assimetria que prova que o **scope decide** (validador
+`41`, bloco C); (3) **RELAÇÃO** estrutural (DIRECT_REPORTS ∪ DESCENDANTS) — o scope **não** substitui
+a relação (bloco G); (4) **AUTORIA** D5 e **estado** D11/D12 como na P2. Helper novo:
+`f5_11_ator_tem_escopo_observacao`.
+
+**Exceção normativa declarada:** a **leitura SELF-comunicada** (§8 linha 2 / D7) é a única operação
+sem exigência de scope de gestão (regra específica do domínio); por isso não há scope `SELF` no
+bundle padrão e `ORGANIZATION` não o satisfaz.
+
+### 21.3 Fronteira, regressões e cliente
+
+- Guards das fases anteriores **invertidas explicitamente** (nunca removidas): `35` (A3/J5 +
+  conjunto de roles), `37` (D15) e `39` (A5/D) passaram de “zero concessão de `observation.*`” para
+  “**exatamente 4**, todas em `observacoes_gestor`, zero em `admin`/`metas_*`”; `15`/`30`/`35`
+  ampliaram a **lista fechada de funções** com o helper de scope; `ci.yml` ganhou as duas etapas da
+  P3 (após `39`, antes das regressões F5-06/F5-07), sem remover nem enfraquecer etapa alguma.
+- **Cliente (Policy Engine):** `observation` saiu de `TIPOS_RECURSO_NAO_SOBERANOS` (lista agora
+  **vazia**), passou a tipo **soberano** com identidade UUID em `montarResourceContextSoberano`/
+  `motivoAlvoNaoAutorizavel`, ganhou **fonte única** da matriz de estado (`estadoDominioObservacao`)
+  e a política espelha **D5** (somente o autor edita/exclui/revoga), com a inversão da expectativa
+  legada em `authorizationPolicy.test.ts`. Na fronteira (`contextoAutorizacao`), o probe da
+  observação é **fail-closed** até o loader soberano existir (P4) — o `domainState` declarado pelo
+  chamador **nunca** é autoridade para recurso soberano (invariante 1 do §8).
+- **Não** antecipa P4 (Edge/cliente), P5 (cutover/UI) nem P6 (certificação); nenhuma migração de
+  `localStorage` (D13).
+
+### 21.4 Evidência
+
+Gate focado (`34` 1, `35` 11, `36` 1, `37` 8, `38` 1, `39` 7, `40` 1, `41` blocos A–L) e bateria
+completa na ordem do CI com as duas concorrências reais — contagens no relatório da entrega. Provas
+diretas: perfil com conjunto **exato**; `admin` com 9 e **zero** `observation.*`; `metas_*`
+exclusivas de metas; `observation.write` deprecada e **não-concedível** (recusa por trigger da
+F5-04); DENY sem grant / **sem scope** / com scope **incompatível**; ALLOW com `DIRECT_REPORTS` e com
+`DESCENDANTS` (e `DIRECT_REPORTS` **não** alcançando o descendente); relação ainda obrigatória mesmo
+com scope; SELF pela regra do domínio; cross-tenant/IDOR `NOT_FOUND`; escopo fora da allowlist
+`INVALID_INPUT`; RLS/ACL intactos (ZERO policy, cliente `42501`); nenhum negativo persistido.

@@ -511,6 +511,23 @@ jobs:
             < supabase/validacao/39-validar-f5-11-p2.sql
 
       # ----------------------------------------------------------------------
+      # F5-11 P3 (Issue #246): autorização + concessão (D15) + scope soberano.
+      # A fixture usa o prefixo `f5b3` e AMPLIA a fixture da P2 (hierarquia com
+      # descendente + assignments com scopes distintos).
+      # ----------------------------------------------------------------------
+      - name: "Seed F5-11 P3 scenario (autorizacao: perfil observacoes_gestor + scopes)"
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/40-cenario-f5-11-p3.sql
+
+      - name: "Run F5-11 P3 validation (perfil/grants, scope enforced, DIRECT_REPORTS x DESCENDANTS, SELF, cross-tenant/IDOR e regression P0-P2)"
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/41-validar-f5-11-p3.sql
+
+      # ----------------------------------------------------------------------
       # Regressão F5-06/F5-07 (§23.4): cenários independentes, com prefixos de
       # UUID próprios (`d6`/`d7`), reaplicados antes de cada validação.
       # ----------------------------------------------------------------------

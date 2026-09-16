@@ -280,8 +280,16 @@ describe("authorizationPolicy", () => {
   ] as const)(
     "restringe capabilities de observação ao ciclo %s",
     (status, esperado) => {
+      // F5-11 P3 (D5): a observação é do PRÓPRIO ator para isolar a variável de
+      // ESTADO do ciclo — a AUTORIA tem bloco próprio (observação de outro autor
+      // ⇒ DENY para todos, inclusive GERENTE/COORDENADOR).
       const resource: ObservationResource = {
         ...observationResource,
+        observation: {
+          ...observacaoDeOutroAutor,
+          autorMatricula: gerente.matricula,
+          autorNome: gerente.nome,
+        },
         cycle: { ...ciclo, status },
       };
 
@@ -477,6 +485,10 @@ describe("authorizationPolicy", () => {
     }
   );
 
+  // F5-11 P3 (§8, D5): `observationResource` é a observação de OUTRO autor
+  // (`observacaoDeOutroAutor`), portanto editar/excluir passa a ser DENY para
+  // TODOS — inclusive GERENTE/COORDENADOR, que TÊM a capability e o escopo: a
+  // AUTORIA é condição cumulativa. Criar e ler não dependem de autoria.
   it.each([
     ["observation.create", "GERENTE", gerente, true],
     ["observation.create", "COORDENADOR", coordenador, true],
@@ -484,14 +496,14 @@ describe("authorizationPolicy", () => {
     ["observation.create", "CONSULTOR", pessoa(25, "CONSULTOR"), false],
     ["observation.create", "ESTAGIARIO", pessoa(26, "ESTAGIARIO"), false],
     ["observation.create", "SEM_FUNCAO", pessoa(27, undefined), false],
-    ["observation.edit", "GERENTE", gerente, true],
-    ["observation.edit", "COORDENADOR", coordenador, true],
+    ["observation.edit", "GERENTE", gerente, false],
+    ["observation.edit", "COORDENADOR", coordenador, false],
     ["observation.edit", "ANALISTA", direto, false],
     ["observation.edit", "CONSULTOR", pessoa(28, "CONSULTOR"), false],
     ["observation.edit", "ESTAGIARIO", pessoa(29, "ESTAGIARIO"), false],
     ["observation.edit", "SEM_FUNCAO", pessoa(30, undefined), false],
-    ["observation.delete", "GERENTE", gerente, true],
-    ["observation.delete", "COORDENADOR", coordenador, true],
+    ["observation.delete", "GERENTE", gerente, false],
+    ["observation.delete", "COORDENADOR", coordenador, false],
     ["observation.delete", "ANALISTA", direto, false],
     ["observation.delete", "CONSULTOR", pessoa(31, "CONSULTOR"), false],
     ["observation.delete", "ESTAGIARIO", pessoa(32, "ESTAGIARIO"), false],
@@ -505,15 +517,19 @@ describe("authorizationPolicy", () => {
     }
   );
 
+  // F5-11 P3 (§8, ameaça T19; D5) — INVERSÃO do contrato legado: antes qualquer
+  // ator com a capability no escopo editava/excluía observação de TERCEIRO; agora
+  // SOMENTE o AUTOR o faz. Os dois perfis de gestão (que têm capability e escopo
+  // sobre o colaborador-alvo) permanecem NEGADOS.
   it.each([
     ["observation.edit", "GERENTE", gerente],
     ["observation.edit", "COORDENADOR", coordenador],
     ["observation.delete", "GERENTE", gerente],
     ["observation.delete", "COORDENADOR", coordenador],
   ] as const)(
-    "%s permite %s sobre observação de outro autor",
+    "nega %s para %s sobre observação de outro autor (D5)",
     (capability, _perfil, actor) => {
-      expect(can(contexto(actor), capability, observationResource)).toBe(true);
+      expect(can(contexto(actor), capability, observationResource)).toBe(false);
     }
   );
 

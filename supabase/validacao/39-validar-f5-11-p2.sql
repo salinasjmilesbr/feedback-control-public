@@ -168,7 +168,9 @@ begin
     end if;
   end loop;
 
-  -- (A5) D15 INTACTO (a P2 nao concede nada).
+  -- (A5) D15 RESOLVIDA NA P3 (Issue #246): 4 concessoes, TODAS no perfil
+  --      funcional `observacoes_gestor`; `admin` continua sem observation.*. A
+  --      P2 nao concedia nada; a P3 INVERTE isso em lista fechada explicita.
   select count(*) into v_n from public.capabilities;
   if v_n <> 31 then
     v_falhas := v_falhas || format('catalogo = %s (esperado 31)', v_n);
@@ -177,8 +179,17 @@ begin
     from public.access_role_capabilities rc
     join public.capabilities c on c.id = rc.capability_id
    where c.code like 'observation.%';
+  if v_n <> 4 then
+    v_falhas := v_falhas || format('%s concessao(oes) de observation.* (esperado 4 em observacoes_gestor)', v_n);
+  end if;
+  select count(*) into v_n
+    from public.access_role_capabilities rc
+    join public.capabilities c on c.id = rc.capability_id
+    join public.access_roles r on r.id = rc.access_role_id
+   where c.code like 'observation.%'
+     and (r.name <> 'observacoes_gestor' or r.is_system = false);
   if v_n <> 0 then
-    v_falhas := v_falhas || format('%s concessao(oes) de observation.* (D15 violado)', v_n);
+    v_falhas := v_falhas || format('%s concessao(oes) de observation.* FORA de observacoes_gestor', v_n);
   end if;
   select count(*) into v_n from public.access_role_capabilities
    where access_role_id = 'c0000000-0000-4000-8000-0000000000f1';
@@ -187,7 +198,7 @@ begin
   end if;
   if (select array_agg(r.name order by r.name)
         from public.access_roles r where r.is_system = true)
-     is distinct from array['admin', 'metas_aprovador', 'metas_dono'] then
+     is distinct from array['admin', 'metas_aprovador', 'metas_dono', 'observacoes_gestor'] then
     v_falhas := v_falhas || 'conjunto de roles de SISTEMA mudou';
   end if;
 
@@ -298,6 +309,17 @@ insert into public.membership_access_role_assignments
   ('f5b28000-0000-0000-0000-0000000000a6', 'f5b2d000-0000-0000-0000-0000000000a6',
    'f5b2a000-0000-0000-0000-0000000000a1', 'f5b29000-0000-0000-0000-0000000000f1',
    'active', 'f5b2c000-0000-0000-0000-0000000000a6');
+-- F5-11 P3 (Issue #246): o gate passou a exigir SCOPE CUMULATIVO (D15) alem da
+-- capability. A concessao TRANSITORIA desta fixture passa a ter scope de GESTAO
+-- (DESCENDANTS, que cobre DIRECT_REPORTS), preservando integralmente os cenarios
+-- ALLOW da P2; a leitura SELF-comunicada continua isenta por regra do dominio.
+insert into public.access_role_assignment_scopes
+  (assignment_id, organization_id, scope_type, status, created_by)
+select a.id, 'f5b2a000-0000-0000-0000-0000000000a1', 'DESCENDANTS', 'active',
+       'f5b2c000-0000-0000-0000-0000000000a1'
+  from public.membership_access_role_assignments a
+ where a.access_role_id = 'f5b29000-0000-0000-0000-0000000000f1'
+   and a.status = 'active';
 
 -- Helper TRANSITORIO de assercao negativa (removido no fim deste bloco; a
 -- transacao e' desfeita de qualquer forma).
@@ -915,12 +937,25 @@ declare
   v_n int;
   v_roles text;
 begin
+  -- F5-11 P3 (Issue #246): o catalogo JA tem as 4 concessoes LEGITIMAS do perfil
+  -- `observacoes_gestor` (criadas pela migration da P3). O que este bloco prova e'
+  -- que a concessao TRANSITORIA da fixture NAO persistiu: nenhuma concessao fora
+  -- daquele perfil e nenhuma role/assignment/scope de teste.
+  select count(*) into v_n
+    from public.access_role_capabilities rc
+    join public.capabilities c on c.id = rc.capability_id
+    join public.access_roles r on r.id = rc.access_role_id
+   where c.code like 'observation.%'
+     and (r.name <> 'observacoes_gestor' or r.is_system = false);
+  if v_n <> 0 then
+    raise exception '[FAIL] D1: a concessao TRANSITORIA persistiu (% concessao(oes) de observation.* fora de observacoes_gestor)', v_n;
+  end if;
   select count(*) into v_n
     from public.access_role_capabilities rc
     join public.capabilities c on c.id = rc.capability_id
    where c.code like 'observation.%';
-  if v_n <> 0 then
-    raise exception '[FAIL] D1: a concessao TRANSITORIA persistiu (% concessao(oes) de observation.*)', v_n;
+  if v_n <> 4 then
+    raise exception '[FAIL] D1: observation.* no catalogo = % (esperado 4, todas em observacoes_gestor)', v_n;
   end if;
   select count(*) into v_n from public.access_roles
    where id = 'f5b29000-0000-0000-0000-0000000000f1';
@@ -946,8 +981,8 @@ begin
   end if;
   select array_to_string(array_agg(r.name order by r.name), ',') into v_roles
     from public.access_roles r where r.is_system = true;
-  if v_roles <> 'admin,metas_aprovador,metas_dono' then
-    raise exception '[FAIL] D6: roles de sistema = % (esperado admin,metas_aprovador,metas_dono)', v_roles;
+  if v_roles <> 'admin,metas_aprovador,metas_dono,observacoes_gestor' then
+    raise exception '[FAIL] D6: roles de sistema = % (esperado admin,metas_aprovador,metas_dono,observacoes_gestor)', v_roles;
   end if;
 
   raise notice '[PASS] D/pos-rollback: a fixture transitoria NAO persistiu — ZERO concessao de observation.*, nenhuma role de teste, ZERO observacao/evento, admin com 9 e sem observation.*: o estado entregue pela P2 e EXATAMENTE o estado de producao (DENY ate a P3)';

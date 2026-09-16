@@ -142,12 +142,24 @@ begin
   if v_n <> 8 then
     v_falhas := v_falhas || format('goal.%% + observation.%% = %s (esperado 8)', v_n);
   end if;
+  -- F5-11 P3 (Issue #246): D15 resolvida — `observation.*` existe em EXATAMENTE
+  -- UMA role de sistema (`observacoes_gestor`, 4 capabilities) e em ZERO no
+  -- bundle `admin` (a proibicao da P1.1 virou LISTA FECHADA explicita).
   select count(*) into v_n
     from public.access_role_capabilities rc
     join public.capabilities c on c.id = rc.capability_id
    where c.code like 'observation.%';
+  if v_n <> 4 then
+    v_falhas := v_falhas || format('observation.* com %s concessao(oes) (esperado 4)', v_n);
+  end if;
+  select count(*) into v_n
+    from public.access_role_capabilities rc
+    join public.capabilities c on c.id = rc.capability_id
+    join public.access_roles r on r.id = rc.access_role_id
+   where c.code like 'observation.%'
+     and (r.name <> 'observacoes_gestor' or r.is_system = false);
   if v_n <> 0 then
-    v_falhas := v_falhas || format('D15 violado: %s concessao(oes) de observation.*', v_n);
+    v_falhas := v_falhas || format('%s concessao(oes) de observation.* FORA de observacoes_gestor', v_n);
   end if;
   select count(*) into v_n from public.access_role_capabilities
    where access_role_id = 'c0000000-0000-4000-8000-0000000000f1';
@@ -155,7 +167,7 @@ begin
     v_falhas := v_falhas || format('bundle admin com %s capabilities (esperado 9)', v_n);
   end if;
   if (select array_agg(r.name order by r.name) from public.access_roles r where r.is_system = true)
-     is distinct from array['admin', 'metas_aprovador', 'metas_dono'] then
+     is distinct from array['admin', 'metas_aprovador', 'metas_dono', 'observacoes_gestor'] then
     v_falhas := v_falhas || 'conjunto de roles de SISTEMA mudou (a P1.1 nao cria role/bundle/perfil)';
   end if;
   -- F5-11 P2 (Issue #244): a superficie `observacao_*` passou a existir e e'

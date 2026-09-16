@@ -91,6 +91,31 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   `37` ganhou **B4/B5**, **D4/D5/D6**. Registrado em `docs/F5-11-desenho-tecnico.md` §19.8. **Nenhum**
   outro item do escopo foi alterado; a dívida pré-existente `22P02` **não** foi tocada.
 - **P2 — registro completo (Issue #244):** os bullets acima foram consolidados na entrega da P2.
+- **P3 — DESVIO DE PROCESSO REGISTRADO (não ocultado):** a implementação da P3 **começou antes de
+  existir a Issue da fase**. Este host **não** cria Issue (`gh` ausente e nenhuma API autorizada;
+  nenhum workaround com PAT/credencial foi usado, conforme AGENTS.md/DEV-04). A Issue **#246**
+  (`F5-11/P3 — autorização + capabilities/concessões + scope soberano`) foi criada **depois** pelo
+  orquestrador, que **regularizou** a rastreabilidade Issue-antes-do-código e **fechou a D15**; a
+  partir daí **todos** os artefatos da P3 referenciam **#246** (migration, validadores 40/41, docs
+  §21, `README` de migrations e `ci.yml`). Branch
+  **`feat/f5-11-p3-autorizacao-observacoes`**, base `0f7bcf625052ad3c07113962cfd8997cffb9245b`.
+- **P3 — decisão D15 (registrada no §8 do desenho ANTES do código):** perfil de sistema funcional
+  **`observacoes_gestor`** com **EXATAMENTE** `observation.read/create/edit/delete` e scope
+  `DIRECT_REPORTS`/`DESCENDANTS`; `admin` **zero** `observation.*`; `metas_*` exclusivas de metas;
+  `observation.write` deprecada; **SELF** e **ORGANIZATION** fora do bundle padrão; custom roles
+  seguem possíveis pelo mecanismo soberano.
+- **P3 — o que entregou:** migration `20260932000000_f5_11_p3_authorization_observacoes.sql` com o
+  perfil e com o **scope como enforcement REAL** (gate e RPC de listagem reescritos por
+  `create or replace`, sem editar a migration da P2): ALLOW exige **capability + scope
+  (`resolver_capabilities_escopos_efetivas`) + relação + autoria/estado**. Fixtures/validadores
+  novos: `40-cenario-f5-11-p3.sql` (prefixo `f5b3`, descendente + 5 assignments com scopes distintos,
+  incluindo um **sem** scope) e `41-validar-f5-11-p3.sql` (A–L). Guards de `15`/`30`/`35`/`37`/`39`
+  **invertidas explicitamente**; `ci.yml` com as duas etapas da P3.
+- **P3 — cliente (Policy Engine):** `observation` soberano (lista de tipos não-soberanos **vazia**),
+  UUID canônico, fonte única `estadoDominioObservacao`, espelho de **D5** e probe **fail-closed** na
+  fronteira até o loader soberano existir (P4). 4 arquivos em `src/authorization/`.
+- **P3 — evidência:** gate focado e bateria completa na ordem do CI (contagens no relatório).
+  **P4/P5/P6 não iniciadas.**
 - **P2 — issue que a governa:** **Issue #244** (`F5-11/P2 — RPCs soberanas observacao_*`), mãe
   **#238**. Branch **`feat/f5-11-p2-rpcs-observacoes`**, base `e7aecf27532948d21b97d04d9c15aa7478442cca`.
 - **P2 — o que entregou:** migration `20260931000000_f5_11_p2_observacoes_rpc.sql` com **8 RPCs

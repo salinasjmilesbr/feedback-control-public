@@ -1962,7 +1962,7 @@ declare
     'observacao_listar_por_escopo','observacao_historico',
     'f5_11_ator_efetivo_observacao','f5_11_ator_valido_observacao',
     'f5_11_vinculo_observacao_do_ator','f5_11_relacao_observacao_do_ator',
-    'f5_11_exigir_autorizacao_observacao'    ];
+    'f5_11_exigir_autorizacao_observacao',    'f5_11_ator_tem_escopo_observacao'    ];
   v_funcoes_metas_p1 text[] := array[
     'enforce_evaluation_goal_events_append_only','f5_10_validar_quota_da_meta',
     'f5_10_validar_quota_do_limite','f5_10_proteger_limite_do_ciclo',

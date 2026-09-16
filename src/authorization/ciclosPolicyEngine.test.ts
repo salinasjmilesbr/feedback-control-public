@@ -164,13 +164,17 @@ describe("F5-09 P6 — guardas estáticos da autorização de ciclo", () => {
     expect(usos).toHaveLength(1);
   });
 
-  it("o ciclo é recurso SOBERANO e a observação permanece fora do limite", () => {
-    // F5-10 P4: `goal` passou a SOBERANO **antes** de `cycle` (a F5-09 P6 exige
-    // `"cycle",` imediatamente antes de `] as const`).
+  it("o ciclo e a observação são SOBERANOS e a lista legada está VAZIA", () => {
+    // F5-10 P4: `goal` passou a SOBERANO ANTES de `cycle`. F5-11 P3 (§17.1): a
+    // `observation` também passou a SOBERANA, inserida ANTES de `cycle` — o gate
+    // estático da F5-09 P6 exige o ciclo como ÚLTIMO item, imediatamente antes do
+    // fechamento da lista. O FONTE do módulo é verificado (não o import), e a
+    // asserção continua provando os três tipos no lugar contratado.
     expect(recursoFonte).toMatch(
-      /TIPOS_RECURSO_SOBERANOS[\s\S]*?"goal",\s*"cycle",\s*\] as const/
+      /TIPOS_RECURSO_SOBERANOS[\s\S]*?"goal",[\s\S]*?"observation",\s*"cycle",\s*\] as const/
     );
-    expect(recursoFonte).toContain('TIPOS_RECURSO_NAO_SOBERANOS = ["observation"] as const');
+    // Nenhum tipo permanece fora do limite soberano: a lista é VAZIA.
+    expect(recursoFonte).toContain("TIPOS_RECURSO_NAO_SOBERANOS = [] as const");
   });
 });
 
