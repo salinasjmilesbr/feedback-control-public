@@ -68,13 +68,26 @@ begin
     v_falhas := v_falhas || 'capability nova de comunicado criada (D7 proibe)';
   end if;
 
-  -- (A3) D15 INTACTO: nenhuma concessao de observation.* e admin sem observation.*.
+  -- (A3) D15 RESOLVIDA NA P3 (Issue #246): `observation.*` existe em EXATAMENTE
+  --      UMA role de sistema — o perfil funcional `observacoes_gestor` com as 4
+  --      capabilities canonicas — e continua em ZERO no bundle `admin`. A
+  --      proibicao absoluta das fases P1/P1.1 foi INVERTIDA em LISTA FECHADA
+  --      (nunca removida): qualquer concessao FORA do perfil reprova.
   select count(*) into v_n
     from public.access_role_capabilities rc
     join public.capabilities c on c.id = rc.capability_id
    where c.code like 'observation.%';
+  if v_n <> 4 then
+    v_falhas := v_falhas || format('observation.* com %s concessao(oes) (esperado 4, em observacoes_gestor)', v_n);
+  end if;
+  select count(*) into v_n
+    from public.access_role_capabilities rc
+    join public.capabilities c on c.id = rc.capability_id
+    join public.access_roles r on r.id = rc.access_role_id
+   where c.code like 'observation.%'
+     and (r.name <> 'observacoes_gestor' or r.is_system = false);
   if v_n <> 0 then
-    v_falhas := v_falhas || format('D15 violado: %s concessao(oes) de observation.*', v_n);
+    v_falhas := v_falhas || format('%s concessao(oes) de observation.* FORA do perfil observacoes_gestor', v_n);
   end if;
   select count(*) into v_n from public.access_role_capabilities
    where access_role_id = 'c0000000-0000-4000-8000-0000000000f1';
@@ -92,11 +105,12 @@ begin
   -- (A3b) a P1 NAO cria role/bundle/perfil algum (D15 e decisao da P3). O baseline
   --       de roles de SISTEMA e NOMEADO: `admin` (F4-01/F5-09 P7) e os dois perfis
   --       de dominio criados pela propria F5-10 P4 como seu mecanismo de concessao
-  --       (`metas_dono`, `metas_aprovador`). O conjunto tem de ser EXATAMENTE esse:
-  --       qualquer role de sistema fora dele significa que a P1 inventou papel.
+  --       (`metas_dono`, `metas_aprovador`) MAIS o perfil funcional de observacoes
+  --       criado pela P3 (`observacoes_gestor`, Issue #246). O conjunto tem de ser
+  --       EXATAMENTE esse: role de sistema fora dele significa papel inventado.
   if (select array_agg(r.name order by r.name)
         from public.access_roles r where r.is_system = true)
-     is distinct from array['admin', 'metas_aprovador', 'metas_dono'] then
+     is distinct from array['admin', 'metas_aprovador', 'metas_dono', 'observacoes_gestor'] then
     v_falhas := v_falhas || format(
       'conjunto de roles de SISTEMA mudou (%s) — a P1 nao cria role/bundle/perfil: D15 e decisao da P3',
       coalesce((select array_to_string(array_agg(r.name order by r.name), ',')
@@ -121,7 +135,7 @@ begin
     'observacao_listar_por_escopo','observacao_historico',
     'f5_11_ator_efetivo_observacao','f5_11_ator_valido_observacao',
     'f5_11_vinculo_observacao_do_ator','f5_11_relacao_observacao_do_ator',
-    'f5_11_exigir_autorizacao_observacao'       ]);
+    'f5_11_exigir_autorizacao_observacao',    'f5_11_ator_tem_escopo_observacao'       ]);
   if v_n <> 0 then
     v_falhas := v_falhas || format('%s funcao(oes) de observacoes FORA da lista fechada (P1 + P2)', v_n);
   end if;
@@ -1073,7 +1087,7 @@ declare
     'observacao_listar_por_escopo','observacao_historico',
     'f5_11_ator_efetivo_observacao','f5_11_ator_valido_observacao',
     'f5_11_vinculo_observacao_do_ator','f5_11_relacao_observacao_do_ator',
-    'f5_11_exigir_autorizacao_observacao'    ];
+    'f5_11_exigir_autorizacao_observacao',    'f5_11_ator_tem_escopo_observacao'    ];
   v_tab  text;
   v_n    int;
   v_cols text;
@@ -1128,13 +1142,23 @@ begin
     v_falhas := v_falhas || 'coluna de observacao em tabela de nota/agregado (nao escopo)';
   end if;
 
-  -- (J5) D15 INTACTO (reconferido no estado final).
+  -- (J5) D15 RESOLVIDA NA P3 (reconferida no estado final): 4 concessoes, TODAS
+  --      no perfil funcional `observacoes_gestor`.
   select count(*) into v_n
     from public.access_role_capabilities rc
     join public.capabilities c on c.id = rc.capability_id
    where c.code like 'observation.%';
+  if v_n <> 4 then
+    v_falhas := v_falhas || format('D15: observation.* com %s concessao(oes) (esperado 4)', v_n);
+  end if;
+  select count(*) into v_n
+    from public.access_role_capabilities rc
+    join public.capabilities c on c.id = rc.capability_id
+    join public.access_roles r on r.id = rc.access_role_id
+   where c.code like 'observation.%'
+     and (r.name <> 'observacoes_gestor' or r.is_system = false);
   if v_n <> 0 then
-    v_falhas := v_falhas || format('D15: %s concessao(oes) de observation.*', v_n);
+    v_falhas := v_falhas || format('D15: %s concessao(oes) de observation.* FORA de observacoes_gestor', v_n);
   end if;
   select count(*) into v_n
     from public.access_role_capabilities rc
@@ -1144,11 +1168,12 @@ begin
   if v_n <> 0 then
     v_falhas := v_falhas || 'D15: admin com observation.*';
   end if;
-  -- O conjunto NOMEADO de roles de sistema e a prova de que a P1 nao inventou
-  -- papel: `admin` + os dois perfis de dominio da propria F5-10 P4.
+  -- O conjunto NOMEADO de roles de sistema e a prova de que nenhuma fase inventou
+  -- papel: `admin` + os dois perfis de dominio da F5-10 P4 + o perfil funcional de
+  -- observacoes criado pela P3 (`observacoes_gestor`, Issue #246).
   if (select array_agg(r.name order by r.name)
         from public.access_roles r where r.is_system = true)
-     is distinct from array['admin', 'metas_aprovador', 'metas_dono'] then
+     is distinct from array['admin', 'metas_aprovador', 'metas_dono', 'observacoes_gestor'] then
     v_falhas := v_falhas || format(
       'D15: conjunto de roles de SISTEMA mudou (%s) — nenhuma role/bundle/perfil novo na P1',
       coalesce((select array_to_string(array_agg(r.name order by r.name), ',')

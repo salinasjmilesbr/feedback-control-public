@@ -375,7 +375,10 @@ export async function avaliarOperacaoAutorizacao(
   const contextoAvaliacao =
     deps.carregarContextoAvaliacao &&
     entrada.alvo.type !== "cycle" &&
-    entrada.alvo.type !== "goal"
+    entrada.alvo.type !== "goal" &&
+    // F5-11 P3: a OBSERVACAO e' recurso soberano com fonte unica propria; o loader
+    // de contexto avaliativo nao se aplica a ela.
+    entrada.alvo.type !== "observation"
       ? await deps.carregarContextoAvaliacao({
           target: entrada.alvo,
           organizationId: atorComVinculo.actorContext.organizationId,
@@ -391,7 +394,18 @@ export async function avaliarOperacaoAutorizacao(
         })
       : entrada.alvo.type === "cycle"
         ? estadoDominioCiclo({ status: recurso.status ?? "" })
-        : contextoAvaliacao
+        : entrada.alvo.type === "observation"
+          ? // F5-11 P3 (D15/§8, invariante 1): recurso SOBERANO cuja matriz de estado
+            // tem fonte unica (`estadoDominioObservacao`). O probe NUNCA vem do
+            // chamador: enquanto o loader soberano da observacao nao existir
+            // (P4/Edge, que populara `comunicado`/`authorCollaboratorId`/`cicloStatus`),
+            // o probe e' FAIL-CLOSED para mutacao e a LEITURA segue permitida — a
+            // visibilidade real e' decidida pelo RPC soberano.
+            {
+              allows: (capability: Capability): boolean =>
+                capability === "observation.read",
+            }
+          : contextoAvaliacao
           ? entrada.alvo.type === "evaluation"
             ? estadoDominioAvaliacao({
                 status: contextoAvaliacao.status,

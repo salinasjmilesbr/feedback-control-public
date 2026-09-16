@@ -1429,7 +1429,7 @@ begin
     'observacao_listar_por_escopo','observacao_historico',
     'f5_11_ator_efetivo_observacao','f5_11_ator_valido_observacao',
     'f5_11_vinculo_observacao_do_ator','f5_11_relacao_observacao_do_ator',
-    'f5_11_exigir_autorizacao_observacao'       ]);
+    'f5_11_exigir_autorizacao_observacao',    'f5_11_ator_tem_escopo_observacao'       ]);
   if v_n <> 0 then
     v_falhas := v_falhas || format('%s funcao(oes) de observacoes FORA da lista fechada da F5-11 P1 (nenhuma RPC observacao_* existe ate a P2)', v_n);
   end if;
