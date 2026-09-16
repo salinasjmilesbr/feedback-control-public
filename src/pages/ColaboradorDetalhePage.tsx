@@ -51,7 +51,19 @@ import {
   FILTRO_OBSERVACOES_TODOS,
   type FiltroCicloObservacoesSoberano,
 } from "../components/filtroObservacoesPorCiclo";
-import { getCiclosAvaliacao } from "../services/cicloAvaliacaoStorage";
+// F5-09 P5 — a leitura LEGADA de ciclos (usada só para ROTULAR a seção de
+// avaliações do acervo local) vem da PONTE ISOLADA `cicloApresentacaoLegada`, que
+// não importa o caminho soberano: é esse isolamento que a guarda anti-dual-read
+// (`src/services/ciclosSoberanosSemFallback.test.ts`) exige de quem usa
+// `acessoCiclosSoberanos` para o painel de observações (F5-11 P5).
+import { getCiclosAvaliacao } from "./cicloApresentacaoLegada";
+// F5-11 P5 (Issue #250): ciclos SOBERANOS para o painel de observações — a
+// criação gerencial exige `cycleId` de `evaluation_cycles` (nunca do acervo
+// local, que permanece apenas como leitura legada das avaliações).
+import {
+  obterRepositorioCiclosSoberanos,
+  type CicloSoberano,
+} from "../services/acessoCiclosSoberanos";
 import {
   obterColaborador,
   obterHistoricoColaborador,
@@ -117,6 +129,14 @@ type ColaboradorDetalhePageProps = {
    * porta por escopo de gestão; a semente nunca substitui a leitura feita.
    */
   readonly observacoesIniciais?: readonly ObservacaoSoberana[];
+  /**
+   * F5-11 P5 (Issue #250) — ciclos SOBERANOS da organização (SSR/teste
+   * determinístico). Produção lê a porta única de ciclos
+   * (`obterRepositorioCiclosSoberanos`, F5-09 P5): a CRIAÇÃO de observação exige
+   * um `cycleId` soberano (`evaluation_cycles.id`) e nunca um ciclo inventado ou
+   * lido do acervo local.
+   */
+  readonly ciclosIniciais?: readonly CicloSoberano[];
 };
 
 const SEM_DEPENDENCIAS: DependenciasAcessoColaboradores = {};
@@ -387,6 +407,7 @@ function ColaboradorDetalhePage({
   estadoInicial,
   estruturaInicial,
   observacoesIniciais,
+  ciclosIniciais,
 }: ColaboradorDetalhePageProps = {}) {
   const { collaboratorId } = useParams();
   const navigate = useNavigate();
@@ -936,6 +957,7 @@ function ColaboradorDetalhePage({
         estadoObservacoes={estadoObservacoes}
         alvoObservacoesId={alvoObservacoesId}
         organizacaoId={organizacaoAtivaId}
+        {...(ciclosIniciais ? { ciclosIniciais } : {})}
         onObservacoesChange={() => setVersaoObservacoes((v) => v + 1)}
         nomesDeColaborador={Object.fromEntries(
           estrutura.estado.fase === "pronto"
@@ -964,6 +986,7 @@ function AcervoLegado({
   organizacaoId,
   onObservacoesChange,
   nomesDeColaborador,
+  ciclosIniciais,
 }: {
   colaborador: ColaboradorSoberano;
   estadoObservacoes: EstadoObservacoesSoberanas;
@@ -971,6 +994,8 @@ function AcervoLegado({
   organizacaoId: string | null;
   onObservacoesChange: () => void;
   nomesDeColaborador: MapaDeNomesDeColaborador;
+  /** Semente soberana de ciclos (SSR/teste); produção lê a porta de ciclos. */
+  ciclosIniciais?: readonly CicloSoberano[];
 }) {
   const { usuarioAtual } = useUsuarioAtual();
   // F5-11 P5 — intenção de UX da PÁGINA (filtro de ciclo e visibilidade das
@@ -984,6 +1009,57 @@ function AcervoLegado({
     const repositorio = obterRepositorioObservacoesSoberanas();
     return repositorio ? criarControladorObservacoes({ repositorio }) : null;
   });
+  /**
+   * F5-11 P5 (Issue #250) — CICLOS SOBERANOS do painel. A criação gerencial exige
+   * um `cycleId` SOBERANO (`evaluation_cycles.id`); a lista vem da porta única de
+   * ciclos (`obterRepositorioCiclosSoberanos`) e NUNCA do acervo legado de ciclos.
+   * Ausência de caminho soberano ou erro do
+   * backend ⇒ lista VAZIA (fail-closed): o painel fica sem ciclo e a criação é
+   * recusada localmente (D2) — nenhum ciclo sintético é inventado.
+   *
+   * O estado guarda a CHAVE da organização e a exibição é DERIVADA: ciclos de
+   * outro tenant nunca aparecem e não há `setState` síncrono no efeito (mesmo
+   * padrão da leitura de observações desta tela).
+   */
+  const chaveCiclos = organizacaoId ?? "sem-organizacao";
+  const [leituraCiclos, setLeituraCiclos] = useState<{
+    readonly chave: string;
+    readonly ciclos: readonly CicloSoberano[];
+  }>(() => ({
+    chave: chaveCiclos,
+    // Semente de SSR/teste: nunca substitui uma leitura real (o efeito relê).
+    ciclos: ciclosIniciais ?? [],
+  }));
+
+  useEffect(() => {
+    if (ciclosIniciais || !organizacaoId) return;
+    const organizacao = organizacaoId;
+    let vigente = true;
+
+    function publicar(ciclos: readonly CicloSoberano[]): void {
+      if (vigente) setLeituraCiclos({ chave: organizacao, ciclos });
+    }
+
+    void (async () => {
+      const porta = obterRepositorioCiclosSoberanos();
+      if (!porta) {
+        // Sem caminho soberano ⇒ fail-closed (nunca ciclo local como resposta).
+        publicar([]);
+        return;
+      }
+      const resultado = await porta.listarCiclos(organizacao);
+      if (!vigente) return;
+      // Erro de backend é INDISPONIBILIDADE: lista vazia, nunca ciclo inventado.
+      publicar(resultado.ok ? resultado.data : []);
+    })();
+
+    return () => {
+      vigente = false;
+    };
+  }, [ciclosIniciais, organizacaoId]);
+
+  const ciclosSoberanos: readonly CicloSoberano[] =
+    leituraCiclos.chave === chaveCiclos ? leituraCiclos.ciclos : [];
   /**
    * Rótulos por UUID a partir dos NOMES já carregados pela página. A matrícula
    * não existe nessa superfície: o rótulo vai SEM matrícula (apresentação), e
@@ -1386,7 +1462,7 @@ function AcervoLegado({
               }}
               organizationId={organizacaoId}
               escopo="DESCENDANTS"
-              ciclos={[]}
+              ciclos={ciclosSoberanos}
               controlador={controladorObservacoes}
               rotulos={rotulosObservacoes}
               filtroCiclo={filtroObservacoes}

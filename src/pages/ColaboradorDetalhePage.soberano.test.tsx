@@ -15,6 +15,7 @@ import type {
   ObservacaoSoberana,
   ObservationRepository,
 } from "../application/ports/ObservationRepository";
+import type { CicloSoberano } from "../application/ports/CycleRepository";
 import {
   getColaboradorByMatricula,
   getColaboradores,
@@ -35,6 +36,7 @@ import ColaboradorDetalhePage, {
 } from "./ColaboradorDetalhePage";
 import type { EstadoEstrutura } from "./apoioEstrutura";
 import fontePagina from "./ColaboradorDetalhePage.tsx?raw";
+import fontePainel from "../components/ObservacoesColaborador.tsx?raw";
 
 /**
  * Duplo TIPADO da porta soberana de observações (`F5-11 P5`): sem repositório o
@@ -171,6 +173,33 @@ function observacaoSoberana(
   };
 }
 
+/**
+ * F5-11 P5 (Issue #250) — ciclo SOBERANO (projeção da porta de ciclos, F5-09 P5):
+ * identidade por UUID; `ano`/`numero` são RÓTULOS. A criação de observação só
+ * pode usar este `id` (nunca ciclo derivado de ano/número ou do acervo local).
+ */
+function cicloSoberano(
+  parcial: Partial<CicloSoberano> = {}
+): CicloSoberano {
+  return {
+    id: "12341234-1234-4123-8123-123412341234",
+    organizationId: ORGANIZACAO_TESTE,
+    ano: 2027,
+    numero: 1,
+    status: "ATIVO",
+    dataInicio: "2027-01-01",
+    dataFim: null,
+    dataAtivacao: "2027-01-01T00:00:00.000Z",
+    dataEncerramento: null,
+    encerradoComPendencias: false,
+    quantidadePendencias: 0,
+    version: 1,
+    criadoEm: "2027-01-01T00:00:00.000Z",
+    atualizadoEm: "2027-01-01T00:00:00.000Z",
+    ...parcial,
+  };
+}
+
 /** Fotografia soberana com ocupação, reporting line e colegiado vigentes. */
 function estruturaComAlocacao(): EstruturaSoberana {
   const UNIDADE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -237,7 +266,13 @@ function renderizar(
   estadoInicial: EstadoDetalheColaborador,
   identificador: string = UUID,
   estruturaInicial: EstadoEstrutura = ESTRUTURA_VAZIA,
-  observacoesIniciais?: readonly ObservacaoSoberana[]
+  observacoesIniciais?: readonly ObservacaoSoberana[],
+  /**
+   * F5-11 P5 (Issue #250) — ciclos SOBERANOS semeados. `renderToStaticMarkup` não
+   * executa efeitos, então é por esta semente que o teste observa o que a página
+   * ENTREGA ao painel (produção lê a porta única de ciclos).
+   */
+  ciclosIniciais?: readonly CicloSoberano[]
 ): string {
   // O duplo tipado da porta devolve EXATAMENTE os itens deste caso.
   duplo.itens = [...(observacoesIniciais ?? [])];
@@ -259,6 +294,7 @@ function renderizar(
                   estadoInicial={estadoInicial}
                   estruturaInicial={estruturaInicial}
                   {...(observacoesIniciais ? { observacoesIniciais } : {})}
+                  {...(ciclosIniciais ? { ciclosIniciais } : {})}
                 />
               }
             />
@@ -471,6 +507,123 @@ describe("detalhe soberano em ColaboradorDetalhePage", () => {
     expect(codigo).not.toMatch(/SERVICE_ROLE_KEY|serviceRoleKey/);
     expect(codigo).not.toMatch(/@supabase\/supabase-js|createClient\s*\(/);
     expect(codigo).not.toMatch(/\.from\s*\(\s*["'`]/);
+  });
+
+  it("F5-11 P5 (Achado 1 do PR #251): a CRIAÇÃO usa o `cycleId` SOBERANO", () => {
+    const CICLO = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const html = renderizar(
+      {
+        fase: "pronto",
+        colaborador: soberano(),
+        historico: [],
+        erroHistorico: null,
+      },
+      UUID,
+      {
+        // O rótulo do ALVO vem da estrutura carregada: sem ele o mapeador do
+        // painel devolve `null` por contrato e o cartão (com o rótulo do ciclo)
+        // não é apresentado.
+        ...ESTRUTURA_VAZIA,
+        estrutura: {
+          ...ESTRUTURA_VAZIA.estrutura,
+          colaboradores: [{ collaboratorId: UUID, nome: "Pessoa Fictícia" }],
+        },
+      },
+      [
+        observacaoSoberana({
+          id: "p1",
+          texto: "Fato positivo",
+          cycleId: CICLO,
+        }),
+      ],
+      [cicloSoberano({ id: CICLO, ano: 2027, numero: 1, status: "ATIVO" })]
+    );
+
+    // O ciclo SOBERANO chega ao painel: o UUID é o VALOR da opção (a única ponte
+    // para o rótulo) e o rótulo vem da projeção (`ano`/`numero`), nunca do UUID.
+    expect(html).toContain(`value="${CICLO}"`);
+    expect(html).toContain("2027 · Ciclo 1");
+    expect(html).toContain("2027 • Ciclo 1");
+  });
+
+  it("F5-11 P5 (Achado 1): sem ciclo SOBERANO o painel não inventa ciclo (fail-closed)", () => {
+    const html = renderizar(
+      {
+        fase: "pronto",
+        colaborador: soberano(),
+        historico: [],
+        erroHistorico: null,
+      },
+      UUID,
+      {
+        ...ESTRUTURA_VAZIA,
+        estrutura: {
+          ...ESTRUTURA_VAZIA.estrutura,
+          colaboradores: [{ collaboratorId: UUID, nome: "Pessoa Fictícia" }],
+        },
+      },
+      [observacaoSoberana({ id: "p1", texto: "Fato positivo" })]
+    );
+
+    // Sem ciclos soberanos não há opção de ciclo no filtro nem ciclo de criação
+    // (D2) — e nenhum ciclo sintético é apresentado.
+    expect(html).not.toContain('value="12341234-1234-4123-8123-123412341234"');
+    expect(html).not.toContain("2027 · Ciclo 1");
+    // O rótulo EXPLÍCITO de ausência substitui o número inventado.
+    expect(html).toContain("Ciclo não disponível");
+    // O dado soberano continua exibido: falta o ciclo, nunca a observação.
+    expect(html).toContain("Fato positivo");
+  });
+
+  it("F5-11 P5 (Achados 1 e 2): ciclos vêm da PORTA soberana e o escopo é o UNION estrutural", () => {
+    const apenasCodigo = (fonte: string): string =>
+      fonte
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .split("\n")
+        .map((linha) => {
+          const indice = linha.indexOf("//");
+          return indice === -1 ? linha : linha.slice(0, indice);
+        })
+        .join("\n");
+    const codigoPagina = apenasCodigo(fontePagina);
+    const codigoPainel = apenasCodigo(fontePainel);
+
+    // (Achado 1) A prop vem do estado SOBERANO derivado, nunca de literal vazio
+    // nem do acervo legado de ciclos (`getCiclosAvaliacao`/localStorage).
+    expect(codigoPagina).toMatch(/ciclos=\{ciclosSoberanos\}/);
+    expect(codigoPagina).not.toMatch(/ciclos=\{\[\]\}/);
+    expect(codigoPagina).not.toMatch(/ciclos=\{getCiclosAvaliacao/);
+    // ...e é lida da PORTA ÚNICA de ciclos (F5-09 P5), com FAIL-CLOSED nos dois
+    // modos de falha: sem caminho soberano e erro de backend ⇒ lista vazia.
+    expect(codigoPagina).toContain("obterRepositorioCiclosSoberanos");
+    expect(codigoPagina).toMatch(/publicar\(\[\]\)/);
+    expect(codigoPagina).toMatch(
+      /publicar\(resultado\.ok \? resultado\.data : \[\]\)/
+    );
+    // A CRIAÇÃO do painel usa o `cycleId` da coleção ENTREGUE (UUID soberano).
+    expect(codigoPainel).toMatch(/cicloDaCriacao\s*=[\s\S]*?ciclos\.find\(/);
+    expect(codigoPainel).toMatch(/cycleId:\s*cicloDaCriacao\.id/);
+
+    // ANTI-DUAL-READ (F5-09 P5): a leitura LEGADA de ciclos (rótulo da seção de
+    // avaliações) vive na PONTE ISOLADA `cicloApresentacaoLegada`; este módulo
+    // NÃO importa `cicloAvaliacaoStorage` junto do caminho soberano — é o que a
+    // guarda global `src/services/ciclosSoberanosSemFallback.test.ts` exige.
+    expect(codigoPagina).toContain('from "./cicloApresentacaoLegada"');
+    expect(codigoPagina).not.toMatch(
+      /from\s+"\.\.\/services\/cicloAvaliacaoStorage"/
+    );
+
+    // (Achado 2) O escopo de gestão pedido é `DESCENDANTS`, que é o UNION
+    // estrutural do §8 linha 1/§20.2: o resolver F3-07 caminha `depth + 1` de
+    // forma transitiva (logo INCLUI os subordinados diretos) e o gate da P3 exige
+    // grant com scope `DIRECT_REPORTS` OU `DESCENDANTS`, independentemente do
+    // escopo SOLICITADO — por isso não há over-denial para quem só tem
+    // `DIRECT_REPORTS`. Evidência: `20260907170000:196-229`,
+    // `20260908010000:357-373` e `20260932000000:518-526`.
+    expect(codigoPagina).toMatch(/escopo="DESCENDANTS"/);
+    expect(codigoPagina).toMatch(
+      /listarObservacoesPorEscopo\(\s*organizacaoId,\s*"DESCENDANTS"\s*\)/
+    );
   });
 
   it("busca o histórico pela porta soberana com o UUID do colaborador", async () => {
