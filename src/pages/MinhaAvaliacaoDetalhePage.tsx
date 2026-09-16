@@ -5,7 +5,6 @@ import RoleExpectationsCard from "../components/RoleExpectationsCard";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import { getFeedbacksByColaborador } from "../services/feedbackStorage";
 import { exportarAvaliacaoPdf } from "../services/exportarAvaliacaoPdf";
-import { getObservacoesComunicadasByCiclo } from "../services/observacaoStorage";
 import {
   formatarPeriodoCiclo,
   getCiclosAvaliacao,
@@ -16,6 +15,7 @@ import { obterRepositorioMetasSoberanas } from "../services/acessoMetasSoberanas
 import { metasDoAvaliadoSoberanas } from "./useMetasSoberanasDaAvaliacao";
 import { obterRepositorioCiclosSoberanos } from "../services/acessoCiclosSoberanos";
 import type { MetaSoberana } from "../application/ports/GoalRepository";
+import type { ObservacaoSoberana } from "../application/ports/ObservationRepository";
 
 import {
   getEscalaAvaliacao,
@@ -276,11 +276,20 @@ function MinhaAvaliacaoDetalhePage() {
 
   const criterios = feedback.criteriosDetalhados ?? [];
 
-  const observacoesComunicadas = getObservacoesComunicadasByCiclo(
-    usuarioAtual.matricula,
-    feedback.ano,
-    feedback.ciclo
-  );
+  /**
+   * F5-11 P5 (Issue #250) — fluxo SELF **fail-closed e sem autoridade local**.
+   *
+   * A visão do avaliado NÃO lê mais observação do acervo do navegador: a lista
+   * entregue à tela e ao PDF é VAZIA e o estado é explicitamente indisponível
+   * (o bloco de observações e o atalho da navegação simplesmente não aparecem —
+   * mesmo padrão de ausência já usado nesta página).
+   *
+   * A leitura SELF soberana depende da concessão mínima de `observation.read`
+   * ao avaliado, decidida para a fase P5.1: nesta fase não há caminho autorizado
+   * para o próprio avaliado ler as comunicadas, e NENHUMA capability, grant,
+   * escopo ou papel é presumido aqui.
+   */
+  const observacoesComunicadas: readonly ObservacaoSoberana[] = [];
 
   const cicloDaAvaliacao = getCiclosAvaliacao().find(
     (ciclo) =>
@@ -428,7 +437,16 @@ function MinhaAvaliacaoDetalhePage() {
       return;
     }
     try {
-      await exportarAvaliacaoPdf(ator, avaliacao, metasDoCiclo);
+      // L5: o PDF recebe a lista SOBERANA de comunicadas por parâmetro. Nesta
+      // fase a visão do avaliado entrega lista VAZIA (fail-closed): nenhuma
+      // observação local é arrastada para o documento (ver comentário da
+      // constante `observacoesComunicadas`).
+      await exportarAvaliacaoPdf(
+        ator,
+        avaliacao,
+        metasDoCiclo,
+        observacoesComunicadas
+      );
     } catch {
       setErroPdf("Não foi possível gerar o PDF desta avaliação.");
     } finally {
@@ -1006,14 +1024,18 @@ function MinhaAvaliacaoDetalhePage() {
                   </strong>
 
                   <span>
-                    {new Date(observacao.dataCriacao).toLocaleDateString(
+                    {new Date(observacao.criadoEm).toLocaleDateString(
                       "pt-BR"
                     )}
                   </span>
                 </div>
 
                 <p>{observacao.texto}</p>
-                <small>Registrada por {observacao.autorNome}</small>
+                <small>
+                  {observacao.autorCollaboratorId
+                    ? "Registrada por um autor identificado na estrutura carregada"
+                    : "Autoria não identificada"}
+                </small>
               </article>
             ))}
           </div>

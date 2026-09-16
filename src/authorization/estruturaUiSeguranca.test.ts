@@ -402,6 +402,7 @@ const CAMINHOS_LEGADO_LEITURA: readonly string[] = [
   "../services/exportarAvaliacaoPdf.ts",
   "../services/geradorDadosTeste.ts",
   "../services/historicoOrganizacionalStorage.ts",
+  "../services/observacaoStorage.ts",
   "../services/permissaoAvaliacao.ts",
   "../services/reaberturaCicloService.ts",
   "../infrastructure/localStorage/localCollaboratorRepository.ts",
@@ -520,6 +521,34 @@ describe("F5-08 P6 — nenhuma autoridade estrutural local", () => {
         /setItem\(\s*["'`]feedback-control-colaboradores/
       );
     }
+  });
+
+  it("F5-11 P5: o acervo legado de observações é SOMENTE LEITURA (barreira D13)", () => {
+    const codigo = apenasCodigo(fonteDeProducao("../services/observacaoStorage.ts"));
+
+    // A barreira é o ÚNICO destino das mutações e não existe caminho de escrita.
+    expect(codigo).toContain("barreiraDeEscritaLocal");
+    expect(codigo).toContain("ERRO_ESCRITA_LOCAL_OBSERVACOES");
+    expect(codigo).not.toContain("localStorage.setItem");
+    // Nem identidade fabricada no browser (o id é soberano na Edge).
+    expect(codigo).not.toContain("crypto.randomUUID");
+    // Nem gate de ciclo local (D12 é decidido no servidor).
+    expect(codigo).not.toContain("validarCicloAtivo");
+    // As três mutações continuam exportadas (compatibilidade de chamada) e são
+    // impossíveis por tipo (`never`): não há fallback local.
+    for (const mutacao of [
+      "criarObservacao",
+      "atualizarObservacao",
+      "excluirObservacao",
+    ]) {
+      expect(
+        new RegExp(`export function ${mutacao}\\([\\s\\S]*?\\): never \\{`).test(codigo),
+        mutacao
+      ).toBe(true);
+    }
+    // A leitura legada permanece (fora do caminho funcional), sem dual-read.
+    expect(codigo).toContain("getObservacoesByColaborador");
+    expect(codigo).toContain("getObservacoesByCiclo");
   });
 
   it("nenhum arquivo de produção chama RPC do banco nem carrega credencial privilegiada", () => {

@@ -264,7 +264,10 @@ function ColaboradoresPage({
 
     const confirmar = window.confirm(
       `Gerar uma nova massa de dados para ${ciclo.ano} • Ciclo ${ciclo.ciclo}?\n\n` +
-        "As avaliações, metas e observações já existentes nesse ciclo serão substituídas por dados aleatórios de teste."
+        // F5-10 P6 / F5-11 P5: o gerador de fixtures DEV deixou de produzir metas
+        // (F5-10 P6) e observações (F5-11 P5, barreira D13) — o texto anuncia
+        // somente o que a ação ainda substitui.
+        "As avaliações já existentes nesse ciclo serão substituídas por dados aleatórios de teste."
     );
 
     if (!confirmar) return;
@@ -274,8 +277,7 @@ function ColaboradoresPage({
       window.alert(
         `Dados de teste gerados com sucesso.\n\n` +
           `Colaboradores: ${resultado.colaboradores}\n` +
-          `Avaliações: ${resultado.avaliacoes}\n` +
-          `Observações: ${resultado.observacoes}`
+          `Avaliações: ${resultado.avaliacoes}`
       );
       window.location.reload();
     } catch (error) {

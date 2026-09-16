@@ -356,7 +356,10 @@ function probeObservacaoSoberana(
 
   const estado = estadoDominioObservacao({
     cicloStatus: recurso.cicloStatus ?? "",
-    colaboradorStatus: recurso.colaboradorStatus ?? "",
+    // F5-11 P5: o loader entrega o vocabulário SOBERANO (`active|leave|inactive`);
+    // a conversão para o vocabulário do probe é feita AQUI, pelo normalizador
+    // canônico — valor ausente/desconhecido ⇒ "" ⇒ o probe nega (fail-closed).
+    colaboradorStatus: statusColaboradorDoSoberano(recurso.colaboradorStatus),
   });
 
   const autorDaObservacao = identificadorSoberano(recurso.authorCollaboratorId);
@@ -392,6 +395,15 @@ const STATUS_SOBERANO_PARA_PROBE: Readonly<Record<string, string>> = {
   active: "ATIVO",
   leave: "LICENCA",
   inactive: "DESLIGADO",
+  // IDEMPOTÊNCIA (F5-11 P4/P5): o vocabulário do PROBE também é aceito, porque
+  // a fronteira pode ser alimentada tanto pela LINHA soberana
+  // (`collaborator_status_periods` — `active`/`leave`/`inactive`) quanto por um
+  // contexto que já fale o vocabulário do probe (`ATIVO`/`LICENCA`/`DESLIGADO`).
+  // A normalização é, portanto, um ponto FIXO dos dois vocabulários; valor
+  // ausente/desconhecido continua devolvendo `""` (NÃO resolvido ⇒ DENY).
+  ativo: "ATIVO",
+  licenca: "LICENCA",
+  desligado: "DESLIGADO",
 };
 
 function statusColaboradorDoSoberano(valor: unknown): string {
@@ -700,6 +712,9 @@ export async function avaliarOperacaoAutorizacao(
     // de aprovação EXCLUSIVAMENTE pelos ids congelados daqui (nunca de
     // estrutura viva).
     ...(resourceContext.meta ? { metaDoAlvo: resourceContext.meta } : {}),
+    // F5-11 P5 (§8 linha 3; D5): bloco soberano da OBSERVAÇÃO — o provider passa
+    // a conhecer o AUTOR pela própria LINHA (nunca de estrutura viva).
+    ...(resourceContext.observacao ? { observacaoDoAlvo: resourceContext.observacao } : {}),
     ...(deps.assigned ? { assigned: deps.assigned } : {}),
     // ASSIGNED resolvido POR OPERAÇÃO (F5-06): tem precedência sobre um valor
     // estático injetado, porque reflete o ator/ciclo/alvo reais desta decisão.

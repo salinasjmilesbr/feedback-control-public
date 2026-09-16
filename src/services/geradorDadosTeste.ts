@@ -4,14 +4,9 @@ import { getColaboradores } from "./colaboradorStorage";
 import type { CicloAvaliacao } from "../types/CicloAvaliacao";
 import type { Colaborador } from "../types/Colaborador";
 import type { Feedback } from "../types/Feedback";
-import type {
-  Observacao,
-  TipoObservacao,
-} from "../types/Observacao";
 import { getCiclosAvaliacao } from "./cicloAvaliacaoStorage";
 
 const FEEDBACKS_KEY = "feedback-control-feedbacks";
-const OBSERVACOES_KEY = "feedback-control-observacoes";
 
 const frasesCompetencia = {
   alta: [
@@ -49,27 +44,6 @@ const feedbacksFinais = {
   ],
 };
 
-const observacoesPorTipo: Record<TipoObservacao, string[]> = {
-  POSITIVA: [
-    "Demonstrou boa colaboração com a equipe em uma entrega de alta prioridade.",
-    "Teve iniciativa para antecipar um risco e propor uma solução antes do prazo.",
-    "Apresentou evolução perceptível na qualidade das entregas durante o ciclo.",
-    "Contribuiu de forma relevante para o resultado de uma atividade transversal.",
-    "Recebeu reconhecimento pela disponibilidade e apoio aos colegas.",
-  ],
-  NEUTRA: [
-    "Foi alinhada uma oportunidade de melhorar a priorização das atividades da semana.",
-    "Foi discutida a necessidade de manter maior previsibilidade na comunicação das entregas.",
-    "Foi registrado um ponto de acompanhamento sobre organização e planejamento.",
-    "Houve alinhamento sobre expectativas e próximos passos para uma atividade em andamento.",
-  ],
-  NEGATIVA: [
-    "Uma entrega precisou de retrabalho e foi combinado um plano para evitar recorrência.",
-    "Houve atraso em uma atividade relevante e foram alinhadas ações de prevenção.",
-    "Foi identificado um ponto de atenção na comunicação com as áreas envolvidas.",
-  ],
-};
-
 function lerArray<T>(chave: string): T[] {
   const valor = localStorage.getItem(chave);
   if (!valor) return [];
@@ -87,10 +61,6 @@ function sortear<T>(itens: readonly T[]): T {
 
 function aleatorio(min: number, max: number) {
   return min + Math.random() * (max - min);
-}
-
-function inteiro(min: number, max: number) {
-  return Math.floor(aleatorio(min, max + 1));
 }
 
 function limitar(valor: number, min: number, max: number) {
@@ -247,65 +217,8 @@ function gerarFeedback(
   };
 }
 
-function sortearTipoObservacao(base: number): TipoObservacao {
-  const chance = Math.random();
-
-  if (base >= 4) {
-    if (chance < 0.65) return "POSITIVA";
-    if (chance < 0.92) return "NEUTRA";
-    return "NEGATIVA";
-  }
-
-  if (base < 3) {
-    if (chance < 0.25) return "POSITIVA";
-    if (chance < 0.62) return "NEUTRA";
-    return "NEGATIVA";
-  }
-
-  if (chance < 0.48) return "POSITIVA";
-  if (chance < 0.82) return "NEUTRA";
-  return "NEGATIVA";
-}
-
-function gerarObservacoes(
-  colaborador: Colaborador,
-  ciclo: CicloAvaliacao,
-  gerente: Colaborador,
-  notaBase: number
-): Observacao[] {
-  return Array.from({ length: inteiro(2, 4) }, () => {
-    const tipo = sortearTipoObservacao(notaBase);
-    const agora = dataAleatoriaCiclo(ciclo);
-
-    return {
-      id: crypto.randomUUID(),
-      colaboradorMatricula: colaborador.matricula,
-      tipo,
-      texto: sortear(observacoesPorTipo[tipo]),
-      comunicado: Math.random() < 0.68,
-      ano: ciclo.ano,
-      ciclo: ciclo.ciclo,
-      autorMatricula: gerente.matricula,
-      autorNome: gerente.nome,
-      dataCriacao: agora,
-      dataUltimaAtualizacao: agora,
-      excluida: false,
-      historico: [
-        {
-          id: crypto.randomUUID(),
-          acao: "CRIACAO",
-          data: agora,
-          autorMatricula: gerente.matricula,
-          autorNome: gerente.nome,
-        },
-      ],
-    };
-  });
-}
-
 export interface ResultadoGeracaoDadosTeste {
   avaliacoes: number;
-  observacoes: number;
   colaboradores: number;
 }
 
@@ -351,43 +264,19 @@ export function gerarDadosTesteDoCiclo(
       )
   );
 
-  const observacoesExistentes = lerArray<Observacao>(
-    OBSERVACOES_KEY
-  ).filter(
-    (observacao) =>
-      !(
-        observacao.ano === ciclo.ano &&
-        observacao.ciclo === ciclo.ciclo
-      )
-  );
-
   const feedbacksNovos = analistas.map((colaborador) =>
     gerarFeedback(colaborador, ciclo, todos)
   );
 
-  const feedbackPorMatricula = new Map(
-    feedbacksNovos.map((feedback) => [
-      feedback.colaboradorId,
-      feedback.notaMedia,
-    ])
-  );
-
-  const observacoesNovas = analistas.flatMap((colaborador) =>
-    gerarObservacoes(
-      colaborador,
-      ciclo,
-      usuarioAtual,
-      feedbackPorMatricula.get(colaborador.matricula) ?? 3
-    )
-  );
+  // F5-11 P5 (Issue #250): a semente DEV de observações foi REMOVIDA — o acervo
+  // local está sob barreira D13 (escrita proibida) e a produção de fixtures não
+  // tem ator/JWT para gravar pela via soberana. O ator permanece na assinatura
+  // por compatibilidade de chamada e NÃO decide nada aqui.
+  void usuarioAtual;
 
   localStorage.setItem(
     FEEDBACKS_KEY,
     JSON.stringify([...feedbacksExistentes, ...feedbacksNovos])
-  );
-  localStorage.setItem(
-    OBSERVACOES_KEY,
-    JSON.stringify([...observacoesExistentes, ...observacoesNovas])
   );
 
   return {
@@ -395,7 +284,9 @@ export function gerarDadosTesteDoCiclo(
     // F5-10 P6 (Issue #220): o domínio de metas é SOBERANO (Edge/RPC + RLS) e
     // este gerador de fixtures DEV não produz mais metas nem toca o registro
     // local legado — por isso o campo `metas` saiu da forma pública.
-    observacoes: observacoesNovas.length,
+    // F5-11 P5 (Issue #250): idem para OBSERVAÇÕES — o acervo local está sob
+    // barreira D13 e a semente DEV não produz mais observações, por isso o campo
+    // `observacoes` saiu da forma pública.
     colaboradores: analistas.length,
   };
 }

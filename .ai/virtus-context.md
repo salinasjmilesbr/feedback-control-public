@@ -39,10 +39,12 @@
   **F5-09 P9** (validação integrada; matriz em
   `docs/F5-09-p9-matriz-integrada.md`). O armazenamento local legado
   (`cicloAvaliacaoStorage`/`cicloEquipeService`) permanece **apenas** em
-  consumidores ainda não migrados (painel/relatórios). **Observações (F5-11):** as fases **P1–P3 estão
-  integradas em `main`** e a **P4 (Edge/cliente) está implementada** na branch
-  `feat/f5-11-p4-edge-observacoes`, com **PR e gates finais pendentes** (`GATES PENDENTES
-  (orquestrador)`); o estado consolidado de metas (F5-10) e observações é o de `.ai/handoff.md` §3.
+  consumidores ainda não migrados (painel/relatórios). **Observações (F5-11):** as fases **P1–P4 estão
+  integradas em `main`** (o squash da P4 é `8e88e375`) e a **P5 (cutover soberano da UI, Issue #250)
+  está implementada** na branch `feat/f5-11-p5-cutover-observacoes`, com **PR e gates finais pendentes**
+  (`GATES PENDENTES (orquestrador)`); o **fluxo SELF do avaliado ficou fail-closed** e a leitura SELF
+  soberana (concessão mínima de `observation.read`) foi **adiada para a fase corretiva P5.1**; o estado
+  consolidado de metas (F5-10) e observações é o de `.ai/handoff.md` §3.
 - CI (`.github/workflows/ci.yml`): `npm test`, `npm run build`, `npm run lint`,
   `git diff --check` e validação Supabase local (RLS/policies) quando aplicável.
 
@@ -69,9 +71,11 @@ não existe contrato sem documento fechado correspondente.
   catálogos soberanos). F5-09 (ciclos soberanos) tem **desenho técnico fechado e
   integrado** (`docs/F5-09-desenho-tecnico.md`, D1–D28, fases P1–P9; ratificações
   em `docs/F5-09-duvidas.md`) com **P1–P8 implementadas e integradas em `main`**
-  e a **P9 (validação integrada) em andamento**; as **observações (F5-11)** têm **P1–P3 integradas em
-  `main`** e a **P4 (Edge/cliente) implementada** na branch `feat/f5-11-p4-edge-observacoes`, com PR e
-  gates finais pendentes (`.ai/handoff.md` §3).
+  e a **P9 (validação integrada) em andamento**; as **observações (F5-11)** têm **P1–P4 integradas em
+  `main`** (squash da P4 = `8e88e375`) e a **P5 (cutover soberano da UI, Issue #250) implementada** na
+  branch `feat/f5-11-p5-cutover-observacoes`, com PR e gates finais pendentes (`.ai/handoff.md` §3);
+  o **fluxo SELF do avaliado ficou fail-closed** e a leitura SELF soberana (concessão mínima de
+  `observation.read` ao avaliado) foi **adiada para a fase corretiva P5.1**.
   As atividades seguintes da fase seguem o roadmap do GitHub.
 - **F6+** — hardening geral e trabalhos futuros (fora de escopo das fases
   anteriores).
