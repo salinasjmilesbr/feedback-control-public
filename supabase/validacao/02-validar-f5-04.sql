@@ -500,6 +500,84 @@ end $$;
 reset role;
 
 -- ============================================================================
+-- 7.1) F5-11 P5.2 — a autoridade administrativa é a role `admin` NOMINAL, não
+--      "qualquer role de sistema" (D16/Q3). A P5.1 passou a provisionar
+--      `observacoes_avaliado` (is_system = true) a toda membership elegível:
+--      sem o discriminante nominal, todo avaliado elegível se tornaria
+--      ADMINISTRADOR e poderia conceder/revogar roles (escalada de privilégio).
+--      A prova roda em SUBTRANSAÇÃO com rollback por sentinela: nada persiste.
+-- ============================================================================
+do $$
+declare
+  v_org          uuid := 'd5a00000-0000-0000-0000-0000000000a1';
+  v_ator         uuid := 'd5b00000-0000-0000-0000-0000000000a2';  -- USER_A (nao-admin)
+  v_membership   uuid := 'd5d00000-0000-0000-0000-0000000000a2';
+  v_admin_role   uuid;
+  v_dominio_role uuid;
+begin
+  select r.id into v_admin_role
+    from public.access_roles r
+   where r.is_system = true
+     and r.status = 'active'
+     and r.name = 'admin';
+  if v_admin_role is null then
+    raise exception '[FAIL] role de sistema `admin` ausente do catalogo';
+  end if;
+
+  -- Qualquer role de sistema ATIVA que NAO seja `admin` (role de dominio).
+  select (array_agg(r.id order by r.name))[1] into v_dominio_role
+    from public.access_roles r
+   where r.is_system = true
+     and r.status = 'active'
+     and r.name <> 'admin';
+
+  -- Controle: USER_A nao e administrador no estado atual da fixture.
+  if public.usuario_eh_administrador(v_ator, v_org) then
+    raise exception '[FAIL] ator nao-admin reconhecido como administrador (controle inicial)';
+  end if;
+  raise notice '[PASS] autoridade administrativa: ator sem a role `admin` NAO administra (D16/Q3)';
+
+  if v_dominio_role is null then
+    raise notice '[NAO APLICAVEL] nenhum role de sistema nao-admin no catalogo para a prova negativa';
+  else
+    insert into public.membership_access_role_assignments
+      (membership_id, organization_id, access_role_id, status, origin, created_by)
+    values (v_membership, v_org, v_dominio_role, 'active', 'system', null)
+    on conflict (membership_id, access_role_id) do update
+      set status = 'active',
+          updated_at = now(),
+          version = public.membership_access_role_assignments.version + 1;
+
+    if public.usuario_eh_administrador(v_ator, v_org) then
+      raise exception '[FAIL] detentor de role de SISTEMA nao-admin reconhecido como administrador (escalada F5-11 P5.1)';
+    end if;
+    raise notice '[PASS] autoridade administrativa discriminada pela role `admin`: role de sistema nao-admin NAO administra';
+  end if;
+
+  -- Rollback de sentinela: a prova NAO deixa atribuicao nem trilha.
+  raise exception 'ROLLBACK_SENTINELA_F5_04_ADMIN';
+exception
+  when others then
+    if sqlerrm <> 'ROLLBACK_SENTINELA_F5_04_ADMIN' then raise; end if;
+end $$;
+
+do $$
+declare v_n int;
+begin
+  select count(*) into v_n
+    from public.membership_access_role_assignments a
+    join public.access_roles r on r.id = a.access_role_id
+   where a.membership_id = 'd5d00000-0000-0000-0000-0000000000a2'
+     and a.status = 'active'
+     and r.is_system = true
+     and r.name <> 'admin';
+  if v_n <> 0 then
+    raise exception '[FAIL] prova da autoridade administrativa deixou residuo (% atribuicao(oes) ativa(s))', v_n;
+  end if;
+  raise notice '[PASS] prova da autoridade administrativa sem residuo (subtransacao revertida)';
+end $$;
+
+-- ============================================================================
 -- 8) Limpeza do cenário sintético (catálogo de sistema da migration intacto)
 -- ============================================================================
 
