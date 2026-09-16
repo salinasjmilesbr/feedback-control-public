@@ -34,15 +34,66 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
-### 3.23 F5-11 — Observações soberanas e histórico auditável — P0 FECHADO · P1 EM FECHAMENTO
+### 3.23 F5-11 — Observações soberanas e histórico auditável — P0 FECHADO · P1 INTEGRADA · P1.1 EM FECHAMENTO
 
 - **Atividade-mãe:** **F5-11** — Issue **#238**. **P0** (desenho) entregue na branch
   `docs/f5-11-observacoes-soberanas-desenho`, base `main` = `5889decb81d4dc3feca15ca15d37f164e2f614ea`;
   PR **#239**; **integrado** em `main` como `6d527cc418f20e3fb60f0d25ad23f1013dcb17b4`.
-  **A #238 permanece aberta** até a P6.
+  A **P1** (Issue **#240**) foi **integrada** em `main` como
+  `0fe76193a408c857cc006707c28cb32d8c1d03c2`. **A #238 permanece aberta** até a P6.
+- **P1.1 — issue que a governa:** **Issue #242** (`F5-11/P1.1 — Correção do finding Codex`), mãe
+  **#238**. Branch: **`fix/f5-11-p1-1-coerencia-identidade`**, base `0fe76193a408c857cc006707c28cb32d8c1d03c2`.
+- **P1.1 — o que corrigiu (finding MEDIUM do Codex na P1):** as FKs provavam perfil existente e
+  membership no tenant, mas **não** que a membership é do **perfil** informado ⇒ numa organização com
+  perfil A→membership A e perfil B→membership B, uma escrita técnica podia gravar
+  `author_user_profile_id = A` com `author_membership_id = B`. **Correção estrutural ADITIVA**
+  (migration `20260930000000_f5_11_p1_1_coerencia_identidade_observacoes.sql`; a migration da P1
+  **não** é editada retroativamente), na doutrina do precedente `20260922000000_f5_10_p1_goals_schema.sql:355-419`:
+  **2 funções `SECURITY INVOKER`** (`search_path = public`) + **2 gatilhos `BEFORE ROW`** cobrindo os
+  **4 pares** (`author_*`, `comunicado_por_*`, `excluida_por_*` na linha; `actor_*` na trilha) e a
+  coerência de **`author_collaborator_id`** com o **vínculo ATIVO** da membership. **Por que trigger e
+  não FK:** exigiria chave candidata **nova** em `user_organization_memberships (id, user_profile_id)`
+  (só possui `(id, organization_id)`) e em `membership_collaborator_links` (só possui
+  `unique (membership_id)`) — criar chave nova seria alterar **contrato fechado** de outra fase.
+  **Classes de erro preservadas:** ausência → 23502/23514; inexistente **ou cross-tenant** → 23503
+  (todo lookup é filtrado por `organization_id`); existente **incoerente** → **P0001**.
+- **P1.1 — `author_collaborator_id` (regra determinada, não inventada):** o modelo canônico é
+  **`public.resolver_collaborador_vinculado(profile, org)`** (F5-02, hardening `20260909000000`), que exige
+  **cumulativamente** perfil **ATIVO** (`user_profiles.status = 'active'`), membership **ATIVA**
+  (`user_organization_memberships.status = 'active'`) e vínculo **ATIVO**
+  (`membership_collaborator_links.status = 'active'`; vínculo `disabled` é histórico e **não** resolve).
+  O gatilho impõe **exatamente** essa paridade **integral**; valor **nulo** segue legítimo (ator sem
+  vínculo).
+- **P1.1 — fixtures/validadores:** **`34` foi enriquecido** com os 2 vínculos membership↔colaborador
+  (sem eles as observações da própria fixture seriam incoerentes com o D3) — por isso a evidência de
+  **34/35 foi reexecutada e segue verde** (`34` 1 PASS, `35` 11 PASS); **`36-cenario-f5-11-p1-1.sql`**
+  cria **UMA** organização com **5 identidades na MESMA organização** (A e B com perfil e membership
+  ativos e vínculo ativo; C com vínculo **`disabled`**; **D com membership `disabled` e vínculo ATIVO**
+  — a metade ausente do *finding*; **E com perfil `disabled`**) e **`37-validar-f5-11-p1-1.sql`**
+  (blocos A–H, **8 PASS**) prova: paridade **integral** com o resolvedor (B, inclusive B4/B5),
+  **negativos intra-tenant dos 4 pares** (C), negativos de `author_collaborator_id` incluindo vínculo,
+  **membership** e **perfil** `disabled` (D4/D5/D6), negativos no **UPDATE** com verificação da
+  **mensagem** do mecanismo (E), **positivos** (F), separação de classes de erro + D4/D6/D9 intactos (G)
+  e higiene (H).
+- **P1.1 — defeitos encontrados na própria execução (registrados):** (1) `text[] || '<literal com
+  vírgula>'` é resolvido como concatenação de **arrays** (22P02) — corrigido com cast `::text` nas 10
+  ocorrências da P1.1; (2) o resolvedor chama-se **`resolver_collaborador_vinculado`** (a **tabela** usa
+  "collaborator", a **função** usa "colaborador") — grafia fixada por **igualdade de md5** com o banco
+  (`a7539481ed2bbe7e8003cd2febef8d18`); (3) **não corrigido por estar fora do escopo**: o padrão (1)
+  é **pré-existente** em `20260922000000:68,76,794`, `20260929000000:89,97` e `02-validar-f5-09.sql:1257-1266`
+  — nesses pontos o guard **continua fail-closed**, mas abortaria com `22P02` em vez da mensagem
+  diagnóstica. Registrado em `docs/F5-11-desenho-tecnico.md` §19.7.
+- **P1.1 — correção PRÉ-MERGE (auditoria Codex do PR #243: REPROVADO com 1 finding MEDIUM):** a
+  verificação de `author_collaborator_id` exigia só o **vínculo** ativo e **aceitava** `membership
+  disabled + link active`, combinação que o resolvedor soberano **não** reconhece. Corrigida **antes do
+  merge**, na **mesma** migration (ainda não versionada no PR aberto ⇒ editada no lugar, sem migration
+  nova), repetindo o **join integral do resolvedor**; a fixture `36` ganhou **D** e **E** e o validador
+  `37` ganhou **B4/B5**, **D4/D5/D6**. Registrado em `docs/F5-11-desenho-tecnico.md` §19.8. **Nenhum**
+  outro item do escopo foi alterado; a dívida pré-existente `22P02` **não** foi tocada.
 - **P1 — issue que a governa:** **Issue #240** (`F5-11/P1 — Schema soberano, audit trail e
   substituição dos guards invertidos`), **Issue-mãe #238**. O PR da P1 fecha **#240** (`Closes #240`)
-  e **não** fecha a #238. Branch: **`feat/f5-11-p1-observacoes-schema`**, base `6d527cc…`.
+  e **não** fecha a #238. Branch: **`feat/f5-11-p1-observacoes-schema`**, base `6d527cc…`
+  (**já integrada** em `main` como `0fe76193a408c857cc006707c28cb32d8c1d03c2`).
 - **Exceção de processo registrada pela Issue #240:** a P1 nasceu na esteira da #238 e a
   **regularização de rastreabilidade** (issue própria + PR próprio) é o objeto explícito da #240.
   Os **artefatos SQL** citam internamente `F5-11 P1 (Issue #238)` porque já estavam **validados byte
@@ -81,6 +132,24 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   concorrências reais (A=0 / B=0)**; `34-cenario` 1 PASS; **`35-validar` 11 PASS**; regressões
   F4-08/F5-04/F5-08/F5-09/F5-10/F5-06/F5-07 verdes; `git diff --check` limpo. Repetir `db reset` ou a
   bateria completa **apenas por cautela é proibido**.
+- **Evidências da P1.1 (executadas; não repetir):** gate **focado** = `db reset` + **7 etapas
+  verdes** — `01/02/03` (guards de schema/ACL do F4-08, os mais sensíveis a objeto novo: 57 PASS e
+  8 PASS), `34/35` (P1 com a fixture enriquecida: 1 PASS e 11 PASS) e `36/37` (P1.1: 1 PASS e
+  **8 PASS**). A bateria de **47 etapas NÃO foi repetida**: nenhum validador existente foi editado e
+  os nomes das funções novas **não** casam com nenhuma lista fechada de `15`/`30`/`35` (sem
+  `observa`/`meta`/`goal`), então a evidência anterior segue válida por construção; o CI do PR roda a
+  bateria completa no ambiente autoritativo.
+- **Evidências da correção pré-merge do PR #243 (executadas; não repetir):** gate **foco da correção**
+  = `db reset` + **4 etapas verdes** — `34` 1 PASS, `35` 11 PASS, `36` 1 PASS e `37` **8 PASS** (agora
+  com `A1b`, `B4/B5` e `D4/D5/D6`). As etapas `01/02/03` (F4-08) **não** foram repetidas: a correção
+  altera apenas o **corpo** de uma função `SECURITY INVOKER` já existente — nenhum objeto, grant,
+  policy, RLS ou **forma** de gatilho mudou (o próprio `37` reprova se a forma dos gatilhos mudar).
+- **Gates de código desta correção (executados):** `git diff HEAD --stat -- src/` **vazio** (nada de
+  TS/JS foi tocado), `git diff --check` exit 0, `npm run build` exit 0 e `npm run lint` exit 0.
+  `npm test` registra **2 falhas PRÉ-EXISTENTES e idênticas** às da rodada da P1
+  (`AcompanhamentoMetasPage` e `MinhasMetasPage`), ambas asserts de **fonte multilinha** que quebram
+  no **Windows** por **CRLF** (`src/` intocado): **2075 testes passam** e o CI (ubuntu) é o ambiente
+  autoritativo.
 - **D15 continua BLOQUEANDO a P3 (estado inalterado):** `observation.*` **sem concessão alguma**;
   **`admin` continua SEM `observation.*`** (guarda `02-validar-f4-01.sql:563-578` **preservada**, e o
   validador da P1 **falha** se o bundle deixar de ter 9 ou se qualquer role de sistema receber
@@ -109,11 +178,11 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 - **Gap documental pré-existente (não corrigido, fora do escopo):** a migration
   `20260928000000_f5_10_p5_2_leitura_soberana_metas.sql` (F5-10 P5.2) **não** tem linha no
   `supabase/migrations/README.md`.
-- **Próximos passos:** concluir a P1 (gates de código + commit/push + PR que **fecha #240**) → depois
-  **P2** (RPCs `observacao_*`) → **P3** (autorização + concessões + RLS, **bloqueada até existir o
-  artefato de D15**) → **P4** (Edge + cliente) → **P5** (cutover + barreira contra persistência
-  local) → **P6** (certificação). Contratos da F5-09 (D1–D28) e da F5-10 (D1–D25) **não reabrem**;
-  catálogo permanece com **31** capabilities.
+- **Próximos passos:** concluir a **P1.1** (commit/push + PR que **fecha #242**; o orquestrador conduz
+  PR → auditoria GPT → CI → decisão Codex → squash) → depois **P2** (RPCs `observacao_*`) → **P3**
+  (autorização + concessões + RLS, **bloqueada até existir o artefato de D15**) → **P4** (Edge +
+  cliente) → **P5** (cutover + barreira contra persistência local) → **P6** (certificação). Contratos
+  da F5-09 (D1–D28) e da F5-10 (D1–D25) **não reabrem**; catálogo permanece com **31** capabilities.
 - **Lição DEV-03 desta execução (repetição excessiva de gates):** a P1 consumiu **3 execuções
   completas** da bateria SQL (≈47 etapas cada) e várias execuções focadas, **a maior parte por
   defeitos do harness local, não do produto**. Causas-raiz identificadas: (a) o runner PowerShell

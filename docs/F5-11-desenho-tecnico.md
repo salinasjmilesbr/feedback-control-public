@@ -1343,3 +1343,130 @@ validação. O §8 foi **corrigido** e a conclusão sobre D15 foi **reforçada**
 > **Efeito na P1:** nenhum. A P1 **não** cria role, bundle nem perfil — o validador da P1 **falha**
 > se o conjunto nomeado de roles de sistema deixar de ser exatamente
 > `admin` + `metas_aprovador` + `metas_dono`.
+
+---
+
+## 19. P1.1 — coerência estrutural perfil↔membership (IMPLEMENTADA · Issue #242)
+
+> **Rastreabilidade:** entregue sob a **Issue #242** (`F5-11/P1.1 — Correção do finding Codex`),
+> mãe **#238**. **Não altera D1–D16**, **não resolve D15** e **não antecipa P2/P3**.
+
+### 19.1 Finding MEDIUM do Codex (auditoria independente da P1)
+
+As FKs da P1 provam, **separadamente**, que o perfil existe
+(`fk_evaluation_observations_author_profile` → `user_profiles`) e que a membership existe **no
+tenant** (`fk_evaluation_observations_author_membership` → `user_organization_memberships
+(id, organization_id)`). **Nenhuma** delas prova que a membership informada pertence ao **perfil**
+informado. Numa organização com perfil A → membership A e perfil B → membership B, uma escrita
+técnica podia persistir **`author_user_profile_id = A` com `author_membership_id = B`** — autoria
+incoerente, sem que constraint alguma reclamasse. O mesmo valia para `comunicado_por_*`,
+`excluida_por_*` e `actor_*` da trilha.
+
+### 19.2 Causa-raiz e mecanismo adotado
+
+**Causa-raiz:** o par (perfil, membership) é uma relação de **identidade**, não de tenant. As FKs
+cobrem existência e tenant; a coerência identitária não tinha garantia estrutural — e **não podia**
+ser expressa por FK composta, porque exigiria uma **chave candidata nova** em
+`user_organization_memberships (id, user_profile_id)` (a tabela só possui `(id, organization_id)`)
+e, para o vínculo, em `membership_collaborator_links` (só possui `unique (membership_id)`); criar
+chave nova ali seria **alterar contrato fechado de outra fase** (F4-01/F4-02).
+
+**Mecanismo (migration corretiva ADITIVA `20260930000000_f5_11_p1_1_coerencia_identidade_observacoes.sql`;
+a migration da P1 **não** é editada retroativamente):** duas funções `SECURITY INVOKER` com
+`search_path = public` + dois gatilhos `BEFORE ROW` fail-closed, cobrindo os **quatro pares** —
+`author_*`, `comunicado_por_*`, `excluida_por_*` (linha, `BEFORE INSERT OR UPDATE OF …`) e `actor_*`
+(trilha, `BEFORE INSERT`).
+
+**Separação de classes de erro (preservada):** valor **ausente** → `NOT NULL`/CHECK do contrato
+(23502/23514); referência **inexistente ou cross-tenant** → FK composta (23503, garantido porque
+**todo** lookup do gatilho é filtrado por `organization_id`); referência existente **incoerente** →
+`P0001`. O gatilho só julga **coerência entre valores efetivamente informados**.
+
+### 19.3 `author_collaborator_id` — regra determinada pelo modelo, não inventada
+
+O D3 define o campo como **derivado do vínculo** e nulo quando o ator não tem vínculo. A derivação
+canônica é **`public.resolver_collaborador_vinculado(profile, org)`** (F5-02, endurecido em
+`20260909000000_f5_02_hardening_resolver_collaborador.sql`), que exige **cumulativamente** as **três**
+condições: `user_profiles.status = 'active'`, `user_organization_memberships.status = 'active'` e
+`membership_collaborator_links.status = 'active'` (vínculo `disabled` é histórico e **não** resolve —
+Q6 = B). Portanto a coerência exigida é: **quando informado**, `author_collaborator_id` tem de ser o
+colaborador **reconhecido pelo resolvedor** para o perfil informado, na membership informada e no
+tenant da linha. É exatamente o que o gatilho impõe — **paridade INTEGRAL com o resolvedor** (o *mesmo*
+join, ancorado na membership informada), provada no validador (§19.5, bloco B, inclusive B4/B5) e
+exigida negativamente no bloco D (D4/D5). Nulo continua legítimo (ator sem vínculo): a completude da
+derivação é responsabilidade da operação soberana da P2, não deste invariante.
+
+### 19.4 Ajuste obrigatório na fixture da P1 (declarado)
+
+A fixture `34-cenario-f5-11-p1.sql` informava `author_collaborator_id` **sem** existir o
+`membership_collaborator_links` correspondente — ou seja, era ela própria incoerente com o D3. A
+P1.1 **acrescentou os dois vínculos ativos** (Alfa e Beta) e passou a exigi-los na consistência da
+fixture. Isso **afeta materialmente a evidência de 34/35**, que por isso foi **reexecutada** (e
+segue verde: `34` 1 PASS, `35` 11 PASS) — as demais 40 etapas da bateria **não** foram afetadas
+(nenhum outro validador toca as tabelas de observações e **nenhum validador existente foi
+editado**).
+
+### 19.5 Testes intra-tenant adicionados (o teste que faltava)
+
+`36-cenario-f5-11-p1-1.sql` (prefixo `fe`): **uma** organização com **cinco** identidades, cada uma
+com a **sua** membership **na mesma organização** e o **seu** colaborador vinculado — A e B com perfil
+e membership **ativos** e vínculo **ativo**; C com vínculo **`disabled`**; **D com membership
+`disabled` e vínculo ATIVO** (a metade ausente do *finding*); **E com perfil `disabled`** e membership
+e vínculo ativos. As três negativas cobrem a **matriz integral** das três condições do resolvedor.
+`37-validar-f5-11-p1-1.sql` (blocos A–H, **8 PASS**):
+
+| Bloco | Prova |
+|---|---|
+| A | preflight: fixture intra-tenant, mecanismo instalado (INVOKER + `search_path`), `tgtype` correto dos dois gatilhos, catálogo 31, `admin` 9 sem `observation.*`, D15 intacto, nenhuma RPC |
+| B | **paridade integral**: o resolvedor canônico resolve A→colaborador A e B→colaborador B e **não** resolve **nenhuma** das três negativas — C (vínculo `disabled`), D (membership `disabled` com vínculo ativo = o *finding*) e E (perfil `disabled`) — logo a regra do gatilho **é** a do resolvedor |
+| C | **negativos intra-tenant dos 4 pares**: autor, comunicado, exclusão e ator do evento recusam **perfil A + membership B** com **P0001** (e nenhuma tentativa persiste linha) |
+| D | **negativos de `author_collaborator_id`**: colaborador de outra membership (2 casos), vínculo **`disabled`**, **membership `disabled` com vínculo ATIVO (D4 — o *finding*)** e **perfil `disabled` (D5)** recusados com **P0001** e com verificação da **mensagem** (D4/D5); nenhuma tentativa persiste linha (D6) |
+| E | **negativos no UPDATE** (a linha é mutável): marcar comunicado, excluir e trocar o colaborador — com **verificação da mensagem**, provando que quem recusou foi o invariante de **coerência** e não o gatilho de **imutabilidade** do D4 |
+| F | **positivos**: A+A (+colaborador A), B+B (+colaborador B), `author_collaborator_id` **nulo**, evento com ator coerente e as transições legítimas de exclusão e revogação |
+| G | **classes de erro** (par incompleto → 23514; referência inexistente → 23503) e invariantes **D4**, **D6** e **D9** intactos |
+| H | higiene (nenhum resíduo de prova) |
+
+### 19.6 Fronteira e estado
+
+**Nenhuma** RPC `observacao_*`, nenhuma policy, nenhum grant, nenhuma capability nova, nenhum
+`SECURITY DEFINER`, nenhuma role/bundle/perfil, nenhuma alteração de Edge/UI/cliente e nenhuma
+migração de `localStorage`. **D15 continua BLOQUEANDO a P3** (`observation.*` sem concessão, `admin`
+com 9 e sem `observation.*`). **P2 e P3 não iniciadas.**
+
+### 19.7 Defeitos encontrados na própria execução (registrados, sem ampliar escopo)
+
+1. **Corrigido neste artefato:** `v_faltando := v_faltando || '<literal>'` com **vírgula** no literal
+   é resolvido pelo PostgreSQL como concatenação de **arrays** → `22P02` em vez do diagnóstico
+   pretendido. As 10 ocorrências da migration da P1.1 receberam cast explícito `::text`.
+2. **Corrigido neste artefato:** o resolvedor canônico chama-se
+   **`resolver_collaborador_vinculado`** (híbrido: a **tabela** usa "collaborator" e a **função** usa
+   "collaborador"), e não `resolver_collaborator_vinculado`. A grafia dos artefatos da P1.1 foi
+   fixada por **igualdade de hash** com o identificador do banco (`md5 = a7539481ed2bbe7e8003cd2febef8d18`).
+3. **Não corrigido (fora do escopo, apenas registrado):** o padrão do item 1 é **pré-existente** no
+   repositório, em ramos que só executam em caso de falha — `20260922000000_f5_10_p1_goals_schema.sql:68,76,794`,
+   `20260929000000_f5_11_p1_observations_schema.sql:89,97` e `02-validar-f5-09.sql:1257-1266`. Nesses
+   pontos o guard **continua fail-closed** (aborta), mas abortaria com `22P02` em vez da mensagem
+   diagnóstica pretendida. Editar retroativamente a migration da P1 contrariaria a doutrina de
+   migrations e invalidaria evidência verde; fica registrado para atividade própria.
+
+### 19.8 Correção pré-merge do PR #243 (auditoria Codex)
+
+A auditoria **Codex** do **PR #243** (**REPROVADO**, 1 *finding* **MEDIUM**, Issue #242) apontou que a
+verificação de `author_collaborator_id` exigia apenas `membership_collaborator_links.status = 'active'`
+e **não** `user_organization_memberships.status = 'active'`, divergindo de
+`resolver_collaborador_vinculado`: a combinação `membership disabled + link active` era **aceita**,
+embora o resolvedor soberano **não** reconheça esse colaborador (§19.3).
+
+**Correção mínima aplicada** — na **mesma** migration, que ainda **não está versionada** no PR aberto
+(por isso foi editada no lugar, sem migration corretiva nova): a consulta passou a repetir **o mesmo
+join do resolvedor** — perfil do ator **ATIVO** (`user_profiles.status = 'active'`), membership
+informada **ATIVA** (`user_organization_memberships.status = 'active'`) e vínculo **ATIVO**
+(`membership_collaborator_links.status = 'active'`) — ancorado na membership informada e no tenant da
+linha. Sem redesenho do mecanismo, sem alterar os **quatro pares** já aprovados e sem ampliar escopo.
+
+**Teste focado que faltava (obrigatório):** o bloco **D** do validador ganhou **D4** (membership
+`disabled` + vínculo `active` + colaborador correto do vínculo ⇒ **recusado** com **P0001** e com a
+**mensagem** do invariante de coerência, não a do D4/de FK) e **D5** (perfil `disabled`); **D6** prova
+que **nenhuma** das tentativas persistiu linha. O bloco **B** ganhou **B4/B5**, provando que o
+**resolvedor canônico também não resolve** D e E — a premissa dos negativos. A fixture `36` ganhou as
+identidades **D** e **E**, e o preflight (A1b) passou a exigir a presença das três negativas.

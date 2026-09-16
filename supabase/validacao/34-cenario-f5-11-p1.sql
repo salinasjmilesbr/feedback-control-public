@@ -101,6 +101,23 @@ insert into public.evaluation_cycles
    2037, 1, 'ATIVO', date '2037-01-01', date '2037-03-31', now(), null, 1);
 
 -- ----------------------------------------------------------------------------
+-- 4.1) Vinculo membership <-> colaborador (F4-02)
+-- ----------------------------------------------------------------------------
+-- Necessario desde a F5-11 P1.1 (Issue #242): `author_collaborator_id` e DERIVADO
+-- do vinculo e a coerencia estrutural passou a ser exigida no banco (paridade com
+-- `resolver_collaborator_vinculado`, que resolve membership ATIVA -> link
+-- `status = 'active'`). Sem estas duas linhas, as observacoes desta fixture
+-- informariam um colaborador que NAO e o vinculado da membership e passariam a
+-- ser corretamente recusadas.
+insert into public.membership_collaborator_links
+  (id, membership_id, organization_id, collaborator_id, status)
+values
+  ('fde00000-0000-0000-0000-000000000001', 'fdd00000-0000-0000-0000-000000000001',
+   'fda00000-0000-0000-0000-0000000000a1', 'fdb00000-0000-0000-0000-000000000001', 'active'),
+  ('fde00000-0000-0000-0000-000000000002', 'fdd00000-0000-0000-0000-000000000002',
+   'fda00000-0000-0000-0000-0000000000b1', 'fdb00000-0000-0000-0000-0000000000b1', 'active');
+
+-- ----------------------------------------------------------------------------
 -- 5) Observacoes (a LINHA) - 4 fatos, incluindo comunicado e exclusao logica
 -- ----------------------------------------------------------------------------
 -- obs 1: Alfa, colaborador 1, ciclo ATIVO, POSITIVA e COMUNICADA (fato com carimbo).
@@ -228,6 +245,7 @@ declare
   v_memb       int;
   v_colabs     int;
   v_ciclos     int;
+  v_links      int;
   v_obs        int;
   v_obs_alfa   int;
   v_obs_beta   int;
@@ -251,6 +269,9 @@ begin
    where id in ('fdd10000-0000-0000-0000-0000000000a1',
                 'fdd10000-0000-0000-0000-0000000000a2',
                 'fdd10000-0000-0000-0000-0000000000b1');
+  select count(*) into v_links from public.membership_collaborator_links
+   where id in ('fde00000-0000-0000-0000-000000000001',
+                'fde00000-0000-0000-0000-000000000002') and status = 'active';
   select count(*) into v_obs from public.evaluation_observations
    where organization_id in ('fda00000-0000-0000-0000-0000000000a1',
                              'fda00000-0000-0000-0000-0000000000b1');
@@ -271,17 +292,17 @@ begin
     join public.evaluation_cycles c on c.id = o.cycle_id
    where c.status = 'ENCERRADO';
 
-  if v_orgs <> 2 or v_memb <> 2 or v_colabs <> 3 or v_ciclos <> 3
+  if v_orgs <> 2 or v_memb <> 2 or v_colabs <> 3 or v_ciclos <> 3 or v_links <> 2
      or v_obs <> 4 or v_obs_alfa <> 3 or v_obs_beta <> 1
      or v_comunic <> 1 or v_excluidas <> 1 or v_eventos <> 6
      or v_criadas <> 4 or v_encerradas <> 1 then
     raise exception
-      '[FAIL] cenario F5-11 P1 incompleto (orgs=%, memberships=%, colabs=%, ciclos=%, obs=%, obs_alfa=%, obs_beta=%, comunicadas=%, excluidas=%, eventos=%, criadas=%, em_ciclo_encerrado=%)',
-      v_orgs, v_memb, v_colabs, v_ciclos, v_obs, v_obs_alfa, v_obs_beta,
+      '[FAIL] cenario F5-11 P1 incompleto (orgs=%, memberships=%, colabs=%, ciclos=%, links=%, obs=%, obs_alfa=%, obs_beta=%, comunicadas=%, excluidas=%, eventos=%, criadas=%, em_ciclo_encerrado=%)',
+      v_orgs, v_memb, v_colabs, v_ciclos, v_links, v_obs, v_obs_alfa, v_obs_beta,
       v_comunic, v_excluidas, v_eventos, v_criadas, v_encerradas;
   end if;
 
-  raise notice '[PASS] cenario F5-11 P1: 2 orgs, 2 memberships ativas, 3 colaboradores soberanos, 3 ciclos (Alfa ATIVO, Alfa ENCERRADO, Beta ATIVO), 4 observacoes (1 comunicada, 1 excluida logicamente, 1 em ciclo encerrado), 6 eventos na trilha (4 CRIADA)';
+  raise notice '[PASS] cenario F5-11 P1: 2 orgs, 2 memberships ativas, 3 colaboradores soberanos, 3 ciclos (Alfa ATIVO, Alfa ENCERRADO, Beta ATIVO), 2 vinculos membership<->colaborador, 4 observacoes (1 comunicada, 1 excluida logicamente, 1 em ciclo encerrado), 6 eventos na trilha (4 CRIADA)';
 end $$;
 
 \endif

@@ -477,6 +477,23 @@ jobs:
             < supabase/validacao/35-validar-f5-11-p1.sql
 
       # ----------------------------------------------------------------------
+      # F5-11 P1.1 (Issue #242): correção do finding MEDIUM do Codex — coerência
+      # ESTRUTURAL perfil↔membership (e author_collaborator_id) NA MESMA
+      # organização. Fixture própria (prefixo `fe`), sem tocar em 34/35.
+      # ----------------------------------------------------------------------
+      - name: "Seed F5-11 P1.1 scenario (coerencia perfil<->membership intra-tenant)"
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/36-cenario-f5-11-p1-1.sql
+
+      - name: "Run F5-11 P1.1 validation (negative/positive dos 4 pares perfil<->membership + author_collaborator_id)"
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/37-validar-f5-11-p1-1.sql
+
+      # ----------------------------------------------------------------------
       # Regressão F5-06/F5-07 (§23.4): cenários independentes, com prefixos de
       # UUID próprios (`d6`/`d7`), reaplicados antes de cada validação.
       # ----------------------------------------------------------------------
