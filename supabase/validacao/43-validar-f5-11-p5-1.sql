@@ -742,6 +742,148 @@ begin
   end if;
 
   -- ==========================================================================
+  -- J) F5-11 P5.4 — role automatica EXCLUSIVA (finding 1) + corrida (finding 2)
+  -- ==========================================================================
+  if v_role is not null and v_membership is not null then
+    declare
+      v_j_msg    text;
+      v_j_n      int;
+      v_j_hum    int;
+      v_j_assign int;
+      v_j_ev     int;
+      v_mem_col  uuid := 'f5c1d000-0000-0000-0000-0000000000a9';
+      v_prof_col uuid := 'f5c1c000-0000-0000-0000-0000000000a9';
+    begin
+      -- (a) GRANT humano da role automatica: bloqueado, fail-closed, sem efeito.
+      v_j_hum := (select count(*) from public.privilege_mutation_audit a where a.action in ('grant','revoke'));
+      v_j_assign := (select count(*) from public.membership_access_role_assignments a where a.access_role_id = v_role);
+      begin
+        perform public.conceder_acesso_role_rpc(v_membership, v_role, v_profile);
+        v_falhas := v_falhas || text 'J1/a: conceder_acesso_role_rpc ACEITOU a role automatica (deveria bloquear)';
+      exception when others then
+        v_j_msg := sqlerrm;
+        if position('AUTOMATICA' in v_j_msg) = 0 then
+          v_falhas := v_falhas || format('J1/a: bloqueio com mensagem inesperada (%s)', v_j_msg);
+        end if;
+      end;
+
+      -- (a) REVOKE humano da role automatica: bloqueado, fail-closed.
+      begin
+        perform public.revogar_acesso_role_rpc(v_membership, v_role, v_profile);
+        v_falhas := v_falhas || text 'J2/a: revogar_acesso_role_rpc ACEITOU a role automatica (deveria bloquear)';
+      exception when others then
+        v_j_msg := sqlerrm;
+        if position('AUTOMATICA' in v_j_msg) = 0 then
+          v_falhas := v_falhas || format('J2/a: bloqueio com mensagem inesperada (%s)', v_j_msg);
+        end if;
+      end;
+
+      -- (a) bloqueio NAO produziu efeito algum.
+      if (select count(*) from public.membership_access_role_assignments a where a.access_role_id = v_role) <> v_j_assign then
+        v_falhas := v_falhas || text 'J1/J2/a: o bloqueio alterou assignments';
+      end if;
+      if (select count(*) from public.privilege_mutation_audit a where a.action in ('grant','revoke')) <> v_j_hum then
+        v_falhas := v_falhas || text 'J1/J2/a: o bloqueio gravou trilha humana';
+      end if;
+      if not exists (
+        select 1 from public.membership_access_role_assignments a
+         where a.membership_id = v_membership and a.access_role_id = v_role
+           and a.status = 'active' and a.origin = 'system'
+      ) then
+        v_falhas := v_falhas || text 'J2/a: a assignment automatica foi afetada pelo bloqueio';
+      end if;
+
+      -- (c) COLISAO: membership inelegivel (sem vinculo) + assignment HUMANA
+      -- pre-existente => a automacao falha e NAO altera o historico humano.
+      -- A FK `fk_user_profiles_auth_users` exige a identidade em `auth.users`
+      -- ANTES do profile — mesmo padrao do cenario 42 (6.3), idempotente.
+      if not exists (select 1 from auth.users u where u.id = v_prof_col) then
+        insert into auth.users
+          (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+           raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+        values
+          (v_prof_col, '00000000-0000-0000-0000-000000000000', 'authenticated',
+           'authenticated', 'colisao.p54.f5-11-p5-1@example.invalid', 'x', now(),
+           '{}'::jsonb, '{}'::jsonb, now(), now());
+      end if;
+      insert into public.user_profiles (id, status)
+      values (v_prof_col, 'active')
+      on conflict (id) do nothing;
+      insert into public.user_organization_memberships (id, user_profile_id, organization_id, status)
+      values (v_mem_col, v_prof_col, v_org, 'active')
+      on conflict (id) do nothing;
+      insert into public.membership_access_role_assignments
+        (membership_id, organization_id, access_role_id, status, origin, created_by)
+      values (v_mem_col, v_org, v_role, 'active', 'human', v_profile)
+      on conflict (membership_id, access_role_id) do nothing;
+
+      if not exists (
+        select 1 from public.membership_access_role_assignments a
+         where a.membership_id = v_mem_col and a.access_role_id = v_role and a.origin = 'human'
+      ) then
+        v_falhas := v_falhas || text 'J3/c: fixture de colisao humana nao pode ser criada (premissa do teste)';
+      else
+        v_j_ev := (select count(*) from public.privilege_mutation_audit a
+                    where a.membership_id = v_mem_col and a.access_role_id = v_role);
+        begin
+          perform public.f5_11_p5_1_provisionar_observacoes_avaliado(v_mem_col);
+          v_falhas := v_falhas || text 'J3/c: a automacao NAO falhou diante de assignment HUMANA (colisao)';
+        exception when others then
+          v_j_msg := sqlerrm;
+          if position('colisao' in lower(v_j_msg)) = 0 then
+            v_falhas := v_falhas || format('J3/c: falha de colisao com mensagem inesperada (%s)', v_j_msg);
+          end if;
+        end;
+        if (select count(*) from public.privilege_mutation_audit a
+              where a.membership_id = v_mem_col and a.access_role_id = v_role) <> v_j_ev then
+          v_falhas := v_falhas || text 'J3/c: a colisao gerou evento na trilha';
+        end if;
+        select count(*) into v_j_n from public.membership_access_role_assignments a
+         where a.membership_id = v_mem_col and a.access_role_id = v_role
+           and a.origin = 'human' and a.created_by is not null and a.status = 'active';
+        if v_j_n <> 1 then
+          v_falhas := v_falhas || format('J3/c: historico HUMANO alterado pela automacao (%s linhas humanas intactas)', v_j_n);
+        end if;
+      end if;
+
+      -- (b) a automacao so altera origem system; chamadas repetidas em estado ja
+      -- provisionado sao idempotentes e NAO geram evento (equivalente determini-
+      -- stico do "perdedor da corrida nao emite evento").
+      v_j_ev := (select count(*) from public.privilege_mutation_audit a
+                  where a.membership_id = v_membership and a.access_role_id = v_role);
+      perform public.f5_11_p5_1_provisionar_observacoes_avaliado(v_membership);
+      perform public.f5_11_p5_1_provisionar_observacoes_avaliado(v_membership);
+      if (select count(*) from public.privilege_mutation_audit a
+            where a.membership_id = v_membership and a.access_role_id = v_role) <> v_j_ev then
+        v_falhas := v_falhas || text 'J5/d: chamadas repetidas em estado ja provisionado geraram evento (corrida/idempotencia)';
+      end if;
+      select count(*) into v_j_n from public.membership_access_role_assignments a
+       where a.membership_id = v_membership and a.access_role_id = v_role;
+      if v_j_n <> 1 then
+        v_falhas := v_falhas || format('J5/d: deveria existir EXATAMENTE 1 assignment do perfil SELF (tem %s)', v_j_n);
+      end if;
+      if not exists (
+        select 1 from public.membership_access_role_assignments a
+         where a.membership_id = v_membership and a.access_role_id = v_role
+           and a.origin = 'system' and a.created_by is null
+      ) then
+        v_falhas := v_falhas || text 'J5/d: a assignment automatica perdeu origem system/created_by NULL';
+      end if;
+
+      -- Higiene da fixture de colisao (ordem que respeita as FKs).
+      delete from public.privilege_mutation_audit
+       where membership_id = v_mem_col and access_role_id = v_role;
+      delete from public.membership_access_role_assignments
+       where membership_id = v_mem_col and access_role_id = v_role;
+      delete from public.user_organization_memberships where id = v_mem_col;
+      delete from public.user_profiles where id = v_prof_col;
+      -- Higiene COMPLETA: remove tambem a identidade criada para a prova de
+      -- colisao (depois do profile, respeitando a FK) — sem residuo.
+      delete from auth.users where id = v_prof_col;
+    end;
+  end if;
+
+  -- ==========================================================================
   -- H) RESULTADO + HIGIENE
   -- ==========================================================================
   if array_length(v_falhas, 1) > 0 then
