@@ -34,7 +34,10 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
-### 3.23 F5-11 — Observações soberanas e histórico auditável — P1/P1.1/P2/P3/P4 INTEGRADAS · P5 IMPLEMENTADA (PR E GATES FINAIS PENDENTES; SELF/read ADIADO PARA P5.1)
+### 3.23 F5-11 — Observações soberanas e histórico auditável — P1/P1.1/P2/P3/P4/P5/P5.1–P5.4 IMPLEMENTADAS · CERTIFICADA (Issue #254) · PR/MERGE PENDENTES
+
+- **FECHAMENTO/CERTIFICAÇÃO (Issue #254) — artefato novo `docs/F5-11-certificacao.md`:** auditoria dos critérios de aceite do §17.1 (P1–P6) contra evidência arquivo:linha, cobrindo também a família **P5.1–P5.4** (SELF/read automático com o 5º system role `observacoes_avaliado`; autoridade administrativa por role; lifecycle de `user_profiles.status`; exclusividade automática e ausência de corrida no primeiro provisionamento). **Nenhuma lacuna MATERIAL BLOQUEANTE** foi encontrada. Dívidas **não bloqueantes** (com evidência no artefato, §4): prova literal de transferência entre organizações no validador da P5.1; defeito latente de **diagnóstico** (`v_falhas || 'literal'` em `text[]`) em `41-validar-f5-11-p3.sql`; `42-cenario-f5-11-p5-1.sql` ainda derivando organização/ciclo do tenant da P2; resíduo morto do domínio de ciclos. **Fora de escopo:** as 2 falhas pré-existentes de Windows/CRLF (F5-10) e a fidelidade do harness local aos pares de concorrência. **Não verificável neste ambiente:** texto das Issues #238/#254 (sem `gh`) — critérios extraídos do desenho técnico — e o SHA/base auditados (sem shell).
+- **F5-11 — GATES FINAIS PENDENTES (orquestrador):** `supabase db reset --local --yes` + cadeia `34…43` (esperado **10/10** verdes); pipeline CI-equivalente completo de **56 steps** (esperado **56/56**, incluindo a reaplicação da migration D28 ×2 e os **dois pares de concorrência reais**); `npm test` (esperado **2301/2303**, com apenas as 2 falhas pré-existentes de Windows/CRLF); `npm run build`; `npm run lint`; `git diff --check`; e o **CI do SHA final** (autoridade para os pares de concorrência). **Nenhum resultado de gate é afirmado aqui** — substituir este marcador pelo resultado real.
 
 - **Atividade-mãe:** **F5-11** — Issue **#238**. **P0** (desenho) entregue na branch
   `docs/f5-11-observacoes-soberanas-desenho`, base `main` = `5889decb81d4dc3feca15ca15d37f164e2f614ea`;
