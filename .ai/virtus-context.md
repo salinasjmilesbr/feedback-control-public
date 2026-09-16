@@ -79,6 +79,13 @@ não existe contrato sem documento fechado correspondente.
   (`docs/F5-11-certificacao.md`, Issue #254), com PR e merge pendentes (`.ai/handoff.md` §3);
   o **fluxo SELF do avaliado lê as observações comunicadas** por via soberana (role automática
   `observacoes_avaliado`, sem mutações SELF).
+  A **certificação transversal da Etapa 5 (Issue #256)** foi produzida em
+  `docs/etapa-5-certificacao.md`, **sem lacuna material bloqueante**: os três blockers históricos
+  (ciclos, colaboradores, metas/observações) estão demonstradamente resolvidos e as obrigações
+  transversais têm evidência citável; restam **dívidas não bloqueantes** (leitores legados de ciclo
+  em módulos de produção, `localCycleRepository` LEGADO declarado, fixtures com chaves legadas,
+  prova literal de transferência entre organizações, defeito latente de diagnóstico no validador 41
+  e o cenário 42 derivando tenant da P2) e o **fechamento formal é a F5-12**.
   As atividades seguintes da fase seguem o roadmap do GitHub.
 - **F6+** — hardening geral e trabalhos futuros (fora de escopo das fases
   anteriores).
