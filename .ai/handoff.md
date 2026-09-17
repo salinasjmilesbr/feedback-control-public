@@ -34,6 +34,55 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
+### 3.28 F6-A09 — boot das Edges: specifier relativo sem extensão (Deno) — CORRIGIDO · PR/MERGE PENDENTES
+
+- **Atividade/branch:** **F6-A09**, branch **`fix/f6-a09-edge-boot-extension`**, base
+  **`main` = `098235979c668a2719e42f1845705f4a39b5dd39`**. Sem Issue/PR vinculados nesta sessão.
+- **Defeito — o import exato:** `src/authorization/catalogoCapabilities.ts:1` era
+  `import type { Capability } from "./Capability";` (**sem `.ts`**). O **Deno/Edge Runtime exige
+  extensão explícita** em specifier relativo; Vite/Vitest/tsc toleram a omissão
+  (`allowImportingTsExtensions: true`). Erro de runtime: `failed to create the graph: Failed
+  resolving types. Relative import path ... not prefixed` ⇒ `503 {"code":"BOOT_ERROR"}`.
+- **Correção mínima (1 linha de produto):** `"./Capability"` → `"./Capability.ts"`, alinhando o
+  arquivo à convenção já usada por **todos** os vizinhos (`contextoAutorizacao.ts`,
+  `estadoDominio*.ts`, `policyEngine/*`, `providers/reais.ts`; 157 imports relativos com `.ts`
+  explícito em `src/`). Nenhum arquivo de `supabase/` foi tocado.
+- **Alcance do MESMO padrão (varredura do grafo das 10 entries, 45 arquivos):** **exatamente 1**
+  specifier relativo sem extensão (o defeito acima) e **0** imports relativos não resolvidos.
+  Ele quebrava transitivamente **6 das 10** Edges: `colaboradores`, `metas`, `observacoes`,
+  `ciclos`, `avaliacoes` e `contexto-autorizacao`.
+- **Lacuna de gate fechada:** `src/authorization/ciclosEdgeImportGraph.test.ts` passou a coletar
+  `semExtensao` em `percorrerGrafo()` e ganhou o `describe("F6-A09 — ...")` (3 casos): reprova
+  qualquer specifier relativo sem `.ts`/`.tsx` em **qualquer** Edge, exige não-vacuidade do walk e
+  trava o `"./Capability.ts"` do catálogo. Causa da cegueira do CI: `resolver()` tenta `${alvo}.ts`
+  (resolve como o TypeScript) e o grafo continuava "íntegro" com o boot inválido para o Deno.
+- **GATES (árvore final):** foco
+  `npx vitest run src/authorization/{ciclos,metas,observacoes}EdgeImportGraph.test.ts` = **3
+  arquivos / 26 testes, 0 falhas** (exit 0); **`npm test` = 3 falhas | 2392 passam (2395)** —
+  **2 PRÉ-EXISTENTES Windows/CRLF** (`AcompanhamentoMetasPage.test.tsx`, `MinhasMetasPage.test.tsx`)
+  + **1 AMBIENTAL** (`serviceColaboradores.test.ts:681`), provada por A/B: com as minhas alterações
+  em `git stash` a falha **reproduz igual** (B1) e com `.env.local` **ausente** o arquivo **passa
+  36/36** (B2) ⇒ **não** é regressão do F6-A09 (o CI ubuntu/LF não tem `.env.local`); `npm run build`
+  **exit 0**; `npm run lint` **exit 0**; `git diff --check` **exit 0**; `git status --short` restrito
+  aos **3 arquivos** previstos (2 de código/teste + este handoff).
+- **RUNTIME verificado (edge-runtime 1.74.3 / Deno 2.1.4):** `POST` em
+  `http://127.0.0.1:54321/functions/v1/<fn>` com o JWT do `.env.local` ⇒ **9 das 10 Edges bootam**
+  e respondem com código próprio (`NOT_AUTHORIZED` 401 nas autenticadas, `INVALID_INPUT` 400 em
+  `provisionar-organizacao`); antes da correção eram **6** em `BOOT_ERROR` 503.
+- **BLOQUEIO REMANESCENTE — defeito DISTINTO e PRÉ-EXISTENTE (fora do escopo do F6-A09):**
+  `supabase/functions/avaliacoes/assignedSupabase.ts:22` —
+  `import type { SupabaseClient } from "@supabase/supabase-js"` (**bare specifier**, arquivo
+  inalterado desde o **#176/F5-06**). Log do runtime: `Failed resolving types. Relative import path
+  "@supabase/supabase-js" not prefixed with / or ./ or ../` ⇒ `avaliacoes` permanece `503
+  BOOT_ERROR`. É **outra classe** de defeito (specifier nu, não extensão relativa) e envolve decisão
+  própria (URL `https://esm.sh/@supabase/supabase-js@2` vs. import map) — **não** foi alterado aqui.
+- **INCIDENTE DE AMBIENTE (registrado, não silenciado):** o container
+  `supabase_edge_runtime_feedback-control` estava **órfão** (nenhum processo `functions serve`
+  vivo; uptime reiniciando a cada poucos minutos) e **desapareceu após um `docker restart`** meu.
+  Restaurei o serviço de funções com `npx supabase functions serve --env-file .env.f6-local`
+  (**job em background desta sessão** — não sobrevive ao fim da sessão; reinicie se necessário).
+  O `.env.local` foi preservado e usado apenas como bearer das sondas (valores nunca impressos).
+
 ### 3.27 F6-A04 — Entrada do Admin Virtus na superfície de plataforma (Issue #269) — IMPLEMENTADO · PR/MERGE PENDENTES
 
 - **Atividade/branch:** **F6-A04** (Issue **#269**), branch **`feat/f6-a04-entrada-plataforma`**, base
