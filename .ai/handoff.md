@@ -34,6 +34,75 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
+### 3.25 F6-A03 — Implementação do bootstrap mínimo seguro do GREENFIELD (Issue #266) — IMPLEMENTADO · PR/MERGE PENDENTES
+
+- **Atividade/branch:** **F6-A03** (Issue **#266**), branch **`feat/f6-a03-bootstrap-greenfield`**,
+  base **`main` = `453d16b0c7a143869065ef8f93f1bad9ab2c70b2`** (squash do **PR #267**, que fechou o
+  desenho). Contrato normativo: **`docs/F6-A03-desenho-tecnico.md`** (D1–D21 e Q1–Q3 FECHADAS).
+  **Nenhuma decisão foi reaberta e nenhum escopo foi ampliado** (sem portal SaaS, sem listagem de
+  tenants, sem gestão de operadores/roles/planos/lifecycle).
+- **Entregue (28 arquivos: 20 novos + 8 alterados).** **SQL:** migration
+  `supabase/migrations/20260937000000_f6_a03_bootstrap_organizacao.sql` — tabela
+  **`platform_provisioning_events`** (trilha append-only do plano de plataforma + âncora de
+  idempotência: `unique (operation_id)`, `payload_hash` SHA-256, **sem FKs** pelo precedente do D18,
+  RLS habilitado com **ZERO policy**, `service_role` **somente `SELECT`+`INSERT`**, UPDATE bloqueado
+  por gatilho) e RPC **`organizacao_provisionar_inicial`** (`SECURITY INVOKER`, `search_path` fixo,
+  `EXECUTE` só `service_role`, **sem DEFINER novo**; uma transação: organização com id do banco →
+  `user_profiles` globais do **founder (D16)** e do **ator (D17)** → membership ativa → role `admin`
+  **resolvida por nome** pelo primitivo `conceder_acesso_role` → trilha D18; idempotência por
+  `operation_id` + `payload_hash` server-side com **um único** `insert … on conflict … do nothing
+  returning` → replay devolve o mesmo `organization_id`, hash divergente recusa; **contenção por
+  construção**: só cria tenant novo e vazio). **Edge:**
+  `supabase/functions/provisionar-organizacao/{contrato,core,index}.ts` com as duas operações
+  (`plataforma.provisionar_organizacao` e o self-check `plataforma.operador_atual`), allowlist de
+  plataforma reutilizada (fail-closed), allowlist **estrita** de chaves, identidade soberana por
+  `auth.getUser`, execução com `service_role` **sem o JWT do usuário**, e **compensação** do usuário
+  criado no Auth quando a RPC falha; `[functions.provisionar-organizacao]` (`verify_jwt = true`) no
+  `supabase/config.toml`. **Cliente:** `src/infrastructure/supabase/plataforma/{contrato,edgePlataforma}.ts`
+  (adapter fail-closed nos 3 caminhos; código desconhecido ⇒ `INTERNAL`), porta
+  `src/application/ports/ProvisionamentoPlataforma.ts` e
+  `src/services/plataforma/{controladorProvisionamento,formularioPlataforma}.ts` (código público →
+  taxonomia F0-05 com mensagem canônica). **UI mínima:** `src/pages/plataforma/NovaOrganizacaoPlataformaPage.tsx`
+  (formulário com **dois** campos: nome + primeiro Admin "eu mesmo"/e-mail; confirmação exibe **só o
+  nome** — nunca o UUID), guard puro `src/routes/plataformaRotas.ts`, `src/routes/LayoutPlataforma.tsx`
+  (**fora** de `LayoutAutenticado`/`LayoutFuncional` — D19), rota registrada em `AppRoutes.tsx` e
+  entrada condicional em `src/auth/SemOrganizacao.tsx`. **Validação/guardas:** `44-cenario-f6-a03.sql`
+  + `45-validar-f6-a03.sql` (blocos A–G), 2 passos novos no `ci.yml`, guardas F4-08 atualizadas
+  (`02-validar-f4-08.sql` → **52 tabelas / 29 fechadas** + D16; `03-validar-f4-08-mutacoes.sql` nas
+  duas listas) e `supabase/migrations/README.md`. **Testes novos:** 112 casos em 7 arquivos
+  (contrato, adapter, núcleo da Edge, controlador, guard, página/UI e o bloco novo de barreiras
+  estáticas em `src/authorization/estruturaUiSeguranca.test.ts`).
+- **GATES EXECUTADOS (árvore final; Docker + CLI Supabase locais):** `npx supabase@2.116.0 db reset
+  --local --yes` **exit 0**; **`01-cenario-f4-08` + `02-validar-f4-08` + `03-validar-f4-08-mutacoes`
+  exit 0** (as guardas alteradas passam com a 52ª tabela classificada; **8 mutation tests** verdes);
+  **`44-cenario-f6-a03` exit 0** e **`45-validar-f6-a03` exit 0** com os blocos **A/B/C/D/E/F/G**
+  (preflight de RLS/ACL/DEFINER/catálogo 31/bundle 9; trilha invisível ao cliente e append-only;
+  negativos fail-closed; caminho feliz com D16/D17 e **separação de planos**; idempotência
+  replay/conflito; estado preexistente intocado + segunda organização; higiene); `npm run lint`
+  **exit 0**; `npm run build` **exit 0**; `git diff --check` **exit 0**; **`npm test` = 2 falhas |
+  2373 passam (2375)** — as 2 falhas são **PRÉ-EXISTENTES** e de **Windows/CRLF**
+  (`AcompanhamentoMetasPage.test.tsx` 1/14 e `MinhasMetasPage.test.tsx` 1/14, ambas `toMatch` sobre
+  **texto-fonte** de páginas **não tocadas**; confirmadas em execução focada) — o CI (ubuntu/LF) é a
+  autoridade. **Gate focado da atividade: 112/112 verdes.**
+- **Divergências/observações REGISTRADAS (nenhuma decisão reaberta):** (i) o §6.1 do contrato fixa as
+  chaves transportáveis e **não** diz de onde a UI obtém a identidade do próprio operador para "eu
+  mesmo" — implementado por `identidadeDoOperadorAutenticado()` (lê a **sessão local**,
+  `cliente.auth.getSession()`), que **não é autoridade** (a Edge re-deriva o ator do JWT) e viaja no
+  campo já contratado `founder_user_id`; (ii) arquivo adicional
+  `src/services/plataforma/formularioPlataforma.ts` (conversão pura formulário→intenção) para manter o
+  módulo React exportando **somente componentes** (regra `react-refresh/only-export-components`);
+  (iii) o estado "ambiente sem caminho soberano" passou a ser **derivado** (ausência de controlador)
+  em vez de estado, pela regra `react-hooks/set-state-in-effect` — comportamento fail-closed
+  equivalente; (iv) **defeito próprio corrigido antes do gate**: a guarda de `search_path` usava
+  `position('search_path=public' …)` sobre `pg_get_functiondef`, que renderiza `SET search_path TO
+  'public'` — corrigida na migration **e** no validador `45`.
+- **Limitação de ambiente registrada:** no início da atividade **não** havia engine Docker nem CLI
+  Supabase (o `npx` era negado ao escrever no cache do npm); o engine foi aberto pelo responsável e
+  o gate SQL rodou com `npx --yes supabase@2.116.0` + `docker exec` no container
+  `supabase_db_feedback-control`. O **`push` continua bloqueado** pelo `askpass` do VS Code
+  (`.ai/git-rules.md` §3) — commit local entregue com branch/SHA; **PR a abrir pelo orquestrador**
+  (DEV-04), **sem merge**.
+
 ### 3.24 F6-A03 — Desenho do bootstrap mínimo seguro do GREENFIELD (Issue #266 / PR #267) — DESENHO ENTREGUE · Q1–Q3 FECHADAS (A) · UI MÍNIMA NO ESCOPO
 
 - **Atividade:** **F6-A03** (Issue **#266**), branch **`docs/f6-a03-bootstrap-greenfield-desenho`**,

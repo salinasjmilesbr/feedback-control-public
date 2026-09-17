@@ -732,3 +732,79 @@ describe("F5-08 P6 (correção) — papel/elegibilidade sem estrutura local", ()
     expect(codigo).toContain("return mundoLocalSintetico(actor, colaboradores);");
   });
 });
+
+// ---------------------------------------------------------------------------
+// F6-A03 (Issue #266) — SUPERFÍCIE MÍNIMA DE PLATAFORMA: barreiras estáticas
+// ---------------------------------------------------------------------------
+
+/**
+ * Módulos da superfície de plataforma (§6.5 do contrato). Nenhum deles decide
+ * autorização, escreve no navegador, chama RPC do banco ou carrega credencial
+ * privilegiada — a decisão é sempre da Edge `provisionar-organizacao` + RPC
+ * soberana (D18–D21).
+ */
+const MODULOS_PLATAFORMA: readonly string[] = [
+  "../routes/plataformaRotas.ts",
+  "../routes/LayoutPlataforma.tsx",
+  "../pages/plataforma/NovaOrganizacaoPlataformaPage.tsx",
+  "../services/plataforma/controladorProvisionamento.ts",
+  "../infrastructure/supabase/plataforma/contrato.ts",
+  "../infrastructure/supabase/plataforma/edgePlataforma.ts",
+];
+
+describe("F6-A03 — plataforma: barreiras estáticas da superfície mínima", () => {
+  it("nenhum módulo escreve no navegador, chama RPC do banco ou usa credencial privilegiada", () => {
+    for (const caminho of MODULOS_PLATAFORMA) {
+      const codigo = apenasCodigo(fonteDeProducao(caminho));
+      expect(codigo, caminho).not.toContain("localStorage");
+      expect(codigo, caminho).not.toContain("sessionStorage");
+      expect(codigo, caminho).not.toMatch(/\.rpc\s*\(/);
+      expect(codigo, caminho).not.toContain("service_role");
+      expect(codigo, caminho).not.toMatch(/SERVICE_ROLE|serviceRoleKey/);
+    }
+  });
+
+  it("a UI de plataforma não decide autorização (sem authorize/can/Policy Engine)", () => {
+    for (const caminho of MODULOS_PLATAFORMA) {
+      const codigo = apenasCodigo(fonteDeProducao(caminho));
+      expect(codigo, caminho).not.toMatch(/\bauthorize\s*\(/);
+      expect(codigo, caminho).not.toMatch(/\bcan\s*\(/);
+      expect(codigo, caminho).not.toContain("Policy Engine");
+      // Nenhuma capability do plano funcional é consultada pela plataforma.
+      expect(codigo, caminho).not.toContain("observation.");
+      expect(codigo, caminho).not.toContain("goal.");
+    }
+  });
+
+  it("o layout de plataforma NÃO carrega estrutura soberana de tenant (D19)", () => {
+    const layout = apenasCodigo(fonteDeProducao("../routes/LayoutPlataforma.tsx"));
+    for (const proibido of [
+      "useEstruturaSoberanaDoCliente",
+      "UsuarioAtualBar",
+      "NavegacaoPrincipal",
+      "AuthorizationContext",
+      "organizacaoAtivaId",
+    ]) {
+      expect(layout, proibido).not.toContain(proibido);
+    }
+    expect(layout).toContain("decidirAcessoARotaDePlataforma");
+  });
+
+  it("a rota de plataforma é registrada FORA do shell funcional e do menu (D21)", () => {
+    const rotas = apenasCodigo(fonteDeProducao("../routes/AppRoutes.tsx"));
+    expect(rotas).toContain("LayoutPlataforma");
+    expect(rotas).toContain("ROTA_PLATAFORMA_NOVA_ORGANIZACAO");
+    expect(rotas).toContain("NovaOrganizacaoPlataformaPage");
+
+    // A navegação funcional do produto NÃO ganha a superfície de plataforma.
+    expect(apenasCodigo(MenuFonte as string)).not.toContain("/plataforma");
+  });
+
+  it("o guard admite sessão viva sem tenant e bloqueia fail-closed a não confirmada", () => {
+    const guard = apenasCodigo(fonteDeProducao("../routes/plataformaRotas.ts"));
+    expect(guard).toContain('case "semOrganizacao":');
+    expect(guard).toContain('case "acessoNegado":');
+    expect(guard).toContain('case "sessaoIndisponivel":');
+    expect(guard).toContain('case "indisponivel":');
+  });
+});
