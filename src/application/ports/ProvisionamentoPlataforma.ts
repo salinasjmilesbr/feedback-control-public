@@ -22,6 +22,16 @@ export interface NovaOrganizacaoPlataforma {
   readonly operationId: string;
   readonly organizationName: string;
   /**
+   * F6-A11 (D22/D23): nome humano do primeiro Admin — dado a criar; é a fonte
+   * canônica de `collaborators.full_name` do founder na nova organização.
+   */
+  readonly founderFullName: string;
+  /**
+   * F6-A11 (D23/D28): matrícula declarada do primeiro Admin na nova organização.
+   * Código de negócio declarado — a unicidade é decidida/garantida server-side.
+   */
+  readonly founderMatricula: string;
+  /**
    * Primeiro Admin por identidade JÁ existente (caminho de API; a UI mínima usa
    * este campo para "eu mesmo").
    */

@@ -1,6 +1,6 @@
 /**
- * F6-A03 (Issue #266) — conversão PURA do formulário da UI mínima de plataforma
- * em INTENÇÃO transportável.
+ * F6-A03 (Issue #266) + F6-A11 (Issue #273) — conversão PURA do formulário da UI
+ * mínima de plataforma em INTENÇÃO transportável.
  *
  * Vive fora do arquivo da página por dois motivos:
  * - é lógica pura, testável sem React (nada de estado, nada de DOM);
@@ -10,7 +10,8 @@
  * FAIL-CLOSED: entrada incompleta nunca vira requisição. A conversão NÃO decide
  * autorização e NÃO gera identidade — o `operationId` chega pronto (UUID do
  * cliente) e o primeiro Admin é apenas o ALVO designado (a Edge re-deriva o ator
- * do JWT verificado).
+ * do JWT verificado). O nome humano e a matrícula do primeiro Admin são DADOS a
+ * criar (F6-A11/D23), nunca autoridade.
  */
 
 import type { NovaOrganizacaoPlataforma } from "../../application/ports/ProvisionamentoPlataforma";
@@ -19,7 +20,7 @@ import type { NovaOrganizacaoPlataforma } from "../../application/ports/Provisio
 export type FormaPrimeiroAdmin = "eu" | "outra";
 
 /** Motivo da recusa de montagem — nunca exposto cru; vira erro da taxonomia. */
-export type MotivoMontagem = "nome" | "identidade" | "email";
+export type MotivoMontagem = "nome" | "admin" | "matricula" | "identidade" | "email";
 
 export type ResultadoMontagem =
   | { readonly ok: true; readonly entrada: NovaOrganizacaoPlataforma }
@@ -28,6 +29,16 @@ export type ResultadoMontagem =
 export interface EntradaMontagem {
   readonly operacaoId: string;
   readonly nome: string;
+  /**
+   * F6-A11/D22-D23: nome HUMANO do primeiro Admin (obrigatório) — fonte canônica
+   * de `collaborators.full_name`; nunca derivado do e-mail.
+   */
+  readonly nomeAdmin: string;
+  /**
+   * F6-A11/D23/D28: matrícula declarada do primeiro Admin (obrigatória) — código
+   * de negócio declarado pelo operador, nunca inventado.
+   */
+  readonly matriculaAdmin: string;
   readonly forma: FormaPrimeiroAdmin;
   readonly email: string;
   /**
@@ -41,12 +52,24 @@ export function montarEntradaProvisao(entrada: EntradaMontagem): ResultadoMontag
   const nome = entrada.nome.trim();
   if (nome === "") return { ok: false, motivo: "nome" };
 
+  const nomeAdmin = entrada.nomeAdmin.trim();
+  if (nomeAdmin === "") return { ok: false, motivo: "admin" };
+
+  const matriculaAdmin = entrada.matriculaAdmin.trim();
+  if (matriculaAdmin === "") return { ok: false, motivo: "matricula" };
+
   if (entrada.forma === "eu") {
     const id = entrada.usuarioAutenticadoId?.trim() ?? "";
     if (id === "") return { ok: false, motivo: "identidade" };
     return {
       ok: true,
-      entrada: { operationId: entrada.operacaoId, organizationName: nome, founderUserId: id },
+      entrada: {
+        operationId: entrada.operacaoId,
+        organizationName: nome,
+        founderFullName: nomeAdmin,
+        founderMatricula: matriculaAdmin,
+        founderUserId: id,
+      },
     };
   }
 
@@ -54,6 +77,12 @@ export function montarEntradaProvisao(entrada: EntradaMontagem): ResultadoMontag
   if (email === "") return { ok: false, motivo: "email" };
   return {
     ok: true,
-    entrada: { operationId: entrada.operacaoId, organizationName: nome, founderEmail: email },
+    entrada: {
+      operationId: entrada.operacaoId,
+      organizationName: nome,
+      founderFullName: nomeAdmin,
+      founderMatricula: matriculaAdmin,
+      founderEmail: email,
+    },
   };
 }

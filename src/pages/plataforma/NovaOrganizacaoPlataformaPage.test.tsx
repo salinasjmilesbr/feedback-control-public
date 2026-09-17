@@ -22,10 +22,17 @@ import type { ProvisionamentoPlataforma } from "../../application/ports/Provisio
  * negativa neutra, indisponibilidade explícita e confirmação SEM identificador
  * interno. Prova também a conversão PURA do formulário em intenção
  * (`montarEntradaProvisao`), com fail-closed para entrada incompleta.
+ *
+ * F6-A11 (Issue #273): o formulário ganhou a identidade FUNCIONAL mínima do
+ * primeiro Admin (nome humano + matrícula, D23/D26/D28) — dois campos
+ * `required`, depois do bloco de identificação e antes da mensagem de erro.
  */
 
 const OPERACAO_ID = "f6a3b000-0000-4000-8000-000000000001";
 const OPERADOR = "f6a30000-0000-4000-8000-000000000003";
+/** Dados FICTÍCIOS da identidade funcional mínima do primeiro Admin (F6-A11). */
+const NOME_ADMIN = "Admin Teste A11";
+const MATRICULA_ADMIN = "A1100001";
 
 function semearFormulario(
   forma: FormaPrimeiroAdmin = "eu",
@@ -38,11 +45,15 @@ function semearFormulario(
         nome=""
         forma={forma}
         email=""
+        nomeAdmin={NOME_ADMIN}
+        matriculaAdmin={MATRICULA_ADMIN}
         mensagem={mensagem}
         enviando={enviando}
         aoMudarNome={() => {}}
         aoMudarForma={() => {}}
         aoMudarEmail={() => {}}
+        aoMudarNomeAdmin={() => {}}
+        aoMudarMatriculaAdmin={() => {}}
         aoEnviar={() => {}}
       />
     </MemoryRouter>
@@ -94,15 +105,37 @@ describe("F6-A03 — UI: formulário mínimo (critério 23)", () => {
     expect(html).toContain("Outra pessoa (e-mail)");
     // SEM o campo de e-mail enquanto a escolha é "eu mesmo".
     expect(html).not.toContain("E-mail do primeiro Admin");
-    // Exatamente dois controles de entrada: nome e a seleção do primeiro Admin.
-    expect((html.match(/<input/g) ?? []).length).toBe(1);
+    // Três controles de entrada: nome da organização + os DOIS campos novos do
+    // primeiro Admin (nome humano e matrícula — F6-A11/D28).
+    expect((html.match(/<input/g) ?? []).length).toBe(3);
     expect((html.match(/<select/g) ?? []).length).toBe(1);
   });
 
   it("mostra o campo de e-mail quando o primeiro Admin é outra pessoa", () => {
     const html = semearFormulario("outra");
     expect(html).toContain("E-mail do primeiro Admin");
-    expect((html.match(/<input/g) ?? []).length).toBe(2);
+    // Nome da organização + e-mail + nome humano + matrícula do primeiro Admin.
+    expect((html.match(/<input/g) ?? []).length).toBe(4);
+  });
+
+  it("renderiza os DOIS campos novos do primeiro Admin, obrigatórios e na ordem contratada", () => {
+    const html = semearFormulario("eu", false, "Verifique os dados informados e tente novamente.");
+
+    expect(html).toContain("Nome do primeiro Admin");
+    expect(html).toContain("Matrícula do primeiro Admin");
+    // Os dois campos são `required`: o formulário continua fail-closed.
+    expect(html).toMatch(/<span>Nome do primeiro Admin<\/span><input[^>]*required/);
+    expect(html).toMatch(/<span>Matrícula do primeiro Admin<\/span><input[^>]*required/);
+
+    // Ordem contratada: DEPOIS do bloco de identificação e ANTES do erro.
+    const identificacao = html.indexOf("<span>Primeiro Admin</span>");
+    const nomeAdmin = html.indexOf("Nome do primeiro Admin");
+    const matriculaAdmin = html.indexOf("Matrícula do primeiro Admin");
+    const erro = html.indexOf("Verifique os dados informados");
+    expect(identificacao).toBeGreaterThan(-1);
+    expect(nomeAdmin).toBeGreaterThan(identificacao);
+    expect(matriculaAdmin).toBeGreaterThan(nomeAdmin);
+    expect(erro).toBeGreaterThan(matriculaAdmin);
   });
 
   it("NÃO oferece escolha de role, organização, tenant nem lista de usuários", () => {
@@ -183,6 +216,8 @@ describe("F6-A03 — UI: conversão pura do formulário em intenção", () => {
     const resultado = montarEntradaProvisao({
       operacaoId: OPERACAO_ID,
       nome: "  Org Sintetica  ",
+      nomeAdmin: NOME_ADMIN,
+      matriculaAdmin: MATRICULA_ADMIN,
       forma: "eu",
       email: "ignorado@example.invalid",
       usuarioAutenticadoId: OPERADOR,
@@ -193,6 +228,8 @@ describe("F6-A03 — UI: conversão pura do formulário em intenção", () => {
     expect(resultado.entrada).toEqual({
       operationId: OPERACAO_ID,
       organizationName: "Org Sintetica",
+      founderFullName: NOME_ADMIN,
+      founderMatricula: MATRICULA_ADMIN,
       founderUserId: OPERADOR,
     });
     expect(resultado.entrada.founderEmail).toBeUndefined();
@@ -202,6 +239,8 @@ describe("F6-A03 — UI: conversão pura do formulário em intenção", () => {
     const resultado = montarEntradaProvisao({
       operacaoId: OPERACAO_ID,
       nome: "Org Sintetica",
+      nomeAdmin: NOME_ADMIN,
+      matriculaAdmin: MATRICULA_ADMIN,
       forma: "outra",
       email: "  Novo.Admin@Example.INVALID ",
       usuarioAutenticadoId: OPERADOR,
@@ -212,27 +251,30 @@ describe("F6-A03 — UI: conversão pura do formulário em intenção", () => {
     expect(resultado.entrada).toEqual({
       operationId: OPERACAO_ID,
       organizationName: "Org Sintetica",
+      founderFullName: NOME_ADMIN,
+      founderMatricula: MATRICULA_ADMIN,
       founderEmail: "novo.admin@example.invalid",
     });
     expect(resultado.entrada.founderUserId).toBeUndefined();
   });
 
   it("entrada incompleta é fail-closed (nome, identidade e e-mail)", () => {
+    const identidadeFuncional = { nomeAdmin: NOME_ADMIN, matriculaAdmin: MATRICULA_ADMIN };
     const casos = [
       [
-        { nome: "   ", forma: "eu" as const, email: "", usuarioAutenticadoId: OPERADOR },
+        { ...identidadeFuncional, nome: "   ", forma: "eu" as const, email: "", usuarioAutenticadoId: OPERADOR },
         "nome",
       ],
       [
-        { nome: "Org", forma: "eu" as const, email: "", usuarioAutenticadoId: null },
+        { ...identidadeFuncional, nome: "Org", forma: "eu" as const, email: "", usuarioAutenticadoId: null },
         "identidade",
       ],
       [
-        { nome: "Org", forma: "eu" as const, email: "", usuarioAutenticadoId: "   " },
+        { ...identidadeFuncional, nome: "Org", forma: "eu" as const, email: "", usuarioAutenticadoId: "   " },
         "identidade",
       ],
       [
-        { nome: "Org", forma: "outra" as const, email: "  ", usuarioAutenticadoId: OPERADOR },
+        { ...identidadeFuncional, nome: "Org", forma: "outra" as const, email: "  ", usuarioAutenticadoId: OPERADOR },
         "email",
       ],
     ] as const;
@@ -242,5 +284,98 @@ describe("F6-A03 — UI: conversão pura do formulário em intenção", () => {
       expect(resultado.ok, motivo).toBe(false);
       if (!resultado.ok) expect(resultado.motivo).toBe(motivo);
     }
+  });
+});
+
+/**
+ * F6-A11 (Issue #273) — identidade FUNCIONAL mínima do primeiro Admin na
+ * conversão PURA do formulário (`montarEntradaProvisao`, D23/D26/D28).
+ *
+ * Prova o fail-closed dos dois campos novos com motivos PRÓPRIOS (`"admin"` e
+ * `"matricula"`), a ORDEM de validação do contrato (nome da organização ⇒ nome
+ * do Admin ⇒ matrícula ⇒ forma) e que a entrada montada carrega os valores já
+ * normalizados por `trim`.
+ */
+describe("F6-A11 — UI: identidade funcional mínima do primeiro Admin", () => {
+  it("nome do primeiro Admin vazio ⇒ motivo 'admin'", () => {
+    for (const nomeAdmin of ["", "   ", "\t\n"]) {
+      const resultado = montarEntradaProvisao({
+        operacaoId: OPERACAO_ID,
+        nome: "Org Sintetica",
+        nomeAdmin,
+        matriculaAdmin: MATRICULA_ADMIN,
+        forma: "eu",
+        email: "",
+        usuarioAutenticadoId: OPERADOR,
+      });
+      expect(resultado.ok, JSON.stringify(nomeAdmin)).toBe(false);
+      if (!resultado.ok) expect(resultado.motivo, JSON.stringify(nomeAdmin)).toBe("admin");
+    }
+  });
+
+  it("matrícula do primeiro Admin vazia ⇒ motivo 'matricula'", () => {
+    for (const matriculaAdmin of ["", "   ", "\t\n"]) {
+      const resultado = montarEntradaProvisao({
+        operacaoId: OPERACAO_ID,
+        nome: "Org Sintetica",
+        nomeAdmin: NOME_ADMIN,
+        matriculaAdmin,
+        forma: "eu",
+        email: "",
+        usuarioAutenticadoId: OPERADOR,
+      });
+      expect(resultado.ok, JSON.stringify(matriculaAdmin)).toBe(false);
+      if (!resultado.ok) expect(resultado.motivo, JSON.stringify(matriculaAdmin)).toBe("matricula");
+    }
+  });
+
+  it("a ORDEM da validação é nome da organização ⇒ admin ⇒ matrícula ⇒ forma", () => {
+    const base = {
+      operacaoId: OPERACAO_ID,
+      nome: "Org Sintetica",
+      nomeAdmin: NOME_ADMIN,
+      matriculaAdmin: MATRICULA_ADMIN,
+      forma: "eu" as const,
+      email: "",
+      usuarioAutenticadoId: OPERADOR,
+    };
+
+    // Nome da organização vazio vence os campos novos vazios.
+    const semNome = montarEntradaProvisao({ ...base, nome: "  ", nomeAdmin: "  " });
+    expect(semNome.ok).toBe(false);
+    if (!semNome.ok) expect(semNome.motivo).toBe("nome");
+
+    // Nome do Admin vazio vence a matrícula vazia.
+    const semAdmin = montarEntradaProvisao({ ...base, nomeAdmin: "  ", matriculaAdmin: "  " });
+    expect(semAdmin.ok).toBe(false);
+    if (!semAdmin.ok) expect(semAdmin.motivo).toBe("admin");
+
+    // Matrícula vazia vence a forma inválida ("eu" sem identidade de sessão).
+    const semMatricula = montarEntradaProvisao({
+      ...base,
+      matriculaAdmin: "  ",
+      usuarioAutenticadoId: null,
+    });
+    expect(semMatricula.ok).toBe(false);
+    if (!semMatricula.ok) expect(semMatricula.motivo).toBe("matricula");
+  });
+
+  it("a entrada montada carrega founderFullName/founderMatricula com trim aplicado", () => {
+    const resultado = montarEntradaProvisao({
+      operacaoId: OPERACAO_ID,
+      nome: "  Org Sintetica  ",
+      nomeAdmin: `   ${NOME_ADMIN}  `,
+      matriculaAdmin: `\t${MATRICULA_ADMIN} `,
+      forma: "outra",
+      email: "  Novo.Admin@Example.INVALID ",
+      usuarioAutenticadoId: OPERADOR,
+    });
+
+    expect(resultado.ok).toBe(true);
+    if (!resultado.ok) return;
+    expect(resultado.entrada.founderFullName).toBe(NOME_ADMIN);
+    expect(resultado.entrada.founderMatricula).toBe(MATRICULA_ADMIN);
+    expect(resultado.entrada.organizationName).toBe("Org Sintetica");
+    expect(resultado.entrada.founderEmail).toBe("novo.admin@example.invalid");
   });
 });

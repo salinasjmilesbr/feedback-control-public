@@ -52,6 +52,8 @@ export const CHAVES_POR_OPERACAO: Readonly<Record<OperacaoPlataforma, readonly s
     "organization_name",
     "founder_user_id",
     "founder_email",
+    "founder_full_name",
+    "founder_matricula",
   ],
   [OPERACAO_OPERADOR_ATUAL]: ["operacao"],
 };
@@ -97,6 +99,18 @@ export interface EntradaProvisaoPlataforma {
   readonly operacao: typeof OPERACAO_PROVISIONAR_ORGANIZACAO;
   readonly operationId: string;
   readonly organizationName: string;
+  /**
+   * F6-A11 (D22/D23): nome HUMANO do primeiro Admin — dado a criar, como o nome
+   * da organização. É a fonte canônica de `collaborators.full_name` do founder
+   * (nunca derivado do e-mail, nunca duplicado em `user_profiles`).
+   */
+  readonly founderFullName: string;
+  /**
+   * F6-A11 (D23/D28): matrícula declarada do primeiro Admin na organização nova
+   * (`collaborator_identifiers.business_code`) — código de negócio DECLARADO,
+   * nunca inventado pelo servidor.
+   */
+  readonly founderMatricula: string;
   /**
    * Identificação do primeiro Admin — EXATAMENTE uma das duas formas:
    * `founderUserId` (identidade já existente, caminho de API) OU `founderEmail`
@@ -148,6 +162,26 @@ export function validarEntradaProvisaoPlataforma(corpo: unknown): ResultadoValid
     return { ok: false, codigo: "INVALID_NAME", message: "Informe o nome da organização." };
   }
 
+  // F6-A11/D26: identidade funcional mínima do primeiro Admin, validada por FORMA
+  // com a taxonomia FECHADA (nenhum código público novo): nome humano ⇒
+  // `INVALID_NAME`; matrícula ⇒ `INVALID_FOUNDER`. A mensagem específica é do
+  // validador (o cliente exibe a mensagem canônica do código — F0-05).
+  const founderFullName =
+    typeof corpo.founder_full_name === "string" ? corpo.founder_full_name.trim() : "";
+  if (founderFullName === "") {
+    return { ok: false, codigo: "INVALID_NAME", message: "Informe o nome do primeiro Admin." };
+  }
+
+  const founderMatricula =
+    typeof corpo.founder_matricula === "string" ? corpo.founder_matricula.trim() : "";
+  if (founderMatricula === "") {
+    return {
+      ok: false,
+      codigo: "INVALID_FOUNDER",
+      message: "Informe a matrícula do primeiro Admin.",
+    };
+  }
+
   const temUserId = corpo.founder_user_id !== undefined;
   const temEmail = corpo.founder_email !== undefined;
   if (temUserId === temEmail) {
@@ -166,7 +200,14 @@ export function validarEntradaProvisaoPlataforma(corpo: unknown): ResultadoValid
     }
     return {
       ok: true,
-      entrada: { operacao: OPERACAO_PROVISIONAR_ORGANIZACAO, operationId, organizationName, founderUserId },
+      entrada: {
+        operacao: OPERACAO_PROVISIONAR_ORGANIZACAO,
+        operationId,
+        organizationName,
+        founderFullName,
+        founderMatricula,
+        founderUserId,
+      },
     };
   }
 
@@ -177,7 +218,14 @@ export function validarEntradaProvisaoPlataforma(corpo: unknown): ResultadoValid
   }
   return {
     ok: true,
-    entrada: { operacao: OPERACAO_PROVISIONAR_ORGANIZACAO, operationId, organizationName, founderEmail },
+    entrada: {
+      operacao: OPERACAO_PROVISIONAR_ORGANIZACAO,
+      operationId,
+      organizationName,
+      founderFullName,
+      founderMatricula,
+      founderEmail,
+    },
   };
 }
 

@@ -91,6 +91,13 @@ export interface ExecucaoProvisionamento {
   readonly founderUserId: string;
   /** `auth.uid()` verificado server-side — NUNCA do corpo. */
   readonly actorUserProfileId: string;
+  /**
+   * F6-A11/D22-D23: nome humano do primeiro Admin — DADO a criar (como o nome da
+   * organização), nunca autoridade; vira `collaborators.full_name`.
+   */
+  readonly founderFullName: string;
+  /** F6-A11/D23/D28: matrícula declarada do primeiro Admin na nova organização. */
+  readonly founderMatricula: string;
 }
 
 export interface ResultadoConvite {
@@ -305,6 +312,10 @@ export async function plataforma(req: Request, deps: DepsPlataforma): Promise<Re
       organizationName: entrada.organizationName,
       founderUserId,
       actorUserProfileId: callerId,
+      // F6-A11/D23: identidade funcional mínima (dado, nunca autoridade). O
+      // e-mail do colaborador é resolvido server-side no `index.ts` (D25).
+      founderFullName: entrada.founderFullName,
+      founderMatricula: entrada.founderMatricula,
     });
 
     if (resultado.erro || !resultado.organizationId) {

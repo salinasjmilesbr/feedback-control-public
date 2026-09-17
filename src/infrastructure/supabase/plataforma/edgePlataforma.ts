@@ -48,6 +48,10 @@ export type ResultadoEdgePlataforma<T> =
 export interface CorpoProvisaoPlataforma {
   readonly operationId: string;
   readonly organizationName: string;
+  /** F6-A11 (D22/D23): nome humano do primeiro Admin (intenção, não autoridade). */
+  readonly founderFullName: string;
+  /** F6-A11 (D23/D28): matrícula declarada do primeiro Admin na nova organização. */
+  readonly founderMatricula: string;
   readonly founderUserId?: string;
   readonly founderEmail?: string;
 }
@@ -70,7 +74,8 @@ function codigoPublico(valor: unknown): CodigoPublico {
 
 /**
  * Corpo da provisão: a identificação do primeiro Admin viaja em UMA única forma
- * (a fronteira não envia `undefined` nem inventa a outra chave).
+ * (a fronteira não envia `undefined` nem inventa a outra chave). A identidade
+ * funcional mínima (nome humano + matrícula) viaja SEMPRE, como intenção.
  */
 export function corpoDaProvisao(
   entrada: NovaOrganizacaoPlataforma
@@ -79,6 +84,8 @@ export function corpoDaProvisao(
     operacao: OPERACAO_PROVISIONAR_ORGANIZACAO,
     operation_id: entrada.operationId,
     organization_name: entrada.organizationName,
+    founder_full_name: entrada.founderFullName,
+    founder_matricula: entrada.founderMatricula,
   };
   if (entrada.founderUserId !== undefined) {
     corpo.founder_user_id = entrada.founderUserId;

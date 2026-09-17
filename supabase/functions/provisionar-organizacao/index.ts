@@ -130,12 +130,35 @@ Deno.serve(async (req) => {
 
     // 4) Execução privilegiada da RPC soberana (transacional e idempotente).
     //    O ator é o `auth.uid()` verificado; nenhum campo de autoridade viaja.
+    //
+    //    F6-A11/D23/D25: o e-mail do colaborador inicial é o e-mail da IDENTIDADE
+    //    AUTENTICADA do primeiro Admin, resolvido AQUI (Auth Admin, server-side) e
+    //    nunca declarado pelo corpo. Ausente/ilegível ⇒ fail-closed: a RPC recusa
+    //    com `F6_A03_INVALID_FOUNDER` e nenhum tenant parcial é criado.
     provisionar: async (execucao) => {
+      const { data: usuarioFounder, error: erroFounder } = await admin.auth.admin.getUserById(
+        execucao.founderUserId
+      );
+      const founderEmail =
+        typeof usuarioFounder?.user?.email === "string" ? usuarioFounder.user.email : null;
+      if (erroFounder || !founderEmail) {
+        return {
+          organizationId: null,
+          erro: {
+            code: "F6_A03_INVALID_FOUNDER",
+            message: "E-mail da identidade do primeiro Admin indisponível.",
+          },
+        };
+      }
+
       const { data, error } = await admin.rpc("organizacao_provisionar_inicial", {
         p_operation_id: execucao.operationId,
         p_organization_name: execucao.organizationName,
         p_founder_user_profile_id: execucao.founderUserId,
         p_actor_user_profile_id: execucao.actorUserProfileId,
+        p_founder_full_name: execucao.founderFullName,
+        p_founder_matricula: execucao.founderMatricula,
+        p_founder_email: founderEmail,
       });
       if (error) {
         return { organizationId: null, erro: { code: error.code, message: error.message } };

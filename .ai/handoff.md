@@ -34,6 +34,56 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
+### 3.30 F6-A11 — bootstrap funcional do primeiro Admin GREENFIELD (Issue #273) — IMPLEMENTADO · PR/MERGE PENDENTES
+
+- **Atividade/branch:** **F6-A11** (Issue **#273**), branch **`feat/f6-a11-bootstrap-funcional-admin`**, base
+  **`main` = `5a9a5ca4dad567c1d15a6746e9a9e3b9090ce352`** (desenho **FECHADO** D22–D30 já integrado).
+  Contrato: `docs/F6-A11-desenho-tecnico.md`.
+- **Entregue (12 arquivos, sendo 1 novo):** migration
+  **`supabase/migrations/20260938000000_f6_a11_bootstrap_funcional_admin.sql`** — `DROP` explícito da
+  assinatura antiga de 4 parâmetros + RPC de **7 parâmetros** com `payload_hash` cobrindo nome/matrícula/
+  e-mail, passos novos **(11.1) `colaborador_criar`** e **(11.2) `vincular_colaborador`** na MESMA
+  transação, guarda final ampliada (colaborador + identificador aberto + status ativo + vínculo ativo) e
+  guarda da própria migration (INVOKER, `search_path`, EXECUTE só `service_role`, uso dos primitivos e
+  **ausência de INSERT direto** no vínculo); Edge `provisionar-organizacao` (`core.ts`/`index.ts`: 2
+  campos novos + e-mail da identidade resolvido server-side por `auth.admin.getUserById`); contrato/porta/
+  adapter/controlador (`contrato.ts`, `ProvisionamentoPlataforma.ts`, `edgePlataforma.ts`,
+  `controladorProvisionamento.ts`); formulário/UI (`formularioPlataforma.ts` e
+  `NovaOrganizacaoPlataformaPage.tsx` com os 2 campos e os motivos `admin`/`matricula`);
+  `supabase/validacao/45-validar-f6-a03.sql` (assinatura nova, 17 chamadas, blocos D24/E5/E6/C7-C10 e
+  higiene); `supabase/migrations/README.md`; comentário em `supabase/config.toml`; **5 arquivos de
+  teste** (contrato, edgePlataforma, edgeProvisionamento, controlador e página).
+- **GATES (árvore final):** `npm run build` **exit 0**; `npm run lint` **exit 0**; `git diff --check`
+  **exit 0**; **`npm test` = 3 falhas | 2409 passam (2412)** — exatamente as 3 já conhecidas (**2
+  PRÉ-EXISTENTES** Windows/CRLF em `AcompanhamentoMetasPage.test.tsx` e `MinhasMetasPage.test.tsx` + **1
+  AMBIENTAL** por `.env.local` em `serviceColaboradores.test.ts`, provada por A/B no F6-A09) e **17
+  testes novos** de plataforma verdes. Nenhuma regressão fora dessas.
+- **SQL (docker/psql):** migration aplicada com a guarda `[PASS]`; smoke do bootstrap executado como
+  **`service_role`** (mesmo papel da Edge) em transação revertida ⇒ 1 colaborador + 1 identificador
+  ABERTO + 1 período `active` + 1 evento `ADMISSAO` + 1 vínculo F5-02; replay estável sem duplicação;
+  divergência de intenção recusada (`F6_A03_CONFLICT`); forma inválida recusada
+  (`F6_A03_INVALID_FOUNDER`) com rollback total. **Validadores `44-cenario-f6-a03.sql` e
+  `45-validar-f6-a03.sql` = exit 0** (A/B/C/C7-C9/D/D24/E/E5-E6/F/G).
+- **ACHADO DE IMPLEMENTAÇÃO (consequência do D24 — não é defeito):** ao criar o vínculo F5-02, o trigger
+  do **lifecycle do avaliado** (F5-11 P5.1/P5.3, `20260933000000`/`20260935000000`) provisiona
+  `observacoes_avaliado` (bundle = **exatamente** `observation.read`, **sem scope**, concedida só por
+  elegibilidade — P5.4) e grava `system_grant` com **ator NULL**. Assim o primeiro Admin passa a resolver
+  **10** capabilities (9 do bundle `admin` + `observation.read`) e a organização passa a ter **2** linhas
+  na trilha D18 (1 humana do `admin` + 1 automática). As asserções **D8** e **E1** do validador (era
+  F6-A03, quando o founder não era colaborador) foram atualizadas para o **conjunto exato** e para o
+  sujeito do provisionamento, com o motivo documentado no arquivo. Invariantes do contrato preservados:
+  catálogo **31**, bundle `admin` **9**, nenhuma role/capability nova.
+- **RUNTIME:** as Edges relevantes bootam com código próprio (`provisionar-organizacao` = `INVALID_INPUT`
+  de forma; demais = `NOT_AUTHORIZED`); `avaliacoes` segue `503 BOOT_ERROR` pelo defeito **distinto e
+  pré-existente** (bare specifier em `supabase/functions/avaliacoes/assignedSupabase.ts:22`), registrado
+  como finding separado e **não** tratado aqui.
+- **Limitação registrada:** a jornada HTTP ponta a ponta com operador da allowlist **não** foi executada
+  (não existe identidade de operador no Auth local — criá-la é ato de raiz de confiança, fora do escopo);
+  a evidência é o validador SQL, a execução da RPC como `service_role` e os testes de núcleo da Edge.
+- **Higiene de ambiente:** execuções abortadas do validador 45 deixam fixtures (os blocos commitam
+  individualmente); o resíduo foi limpo por script e os validadores reexecutados do zero. O banco local
+  preserva o tenant GREENFIELD F6 e o cenário LEGADO.
+
 ### 3.29 F6-A11 — desenho do bootstrap funcional do primeiro Admin GREENFIELD (Issue #273) — DESENHO **FECHADO** (D22–D30) · PR **#274** ABERTA
 
 - **Atividade/branch:** **F6-A11** (Issue **#273**), branch **`docs/f6-a11-bootstrap-funcional-admin`**,

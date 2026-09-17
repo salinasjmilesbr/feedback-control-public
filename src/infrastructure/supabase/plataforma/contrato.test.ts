@@ -22,10 +22,17 @@ import {
  * `organization_id`, `capability`, `scope`, `status`, `version`, `origin`,
  * `payload_hash`), o XOR do primeiro Admin é obrigatório e a lista de códigos
  * públicos é fechada (D21: escopo com exatamente duas operações).
+ *
+ * F6-A11 (Issue #273): a intenção ganhou a identidade FUNCIONAL mínima do
+ * primeiro Admin (`founder_full_name` e `founder_matricula`, ambas
+ * obrigatórias — D23/D26/D28); a allowlist estrita passa a ter 7 chaves.
  */
 
 const OPERACAO_ID = "66666666-6666-4666-8666-666666666666";
 const FOUNDER_ID = "77777777-7777-4777-8777-777777777777";
+/** Dados FICTÍCIOS da identidade funcional mínima do primeiro Admin (F6-A11). */
+const NOME_ADMIN = "Admin Teste A11";
+const MATRICULA_ADMIN = "A1100001";
 
 function corpoValido(extra: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -33,6 +40,8 @@ function corpoValido(extra: Record<string, unknown> = {}): Record<string, unknow
     operation_id: OPERACAO_ID,
     organization_name: "Org Sintetica F6-A03",
     founder_user_id: FOUNDER_ID,
+    founder_full_name: NOME_ADMIN,
+    founder_matricula: MATRICULA_ADMIN,
     ...extra,
   };
 }
@@ -83,6 +92,22 @@ describe("F6-A03 — contrato: operações fechadas (D21)", () => {
     }
   });
 
+  it("a allowlist da provisão tem EXATAMENTE as 7 chaves contratadas (F6-A11/D26)", () => {
+    expect([...CHAVES_POR_OPERACAO[OPERACAO_PROVISIONAR_ORGANIZACAO]].sort()).toEqual(
+      [
+        "operacao",
+        "operation_id",
+        "organization_name",
+        "founder_user_id",
+        "founder_email",
+        "founder_full_name",
+        "founder_matricula",
+      ].sort()
+    );
+    // O self-check continua transportando SOMENTE `operacao` (D20).
+    expect([...CHAVES_POR_OPERACAO[OPERACAO_OPERADOR_ATUAL]]).toEqual(["operacao"]);
+  });
+
   it("a lista de códigos públicos é fechada e não inclui código de sucesso", () => {
     expect([...CODIGOS_PUBLICOS].sort()).toEqual(
       [
@@ -111,6 +136,9 @@ describe("F6-A03 — contrato: allowlist ESTRITA por operação", () => {
     expect(resultado.entrada.founderUserId).toBe(FOUNDER_ID);
     expect(resultado.entrada.founderEmail).toBeUndefined();
     expect(resultado.entrada.operationId).toBe(OPERACAO_ID);
+    // F6-A11/D26: a identidade funcional mínima acompanha o XOR do Admin.
+    expect(resultado.entrada.founderFullName).toBe(NOME_ADMIN);
+    expect(resultado.entrada.founderMatricula).toBe(MATRICULA_ADMIN);
   });
 
   it("aceita founder_email normalizado (trim + minúsculas)", () => {
@@ -222,5 +250,76 @@ describe("F6-A03 — contrato: operações só de `operacao`", () => {
 
     const naoObjeto = validarSomenteOperacao(null, OPERACAO_OPERADOR_ATUAL);
     expect(naoObjeto.ok).toBe(false);
+  });
+});
+
+/**
+ * F6-A11 (Issue #273) — identidade FUNCIONAL mínima do primeiro Admin
+ * (`founder_full_name` + `founder_matricula`, D23/D26/D28).
+ *
+ * Prova que a ausência/vazio de cada campo novo é fail-closed com a taxonomia
+ * FECHADA (nenhum código público novo), que os valores são normalizados por
+ * `trim` na entrada devolvida e que a allowlist estrita continua recusando
+ * qualquer chave fora das 7 contratadas.
+ */
+describe("F6-A11 — contrato: identidade funcional mínima do primeiro Admin", () => {
+  it("corpo SEM founder_full_name ⇒ INVALID_NAME (nunca sucesso presumido)", () => {
+    const ausente = corpoValido();
+    delete ausente.founder_full_name;
+    const semCampo = validarEntradaProvisaoPlataforma(ausente);
+    expect(semCampo.ok).toBe(false);
+    if (!semCampo.ok) {
+      expect(semCampo.codigo).toBe("INVALID_NAME");
+      expect(semCampo.message).toBe("Informe o nome do primeiro Admin.");
+    }
+
+    for (const vazio of ["", "   ", "\t\n", undefined, 42]) {
+      const resultado = validarEntradaProvisaoPlataforma(
+        corpoValido({ founder_full_name: vazio })
+      );
+      expect(resultado.ok, String(vazio)).toBe(false);
+      if (!resultado.ok) expect(resultado.codigo, String(vazio)).toBe("INVALID_NAME");
+    }
+  });
+
+  it("corpo SEM founder_matricula ⇒ INVALID_FOUNDER (nunca sucesso presumido)", () => {
+    const ausente = corpoValido();
+    delete ausente.founder_matricula;
+    const semCampo = validarEntradaProvisaoPlataforma(ausente);
+    expect(semCampo.ok).toBe(false);
+    if (!semCampo.ok) {
+      expect(semCampo.codigo).toBe("INVALID_FOUNDER");
+      expect(semCampo.message).toBe("Informe a matrícula do primeiro Admin.");
+    }
+
+    for (const vazio of ["", "   ", "\t\n", undefined, 42]) {
+      const resultado = validarEntradaProvisaoPlataforma(
+        corpoValido({ founder_matricula: vazio })
+      );
+      expect(resultado.ok, String(vazio)).toBe(false);
+      if (!resultado.ok) expect(resultado.codigo, String(vazio)).toBe("INVALID_FOUNDER");
+    }
+  });
+
+  it("normaliza nome e matrícula do Admin com trim na entrada devolvida", () => {
+    const resultado = validarEntradaProvisaoPlataforma(
+      corpoValido({
+        founder_full_name: `   ${NOME_ADMIN}  `,
+        founder_matricula: `  ${MATRICULA_ADMIN}\t`,
+      })
+    );
+
+    expect(resultado.ok).toBe(true);
+    if (!resultado.ok) return;
+    expect(resultado.entrada.founderFullName).toBe(NOME_ADMIN);
+    expect(resultado.entrada.founderMatricula).toBe(MATRICULA_ADMIN);
+  });
+
+  it("chave desconhecida continua ⇒ INVALID_INPUT (allowlist estrita)", () => {
+    for (const chave of ["founder_fullname", "founder_matriculas", "founder_admin", "nome_admin"]) {
+      const resultado = validarEntradaProvisaoPlataforma(corpoValido({ [chave]: "x" }));
+      expect(resultado.ok, chave).toBe(false);
+      if (!resultado.ok) expect(resultado.codigo, chave).toBe("INVALID_INPUT");
+    }
   });
 });
