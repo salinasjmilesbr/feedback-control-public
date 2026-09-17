@@ -34,6 +34,52 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
+### 3.27 F6-A04 — Entrada do Admin Virtus na superfície de plataforma (Issue #269) — IMPLEMENTADO · PR/MERGE PENDENTES
+
+- **Atividade/branch:** **F6-A04** (Issue **#269**), branch **`feat/f6-a04-entrada-plataforma`**, base
+  **`main` = `242cf26120fb367ed6e7b16d8730cc4775d2de85`** (desenho **aprovado e integrado**).
+  Contrato normativo: `docs/F6-A04-desenho-tecnico.md` (§3.1/C1, D1–D5, critérios §6).
+- **Entregue (6 arquivos, sendo 2 novos):** **`src/auth/EntradaPlataforma.tsx`** (novo) — componente
+  **ÚNICO** com a sonda de UX já existente (`souOperadorDaPlataforma`, **D20**) e o `Link` para
+  `ROTA_PLATAFORMA_NOVA_ORGANIZACAO`; o portão começa **fechado** (`useState(false)`), só abre com a
+  sonda positiva e é **fail-closed** sem caminho soberano (`null`) e em qualquer falha; **não** decide
+  autorização, **não** toca storage, **não** chama RPC e **não** carrega dado de tenant. **Call sites
+  (4):** `src/auth/LoginPage.tsx` nos ramos **`acessoNegado`** (B1 — era beco sem saída) e
+  **`autenticado`** (B2), `src/auth/AguardandoSelecao.tsx` (D5) e a **refatoração** de
+  `src/auth/SemOrganizacao.tsx`, que deixou de ter o bloco inline. **Testes:**
+  `src/auth/EntradaPlataforma.test.tsx` (novo — visibilidade `false`/`true`, portão fail-closed,
+  barreiras estáticas e prova do **componente único** com ausência de sonda duplicada nos call sites)
+  e um caso de regressão do ramo `acessoNegado` em `src/auth/roteamentoAutenticado.test.tsx`.
+  **Nenhum** arquivo de `plataformaRotas.ts`, `LayoutPlataforma.tsx`, `AppRoutes.tsx`, Edge, RPC, SQL,
+  CI ou navegação foi tocado (D2/D21 e critério 5 do contrato).
+- **Mecanismo de sessão conferido (habilita o critério 1–3):** o cliente usado pela entrada é o de
+  infraestrutura, que **lê a sessão persistida pelo cliente de Auth** (`persistSession: true`;
+  `src/infrastructure/supabase/supabaseClient.ts:11-22` — fonte ÚNICA de sessão, F5-08 P4), portanto a
+  chamada `functions.invoke` leva o **JWT do usuário** ao self-check da Edge.
+- **GATES EXECUTADOS (árvore final):** **foco** `npx vitest run src/auth
+  src/authorization/estruturaUiSeguranca.test.ts` = **52 arquivos / 1055 testes, 0 falhas** (exit 0);
+  **`npm test` completo = 2 falhas | 2390 passam (2392)** — as 2 falhas são **PRÉ-EXISTENTES** de
+  **Windows/CRLF** (`AcompanhamentoMetasPage.test.tsx` e `MinhasMetasPage.test.tsx`, `toMatch` sobre
+  texto-fonte de páginas **não tocadas**; o CI ubuntu/LF é a autoridade); `npm run lint` **exit 0**;
+  `npm run build` **exit 0**; `git diff --check` **exit 0**; `git status --short` restrito aos **6
+  arquivos** previstos.
+- **Limitação de verificação (registrada, não silenciada):** a jornada **ponta a ponta** (login →
+  sessão → superfície) **não** foi executada neste workspace porque **não existe `.env.local`**
+  (`VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` ausentes ⇒ `src/auth/cliente.ts:20-24` devolve `null`
+  ⇒ estado `indisponivel` ⇒ a tela de login não renderiza formulário) — é o registro **R1/§3.3** do
+  desenho (**pré-requisito operacional**, não defeito de código). A evidência possível neste ambiente
+  é a de **testes de componente/render + leitura estática**, entregue acima; o projeto **não possui
+  ambiente DOM**, então o estado pós-sonda é provado pela separação apresentação × portão e pela
+  semântica fail-closed do próprio portão (coberta em `controladorProvisionamento.test.ts`).
+- **Desvios do desenho (nenhum de contrato):** (i) o arquivo do componente expõe também
+  `EntradaPlataformaVisivel` — sub-componente **puro** de apresentação, necessário para provar
+  "oculta com `false` / visível com `true`" (critério 6) no tooling sem DOM; continua **um** arquivo,
+  **uma** sonda e **um** link; (ii) foi acrescentado um caso de teste em
+  `roteamentoAutenticado.test.tsx` ("testes correspondentes" do critério 5). Nada mais divergiu:
+  D1–D5 e os critérios 1–5 do contrato foram seguidos.
+- **Pendências:** `push` e abertura do PR pelo **orquestrador** (`.ai/git-rules.md` §3 — limitação do
+  sandbox). **Nenhum merge** executado.
+
 ### 3.26 F6-A04 — Desenho do acesso do Admin Virtus à superfície de plataforma (Issue #269) — DESENHO ENTREGUE
 
 - **Atividade:** F6-A04 (Issue **#269**), branch **`docs/f6-a04-login-plataforma-desenho`**, base

@@ -4,6 +4,7 @@ import { toPublicError } from "../errors/applicationErrors";
 import { useAuth } from "./AuthContext";
 import { mensagemDeExpiracao } from "./politicaSessao";
 import AguardandoSelecao from "./AguardandoSelecao";
+import EntradaPlataforma from "./EntradaPlataforma";
 import SemOrganizacao from "./SemOrganizacao";
 import SessaoIndisponivel from "./SessaoIndisponivel";
 import "../styles/auth.css";
@@ -106,6 +107,10 @@ function LoginPage() {
               Sair
             </button>
           </div>
+          {/* F6-A04 (Issue #269): porta para a superfície de plataforma na tela
+              imediatamente posterior ao login (D2). A entrada é UX e só aparece
+              com o self-check positivo (D20); a autoridade segue server-side. */}
+          <EntradaPlataforma />
         </section>
       </div>
     );
@@ -121,6 +126,11 @@ function LoginPage() {
           </div>
         </section>
         <section className="auth-card">
+          {/* F6-A04 (Issue #269/B1): sem esta porta o estado `acessoNegado` — que
+              é o do operador de plataforma sem `user_profiles` (F6-A03 D17) —
+              ficava sem caminho para a superfície (D1/D2). A mensagem da
+              taxonomia F0-05 permanece intacta (D4). */}
+          <EntradaPlataforma />
           <button
             type="button"
             className="brand-button brand-button--secondary"
