@@ -400,10 +400,13 @@ Fonte detalhada: `.ai/git-rules.md`.
 7. **Medição de eficiência:** avaliar o trabalho por **custo + tempo + número de rodadas + esforço
    humano**, preservando o resultado e os gates exigidos; não criar rodadas extras apenas para
    repetir evidência já suficiente.
-8. **Janelas e preços de referência:** registrar, quando houver uso de modelos, as janelas **peak**
-   e **off-peak** e os preços de referência do **DeepSeek V4.1 Flash**, em horário de São Paulo.
-   Priorizar off-peak quando isso não interromper o trabalho nem criar rodadas adicionais; a
-   preferência de janela nunca autoriza prometer execução futura.
+8. **Janelas e preços de referência:** em horário de São Paulo, **off-peak** corresponde a **01h–03h
+   e 07h–22h**; em dias úteis, **peak** corresponde a **22h–01h e 03h–07h**. Para o **DeepSeek
+   V4.1 Flash**, os preços de referência são: **off-peak** — cache hit **US$ 0,003/M**, cache miss
+   **US$ 0,15/M** e output **US$ 0,60/M**; **peak** — cache hit **US$ 0,006/M**, cache miss
+   **US$ 0,30/M** e output **US$ 1,20/M**. Priorizar off-peak quando isso não interromper o
+   trabalho nem criar rodadas adicionais; a preferência de janela nunca autoriza prometer execução
+   futura.
 9. **Snapshot de consumo da API (informado pelo orquestrador):** total **US$ 69,68**; saldo
    **US$ 9,31**; últimos **7 dias US$ 29,39**; **13.744 requests**; **4.518.439.425 tokens**. O saldo
    é o recurso mais escasso do projeto e reforça as regras 1 a 4 desta parte (não repetir gate sem
