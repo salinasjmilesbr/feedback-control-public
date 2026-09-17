@@ -1,8 +1,5 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { useAuth } from "./AuthContext";
-import { obterProvisionamentoPlataforma } from "../services/plataforma/controladorProvisionamento";
-import { ROTA_PLATAFORMA_NOVA_ORGANIZACAO } from "../routes/plataformaRotas";
+import EntradaPlataforma from "./EntradaPlataforma";
 import "../styles/auth.css";
 
 /**
@@ -11,31 +8,13 @@ import "../styles/auth.css";
  * permanece bloqueada e nenhum tenant é inventado; o usuário pode apenas sair.
  * A UX final de seleção de organização pertence à F5-03 (não implementada aqui).
  *
- * F6-A03 (Issue #266) — entrada da superfície de PLATAFORMA: o operador
- * autorizado (self-check de UX, D20) recebe um link para criar a organização e
- * definir o primeiro Admin — é o estado em que ele aterrissa quando ainda não há
- * tenant. Nada aqui decide autorização: a ausência do link não bloqueia nada e a
- * decisão real continua na Edge + RPC soberana. O link NÃO é exibido para quem
- * não é operador.
+ * F6-A04 (Issue #269): a entrada da superfície de plataforma passou a ser o
+ * componente ÚNICO `EntradaPlataforma` (sonda + link, fail-closed, D20/D3) —
+ * antes o bloco era inline aqui. Nada aqui decide autorização: a ausência do
+ * link não bloqueia nada e a decisão real continua na Edge + RPC soberana.
  */
 function SemOrganizacao() {
   const { estado, sair } = useAuth();
-  const [ehOperadorDePlataforma, setEhOperadorDePlataforma] = useState(false);
-
-  useEffect(() => {
-    let vigente = true;
-    const provisionamento = obterProvisionamentoPlataforma();
-    // Fail-closed: sem caminho soberano no ambiente, nenhum atalho é oferecido.
-    if (!provisionamento) return undefined;
-
-    void provisionamento.souOperadorDaPlataforma().then((operador) => {
-      if (vigente) setEhOperadorDePlataforma(operador);
-    });
-
-    return () => {
-      vigente = false;
-    };
-  }, []);
 
   const email =
     estado.status === "semOrganizacao"
@@ -57,11 +36,7 @@ function SemOrganizacao() {
         </section>
         <section className="auth-card">
           {email && <p className="auth-card__email">{email}</p>}
-          {ehOperadorDePlataforma && (
-            <Link to={ROTA_PLATAFORMA_NOVA_ORGANIZACAO} className="auth-status__entrar">
-              Criar organização
-            </Link>
-          )}
+          <EntradaPlataforma />
           <button
             type="button"
             className="brand-button brand-button--secondary"

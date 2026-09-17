@@ -1,4 +1,5 @@
 import { useAuth } from "./AuthContext";
+import EntradaPlataforma from "./EntradaPlataforma";
 import "../styles/auth.css";
 
 /**
@@ -42,6 +43,11 @@ function AguardandoSelecao() {
               </button>
             ))}
           </div>
+
+          {/* F6-A04 (Issue #269/D5): mesma porta para a superfície de plataforma
+              no estado de sessão viva com N>1 memberships — componente ÚNICO
+              (sonda + link, fail-closed), zero superfície nova. */}
+          <EntradaPlataforma />
 
           <button
             type="button"
