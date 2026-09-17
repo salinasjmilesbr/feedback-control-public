@@ -1,4 +1,4 @@
-# Plano Mestre — Virtus (v16)
+# Plano Mestre — Virtus (v16.1)
 
 > ## NOTA DE RASTREABILIDADE — LEIA ANTES DE USAR ESTE DOCUMENTO
 >
@@ -27,7 +27,7 @@
 
 | Campo | Valor |
 |---|---|
-| Versão | **v16** |
+| Versão | **v16.1** |
 | Data-ação | Registro de governança documental da Issue #258 (reorganização do Plano Mestre) |
 | Escopo | Reorganizar e preservar TODO o conhecimento vigente de doutrina, processo, roadmap e estado |
 | Modelo | história + roadmap + manual operacional |
@@ -261,7 +261,7 @@ auditoria (GPT) / revisão (Codex) → squash merge em `main` → auditoria fina
 | **Flash (DEV de implementação)** | Agente de implementação (modelo `deepseek-flash`) | Lê as fontes obrigatórias, implementa o lote aprovado, roda validação progressiva, **autoauditoria estática**, autua as **Notas Flash** (Parte X), registra desvios/dívidas e **nunca faz merge**. |
 | **GPT (auditor)** | Auditor externo | Auditoria final: confronta o **SHA auditado** com o contrato e a Issue, verifica evidência × obrigação, aponta findings com severidade (bloqueante/dívida/fora de escopo). |
 | **Codex (revisor)** | Revisor pré-merge | Revisão de código/contrato antes do merge; aponta defeitos materiais (segurança, autorização, integridade, contrato). |
-| **Orquestrador** | Humano, autoridade decisória | Cria Issues e PRs, decide arquitetura (abre/fecha `D#`/`Q#`), **autoriza elevação de acesso**, aprova exceções, define escopo/fase, executa **squash merge** e o **CI oficial** é sua responsabilidade. |
+| **Orquestrador** | Humano, autoridade decisória | Cria Issues e PRs, decide arquitetura (abre/fecha `D#`/`Q#`), **autoriza elevação de acesso**, aprova exceções, define escopo/fase, executa **squash merge** e o **CI oficial** é sua responsabilidade. Deve consultar e preservar a memória operacional registrada (`.ai/handoff.md`, decisões, certificações e registros de dívidas), sem depender de memória informal. |
 
 Regra de ouro: **nenhum agente se autoconcede autoridade** — nem técnica, nem de elevação de acesso.
 
@@ -377,6 +377,13 @@ Fonte detalhada: `.ai/git-rules.md`.
 8. **Regra de ouro dos gates**: gate vermelho **não** se contorna; corrige-se a causa (código ou
    expectativa comprovadamente errada).
 
+9. **Execução no momento**: quando houver acesso e não existir decisão humana pendente, o agente
+   executa a atividade no fluxo corrente, em vez de prometer execução futura.
+10. **Avanço automático**: o fluxo avança para a próxima etapa operacional quando não houver
+    decisão humana pendente; bloqueios reais são registrados com a responsabilidade correspondente.
+11. **Não reabrir sem informação nova**: gate, auditoria ou decisão encerrados não são reabertos sem
+    informação relevante nova que altere a análise.
+
 ---
 
 ## Parte XIII — Custos e eficiência
@@ -390,7 +397,17 @@ Fonte detalhada: `.ai/git-rules.md`.
    arquivos inteiros, delegação de tarefas autocontidas, evitar reabrir arquivos grandes.
 5. **Falhar barato e cedo**: validação progressiva e fail-fast na cadeia de validadores.
 6. **Registrar limitações de ambiente** em vez de gastar rodadas contornando-as.
-7. **Snapshot de consumo da API (informado pelo orquestrador):** total **US$ 69,68**; saldo
+7. **Medição de eficiência:** avaliar o trabalho por **custo + tempo + número de rodadas + esforço
+   humano**, preservando o resultado e os gates exigidos; não criar rodadas extras apenas para
+   repetir evidência já suficiente.
+8. **Janelas e preços de referência:** em horário de São Paulo, **off-peak** corresponde a **01h–03h
+   e 07h–22h**; em dias úteis, **peak** corresponde a **22h–01h e 03h–07h**. Para o **DeepSeek
+   V4.1 Flash**, os preços de referência são: **off-peak** — cache hit **US$ 0,003/M**, cache miss
+   **US$ 0,15/M** e output **US$ 0,60/M**; **peak** — cache hit **US$ 0,006/M**, cache miss
+   **US$ 0,30/M** e output **US$ 1,20/M**. Priorizar off-peak quando isso não interromper o
+   trabalho nem criar rodadas adicionais; a preferência de janela nunca autoriza prometer execução
+   futura.
+9. **Snapshot de consumo da API (informado pelo orquestrador):** total **US$ 69,68**; saldo
    **US$ 9,31**; últimos **7 dias US$ 29,39**; **13.744 requests**; **4.518.439.425 tokens**. O saldo
    é o recurso mais escasso do projeto e reforça as regras 1 a 4 desta parte (não repetir gate sem
    informação nova, agrupar execuções, reaproveitar evidência certificada e conter contexto).
@@ -531,6 +548,6 @@ fontes. Itens conhecidos:
 
 ---
 
-*Fim da v16. Este documento é história + roadmap + manual operacional. Em caso de divergência com
+*Fim da v16.1. Este documento é história + roadmap + manual operacional. Em caso de divergência com
 `.ai/*` ou com o desenho de uma atividade, prevalece a fonte normativa — e a divergência deve ser
 registrada aqui.*
