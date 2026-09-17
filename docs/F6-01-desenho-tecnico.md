@@ -7,8 +7,11 @@
 
 ## 1. Invariantes da auditoria
 
-- Inspecionar e operar o produto somente em modo READ-ONLY: não editar código,
-  não corrigir dados e não transformar achado diretamente em trabalho.
+- **READ-ONLY**, nesta auditoria, significa não alterar código, arquitetura nem
+  corrigir o produto durante a execução. Mutações funcionais de dados realizadas
+  pela própria UI são permitidas e necessárias no cenário **GREENFIELD**, para
+  testar os fluxos reais do produto; não corrigir dados LEGACY nem transformar
+  achado diretamente em trabalho.
 - Preservar a massa **LEGACY** existente e manter a massa **GREENFIELD F6**
   isolada. Se dado LEGACY aparecer no contexto GREENFIELD, registrar o sintoma
   como possível falha de isolamento; não limpar para fazer o roteiro passar.
