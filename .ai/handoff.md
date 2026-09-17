@@ -34,7 +34,41 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
-### 3.25 F6-A03 — Implementação do bootstrap mínimo seguro do GREENFIELD (Issue #266) — IMPLEMENTADO · PR/MERGE PENDENTES
+### 3.26 F6-A04 — Desenho do acesso do Admin Virtus à superfície de plataforma (Issue #269) — DESENHO ENTREGUE
+
+- **Atividade:** F6-A04 (Issue **#269**), branch **`docs/f6-a04-login-plataforma-desenho`**, base
+  **`main` = `ccf7948`** (F6-A03 **já integrada**, incluindo a correção do replay idempotente).
+  **Exclusivamente documental**: zero código, SQL, CI ou teste alterado.
+- **Artefato:** `docs/F6-A04-desenho-tecnico.md` (novo, curto) — percurso-alvo (login por e-mail/senha
+  → sessão válida → `/plataforma/nova-organizacao`), auditoria com evidência arquivo:linha,
+  **4 bloqueios**, a correção mínima, **D1–D5**, 4 ameaças, 7 critérios de aceite, registros
+  **R1–R4** e **nenhuma dúvida bloqueante**.
+- **Bloqueios demonstrados:** **B1** no estado `acessoNegado` (sessão válida **sem** `user_profiles`
+  — o caso admissível do **D17** da F6-A03) a tela de login oferece **apenas "Sair"**
+  (`src/auth/LoginPage.tsx:114-134`): o guard **admite** a rota (D19) mas **não há porta**;
+  **B2** sessão válida **com** tenant (`autenticado`, `LoginPage.tsx:73-112`) e com N>1
+  (`aguardandoSelecao` → `AguardandoSelecao.tsx:46-52`) também **não** têm entrada — a F6-A03 só
+  ligou o link em `SemOrganizacao`; **B3** (pré-requisito de ambiente) sem
+  `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` o cliente é `null` (`src/auth/cliente.ts:20-24`), o
+  estado vira `indisponivel` e a tela **não renderiza formulário** (`LoginPage.tsx:45-59`) — **não
+  existe `.env.local` neste workspace**; **B4** (raiz de confiança) o operador precisa existir no
+  Auth com senha e estar na allowlist (`supabase/config.toml:63-66`; fixture sintética em
+  `supabase/validacao/01-cenario-f2-10.sql`).
+- **Correção desenhada (C1, mínima):** **um** componente `src/auth/EntradaPlataforma.tsx` com o
+  self-check de UX já existente (`souOperadorDaPlataforma`, **D20**, fail-closed) + `Link` para
+  `ROTA_PLATAFORMA_NOVA_ORGANIZACAO`, usado em **4 call sites** (ramos `acessoNegado` e
+  `autenticado` do login — essenciais —, `aguardandoSelecao` e a refatoração de `SemOrganizacao`).
+  **Nenhuma** rota, guard, Edge, RPC, RLS, grant, capability ou item de navegação novo.
+- **Gates proporcionais (docs):** `git diff --check` **exit 0** e escopo conferido por
+  `git status --short` (**apenas** `docs/F6-A04-desenho-tecnico.md` e este handoff). Nenhum gate de
+  produto foi executado — nenhum artefato de runtime foi tocado, seguindo o precedente das
+  atividades documentais (F6-01 e DEV-04).
+- **Não verificável neste ambiente:** a jornada de ponta a ponta (exige `.env.local` + stack local +
+  identidade sintética — §3.3 do documento) e o texto da Issue #269 (sem `gh`).
+- **Pendências:** implementação em atividade posterior com contrato fechado; `push` e abertura do PR
+  pelo **orquestrador** (`.ai/git-rules.md` §3 — limitação do sandbox; **nenhum** contorno).
+
+### 3.25 F6-A03 — Implementação do bootstrap mínimo seguro do GREENFIELD (Issue #266) — INTEGRADA em `main` como `ccf7948`
 
 - **Atividade/branch:** **F6-A03** (Issue **#266**), branch **`feat/f6-a03-bootstrap-greenfield`**,
   base **`main` = `453d16b0c7a143869065ef8f93f1bad9ab2c70b2`** (squash do **PR #267**, que fechou o
