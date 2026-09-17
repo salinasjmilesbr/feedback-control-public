@@ -5,7 +5,7 @@ import {
   type DepsContextoAutorizacao,
 } from "../../../src/authorization/contextoAutorizacao.ts";
 import type { AuthIdentity } from "../../../src/auth/tipos.ts";
-import { capabilityCanonica } from "../../../src/authorization/catalogoCapacidades.ts";
+import { capabilityCanonica } from "../../../src/authorization/catalogoCapabilities.ts";
 import type { Capability } from "../../../src/authorization/Capability.ts";
 import type { CapabilityComEscopos } from "../../../src/authorization/providers/reais.ts";
 import type { ScopeType } from "../../../src/authorization/policyEngine/types.ts";
