@@ -34,6 +34,49 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
+### 3.24 F6-A03 — Desenho do bootstrap mínimo seguro do GREENFIELD (Issue #266) — DESENHO ENTREGUE
+
+- **Atividade:** **F6-A03** (Issue **#266**), branch **`docs/f6-a03-bootstrap-greenfield-desenho`**,
+  base `main` = `52348dd`. **Atividade exclusivamente documental**: **zero** migration, RPC, Edge,
+  capability, role, policy, RLS, grant, página, teste ou workflow de CI criados/alterados.
+- **Artefato:** `docs/F6-A03-desenho-tecnico.md` (novo) — objetivo/não-escopo, estado atual auditado
+  com evidência arquivo:linha, **4 bloqueios** do GREENFIELD, separação explícita dos planos,
+  fluxo mínimo, contratos propostos, componentes reutilizados × novos, guardas impactadas,
+  critérios de aceite, 13 ameaças, **13 decisões fechadas (D1–D13)** e **3 dúvidas (Q1–Q3)**.
+- **Bloqueios demonstrados (o GREENFIELD não é executável hoje):** **B1** não existe caminho
+  autorizado para criar organização (RLS + zero policies + `revoke all` e regrant só `SELECT` em
+  `organizations`; **nenhuma** RPC insere em `organizations` nas 62 migrations; organizações só
+  nascem por fixture em `supabase/validacao/*`); **B2** o primeiro `admin` é inalcançável
+  (`usuario_eh_administrador` exige atribuição ativa de `admin` ⇒ circular; `conceder_acesso_role_rpc`
+  proíbe auto-concessão; o primitivo `conceder_acesso_role` não é exposto por nenhum caminho
+  server-side); **B3** o convite cria perfil + membership e **nenhuma** role (o convidado entra com
+  zero capabilities); **B4** não há superfície de produto para atribuir role (nenhum módulo do
+  cliente invoca `gerenciar-access-role`, e `[functions.gerenciar-access-role]` **não** está
+  declarado em `supabase/config.toml`).
+- **Separação entregue:** **autoridade de plataforma** (allowlist do ambiente + `auth.getUser` +
+  perfil ativo — confere **zero** capabilities/roles/membership; **não** é representável em
+  `capabilities`/`access_roles`/assignments) × **role `admin` do tenant** (`access_role` de sistema
+  validada por `usuario_eh_administrador`, `20260934000000:37-62`); nenhuma das duas implica a
+  outra. Coerente com F4-01 D9/D16/D17, F5-03 §5.5, F5-04 D15/D16 e F5-11 P5.2 (nenhuma decisão
+  fechada reaberta).
+- **Núcleo técnico proposto:** Edge `provisionar-organizacao` (trio `index`/`core`/contrato, allowlist
+  **estrita** de chaves, `verify_jwt = true`) + RPC `organizacao_provisionar_inicial` (**um**
+  `SECURITY INVOKER`, `search_path` fixo, `EXECUTE` só `service_role`, **sem DEFINER novo** — a
+  guarda F4-08 exige exatamente 4) com transação única e **idempotência por replay verificado**
+  (`operation_id` + `payload_hash` server-side, um único `insert ... on conflict ... returning`,
+  **sem advisory lock** — molde F5-11 P5.4); **contenção por construção** (só cria tenant novo e
+  vazio, nunca toca estado pré-existente) e reuso do primitivo `conceder_acesso_role` + trilha D18
+  `privilege_mutation_audit`. **Uma** tabela nova (`platform_provisioning_events`: RLS + zero
+  policies, `service_role` só `SELECT`/`INSERT`, append-only).
+- **Não verificado neste ambiente (registrado, não silenciado):** o texto da **Issue #266** (sem
+  `gh`) — escopo derivado do enunciado da atividade; execução de `db reset`, Docker e CI (sem
+  shell); e a descoberta automática da Edge `gerenciar-access-role` sem declaração no `config.toml`
+  (**F1** do documento, registrado como **verificação pendente**, não como defeito afirmado).
+- **Pendências:** implementação (atividade posterior, só com contrato fechado); respostas do
+  orquestrador a **Q1** (allowlist permanece × tabela de operadores), **Q2** (auto-bootstrap
+  permitido × separação de funções) e **Q3** (criar `user_profiles` do founder quando ausente);
+  abertura do PR pelo **orquestrador** (DEV-04 — `gh` ausente; **nenhum** contorno com PAT).
+
 ### 3.23 F5-11 — Observações soberanas e histórico auditável — P1/P1.1/P2/P3/P4/P5/P5.1–P5.4 IMPLEMENTADAS · CERTIFICADA (Issue #254) · PR/MERGE PENDENTES
 
 - **FECHAMENTO/CERTIFICAÇÃO (Issue #254) — artefato novo `docs/F5-11-certificacao.md`:** auditoria dos critérios de aceite do §17.1 (P1–P6) contra evidência arquivo:linha, cobrindo também a família **P5.1–P5.4** (SELF/read automático com o 5º system role `observacoes_avaliado`; autoridade administrativa por role; lifecycle de `user_profiles.status`; exclusividade automática e ausência de corrida no primeiro provisionamento). **Nenhuma lacuna MATERIAL BLOQUEANTE** foi encontrada. Dívidas **não bloqueantes** (com evidência no artefato, §4): prova literal de transferência entre organizações no validador da P5.1; defeito latente de **diagnóstico** (`v_falhas || 'literal'` em `text[]`) em `41-validar-f5-11-p3.sql`; `42-cenario-f5-11-p5-1.sql` ainda derivando organização/ciclo do tenant da P2; resíduo morto do domínio de ciclos. **Fora de escopo:** as 2 falhas pré-existentes de Windows/CRLF (F5-10) e a fidelidade do harness local aos pares de concorrência. **Não verificável neste ambiente:** texto das Issues #238/#254 (sem `gh`) — critérios extraídos do desenho técnico — e o SHA/base auditados (sem shell).
