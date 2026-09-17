@@ -186,7 +186,7 @@ begin
 
   -- (3) GATE DE PLATAFORMA no banco (D14/D17): o ator precisa ser admissivel.
   --     Perfil AUSENTE e admissivel (o ambiente virgem nao tem perfil ainda e a
-  --     linha e criada no passo (6)); perfil EXISTENTE e nao ativo RECUSA.
+  --     linha e criada no passo (8)); perfil EXISTENTE e nao ativo RECUSA.
   --     A autoridade nominal da allowlist e da fronteira server-side (Edge): a
   --     RPC e contida por CONSTRUCAO (D3) e nunca e alcancavel por `authenticated`
   --     (EXECUTE so service_role).
@@ -197,16 +197,7 @@ begin
     raise exception 'F6_A03_FORBIDDEN: perfil do operador de plataforma nao esta ativo';
   end if;
 
-  -- (4) FOUNDER: perfil existente precisa estar ativo (paridade com
-  --     `conceder_acesso_role`, que exige perfil ativo do titular).
-  if exists (
-    select 1 from public.user_profiles up
-     where up.id = p_founder_user_profile_id and up.status <> 'active'
-  ) then
-    raise exception 'F6_A03_INVALID_FOUNDER: perfil do primeiro Admin nao esta ativo';
-  end if;
-
-  -- (5) Role de sistema `admin` resolvida NOMINALMENTE (D9/D13 — nunca por UUID).
+  -- (4) Role de sistema `admin` resolvida NOMINALMENTE (D9/D13 — nunca por UUID).
   select r.id into v_role
     from public.access_roles r
    where r.name = 'admin'
@@ -217,9 +208,15 @@ begin
     raise exception 'F6_A03_INTERNAL: role de sistema admin indisponivel';
   end if;
 
-  -- (6) IDEMPOTENCIA — ponto UNICO de serializacao (unique em operation_id).
+  -- (5) IDEMPOTENCIA — ponto UNICO de serializacao (unique em operation_id).
   --     O id da organizacao e gerado pelo BANCO (convencao F1-02) e ja entra na
   --     trilha: e ele que torna o replay devolvivel sem novo efeito.
+  --
+  --     ORDEM (contrato §5, passos `a`→`b`): a resolucao da idempotencia vem
+  --     ANTES de qualquer validacao/escrita que dependa do ESTADO ATUAL do
+  --     founder. Assim o REPLAY e ESTAVEL e sem efeito: repetir a MESMA intencao
+  --     devolve o mesmo `organization_id` mesmo que o perfil do primeiro Admin
+  --     tenha sido inativado depois (fail-closed permanece para operacao NOVA).
   v_org := gen_random_uuid();
 
   insert into public.platform_provisioning_events (
@@ -247,6 +244,16 @@ begin
     end if;
 
     return v_evento.organization_id;  -- REPLAY: mesmo resultado, zero efeito novo
+  end if;
+
+  -- (6) FOUNDER: perfil EXISTENTE precisa estar ativo (paridade com
+  --     `conceder_acesso_role`, que exige perfil ativo do titular). Avaliado no
+  --     caminho de operacao NOVA — depois da idempotencia, conforme o §5.
+  if exists (
+    select 1 from public.user_profiles up
+     where up.id = p_founder_user_profile_id and up.status <> 'active'
+  ) then
+    raise exception 'F6_A03_INVALID_FOUNDER: perfil do primeiro Admin nao esta ativo';
   end if;
 
   -- (7) ORGANIZACAO nova (unico INSERT de organizacao do produto).

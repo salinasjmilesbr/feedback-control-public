@@ -72,6 +72,29 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   duas listas) e `supabase/migrations/README.md`. **Testes novos:** 112 casos em 7 arquivos
   (contrato, adapter, núcleo da Edge, controlador, guard, página/UI e o bloco novo de barreiras
   estáticas em `src/authorization/estruturaUiSeguranca.test.ts`).
+- **CORREÇÃO PÓS-AUDITORIA (PR #268 — 1 bloqueante):** a auditoria apontou que, no caminho do
+  primeiro Admin **por e-mail**, a Edge convidava no Auth **antes** de reconhecer o replay
+  idempotente: repetir o mesmo `operation_id` após o primeiro sucesso encontrava o e-mail já
+  existente e devolvia **`USER_EXISTS`** antes de chegar à RPC, quebrando a **idempotência ponta a
+  ponta**. Correção LOCAL, **sem reabrir D1–D21 nem ampliar escopo**: (i) a Edge passou a consultar a
+  âncora de idempotência (`platform_provisioning_events`, leitura por `service_role` — o `SELECT`
+  concedido por D7/§6.4 ganhou seu consumidor) **antes de qualquer efeito colateral no Auth**, via a
+  nova dependência `operacaoAplicada`; (ii) decisão pura e testável `reconhecerOperacaoAplicada` →
+  `nenhum` | `replay` (delega o REPLAY à RPC, **fonte única**, com o founder da 1ª execução) |
+  `divergente` (recusa `OPERATION_ALREADY_APPLIED`, sem convidar); a comparação do founder usa
+  `auth.admin.getUserById` (lookup **direto por id**, sem listagem/enumeração) e e-mail ausente ⇒
+  `divergente` (fail-closed); (iii) a RPC passou a resolver a **idempotência ANTES** da validação de
+  estado do founder, na ordem do **§5** do contrato (`a`→`b`) — o REPLAY fica **ESTÁVEL** mesmo se o
+  perfil do primeiro Admin for inativado depois, e operação NOVA com founder inativo segue
+  fail-closed; (iv) **compensação best-effort** (`compensarFounder`/`deleteUser`): a falha dela
+  **não** mascara mais o código público real (try/catch nos dois lados), tratada localmente **sem
+  complexidade adicional** — o órfão fica sem perfil e sem membership (inacessível). **Teste novo
+  exigido pela auditoria:** bloco “REPLAY REAL do caminho por e-mail” em
+  `edgeProvisionamento.test.ts` (mesma intenção ⇒ **mesmo `organization_id` SEM novo convite**,
+  ordem `consulta → provisão` provada; intenção divergente ⇒ `OPERATION_ALREADY_APPLIED` sem
+  convidar) + bloco **E4** no validador `45` (replay estável com founder inativado). Nenhum grant,
+  capability, role, policy ou policy de tabela mudou; `USER_EXISTS` para operação **NOVA** com
+  e-mail existente permanece (limitação §13 F6 do contrato).
 - **GATES EXECUTADOS (árvore final; Docker + CLI Supabase locais):** `npx supabase@2.116.0 db reset
   --local --yes` **exit 0**; **`01-cenario-f4-08` + `02-validar-f4-08` + `03-validar-f4-08-mutacoes`
   exit 0** (as guardas alteradas passam com a 52ª tabela classificada; **8 mutation tests** verdes);

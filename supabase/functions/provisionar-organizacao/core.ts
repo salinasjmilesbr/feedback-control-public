@@ -113,12 +113,76 @@ export interface DepsPlataforma {
    * Fail-closed: qualquer erro deve resolver `false`.
    */
   readonly operadorAutorizado: (authUserId: string) => Promise<boolean>;
+  /**
+   * Operação JÁ registrada na âncora de idempotência (D6/D7), com o e-mail da
+   * identidade do primeiro Admin da PRIMEIRA execução resolvido. `null` =
+   * operação NOVA.
+   *
+   * Existe para que a Edge **não** produza efeito colateral no Auth (convite)
+   * antes de reconhecer um REPLAY: sem esta consulta, repetir a mesma operação
+   * do caminho por e-mail encontraria o e-mail já existente e devolveria
+   * `USER_EXISTS`, quebrando a idempotência ponta a ponta.
+   */
+  readonly operacaoAplicada: (
+    operationId: string
+  ) => Promise<OperacaoAplicadaRegistrada | null>;
   /** Cria a identidade do primeiro Admin no Auth (Auth Admin, server-side). */
   readonly convidarFounder: (email: string) => Promise<ResultadoConvite>;
   /** Executa a RPC soberana transacional/idempotente. */
   readonly provisionar: (execucao: ExecucaoProvisionamento) => Promise<ResultadoProvisionamento>;
   /** Compensação: remove o usuário criado quando a RPC falha. */
   readonly compensarFounder: (userId: string) => Promise<void>;
+}
+
+/** Operação já aplicada, como a Edge a enxerga para reconhecer o REPLAY. */
+export interface OperacaoAplicadaRegistrada {
+  readonly organizationId: string;
+  readonly actorUserProfileId: string;
+  readonly organizationName: string;
+  /** Identidade do primeiro Admin que a PRIMEIRA execução estabeleceu. */
+  readonly founderUserId: string;
+  /** E-mail dessa identidade; `null` quando não foi possível resolver. */
+  readonly founderEmail: string | null;
+}
+
+export type ReconhecimentoOperacao =
+  | { readonly tipo: "nenhum" }
+  /** Mesma intenção: delega o REPLAY à RPC (fonte única), sem novo efeito. */
+  | { readonly tipo: "replay"; readonly founderUserId: string }
+  /** A âncora já existe com intenção DIVERGENTE: recusa fail-closed. */
+  | { readonly tipo: "divergente" };
+
+/**
+ * Decide se a intenção declarada é um REPLAY da operação já registrada.
+ *
+ * Função PURA. Duas garantias:
+ * - a Edge **nunca** declara sucesso nem devolve `organization_id` por conta
+ *   própria: o REPLAY é sempre resolvido pela RPC (fonte única da idempotência);
+ * - intenção divergente (outro ator, outro nome ou outro primeiro Admin) é
+ *   RECUSADA — nunca reaproveita silenciosamente a organização anterior.
+ *
+ * `founderEmail` ausente na operação registrada (ou não resolvido) ⇒
+ * `divergente` (fail-closed): sem prova de que o primeiro Admin é o mesmo, não há
+ * replay.
+ */
+export function reconhecerOperacaoAplicada(
+  aplicada: OperacaoAplicadaRegistrada | null,
+  intencao: {
+    readonly actorUserProfileId: string;
+    readonly organizationName: string;
+    readonly founderEmail: string;
+  }
+): ReconhecimentoOperacao {
+  if (!aplicada) return { tipo: "nenhum" };
+
+  const mesmaIntencao =
+    aplicada.actorUserProfileId === intencao.actorUserProfileId &&
+    aplicada.organizationName === intencao.organizationName &&
+    typeof aplicada.founderEmail === "string" &&
+    aplicada.founderEmail.trim().toLowerCase() === intencao.founderEmail;
+
+  if (!mesmaIntencao) return { tipo: "divergente" };
+  return { tipo: "replay", founderUserId: aplicada.founderUserId };
 }
 
 /**
@@ -196,10 +260,12 @@ export async function plataforma(req: Request, deps: DepsPlataforma): Promise<Re
   }
 
   // (1) Identidade soberana SEMPRE antes de qualquer decisão de conteúdo.
-  const callerId = await deps.resolveCaller(req.headers.get("Authorization"));
-  if (!callerId) {
+  const callerIdResolvido = await deps.resolveCaller(req.headers.get("Authorization"));
+  if (!callerIdResolvido) {
     return erro("NOT_AUTHORIZED", "Não autorizado.", 401);
   }
+  /** Ator VERIFICADO, já sem `null`: atravessa closures sem perder o tipo. */
+  const callerId: string = callerIdResolvido;
 
   // (2) Self-check de UX (D20). NUNCA autoriza nada e NUNCA recusa com 403:
   //     devolve `{ operador: boolean }` — fail-closed em qualquer falha.
@@ -226,50 +292,85 @@ export async function plataforma(req: Request, deps: DepsPlataforma): Promise<Re
   }
   const entrada = validacao.entrada;
 
-  // (5) Primeiro Admin: identidade EXISTENTE (API) ou NOVA (convite).
-  let founderUserId = entrada.founderUserId ?? null;
-  let criadoAgora: string | null = null;
+  // (5) Execução soberana: transacional e idempotente (a RPC deriva o hash
+  //     canônico server-side, revalida o ator e é a fonte ÚNICA do REPLAY).
+  //     A compensação é BEST-EFFORT: a falha dela NUNCA mascara o código público
+  //     real (o usuário órfão fica sem perfil/membership ⇒ inacessível).
+  async function executar(
+    founderUserId: string,
+    criadoAgora: string | null
+  ): Promise<Response> {
+    const resultado = await deps.provisionar({
+      operationId: entrada.operationId,
+      organizationName: entrada.organizationName,
+      founderUserId,
+      actorUserProfileId: callerId,
+    });
 
-  if (!founderUserId) {
-    const email = entrada.founderEmail;
-    if (!email) {
-      return erro("INVALID_FOUNDER");
+    if (resultado.erro || !resultado.organizationId) {
+      if (criadoAgora) {
+        try {
+          await deps.compensarFounder(criadoAgora);
+        } catch {
+          // Silencioso por desenho: a falha da compensação não altera a resposta
+          // (o órfão não tem perfil nem membership — fail-closed).
+        }
+      }
+      return erro(codigoPublicoDeErroRpc(resultado.erro));
     }
-    const convite = await deps.convidarFounder(email);
-    if (convite.erro) {
-      return erro(codigoPublicoDeErroRpc(convite.erro));
-    }
-    if (convite.existente) {
-      // A UI mínima cobre identidade NOVA ou "eu mesmo"; identidade existente de
-      // terceiro exige o caminho `founder_user_id` (registro §13 F6 do contrato).
-      return erro("USER_EXISTS");
-    }
-    if (!convite.userId) {
-      return erro("INTERNAL");
-    }
-    founderUserId = convite.userId;
-    criadoAgora = convite.userId;
+
+    return json({
+      ok: true,
+      operacao: OPERACAO_PROVISIONAR_ORGANIZACAO,
+      resultado: { organization_id: resultado.organizationId },
+    });
   }
 
-  // (6) Execução soberana: transacional e idempotente (a RPC deriva o hash
-  //     canônico server-side e revalida o ator).
-  const resultado = await deps.provisionar({
-    operationId: entrada.operationId,
-    organizationName: entrada.organizationName,
-    founderUserId,
-    actorUserProfileId: callerId,
-  });
-
-  if (resultado.erro || !resultado.organizationId) {
-    if (criadoAgora) {
-      await deps.compensarFounder(criadoAgora);
-    }
-    return erro(codigoPublicoDeErroRpc(resultado.erro));
+  // (6) Identidade JÁ declarada (caminho `founder_user_id`): a RPC reconhece o
+  //     REPLAY por si — nenhum efeito colateral no Auth.
+  const founderDeclarado = entrada.founderUserId;
+  if (founderDeclarado) {
+    return executar(founderDeclarado, null);
   }
 
-  return json({
-    ok: true,
-    operacao: OPERACAO_PROVISIONAR_ORGANIZACAO,
-    resultado: { organization_id: resultado.organizationId },
-  });
+  // (7) Caminho por E-MAIL: reconhecer o REPLAY **antes** de qualquer convite.
+  const email = entrada.founderEmail;
+  if (!email) {
+    return erro("INVALID_FOUNDER");
+  }
+
+  const reconhecimento = reconhecerOperacaoAplicada(
+    await deps.operacaoAplicada(entrada.operationId),
+    {
+      actorUserProfileId: callerId,
+      organizationName: entrada.organizationName,
+      founderEmail: email,
+    }
+  );
+
+  if (reconhecimento.tipo === "divergente") {
+    // A âncora já existe com OUTRA intenção: recusa fail-closed, sem convidar.
+    return erro("OPERATION_ALREADY_APPLIED");
+  }
+  if (reconhecimento.tipo === "replay") {
+    // REPLAY: ZERO efeito colateral no Auth; a RPC devolve o MESMO
+    // `organization_id` da primeira execução.
+    return executar(reconhecimento.founderUserId, null);
+  }
+
+  // (8) Operação NOVA: cria a identidade do primeiro Admin e provisiona.
+  const convite = await deps.convidarFounder(email);
+  if (convite.erro) {
+    return erro(codigoPublicoDeErroRpc(convite.erro));
+  }
+  if (convite.existente) {
+    // Identidade existente de terceiro exige o caminho `founder_user_id`
+    // (limitação registrada no contrato, §13 F6).
+    return erro("USER_EXISTS");
+  }
+  if (!convite.userId) {
+    return erro("INTERNAL");
+  }
+
+  return executar(convite.userId, convite.userId);
 }

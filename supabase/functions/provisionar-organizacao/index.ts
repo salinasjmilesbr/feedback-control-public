@@ -79,7 +79,37 @@ Deno.serve(async (req) => {
       return data.status === "active";
     },
 
-    // 3) Criação da identidade do primeiro Admin (Auth Admin).
+    // 3) Operação JÁ registrada na âncora de idempotência (D6/D7) — consultada
+    //    ANTES de qualquer convite, para que o REPLAY do caminho por e-mail não
+    //    esbarre no e-mail já existente.
+    operacaoAplicada: async (operationId) => {
+      const { data, error } = await admin
+        .from("platform_provisioning_events")
+        .select(
+          "organization_id, organization_name, actor_user_profile_id, founder_user_profile_id"
+        )
+        .eq("operation_id", operationId)
+        .maybeSingle();
+      if (error || !data) return null;
+
+      // E-mail da identidade do primeiro Admin da PRIMEIRA execução: lookup
+      // DIRETO por id (sem listagem/enumeração de usuários). Ausente ⇒ `null`,
+      // e o reconhecimento recusa o replay (fail-closed).
+      const { data: usuario } = await admin.auth.admin.getUserById(
+        data.founder_user_profile_id
+      );
+      const founderEmail = typeof usuario?.user?.email === "string" ? usuario.user.email : null;
+
+      return {
+        organizationId: data.organization_id,
+        actorUserProfileId: data.actor_user_profile_id,
+        organizationName: data.organization_name,
+        founderUserId: data.founder_user_profile_id,
+        founderEmail,
+      };
+    },
+
+    // 4) Criação da identidade do primeiro Admin (Auth Admin).
     convidarFounder: async (email) => {
       const { data, error } = await admin.auth.admin.inviteUserByEmail(email);
       if (error) {
@@ -116,9 +146,16 @@ Deno.serve(async (req) => {
       };
     },
 
-    // 5) Compensação: nenhum usuário parcial fica no Auth.
+    // 6) Compensação BEST-EFFORT: `deleteUser` devolve `{ error }` (não lança) e
+    //    a chamada pode falhar por transporte — nenhuma dessas falhas pode
+    //    mascarar o código público real da operação. O usuário órfão fica SEM
+    //    perfil e SEM membership (inacessível — fail-closed).
     compensarFounder: async (userId) => {
-      await admin.auth.admin.deleteUser(userId);
+      try {
+        await admin.auth.admin.deleteUser(userId);
+      } catch {
+        // Silencioso por desenho (dívida registrada no handoff).
+      }
     },
   };
 

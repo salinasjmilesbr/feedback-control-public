@@ -445,6 +445,58 @@ begin
   raise notice '[PASS] E3: trigger append-only bloqueia UPDATE da trilha inclusive para o owner';
 end $$;
 
+-- (E4) REPLAY e ESTAVEL: repetir a MESMA intencao devolve o MESMO
+--      `organization_id` mesmo que o perfil do primeiro Admin tenha sido
+--      INATIVADO depois (a idempotencia e resolvida ANTES da validacao de estado
+--      do founder, conforme o §5 do contrato) — e operacao NOVA com founder
+--      inativo continua RECUSADA (fail-closed).
+set role service_role;
+do $$
+declare
+  v_org    uuid := current_setting('f6a03.org_alfa')::uuid;
+  v_replay uuid;
+  v_n      integer;
+  v_msg    text;
+  v_ok     boolean;
+begin
+  update public.user_profiles set status = 'disabled'
+   where id = 'f6a30000-0000-4000-8000-000000000002';
+
+  v_replay := public.organizacao_provisionar_inicial(
+    'f6a3b000-0000-4000-8000-000000000001', 'F6-A03 Alfa',
+    'f6a30000-0000-4000-8000-000000000002', 'f6a30000-0000-4000-8000-000000000003');
+  if v_replay is distinct from v_org then
+    raise exception '[FAIL] E4: replay com founder inativo devolveu % (esperado %)', v_replay, v_org;
+  end if;
+
+  select count(*) into v_n from public.platform_provisioning_events e
+   where e.operation_id = 'f6a3b000-0000-4000-8000-000000000001';
+  if v_n <> 1 then
+    raise exception '[FAIL] E4: replay com founder inativo duplicou o evento (%)', v_n;
+  end if;
+
+  -- Operacao NOVA com o MESMO founder inativo continua fail-closed.
+  v_ok := false; v_msg := null;
+  begin
+    perform public.organizacao_provisionar_inicial(
+      'f6a3b000-0000-4000-8000-0000000000e4', 'F6-A03 Founder Inativo Nova',
+      'f6a30000-0000-4000-8000-000000000002', 'f6a30000-0000-4000-8000-000000000003');
+  exception when others then
+    v_msg := SQLERRM;
+    v_ok := position('F6_A03_INVALID_FOUNDER' in v_msg) > 0;
+  end;
+  if not v_ok then
+    raise exception '[FAIL] E4: operacao NOVA com founder inativo deveria recusar com F6_A03_INVALID_FOUNDER (msg=%)', v_msg;
+  end if;
+
+  -- Reativa o perfil: os blocos seguintes (F/G) usam o founder ativo.
+  update public.user_profiles set status = 'active'
+   where id = 'f6a30000-0000-4000-8000-000000000002';
+
+  raise notice '[PASS] E4: REPLAY ESTAVEL (mesmo com o primeiro Admin inativado depois) e operacao NOVA com founder inativo segue fail-closed';
+end $$;
+reset role;
+
 -- ============================================================================
 -- F) ISOLAMENTO — estado preexistente intocado + SEGUNDA organizacao
 -- ============================================================================
