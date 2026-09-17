@@ -49,7 +49,10 @@
 > neste registro (não reutilizável), o histórico da classificação anterior é preservado e a correção
 > **não** é implementada por quem apenas documenta.
 
-#### DT-013 — [FINDING BLOQUEANTE] Edge `avaliacoes` importa módulo inexistente
+> **Findings bloqueantes ABERTOS hoje: NENHUM.** O único registrado nesta classe (`DT-013`) foi
+> **resolvido pela Issue #260 / PR #261** e permanece aqui apenas como histórico da classe.
+
+#### DT-013 — [FINDING BLOQUEANTE · RESOLVIDO] Edge `avaliacoes` importava módulo inexistente
 - **Título curto:** `supabase/functions/avaliacoes/index.ts` importa `catalogoCapacidades.ts` (inexistente).
 - **Origem:** F5-06/F5-07 (registrado no handoff como defeito preexistente em `main`, não corrigido);
   **reclassificado de “dívida não bloqueante” para FINDING BLOQUEANTE na Issue #258**, por decisão do
@@ -66,9 +69,16 @@
 - **Classificação:** **FINDING BLOQUEANTE** (não é dívida aceita).
 - **Motivo de bloqueio:** é defeito funcional concreto com evidência direta, e não um resíduo de
   apresentação; mantê-lo como dívida aceita mascararia uma Edge quebrada.
-- **Momento de reavaliação:** **Issue própria e correção ANTES do fechamento da #258**, conforme
-  decisão do orquestrador.
-- **Status:** `bloqueante — pendente de Issue`.
+- **Momento de reavaliação:** **Issue própria e correção ANTES do fechamento da #258** (atendido — ver
+  desfecho).
+- **Desfecho:** **RESOLVIDO pela Issue #260 / PR #261** (squash-merged; `main` =
+  `f8bf8e33429b11d66e0f8ac9c7bf617c9b2788af`; **CI #306 verde**): a Edge passou a importar o módulo
+  canônico `src/authorization/catalogoCapabilities.ts` e a exceção conhecida foi removida da guarda de
+  grafo (`src/authorization/ciclosEdgeImportGraph.test.ts`). O ID `DT-013` permanece no registro (não
+  reutilizável) e o histórico acima é preservado.
+- **Status:** `concluída — resolvida pela Issue #260 / PR #261`.
+- **Bloqueio:** **nenhum** — o fechamento da #258 não depende mais deste item; depende apenas do fluxo
+  normal (CI oficial e merge pelo orquestrador).
 
 ## 1. Dívidas registradas
 
@@ -219,8 +229,9 @@
 - **Momento de reavaliação:** junto de DT-009 (mesmo par de arquivos).
 - **Status:** `aberta`.
 
-> **`DT-013` não é dívida:** foi **reclassificado como FINDING BLOQUEANTE** — ver **§0.1** (ID
-> preservado e não reutilizável; a correção exige **Issue própria antes do fechamento da #258**).
+> **`DT-013` não é dívida:** foi **reclassificado como FINDING BLOQUEANTE** e **resolvido pela Issue
+> #260 / PR #261** — ver **§0.1** (ID preservado e não reutilizável; histórico mantido; **sem bloqueio
+> pendente** para a #258).
 
 ### D. Documentação
 

@@ -136,7 +136,7 @@ sem inventar detalhe além do que o roadmap vigente define. Notação única: **
 | **Etapa 6 (F6)** | **Auditoria visual/funcional READ-ONLY**, classificando cada achado como **QUEBRADO**, **REGRESSÃO** ou **MELHORIA**, com **consolidação de causas ANTES de criar trabalho** (nenhuma correção começa antes da consolidação) | **Próxima fase.** Escopo definido pelo roadmap vigente; exige Issue + desenho fechado (Parte VI) |
 | **Etapa 7 (F7)** | **Segurança/hardening para produção** | Escopo definido pelo roadmap vigente; exige Issue + desenho fechado |
 | **Etapas 8–10 (F8–F10)** | **Arquitetura-alvo**, **migração**, **pré-produção** e **produção** (posteriores) | Vêm do roadmap vigente; o detalhamento exige Issue + desenho próprios e **não** é fabricado nesta v16 |
-| Backlog: dívidas e findings bloqueantes | Limpeza de resíduos legados, provas literais faltantes, defeitos de diagnóstico; **findings bloqueantes** aguardando Issue | Registro canônico: `docs/dividas-tecnicas.md` (seção de **FINDINGS BLOQUEANTES**); conversão em Issue só por decisão explícita (Parte XV) |
+| Backlog: dívidas e findings bloqueantes | Limpeza de resíduos legados, provas literais faltantes, defeitos de diagnóstico; **findings bloqueantes** (hoje: **nenhum em aberto** — o `DT-013` foi resolvido pela Issue #260 / PR #261) | Registro canônico: `docs/dividas-tecnicas.md` (seção de **FINDINGS BLOQUEANTES**); conversão em Issue só por decisão explícita (Parte XV) |
 
 ### II.3 Próxima fase
 **A próxima fase é a Etapa 6 (F6): auditoria visual/funcional READ-ONLY**, que classifica cada achado
@@ -165,14 +165,19 @@ qualquer fase, começa obrigatoriamente por **Issue + desenho fechado** (Parte V
   responsabilidade do **orquestrador** — as certificações registram isso explicitamente.
 - **PR e merge são do orquestrador** (`gh` ausente no ambiente do agente; DEV-04): o agente entrega
   branch + SHA + título/corpo quando não há mecanismo autorizado de abertura de PR.
+- **Estado da `main` de referência deste registro:** `f8bf8e33429b11d66e0f8ac9c7bf617c9b2788af`, com
+  **CI #306 verde** (squash do PR #261 — correção do import da Edge `avaliacoes`, DT-013).
+- **Esta branch (`docs/governanca-v16`, PR #259) segue ABERTA e não mergeada** — pode estar à frente
+  da `main` acima; nenhum resultado de CI é afirmado aqui para esta branch.
 
 ### III.3 Dívida e findings (resumo; lista canônica em `docs/dividas-tecnicas.md`)
 Resíduos legados de ciclo em módulos de apresentação (incluindo o caso **R1**, agora **verificado e
 fechado** como não-autoritativo, restando limpeza de UX), `localCycleRepository` legado por decisão,
 fixtures de teste que pré-carregam chaves locais, provas literais ainda ausentes em validadores e um
-defeito latente de **diagnóstico** em validador da F5-11. Há ainda **um finding BLOQUEANTE** registrado
-(Edge `avaliacoes` com import de módulo inexistente — `DT-013`), que **exige Issue e correção antes do
-fechamento** e não é dívida aceita. Classificação e detalhes: Parte XV e o registro canônico de
+defeito latente de **diagnóstico** em validador da F5-11. O **finding BLOQUEANTE** registrado
+(Edge `avaliacoes` com import de módulo inexistente — `DT-013`) foi **RESOLVIDO pela Issue #260 /
+PR #261** (squash-merged; `main` = `f8bf8e33429b11d66e0f8ac9c7bf617c9b2788af`; **CI #306 verde**) e
+**não há findings bloqueantes abertos**. Classificação e detalhes: Parte XV e o registro canônico de
 dívidas (`docs/dividas-tecnicas.md`, seção **FINDINGS BLOQUEANTES**).
 
 ---
@@ -452,7 +457,10 @@ Fonte detalhada: `.ai/git-rules.md`.
    bloqueantes, aceitas) e **FINDINGS BLOQUEANTES** — defeitos funcionais concretos e demonstrados,
    que **exigem Issue e correção antes do fechamento** da atividade correspondente. Um finding
    bloqueante **não** pode ser tratado como dívida nem silenciado por conveniência de cronograma
-   (hoje: `DT-013`, ver o registro canônico).
+   (o único registrado até aqui, `DT-013` — Edge `avaliacoes` com import de módulo inexistente —, foi
+   **resolvido pela Issue #260 / PR #261**, squash-merged em `main`
+   `f8bf8e33429b11d66e0f8ac9c7bf617c9b2788af` com **CI #306 verde**; **não há findings bloqueantes
+   abertos**).
 
 ---
 
