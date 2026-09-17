@@ -34,7 +34,33 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
-### 3.28 F6-A09 — boot das Edges: specifier relativo sem extensão (Deno) — CORRIGIDO · PR/MERGE PENDENTES
+### 3.29 F6-A11 — desenho do bootstrap funcional do primeiro Admin GREENFIELD (Issue #273) — DESENHO PROPOSTO · PR/MERGE PENDENTES
+
+- **Atividade/branch:** **F6-A11** (Issue **#273**), branch **`docs/f6-a11-bootstrap-funcional-admin`**,
+  base **`main` = `ba04dfd`** (`fix(F6-A09)…` **#272** e `feat(F6-A04)…` **#269** já integrados).
+- **Entregue (1 arquivo novo):** **`docs/F6-A11-desenho-tecnico.md`** — desenho curto que **emenda**
+  a F6-A03 (D1–D21) sem reabrir decisão alguma. Fecha: **D22** fonte canônica do nome humano em
+  `collaborators.full_name` (`user_profiles` não tem coluna de nome; o convite não grava metadados de
+  nome no Auth); **D23** dados mínimos do colaborador inicial (`full_name`, e-mail resolvido
+  server-side, matrícula declarada obrigatória, `admission_date` NULL, status `active`, sem
+  estrutura); **D24** criação + vínculo F5-02 **atômicos** pelos primitivos `colaborador_criar`
+  (ator = founder — único ator FK-válido do evento `ADMISSAO`) e `vincular_colaborador`, na mesma
+  transação do bootstrap, sem `INSERT` direto no vínculo e sem exceção de autorização; **D25**
+  assinatura nova, hash de intenção ampliado e **`DROP` explícito** da assinatura antiga (evita
+  sobrecarga viva sem âncora funcional) + inventário das chamadas; **D26** impacto mínimo no
+  formulário (2 chaves na allowlist estrita, taxonomia fechada, zero código público novo); **D27**
+  compatibilidade (trilha append-only intocada; replay de intenção antiga recusa fail-closed; tenant
+  já provisionado **não** é retro-completado). **Q4–Q6** registradas com recomendação (origem da
+  matrícula; coluna opcional na trilha; remediação do tenant incompleto).
+- **Nada de código nesta entrega:** nenhum arquivo de `src/`, `supabase/`, teste, CI ou configuração
+  foi alterado — a implementação é atividade própria, em branch própria (`.ai/workflow.md` §2).
+- **Gates proporcionais (docs-only):** `git diff --check` exit 0; `git status --short` restrito aos
+  **2 arquivos** previstos (o desenho + este handoff). Sem gate de produto: nenhum artefato
+  executável foi tocado.
+- **Próximo passo:** revisão/fechamento (GPT) das **Q4–Q6**; com o desenho em `main`, a implementação
+  segue exclusivamente o contrato D22–D27.
+
+### 3.28 F6-A09 — boot das Edges: specifier relativo sem extensão (Deno) — CORRIGIDO · INTEGRADO (squash #272 em `ba04dfd`)
 
 - **Atividade/branch:** **F6-A09**, branch **`fix/f6-a09-edge-boot-extension`**, base
   **`main` = `098235979c668a2719e42f1845705f4a39b5dd39`**. Sem Issue/PR vinculados nesta sessão.
