@@ -1,4 +1,4 @@
-import type { Capability } from "./Capability";
+import type { Capability } from "./Capability.ts";
 
 /**
  * Espelho literal do catálogo canônico de capabilities (F5-04, D14/D6).

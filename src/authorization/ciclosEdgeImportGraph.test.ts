@@ -93,6 +93,7 @@ interface Grafo {
   readonly quebrados: readonly string[];
   readonly diagnostico: readonly string[];
   readonly externos: ReadonlySet<string>;
+  readonly semExtensao: readonly string[];
 }
 
 function percorrerGrafo(entry: string): Grafo {
@@ -101,6 +102,7 @@ function percorrerGrafo(entry: string): Grafo {
   const quebrados: string[] = [];
   const diagnostico: string[] = [];
   const externos = new Set<string>();
+  const semExtensao: string[] = [];
 
   while (fila.length > 0) {
     const arquivo = fila.shift()!;
@@ -130,11 +132,16 @@ function percorrerGrafo(entry: string): Grafo {
         }
         continue;
       }
+      // O Deno/Edge Runtime NÃO resolve extensão implícita: um specifier
+      // relativo sem `.ts`/`.tsx` compila em Vite/Vitest/tsc e QUEBRA o boot.
+      if (!/\.(ts|tsx)$/.test(specifier)) {
+        semExtensao.push(`specifier relativo sem extensão explícita: "${specifier}" em ${arquivo}`);
+      }
       fila.push(caminho);
     }
   }
 
-  return { visitados, quebrados, diagnostico, externos };
+  return { visitados, quebrados, diagnostico, externos, semExtensao };
 }
 
 /** Entries reais das Edge Functions do projeto. */
@@ -223,6 +230,44 @@ describe("F5-09 P7 — import graph das DEMAIS Edge Functions (regressão)", () 
         );
       }
     }
+  });
+});
+
+/**
+ * F6-A09 — lacuna do gate acima: `resolver()` tenta `${alvo}.ts` e portanto
+ * tolera specifier relativo SEM extensão, exatamente como o TypeScript. O
+ * Deno/Edge Runtime é mais estrito e exige a extensão explícita. Foi assim que
+ * `src/authorization/catalogoCapabilities.ts` (`"./Capability"`, sem `.ts`)
+ * manteve o CI VERDE enquanto 6 das 10 Edges respondiam
+ * `503 {"code":"BOOT_ERROR"}` no runtime local — o grafo continuava "íntegro"
+ * para o gate e inválido para o Deno.
+ *
+ * Estas asserções fecham a lacuna para TODAS as Edges (o walk é por entry real).
+ */
+describe("F6-A09 — specifier relativo no grafo das Edges exige extensão explícita (Deno)", () => {
+  it("NENHUMA Edge tem import relativo sem extensão explícita (.ts/.tsx)", () => {
+    const problemas: string[] = [];
+    for (const entry of ENTRIES) {
+      const grafo = entry === ENTRY_CICLOS ? grafoCiclos : percorrerGrafo(entry);
+      for (const achado of grafo.semExtensao) problemas.push(`${entry}: ${achado}`);
+    }
+    expect(problemas).toEqual([]);
+  });
+
+  it("o gate não é vazio: os grafos inspecionam imports relativos reais", () => {
+    const relativos = ENTRIES.flatMap((entry) => {
+      const grafo = entry === ENTRY_CICLOS ? grafoCiclos : percorrerGrafo(entry);
+      return [...grafo.visitados]
+        .flatMap((caminho) => specifiersDe(POR_CAMINHO.get(caminho) ?? ""))
+        .filter((specifier) => specifier.startsWith("."));
+    });
+    expect(relativos.length).toBeGreaterThan(50);
+  });
+
+  it("o catálogo canônico (defeito original do F6-A09) importa `./Capability.ts`", () => {
+    const catalogo = POR_CAMINHO.get("src/authorization/catalogoCapabilities.ts");
+    expect(catalogo).toBeDefined();
+    expect(specifiersDe(catalogo ?? "")).toContain("./Capability.ts");
   });
 });
 
