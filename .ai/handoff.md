@@ -34,15 +34,16 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
-### 3.24 F6-A03 — Desenho do bootstrap mínimo seguro do GREENFIELD (Issue #266) — DESENHO ENTREGUE
+### 3.24 F6-A03 — Desenho do bootstrap mínimo seguro do GREENFIELD (Issue #266 / PR #267) — DESENHO ENTREGUE · Q1–Q3 FECHADAS (A) · UI MÍNIMA NO ESCOPO
 
 - **Atividade:** **F6-A03** (Issue **#266**), branch **`docs/f6-a03-bootstrap-greenfield-desenho`**,
   base `main` = `52348dd`. **Atividade exclusivamente documental**: **zero** migration, RPC, Edge,
   capability, role, policy, RLS, grant, página, teste ou workflow de CI criados/alterados.
 - **Artefato:** `docs/F6-A03-desenho-tecnico.md` (novo) — objetivo/não-escopo, estado atual auditado
-  com evidência arquivo:linha, **4 bloqueios** do GREENFIELD, separação explícita dos planos,
-  fluxo mínimo, contratos propostos, componentes reutilizados × novos, guardas impactadas,
-  critérios de aceite, 13 ameaças, **13 decisões fechadas (D1–D13)** e **3 dúvidas (Q1–Q3)**.
+  com evidência arquivo:linha, **5 bloqueios** (B1–B5) do GREENFIELD, separação explícita dos planos,
+  fluxo mínimo **com a jornada de produto**, contratos propostos (Edge + RPC + **UI mínima** +
+  self-check), componentes reutilizados × novos, guardas impactadas, critérios de aceite,
+  **18 ameaças**, **21 decisões fechadas (D1–D21)** e **Q1–Q3 FECHADAS (alternativa A)**.
 - **Bloqueios demonstrados (o GREENFIELD não é executável hoje):** **B1** não existe caminho
   autorizado para criar organização (RLS + zero policies + `revoke all` e regrant só `SELECT` em
   `organizations`; **nenhuma** RPC insere em `organizations` nas 62 migrations; organizações só
@@ -52,7 +53,26 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   server-side); **B3** o convite cria perfil + membership e **nenhuma** role (o convidado entra com
   zero capabilities); **B4** não há superfície de produto para atribuir role (nenhum módulo do
   cliente invoca `gerenciar-access-role`, e `[functions.gerenciar-access-role]` **não** está
-  declarado em `supabase/config.toml`).
+  declarado em `supabase/config.toml`); **B5** a superfície de produto **não é alcançável no
+  ambiente virgem**: o molde `/convidar-usuario` vive sob `LayoutAutenticado`→`LayoutFuncional` e o
+  formulário devolve `null` fora do estado `autenticado` — sem perfil o estado é `acessoNegado` e
+  sem membership é `semOrganizacao`, exatamente as condições em que o bootstrap é necessário
+  (⇒ **D19**). **B4 permanece** após esta atividade (a UI mínima só concede `admin` no bootstrap).
+- **Q1–Q3 FECHADAS na alternativa A (registradas em D14–D17):** **Q1/D14** a autoridade de plataforma
+  permanece na **allowlist do ambiente** (não se cria tabela `platform_operators` nesta atividade);
+  **Q2/D15** o operador **pode** ser o próprio primeiro Admin (auto-bootstrap), sustentado pela
+  contenção por construção; **Q3/D16** a transação **cria o `user_profiles` do founder** quando
+  ausente — e, por consequência forçada (**D17**, derivada), também o do **ator**: a FK de
+  `created_by` de `conceder_acesso_role` quebraria sem ele, e autor sintético/`system_grant`
+  **falsificaria** a autoria que D18/P5.1 protegem. As alternativas **B** ficam registradas **apenas
+  como reversão** (§13 F10).
+- **Ajuste de escopo incorporado (D18–D21):** a solução **inclui a UI mínima de plataforma** —
+  rota `/plataforma/nova-organizacao` **fora** de `LayoutAutenticado`/`LayoutFuncional` (**D19**),
+  guard de plataforma que admite `semOrganizacao`/`acessoNegado`, página com **dois** campos
+  (nome da organização + primeiro Admin: "eu mesmo" ou e-mail), **self-check de UX**
+  `plataforma.operador_atual` (**D20**, UX e nunca autoridade; negativa neutra) e **escopo fechado**
+  (**D21**: só organização + role `admin`; sem portal SaaS, sem listar tenants, sem gerir
+  roles/operadores/planos/lifecycle).
 - **Separação entregue:** **autoridade de plataforma** (allowlist do ambiente + `auth.getUser` +
   perfil ativo — confere **zero** capabilities/roles/membership; **não** é representável em
   `capabilities`/`access_roles`/assignments) × **role `admin` do tenant** (`access_role` de sistema
@@ -72,10 +92,11 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   `gh`) — escopo derivado do enunciado da atividade; execução de `db reset`, Docker e CI (sem
   shell); e a descoberta automática da Edge `gerenciar-access-role` sem declaração no `config.toml`
   (**F1** do documento, registrado como **verificação pendente**, não como defeito afirmado).
-- **Pendências:** implementação (atividade posterior, só com contrato fechado); respostas do
-  orquestrador a **Q1** (allowlist permanece × tabela de operadores), **Q2** (auto-bootstrap
-  permitido × separação de funções) e **Q3** (criar `user_profiles` do founder quando ausente);
-  abertura do PR pelo **orquestrador** (DEV-04 — `gh` ausente; **nenhum** contorno com PAT).
+- **Pendências:** implementação (atividade posterior, só com contrato fechado: migration + RPC, Edge,
+  **UI mínima + guard**, validadores `44`/`45` e 2 passos de CI). **Nenhuma dúvida permanece
+  aberta** — o desenho está **fechado para implementação**. `push`/PR/merge ficam com o
+  **orquestrador** (DEV-04: `gh` ausente e `push` falhando por `askpass` do VS Code; **nenhum**
+  contorno com PAT).
 
 ### 3.23 F5-11 — Observações soberanas e histórico auditável — P1/P1.1/P2/P3/P4/P5/P5.1–P5.4 IMPLEMENTADAS · CERTIFICADA (Issue #254) · PR/MERGE PENDENTES
 
