@@ -94,6 +94,9 @@ export function criarProvisionamentoPlataforma(
       const resposta = await edge.provisionarOrganizacao({
         operationId: entrada.operationId,
         organizationName: entrada.organizationName,
+        // F6-A11/D23: identidade funcional mínima (intenção, nunca autoridade).
+        founderFullName: entrada.founderFullName,
+        founderMatricula: entrada.founderMatricula,
         ...(entrada.founderUserId !== undefined
           ? { founderUserId: entrada.founderUserId }
           : {}),

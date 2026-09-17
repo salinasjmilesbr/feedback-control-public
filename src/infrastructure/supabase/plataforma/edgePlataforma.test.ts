@@ -19,10 +19,18 @@ import {
  * caminhos: `error` de transporte, `error` no corpo 2xx e `data.ok !== true`
  * (2xx fora do contrato). Código desconhecido NUNCA vira sucesso: vira
  * `INTERNAL` (critério 25).
+ *
+ * F6-A11 (Issue #273): a identidade FUNCIONAL mínima do primeiro Admin
+ * (`founder_full_name` e `founder_matricula`, D23/D26/D28) viaja SEMPRE — nas
+ * DUAS formas de identificação — porque o bootstrap só conclui com a âncora
+ * funcional do primeiro Admin.
  */
 
 const OPERACAO_ID = "66666666-6666-4666-8666-666666666666";
 const FOUNDER_ID = "77777777-7777-4777-8777-777777777777";
+/** Dados FICTÍCIOS da identidade funcional mínima do primeiro Admin (F6-A11). */
+const NOME_ADMIN = "Admin Teste A11";
+const MATRICULA_ADMIN = "A1100001";
 
 interface Invocacao {
   readonly funcao: string;
@@ -61,17 +69,29 @@ function clienteFalso(resposta: {
 }
 
 describe("F6-A03 — adapter: corpo transportado", () => {
-  it("envia operacao + operation_id + nome, sem nenhum campo de autoridade", () => {
+  it("envia operacao + operation_id + nome + identidade funcional do Admin, sem campo de autoridade", () => {
     const corpo = corpoDaProvisao({
       operationId: OPERACAO_ID,
       organizationName: "Org Sintetica",
+      founderFullName: NOME_ADMIN,
+      founderMatricula: MATRICULA_ADMIN,
       founderUserId: FOUNDER_ID,
     });
 
     expect(Object.keys(corpo).sort()).toEqual(
-      ["founder_user_id", "operacao", "operation_id", "organization_name"].sort()
+      [
+        "founder_user_id",
+        "founder_full_name",
+        "founder_matricula",
+        "operacao",
+        "operation_id",
+        "organization_name",
+      ].sort()
     );
     expect(corpo.operacao).toBe(OPERACAO_PROVISIONAR_ORGANIZACAO);
+    expect(corpo.organization_name).toBe("Org Sintetica");
+    expect(corpo.founder_full_name).toBe(NOME_ADMIN);
+    expect(corpo.founder_matricula).toBe(MATRICULA_ADMIN);
     expect(JSON.stringify(corpo)).not.toContain("organization_id");
     expect(JSON.stringify(corpo)).not.toContain("actor_user_profile_id");
     expect(JSON.stringify(corpo)).not.toContain("capability");
@@ -81,6 +101,8 @@ describe("F6-A03 — adapter: corpo transportado", () => {
     const porId = corpoDaProvisao({
       operationId: OPERACAO_ID,
       organizationName: "Org A",
+      founderFullName: NOME_ADMIN,
+      founderMatricula: MATRICULA_ADMIN,
       founderUserId: FOUNDER_ID,
     });
     expect(porId.founder_user_id).toBe(FOUNDER_ID);
@@ -89,10 +111,62 @@ describe("F6-A03 — adapter: corpo transportado", () => {
     const porEmail = corpoDaProvisao({
       operationId: OPERACAO_ID,
       organizationName: "Org B",
+      founderFullName: NOME_ADMIN,
+      founderMatricula: MATRICULA_ADMIN,
       founderEmail: "novo.admin@example.invalid",
     });
     expect(porEmail.founder_email).toBe("novo.admin@example.invalid");
     expect(Object.prototype.hasOwnProperty.call(porEmail, "founder_user_id")).toBe(false);
+  });
+
+  it("inclui founder_full_name e founder_matricula nas DUAS formas (F6-A11/D26)", () => {
+    const porId = corpoDaProvisao({
+      operationId: OPERACAO_ID,
+      organizationName: "Org A",
+      founderFullName: NOME_ADMIN,
+      founderMatricula: MATRICULA_ADMIN,
+      founderUserId: FOUNDER_ID,
+    });
+    const porEmail = corpoDaProvisao({
+      operationId: OPERACAO_ID,
+      organizationName: "Org B",
+      founderFullName: NOME_ADMIN,
+      founderMatricula: MATRICULA_ADMIN,
+      founderEmail: "outro.admin@example.invalid",
+    });
+
+    for (const [forma, corpo] of [
+      ["eu mesmo (founder_user_id)", porId],
+      ["outra pessoa (founder_email)", porEmail],
+    ] as const) {
+      // As duas chaves novas viajam SEMPRE — nenhuma forma as omite.
+      expect(Object.prototype.hasOwnProperty.call(corpo, "founder_full_name"), forma).toBe(true);
+      expect(Object.prototype.hasOwnProperty.call(corpo, "founder_matricula"), forma).toBe(true);
+      expect(corpo.founder_full_name, forma).toBe(NOME_ADMIN);
+      expect(corpo.founder_matricula, forma).toBe(MATRICULA_ADMIN);
+    }
+
+    // Exatamente 6 chaves em cada forma: 4 fixas + a chave do Admin + a nova.
+    expect(Object.keys(porId).sort()).toEqual(
+      [
+        "operacao",
+        "operation_id",
+        "organization_name",
+        "founder_user_id",
+        "founder_full_name",
+        "founder_matricula",
+      ].sort()
+    );
+    expect(Object.keys(porEmail).sort()).toEqual(
+      [
+        "operacao",
+        "operation_id",
+        "organization_name",
+        "founder_email",
+        "founder_full_name",
+        "founder_matricula",
+      ].sort()
+    );
   });
 
   it("o self-check envia apenas a operação", async () => {
@@ -114,6 +188,8 @@ describe("F6-A03 — adapter: fail-closed nos três caminhos", () => {
     const resposta = await criarEdgePlataforma(cliente).provisionarOrganizacao({
       operationId: OPERACAO_ID,
       organizationName: "Org",
+      founderFullName: NOME_ADMIN,
+      founderMatricula: MATRICULA_ADMIN,
       founderUserId: FOUNDER_ID,
     });
     expect(resposta.ok).toBe(true);
@@ -130,6 +206,8 @@ describe("F6-A03 — adapter: fail-closed nos três caminhos", () => {
       const resposta = await criarEdgePlataforma(cliente).provisionarOrganizacao({
         operationId: OPERACAO_ID,
         organizationName: "Org",
+        founderFullName: NOME_ADMIN,
+        founderMatricula: MATRICULA_ADMIN,
         founderUserId: FOUNDER_ID,
       });
       expect(resposta.ok).toBe(false);
@@ -144,6 +222,8 @@ describe("F6-A03 — adapter: fail-closed nos três caminhos", () => {
     const resposta = await criarEdgePlataforma(cliente).provisionarOrganizacao({
       operationId: OPERACAO_ID,
       organizationName: "Org",
+      founderFullName: NOME_ADMIN,
+      founderMatricula: MATRICULA_ADMIN,
       founderUserId: FOUNDER_ID,
     });
     expect(resposta.ok).toBe(false);
@@ -155,6 +235,8 @@ describe("F6-A03 — adapter: fail-closed nos três caminhos", () => {
     const r1 = await criarEdgePlataforma(conhecido.cliente).provisionarOrganizacao({
       operationId: OPERACAO_ID,
       organizationName: "Org",
+      founderFullName: NOME_ADMIN,
+      founderMatricula: MATRICULA_ADMIN,
       founderUserId: FOUNDER_ID,
     });
     expect(r1.ok).toBe(false);
@@ -164,6 +246,8 @@ describe("F6-A03 — adapter: fail-closed nos três caminhos", () => {
     const r2 = await criarEdgePlataforma(desconhecido.cliente).provisionarOrganizacao({
       operationId: OPERACAO_ID,
       organizationName: "Org",
+      founderFullName: NOME_ADMIN,
+      founderMatricula: MATRICULA_ADMIN,
       founderUserId: FOUNDER_ID,
     });
     expect(r2.ok).toBe(false);
@@ -177,6 +261,8 @@ describe("F6-A03 — adapter: fail-closed nos três caminhos", () => {
     await edge.provisionarOrganizacao({
       operationId: OPERACAO_ID,
       organizationName: "Org",
+      founderFullName: NOME_ADMIN,
+      founderMatricula: MATRICULA_ADMIN,
       founderUserId: FOUNDER_ID,
     });
     expect(proibidas).toEqual([]);

@@ -30,6 +30,12 @@ import type { CodigoPublico } from "../../infrastructure/supabase/plataforma/con
 const ORGANIZACAO = "f6a30000-0000-4000-8000-0000000000f1";
 const OPERADOR = "f6a30000-0000-4000-8000-000000000003";
 const OPERACAO_ID = "f6a3b000-0000-4000-8000-000000000001";
+/**
+ * F6-A11 (Issue #273): identidade FUNCIONAL mínima do primeiro Admin — dados
+ * FICTÍCIOS que a porta agora exige em TODA intenção (D23/D26/D28).
+ */
+const NOME_ADMIN = "Admin Teste A11";
+const MATRICULA_ADMIN = "A1100001";
 
 interface EdgeFalsa extends EdgePlataforma {
   readonly provisoes: unknown[];
@@ -97,6 +103,8 @@ describe("F6-A03 — controlador: provisionamento", () => {
       operationId: OPERACAO_ID,
       organizationName: "Org Sintetica",
       founderUserId: OPERADOR,
+      founderFullName: NOME_ADMIN,
+      founderMatricula: MATRICULA_ADMIN,
     });
 
     expect(resultado).toEqual({ organizationId: ORGANIZACAO });
@@ -105,6 +113,9 @@ describe("F6-A03 — controlador: provisionamento", () => {
         operationId: OPERACAO_ID,
         organizationName: "Org Sintetica",
         founderUserId: OPERADOR,
+        // F6-A11/D23: a identidade funcional mínima atravessa a porta.
+        founderFullName: NOME_ADMIN,
+        founderMatricula: MATRICULA_ADMIN,
       },
     ]);
   });
@@ -114,7 +125,12 @@ describe("F6-A03 — controlador: provisionamento", () => {
       provisao: { ok: false, error: { code: "OPERATION_ALREADY_APPLIED", message: "x" } },
     });
     await expect(
-      controlador(edge).provisionarOrganizacao({ operationId: OPERACAO_ID, organizationName: "Org" })
+      controlador(edge).provisionarOrganizacao({
+        operationId: OPERACAO_ID,
+        organizationName: "Org",
+        founderFullName: NOME_ADMIN,
+        founderMatricula: MATRICULA_ADMIN,
+      })
     ).rejects.toBeInstanceOf(ConflictError);
   });
 
@@ -129,7 +145,12 @@ describe("F6-A03 — controlador: provisionamento", () => {
     ]) {
       const edge = edgeFalsa({ provisao: { ok: true, data } });
       await expect(
-        controlador(edge).provisionarOrganizacao({ operationId: OPERACAO_ID, organizationName: "Org" }),
+        controlador(edge).provisionarOrganizacao({
+          operationId: OPERACAO_ID,
+          organizationName: "Org",
+          founderFullName: NOME_ADMIN,
+          founderMatricula: MATRICULA_ADMIN,
+        }),
         JSON.stringify(data)
       ).rejects.toBeInstanceOf(TechnicalError);
     }

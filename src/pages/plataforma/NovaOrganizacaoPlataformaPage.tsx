@@ -108,28 +108,39 @@ export interface PropsFormularioNovaOrganizacao {
   readonly nome: string;
   readonly forma: FormaPrimeiroAdmin;
   readonly email: string;
+  /** F6-A11/D22-D23: nome humano do primeiro Admin (obrigatório). */
+  readonly nomeAdmin: string;
+  /** F6-A11/D23/D28: matrícula declarada do primeiro Admin (obrigatória). */
+  readonly matriculaAdmin: string;
   readonly mensagem: string;
   readonly enviando: boolean;
   readonly aoMudarNome: (valor: string) => void;
   readonly aoMudarForma: (valor: FormaPrimeiroAdmin) => void;
   readonly aoMudarEmail: (valor: string) => void;
+  readonly aoMudarNomeAdmin: (valor: string) => void;
+  readonly aoMudarMatriculaAdmin: (valor: string) => void;
   readonly aoEnviar: (evento: FormEvent) => void;
 }
 
 /**
- * Formulário MÍNIMO: nome da organização + identificação do primeiro Admin
- * ("eu mesmo" ou e-mail). Nenhuma escolha de role, organização, tenant ou
- * usuário é oferecida (critério 23).
+ * Formulário MÍNIMO: nome da organização, identificação do primeiro Admin
+ * ("eu mesmo" ou e-mail) e a identidade FUNCIONAL dele (nome humano e matrícula
+ * — F6-A11/D23). Nenhuma escolha de role, organização, tenant ou usuário é
+ * oferecida (critério 23).
  */
 export function FormularioNovaOrganizacao({
   nome,
   forma,
   email,
+  nomeAdmin,
+  matriculaAdmin,
   mensagem,
   enviando,
   aoMudarNome,
   aoMudarForma,
   aoMudarEmail,
+  aoMudarNomeAdmin,
+  aoMudarMatriculaAdmin,
   aoEnviar,
 }: PropsFormularioNovaOrganizacao) {
   return (
@@ -177,6 +188,28 @@ export function FormularioNovaOrganizacao({
           </label>
         )}
 
+        <label className="branding-field">
+          <span>Nome do primeiro Admin</span>
+          <input
+            type="text"
+            autoComplete="off"
+            value={nomeAdmin}
+            onChange={(evento) => aoMudarNomeAdmin(evento.target.value)}
+            required
+          />
+        </label>
+
+        <label className="branding-field">
+          <span>Matrícula do primeiro Admin</span>
+          <input
+            type="text"
+            autoComplete="off"
+            value={matriculaAdmin}
+            onChange={(evento) => aoMudarMatriculaAdmin(evento.target.value)}
+            required
+          />
+        </label>
+
         {mensagem && (
           <p className="auth-message" role="alert">
             {mensagem}
@@ -223,6 +256,9 @@ function NovaOrganizacaoPlataformaPage({
   const [nome, setNome] = useState("");
   const [forma, setForma] = useState<FormaPrimeiroAdmin>("eu");
   const [email, setEmail] = useState("");
+  // F6-A11/D23: identidade funcional mínima do primeiro Admin (dados a criar).
+  const [nomeAdmin, setNomeAdmin] = useState("");
+  const [matriculaAdmin, setMatriculaAdmin] = useState("");
   const [mensagem, setMensagem] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [nomeConfirmado, setNomeConfirmado] = useState("");
@@ -260,6 +296,8 @@ function NovaOrganizacaoPlataformaPage({
       const montagem = montarEntradaProvisao({
         operacaoId: crypto.randomUUID(),
         nome,
+        nomeAdmin,
+        matriculaAdmin,
         forma,
         email,
         usuarioAutenticadoId,
@@ -300,11 +338,15 @@ function NovaOrganizacaoPlataformaPage({
       nome={nome}
       forma={forma}
       email={email}
+      nomeAdmin={nomeAdmin}
+      matriculaAdmin={matriculaAdmin}
       mensagem={mensagem}
       enviando={enviando}
       aoMudarNome={setNome}
       aoMudarForma={setForma}
       aoMudarEmail={setEmail}
+      aoMudarNomeAdmin={setNomeAdmin}
+      aoMudarMatriculaAdmin={setMatriculaAdmin}
       aoEnviar={enviar}
     />
   );

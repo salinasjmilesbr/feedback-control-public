@@ -36,6 +36,12 @@ const FOUNDER = "f6a30000-0000-4000-8000-000000000002";
 const OPERACAO_ID = "f6a3b000-0000-4000-8000-000000000001";
 const ORGANIZACAO = "f6a30000-0000-4000-8000-0000000000f1";
 const EMAIL = "novo.admin@example.invalid";
+/**
+ * F6-A11 (Issue #273): identidade FUNCIONAL mínima do primeiro Admin — dados
+ * FICTÍCIOS que acompanham TODA intenção de provisionamento (D23/D26/D28).
+ */
+const NOME_ADMIN = "Admin Teste A11";
+const MATRICULA_ADMIN = "A1100001";
 
 interface Chamadas {
   readonly ordem: string[];
@@ -117,6 +123,10 @@ function corpoProvisao(extra: Record<string, unknown> = {}): Record<string, unkn
     operation_id: OPERACAO_ID,
     organization_name: "Org Sintetica F6-A03",
     founder_user_id: FOUNDER,
+    // F6-A11/D26: as duas chaves novas são OBRIGATÓRIAS na allowlist estrita —
+    // os corpos de teste as enviam centralmente por este builder.
+    founder_full_name: NOME_ADMIN,
+    founder_matricula: MATRICULA_ADMIN,
     ...extra,
   };
 }
@@ -264,6 +274,9 @@ describe("F6-A03 — Edge core: provisionamento", () => {
       organizationName: "Org Sintetica F6-A03",
       founderUserId: FOUNDER,
       actorUserProfileId: OPERADOR,
+      // F6-A11/D23: a identidade funcional mínima chega à execução da RPC.
+      founderFullName: NOME_ADMIN,
+      founderMatricula: MATRICULA_ADMIN,
     });
   });
 
@@ -378,6 +391,9 @@ describe("F6-A03 — Edge core: REPLAY REAL do caminho por e-mail (defeito corri
         organizationName: "Org Sintetica F6-A03",
         founderUserId: FOUNDER,
         actorUserProfileId: OPERADOR,
+        // F6-A11/D26: a intenção funcional do Admin também atravessa o replay.
+        founderFullName: NOME_ADMIN,
+        founderMatricula: MATRICULA_ADMIN,
       },
     ]);
     expect(chamadas.compensar).toEqual([]);
@@ -477,5 +493,102 @@ describe("F6-A03 — Edge core: mapa fechado de erro da RPC", () => {
     for (const [erro, esperado] of casos) {
       expect(codigoPublicoDeErroRpc(erro), JSON.stringify(erro)).toBe(esperado);
     }
+  });
+});
+
+/**
+ * F6-A11 (Issue #273) — GUARDA ESTÁTICA da migration do bootstrap funcional.
+ *
+ * Lê a migration REAL (`import.meta.glob` com `?raw`, mesmo molde dos guards de
+ * import graph do repositório) e falha de forma explícita se o contrato FECHADO
+ * (D24/D25) não estiver materializado no SQL:
+ * - a assinatura ANTIGA de 4 parâmetros é REMOVIDA explicitamente (D25: sem o
+ *   `drop`, o `create or replace` criaria sobrecarga e deixaria vivo um caminho
+ *   de bootstrap SEM a âncora funcional);
+ * - a assinatura NOVA tem exatamente os 7 parâmetros, com os nomes contratados;
+ * - o colaborador e o vínculo nascem pelos PRIMITIVOS canônicos (D24);
+ * - NENHUM `INSERT` direto em `membership_collaborator_links` (Issue §5);
+ * - a RPC continua `SECURITY INVOKER` (nenhum `SECURITY DEFINER` novo).
+ */
+const MIGRACOES_F6_A11 = import.meta.glob(
+  "../../../../supabase/migrations/*f6_a11*.sql",
+  { query: "?raw", import: "default", eager: true }
+) as Readonly<Record<string, string>>;
+const MIGRACAO_F6_A11 = Object.values(MIGRACOES_F6_A11)[0] ?? "";
+
+/** Assinatura NOVA declaração da RPC (nomes dos parâmetros, na ordem do SQL). */
+const MARCADOR_ASSINATURA = "create or replace function public.organizacao_provisionar_inicial(";
+
+function parametrosDaAssinatura(texto: string): readonly string[] {
+  const inicio = texto.indexOf(MARCADOR_ASSINATURA);
+  if (inicio === -1) return [];
+  const fim = texto.indexOf(")", inicio + MARCADOR_ASSINATURA.length);
+  if (fim === -1) return [];
+  return texto
+    .slice(inicio + MARCADOR_ASSINATURA.length, fim)
+    .split("\n")
+    .map((linha) => /^\s*(p_[a-z_]+)\s+\S/.exec(linha)?.[1])
+    .filter((nome): nome is string => typeof nome === "string");
+}
+
+describe("F6-A11 — guarda estática da migration do bootstrap funcional (D22–D30)", () => {
+  it("o glob encontra EXATAMENTE a migration F6-A11 do bootstrap", () => {
+    expect(Object.keys(MIGRACOES_F6_A11)).toHaveLength(1);
+    expect(MIGRACAO_F6_A11.length).toBeGreaterThan(0);
+    expect(MIGRACAO_F6_A11).toContain("organizacao_provisionar_inicial");
+  });
+
+  it("remove EXPLICITAMENTE a assinatura antiga de 4 parâmetros (D25)", () => {
+    expect(MIGRACAO_F6_A11).toContain(
+      "drop function if exists public.organizacao_provisionar_inicial(uuid, text, uuid, uuid)"
+    );
+  });
+
+  it("declara a assinatura NOVA com os 7 parâmetros contratados (D25)", () => {
+    // A assinatura SQL nova (regprocedure) aparece no corpo da migration.
+    expect(MIGRACAO_F6_A11).toContain(
+      "public.organizacao_provisionar_inicial(uuid, text, uuid, uuid, text, text, text)"
+    );
+
+    // E a DECLARAÇÃO da função traz exatamente estes 7 nomes, nesta ordem.
+    expect(parametrosDaAssinatura(MIGRACAO_F6_A11)).toEqual([
+      "p_operation_id",
+      "p_organization_name",
+      "p_founder_user_profile_id",
+      "p_actor_user_profile_id",
+      "p_founder_full_name",
+      "p_founder_matricula",
+      "p_founder_email",
+    ]);
+  });
+
+  it("cria colaborador e vínculo pelos PRIMITIVOS canônicos (D24)", () => {
+    // Issue §5: o bootstrap reusa os primitivos, nunca DML próprio.
+    expect(MIGRACAO_F6_A11).toContain("public.colaborador_criar(");
+    expect(MIGRACAO_F6_A11).toContain("public.vincular_colaborador(");
+  });
+
+  it("NÃO faz INSERT direto em membership_collaborator_links (Issue §5)", () => {
+    // A regex EXIGE o `(` logo após o nome da tabela: a própria migration cita a
+    // string `'insert into public.membership_collaborator_links'` dentro de uma
+    // checagem `position(...)`, que NÃO é um INSERT e por isso não pode casar.
+    const insertDireto =
+      /insert\s+into\s+public\.membership_collaborator_links\s*\(/i;
+    expect(insertDireto.test(MIGRACAO_F6_A11)).toBe(false);
+  });
+
+  it("a RPC do bootstrap é SECURITY INVOKER (nenhum DEFINER novo)", () => {
+    const inicio = MIGRACAO_F6_A11.indexOf(MARCADOR_ASSINATURA);
+    const fim = MIGRACAO_F6_A11.indexOf("$fn$;", inicio);
+    expect(inicio).toBeGreaterThan(-1);
+    expect(fim).toBeGreaterThan(inicio);
+
+    // A asserção é feita sobre a DEFINIÇÃO da função (do `create or replace` até
+    // o fechamento `$fn$;`): a migration ainda MENCIONA `SECURITY DEFINER` no
+    // comentário do cabeçalho e na guarda interna `position('SECURITY DEFINER'
+    // in v_def)`, que existem justamente para PROIBIR o DEFINER.
+    const definicao = MIGRACAO_F6_A11.slice(inicio, fim).toLowerCase();
+    expect(definicao).not.toContain("security definer");
+    expect(definicao).toContain("security invoker");
   });
 });

@@ -103,11 +103,14 @@ enabled = true
 verify_jwt = true
 entrypoint = "./functions/observacoes/index.ts"
 
-# F6-A03 (Issue #266): fronteira server-side do PLANO DE PLATAFORMA. verify_jwt =
-# true porque as duas operacoes (`plataforma.provisionar_organizacao` e o
-# self-check `plataforma.operador_atual`) exigem identidade autenticada; a funcao
-# AINDA resolve o ator com auth.getUser, aplica a allowlist de plataforma e
-# executa a RPC soberana `organizacao_provisionar_inicial` (que revalida tudo).
+# F6-A03 (Issue #266) + F6-A11 (Issue #273): fronteira server-side do PLANO DE
+# PLATAFORMA. verify_jwt = true porque as duas operacoes
+# (`plataforma.provisionar_organizacao` e o self-check `plataforma.operador_atual`)
+# exigem identidade autenticada; a funcao AINDA resolve o ator com auth.getUser,
+# aplica a allowlist de plataforma e executa a RPC soberana
+# `organizacao_provisionar_inicial` (que revalida tudo e, desde a F6-A11/D22-D25,
+# cria atomicamente a ancora funcional do primeiro Admin - colaborador + vinculo
+# F5-02 - resolvendo o e-mail da identidade server-side).
 [functions.provisionar-organizacao]
 enabled = true
 verify_jwt = true
