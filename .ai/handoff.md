@@ -34,7 +34,37 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
-### 3.28 F6-A09 — boot das Edges: specifier relativo sem extensão (Deno) — CORRIGIDO · PR/MERGE PENDENTES
+### 3.29 F6-A11 — desenho do bootstrap funcional do primeiro Admin GREENFIELD (Issue #273) — DESENHO **FECHADO** (D22–D30) · PR **#274** ABERTA
+
+- **Atividade/branch:** **F6-A11** (Issue **#273**), branch **`docs/f6-a11-bootstrap-funcional-admin`**,
+  base **`main` = `ba04dfd`** (`fix(F6-A09)…` **#272** e `feat(F6-A04)…` **#269** já integrados).
+- **Entregue (1 arquivo novo):** **`docs/F6-A11-desenho-tecnico.md`** — desenho curto que **emenda**
+  a F6-A03 (D1–D21) sem reabrir decisão alguma. Fecha: **D22** fonte canônica do nome humano em
+  `collaborators.full_name` (`user_profiles` não tem coluna de nome; o convite não grava metadados de
+  nome no Auth); **D23** dados mínimos do colaborador inicial (`full_name`, e-mail resolvido
+  server-side, matrícula declarada obrigatória, `admission_date` NULL, status `active`, sem
+  estrutura); **D24** criação + vínculo F5-02 **atômicos** pelos primitivos `colaborador_criar`
+  (ator = founder — único ator FK-válido do evento `ADMISSAO`) e `vincular_colaborador`, na mesma
+  transação do bootstrap, sem `INSERT` direto no vínculo e sem exceção de autorização; **D25**
+  assinatura nova, hash de intenção ampliado e **`DROP` explícito** da assinatura antiga (evita
+  sobrecarga viva sem âncora funcional) + inventário das chamadas; **D26** impacto mínimo no
+  formulário (2 chaves na allowlist estrita, taxonomia fechada, zero código público novo); **D27**
+  compatibilidade (trilha append-only intocada; replay de intenção antiga recusa fail-closed; tenant
+  já provisionado **não** é retro-completado). **D28–D30** fecham **Q4–Q6 na alternativa A** na
+  revisão da **PR #274**: matrícula como **campo obrigatório** do formulário de plataforma (D28);
+  trilha `platform_provisioning_events` **sem** coluna nova, colaborador derivável pelo vínculo ativo
+  (D29); remediação do tenant incompleto por **organização nova** pelo fluxo completo (D30) — as
+  alternativas B/C ficam registradas como follow-up reversível, sem reabrir D22–D27 nem a F6-A03.
+- **Nada de código nesta entrega:** nenhum arquivo de `src/`, `supabase/`, teste, CI ou configuração
+  foi alterado — a implementação é atividade própria, em branch própria (`.ai/workflow.md` §2).
+- **Gates proporcionais (docs-only):** `git diff --check` exit 0; `git status --short` restrito aos
+  **2 arquivos** previstos (o desenho + este handoff). Sem gate de produto: nenhum artefato
+  executável foi tocado.
+- **Próximo passo:** desenho **FECHADO** e pronto para implementação — a implementação é
+  atividade/branch própria, **encerra a Issue #273** e segue exclusivamente o contrato **D22–D30**.
+  A **PR #274** aguarda merge pelo orquestrador (o agente de implementação/desenho **não** faz merge).
+
+### 3.28 F6-A09 — boot das Edges: specifier relativo sem extensão (Deno) — CORRIGIDO · INTEGRADO (squash #272 em `ba04dfd`)
 
 - **Atividade/branch:** **F6-A09**, branch **`fix/f6-a09-edge-boot-extension`**, base
   **`main` = `098235979c668a2719e42f1845705f4a39b5dd39`**. Sem Issue/PR vinculados nesta sessão.
