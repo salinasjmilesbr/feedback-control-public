@@ -175,14 +175,16 @@ declare v_tab text;
     -- a primeira migration, sem repetir o padrao expor-depois-endurecer da P4.
     'evaluation_goals','evaluation_goal_approvals',
     'evaluation_goal_events','evaluation_cycle_goal_limits',
-    'evaluation_observations','evaluation_observation_events'];
+    'evaluation_observations','evaluation_observation_events',
+    -- F6-A03 (Issue #266): trilha do plano de plataforma — fechada.
+    'platform_provisioning_events'];
 begin
   foreach v_tab in array v_closed loop
     if exists (select 1 from pg_policies p where p.schemaname='public' and p.tablename=v_tab) then
       raise exception '[FAIL] tabela fechada com policy indevida: %', v_tab;
     end if;
   end loop;
-  raise notice '[PASS] 28 tabelas fechadas permanecem sem policy (22 historicas + as 4 tabelas de metas por D22-A + as 2 tabelas de observacoes por D9)';
+  raise notice '[PASS] 29 tabelas fechadas permanecem sem policy (22 historicas + as 4 tabelas de metas por D22-A + as 2 tabelas de observacoes por D9 + a trilha de plataforma da F6-A03)';
 end $$;
 
 do $$
@@ -269,7 +271,9 @@ declare
     -- observacoes. A categoria aqui e apenas o inventario completo das tabelas.
     'evaluation_goals','evaluation_goal_approvals','evaluation_goal_events',
     'evaluation_cycle_goal_limits',
-    'evaluation_observations','evaluation_observation_events'];
+    'evaluation_observations','evaluation_observation_events',
+    -- F6-A03 (Issue #266): trilha do plano de plataforma (deny-by-default integral).
+    'platform_provisioning_events'];
   v_privs text[] := array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'];
 begin
   foreach v_tab in array v_todos loop
@@ -279,7 +283,7 @@ begin
       end if;
     end loop;
   end loop;
-  raise notice '[PASS] anon sem qualquer privilegio de tabela (51 tabelas x 7 privs)';
+  raise notice '[PASS] anon sem qualquer privilegio de tabela (52 tabelas x 7 privs)';
 end $$;
 
 do $$
@@ -311,7 +315,8 @@ declare
     -- service_role). F5-11 P1 (D9): idem para as 2 tabelas de observacoes.
     'evaluation_goals','evaluation_goal_approvals','evaluation_goal_events',
     'evaluation_cycle_goal_limits',
-    'evaluation_observations','evaluation_observation_events'];
+    'evaluation_observations','evaluation_observation_events',
+    'platform_provisioning_events'];
 begin
   foreach v_tab in array v_todos loop
     foreach v_priv in array v_dml loop
@@ -320,7 +325,7 @@ begin
       end if;
     end loop;
   end loop;
-  raise notice '[PASS] authenticated sem INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER (51 tabelas)';
+  raise notice '[PASS] authenticated sem INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER (52 tabelas)';
 end $$;
 
 do $$
@@ -350,7 +355,8 @@ declare v_tab text;
     -- F5-11 P1 (D9): idem para as 2 tabelas de observacoes.
     'evaluation_goals','evaluation_goal_approvals',
     'evaluation_goal_events','evaluation_cycle_goal_limits',
-    'evaluation_observations','evaluation_observation_events'];
+    'evaluation_observations','evaluation_observation_events',
+    'platform_provisioning_events'];
   -- F5-07: log append-only — tem policy SELECT own-tenant mas NAO tem grant a
   -- `authenticated` (categoria propria; nao e "legivel" nem "fechada").
   v_policy_sem_grant text[] := array['collaborator_events'];
@@ -370,7 +376,7 @@ begin
       raise exception '[FAIL] authenticated com SELECT no log append-only public.%', v_tab;
     end if;
   end loop;
-  raise notice '[PASS] authenticated com SELECT somente nas tabelas legiveis (22 legiveis: 18 F4-08 + evaluation_cycles do P5 + organizations/user_profiles/user_organization_memberships; 28 fechadas + 1 log append-only sem SELECT)';
+  raise notice '[PASS] authenticated com SELECT somente nas tabelas legiveis (22 legiveis: 18 F4-08 + evaluation_cycles do P5 + organizations/user_profiles/user_organization_memberships; 29 fechadas + 1 log append-only sem SELECT)';
 end $$;
 
 -- ----------------------------------------------------------------------------
@@ -406,11 +412,15 @@ begin
       -- F5-11 P1 (Issue #238): as 2 tabelas de observacoes entram no inventario
       -- D16 (catalogacao explicita obrigatoria) e na categoria DENY-BY-DEFAULT
       -- INTEGRAL por D9.
-      'evaluation_observations','evaluation_observation_events');
+      'evaluation_observations','evaluation_observation_events',
+      -- F6-A03 (Issue #266): trilha do plano de plataforma entra no inventario
+      -- D16 (catalogacao explicita obrigatoria) e na categoria deny-by-default
+      -- integral.
+      'platform_provisioning_events');
   if v_t is not null then
     raise exception '[FAIL] tabela public nao classificada (D16 — catalogacao explicita obrigatoria): %', v_t;
   end if;
-  raise notice '[PASS] todas as 51 tabelas public estao explicitamente classificadas (D16)';
+  raise notice '[PASS] todas as 52 tabelas public estao explicitamente classificadas (D16)';
 end $$;
 
 do $$
@@ -816,14 +826,14 @@ end $$;
 
 do $$
 declare v_t text; v_ok boolean;
-  v_closed text[] := array['access_roles','access_role_capabilities','membership_access_role_assignments','membership_collaborator_links','access_role_assignment_scopes','access_role_assignment_unit_targets','evaluation_succession_events','privilege_mutation_audit','evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria','evaluation_config_scale_bands','evaluation_config_participant_roles','evaluations','evaluation_participants','evaluation_scores','evaluation_comments','evaluation_events','evaluation_pendencies','evaluation_aggregates','collaborator_events','cycle_events','evaluation_goals','evaluation_goal_approvals','evaluation_goal_events','evaluation_cycle_goal_limits','evaluation_observations','evaluation_observation_events'];
+  v_closed text[] := array['access_roles','access_role_capabilities','membership_access_role_assignments','membership_collaborator_links','access_role_assignment_scopes','access_role_assignment_unit_targets','evaluation_succession_events','privilege_mutation_audit','evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria','evaluation_config_scale_bands','evaluation_config_participant_roles','evaluations','evaluation_participants','evaluation_scores','evaluation_comments','evaluation_events','evaluation_pendencies','evaluation_aggregates','collaborator_events','cycle_events','evaluation_goals','evaluation_goal_approvals','evaluation_goal_events','evaluation_cycle_goal_limits','evaluation_observations','evaluation_observation_events','platform_provisioning_events'];
 begin
   foreach v_t in array v_closed loop
     v_ok := false;
     begin execute format('select count(*) from public.%I', v_t); exception when insufficient_privilege then v_ok := true; end;
     if not v_ok then raise exception '[FAIL] authenticated leu tabela fechada %', v_t; end if;
   end loop;
-  raise notice '[PASS] 28 tabelas fechadas invisiveis (permission denied) apesar de dados de fixture (as 4 tabelas de metas voltaram a deny-by-default integral por D22-A e as 2 tabelas de observacoes nasceram deny-by-default integral por D9 — a leitura funcional passa pela superficie soberana, nunca pela RLS)';
+  raise notice '[PASS] 29 tabelas fechadas invisiveis (permission denied) apesar de dados de fixture (as 4 tabelas de metas voltaram a deny-by-default integral por D22-A, as 2 tabelas de observacoes nasceram deny-by-default integral por D9 e a trilha de plataforma da F6-A03 nasceu deny-by-default integral — a leitura funcional passa pela superficie soberana, nunca pela RLS)';
 end $$;
 
 do $$

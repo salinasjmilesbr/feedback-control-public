@@ -102,3 +102,13 @@ entrypoint = "./functions/metas/index.ts"
 enabled = true
 verify_jwt = true
 entrypoint = "./functions/observacoes/index.ts"
+
+# F6-A03 (Issue #266): fronteira server-side do PLANO DE PLATAFORMA. verify_jwt =
+# true porque as duas operacoes (`plataforma.provisionar_organizacao` e o
+# self-check `plataforma.operador_atual`) exigem identidade autenticada; a funcao
+# AINDA resolve o ator com auth.getUser, aplica a allowlist de plataforma e
+# executa a RPC soberana `organizacao_provisionar_inicial` (que revalida tudo).
+[functions.provisionar-organizacao]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/provisionar-organizacao/index.ts"

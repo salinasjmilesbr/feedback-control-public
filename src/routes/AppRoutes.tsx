@@ -11,6 +11,9 @@ import UsuarioAtualBar from "../components/UsuarioAtualBar";
 import NavegacaoPrincipal from "../components/NavegacaoPrincipal";
 import AppFooter from "../components/AppFooter";
 import LayoutAutenticado from "../auth/LayoutAutenticado";
+import LayoutPlataforma from "./LayoutPlataforma";
+import { ROTA_PLATAFORMA_NOVA_ORGANIZACAO } from "./plataformaRotas";
+import NovaOrganizacaoPlataformaPage from "../pages/plataforma/NovaOrganizacaoPlataformaPage";
 import { useAuth } from "../auth/AuthContext";
 import { useEstruturaSoberanaDoCliente } from "../pages/useEstruturaSoberanaDoCliente";
 import LoginPage from "../auth/LoginPage";
@@ -96,6 +99,21 @@ function AppRoutes() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/recuperar-senha" element={<RecuperarSenhaPage />} />
           <Route path="/redefinir-senha" element={<RedefinirSenhaPage />} />
+        </Route>
+
+        {/*
+          F6-A03 (Issue #266): superfície MÍNIMA de PLATAFORMA (D18–D21). Fica
+          FORA de `LayoutAutenticado`/`LayoutFuncional` de propósito (D19): o
+          plano de plataforma NÃO depende da resolução de identidade de tenant e
+          não pode carregar estrutura soberana de uma organização que ainda não
+          existe. A autoridade é sempre a Edge `provisionar-organizacao` + RPC
+          soberana — a rota não entra na navegação funcional (D21).
+        */}
+        <Route element={<LayoutPlataforma />}>
+          <Route
+            path={ROTA_PLATAFORMA_NOVA_ORGANIZACAO}
+            element={<NovaOrganizacaoPlataformaPage />}
+          />
         </Route>
 
         <Route element={<LayoutAutenticado />}>

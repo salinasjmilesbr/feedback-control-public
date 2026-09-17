@@ -546,6 +546,28 @@ jobs:
             < supabase/validacao/43-validar-f5-11-p5-1.sql
 
       # ----------------------------------------------------------------------
+      # F6-A03 (Issue #266): BOOTSTRAP MINIMO SEGURO DO GREENFIELD — trilha de
+      # plataforma (`platform_provisioning_events`, RLS + zero policy +
+      # append-only + service_role so SELECT/INSERT) e RPC
+      # `organizacao_provisionar_inicial` (SECURITY INVOKER, search_path fixo,
+      # EXECUTE so service_role, idempotente por operation_id + payload_hash).
+      # A fixture usa o prefixo `f6a3` e o validador cobre: negativos
+      # fail-closed, D16/D17, separacao de planos, idempotencia (replay/conflito)
+      # e isolamento do estado preexistente.
+      # ----------------------------------------------------------------------
+      - name: "Seed F6-A03 scenario (bootstrap de plataforma: identidades, organizacao LEGADO preexistente)"
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/44-cenario-f6-a03.sql
+
+      - name: "Run F6-A03 validation (RLS/ACL da trilha, append-only, gate fail-closed, D16/D17, separacao de planos, idempotencia por replay e isolamento multi-tenant)"
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/45-validar-f6-a03.sql
+
+      # ----------------------------------------------------------------------
       # Regressão F5-06/F5-07 (§23.4): cenários independentes, com prefixos de
       # UUID próprios (`d6`/`d7`), reaplicados antes de cada validação.
       # ----------------------------------------------------------------------
