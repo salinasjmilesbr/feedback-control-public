@@ -1740,6 +1740,8 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   `src/authorization/catalogoCapacidades.ts` (inexistente; o módulo real é
   `catalogoCapabilities.ts`), o que impede o bundle da função F5-06. Não afeta
   `npm test`/`build`/`lint`/`tsc` (apenas o bundle Deno da Edge).
+  **Classificação atual (Issue #258): FINDING BLOQUEANTE (`DT-013`)** — não é dívida aceita; exige
+  Issue própria e correção antes do fechamento da #258 (registro canônico: `docs/dividas-tecnicas.md` §0.1).
 
 ### 3.2 BUG #170 (concluída e integrada)
 

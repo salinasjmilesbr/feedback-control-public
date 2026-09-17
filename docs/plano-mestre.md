@@ -126,16 +126,24 @@ Detalhamento por fase (critérios, decisões, evidências): `docs/F5-01-desenho-
 `docs/F5-10-p7-matriz-integrada.md`, `docs/F5-11-certificacao.md`, `docs/etapa-5-certificacao.md`.
 
 ### II.2 Planejado
+Roadmap **até produção**. As etapas abaixo vêm do **Plano Mestre externo v15** (que **não** está
+versionado neste repositório — ver Parte XVII, item 5) e a v16 as traz por decisão do orquestrador,
+sem inventar detalhe além do que o roadmap vigente define. Notação única: **Etapa N (FN)**.
+
 | Etapa | Conteúdo esperado | Observação |
 |---|---|---|
 | **F5-12 (Issue #256)** | Validação integrada e fechamento formal da Etapa 5 | **É a certificação transversal já produzida** — não há fase posterior de fechamento dentro da F5 |
-| **F6** | Próxima etapa de produto/engenharia após a Etapa 5 | Escopo **não** definido neste repositório: exige Issue própria do orquestrador |
-| Backlog de dívidas | Limpeza de resíduos legados, provas literais faltantes, defeitos de diagnóstico | Registro canônico: `docs/dividas-tecnicas.md`; conversão em Issue só por decisão explícita (Parte XV) |
+| **Etapa 6 (F6)** | **Auditoria visual/funcional READ-ONLY**, classificando cada achado como **QUEBRADO**, **REGRESSÃO** ou **MELHORIA**, com **consolidação de causas ANTES de criar trabalho** (nenhuma correção começa antes da consolidação) | **Próxima fase.** Escopo definido pelo roadmap vigente; exige Issue + desenho fechado (Parte VI) |
+| **Etapa 7 (F7)** | **Segurança/hardening para produção** | Escopo definido pelo roadmap vigente; exige Issue + desenho fechado |
+| **Etapas 8–10 (F8–F10)** | **Arquitetura-alvo**, **migração**, **pré-produção** e **produção** (posteriores) | Vêm do roadmap vigente; o detalhamento exige Issue + desenho próprios e **não** é fabricado nesta v16 |
+| Backlog: dívidas e findings bloqueantes | Limpeza de resíduos legados, provas literais faltantes, defeitos de diagnóstico; **findings bloqueantes** aguardando Issue | Registro canônico: `docs/dividas-tecnicas.md` (seção de **FINDINGS BLOQUEANTES**); conversão em Issue só por decisão explícita (Parte XV) |
 
 ### II.3 Próxima fase
-**A próxima fase é a F6, e ela ainda não tem escopo, contrato ou Issue neste repositório.** O que está
-pronto para alimentá-la é o **insumo documental**: a matriz da Etapa 5, as dívidas registradas e o
-handoff. Qualquer trabalho de F6 começa, obrigatoriamente, por **Issue + desenho fechado** (Parte VI).
+**A próxima fase é a Etapa 6 (F6): auditoria visual/funcional READ-ONLY**, que classifica cada achado
+como **QUEBRADO**, **REGRESSÃO** ou **MELHORIA** e **consolida as causas antes de criar qualquer
+trabalho** — nenhuma correção começa antes dessa consolidação. O que já está pronto para alimentá-la é
+o **insumo documental**: a matriz da Etapa 5, o registro de dívidas/findings e o handoff. Como
+qualquer fase, começa obrigatoriamente por **Issue + desenho fechado** (Parte VI).
 
 ---
 
@@ -158,12 +166,14 @@ handoff. Qualquer trabalho de F6 começa, obrigatoriamente, por **Issue + desenh
 - **PR e merge são do orquestrador** (`gh` ausente no ambiente do agente; DEV-04): o agente entrega
   branch + SHA + título/corpo quando não há mecanismo autorizado de abertura de PR.
 
-### III.3 Dívida (resumo; lista canônica em `docs/dividas-tecnicas.md`)
+### III.3 Dívida e findings (resumo; lista canônica em `docs/dividas-tecnicas.md`)
 Resíduos legados de ciclo em módulos de apresentação (incluindo o caso **R1**, agora **verificado e
 fechado** como não-autoritativo, restando limpeza de UX), `localCycleRepository` legado por decisão,
 fixtures de teste que pré-carregam chaves locais, provas literais ainda ausentes em validadores e um
-defeito latente de **diagnóstico** em validador da F5-11. Classificação e detalhes: Parte XV e o
-registro canônico de dívidas.
+defeito latente de **diagnóstico** em validador da F5-11. Há ainda **um finding BLOQUEANTE** registrado
+(Edge `avaliacoes` com import de módulo inexistente — `DT-013`), que **exige Issue e correção antes do
+fechamento** e não é dívida aceita. Classificação e detalhes: Parte XV e o registro canônico de
+dívidas (`docs/dividas-tecnicas.md`, seção **FINDINGS BLOQUEANTES**).
 
 ---
 
@@ -375,6 +385,10 @@ Fonte detalhada: `.ai/git-rules.md`.
    arquivos inteiros, delegação de tarefas autocontidas, evitar reabrir arquivos grandes.
 5. **Falhar barato e cedo**: validação progressiva e fail-fast na cadeia de validadores.
 6. **Registrar limitações de ambiente** em vez de gastar rodadas contornando-as.
+7. **Snapshot de consumo da API (informado pelo orquestrador):** total **US$ 69,68**; saldo
+   **US$ 9,31**; últimos **7 dias US$ 29,39**; **13.744 requests**; **4.518.439.425 tokens**. O saldo
+   é o recurso mais escasso do projeto e reforça as regras 1 a 4 desta parte (não repetir gate sem
+   informação nova, agrupar execuções, reaproveitar evidência certificada e conter contexto).
 
 ---
 
@@ -430,10 +444,15 @@ Fonte detalhada: `.ai/git-rules.md`.
      rastreabilidade registro ↔ Issue ↔ PR;
    - nenhum agente cria Issue por conta própria, e nenhum agente converte dívida em trabalho dentro de
      uma atividade em curso (Parte V, item 6).
-3. **Natureza das dívidas vigentes** (resumo qualitativo, sem IDs): resíduos legados em módulos de
+3. **Natureza dos itens vigentes** (resumo qualitativo, sem IDs): resíduos legados em módulos de
    apresentação; leitores legados declaradamente LEGADO; fixtures que pré-carregam chaves locais;
    provas literais ainda ausentes em validadores; defeito latente de **diagnóstico** em validador;
    cenários de validação que derivam tenant de fase anterior.
+4. **Nem todo item registrado é dívida aceita.** O registro separa duas coisas: **dívidas** (não
+   bloqueantes, aceitas) e **FINDINGS BLOQUEANTES** — defeitos funcionais concretos e demonstrados,
+   que **exigem Issue e correção antes do fechamento** da atividade correspondente. Um finding
+   bloqueante **não** pode ser tratado como dívida nem silenciado por conveniência de cronograma
+   (hoje: `DT-013`, ver o registro canônico).
 
 ---
 
@@ -473,8 +492,8 @@ fontes. Itens conhecidos:
    - Fonte B (vigente): `docs/etapa-5-certificacao.md`, `.ai/handoff.md` e `.ai/virtus-context.md`
      após a correção da Issue #258 registram que **a Issue #256 É a própria F5-12** — não há fase
      posterior de fechamento dentro da F5.
-   - **Vigente:** Fonte B. A F5-12 **é esta entrega**; a **próxima fase é a F6** (sem escopo definido
-     neste repositório).
+   - **Vigente:** Fonte B. A F5-12 **é esta entrega**; a **próxima fase é a Etapa 6 (F6)** —
+     auditoria visual/funcional READ-ONLY (Parte II.2/II.3), com escopo definido pelo roadmap vigente.
 3. **Guarda *point-in-time* da P3 × emenda de D15.**
    - Fonte A: migration da P3 (integrada) proíbe `observation.*` em role de sistema fora de
      `observacoes_gestor` — coerente à época.
@@ -488,6 +507,19 @@ fontes. Itens conhecidos:
      **flake de medição** de tempo de bloqueio.
    - **Vigente:** a **autoridade** dos pares é o **CI oficial**; o resultado local deve ser declarado
      como aproximação quando houver flake.
+5. **Roadmap até produção: v15 (externo) × v16 (este repositório).**
+   - Fonte A (vigente e anterior): o **Plano Mestre externo v15** já definia o roadmap **até produção**
+     — Etapa 6 (auditoria visual/funcional READ-ONLY com classificação QUEBRADO/REGRESSÃO/MELHORIA e
+     consolidação de causas antes de criar trabalho), Etapa 7 (segurança/hardening para produção) e
+     Etapas 8–10 (arquitetura-alvo, migração, pré-produção e produção).
+   - Fonte B (v16, primeira versão versionada aqui): a primeira redação desta v16 **omitiu** esse
+     roadmap e chegou a afirmar que a F6 estava “sem escopo”.
+   - **Desfecho registrado:** a omissão foi **corrigida nesta v16 por decisão do orquestrador** — as
+     Etapas 6–10 constam da Parte II.2/II.3, a próxima fase é a **Etapa 6 (F6)** com o escopo acima, e
+     **não há mais nenhuma afirmação de que a F6/Etapa 6 esteja “sem escopo”**. O detalhamento das
+     Etapas 8–10 **não** foi fabricado: permanece o que o roadmap vigente define, e o detalhamento
+     exige Issue + desenho próprios. A causa de a v16 não trazer esse conteúdo antes é a mesma do item
+     1 (o v15 **não está versionado** neste repositório).
 
 ---
 

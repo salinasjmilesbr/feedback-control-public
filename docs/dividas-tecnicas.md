@@ -20,6 +20,11 @@
 >
 > **Natureza desta rodada (Issue #258):** registro **documental**. Nenhum código, migration, teste,
 > Issue ou correção foi criado/executado; nenhuma dívida foi transformada em Issue.
+>
+> **Duas classes neste registro:** **dívidas** (§1–§3: não bloqueantes, aceitas) e **FINDINGS
+> BLOQUEANTES** (§0.1: defeitos funcionais concretos, demonstrados, que **exigem Issue e correção
+> antes do fechamento** da atividade correspondente). Um finding bloqueante **não** pode ser
+> rebaixado a dívida — nem o inverso — sem decisão explícita do orquestrador.
 
 ## 0. Fontes consolidadas
 
@@ -36,6 +41,34 @@
 | `docs/F5-11-desenho-tecnico.md`, `docs/F4-09-desenho-tecnico.md` | registros de origem de dívidas específicas |
 | `.ai/handoff.md`, `.ai/virtus-context.md` | dívidas, limitações e pendências citadas no contexto operacional |
 | `.github/workflows/ci.yml` | passos de validação (autoridade de CI); o arquivo **não** declara limitação conhecida |
+
+## 0.1 FINDINGS BLOQUEANTES (não são dívidas)
+
+> **Finding bloqueante** = defeito funcional **concreto e demonstrado** que **impede o fechamento** da
+> atividade/fase correspondente até ser corrigido em **Issue própria**. Não é dívida aceita: o ID fica
+> neste registro (não reutilizável), o histórico da classificação anterior é preservado e a correção
+> **não** é implementada por quem apenas documenta.
+
+#### DT-013 — [FINDING BLOQUEANTE] Edge `avaliacoes` importa módulo inexistente
+- **Título curto:** `supabase/functions/avaliacoes/index.ts` importa `catalogoCapacidades.ts` (inexistente).
+- **Origem:** F5-06/F5-07 (registrado no handoff como defeito preexistente em `main`, não corrigido);
+  **reclassificado de “dívida não bloqueante” para FINDING BLOQUEANTE na Issue #258**, por decisão do
+  orquestrador.
+- **Evidência (duas pontas):** (i) `supabase/functions/avaliacoes/index.ts:8` —
+  `import { capabilityCanonica } from "../../../src/authorization/catalogoCapacidades.ts";`;
+  (ii) o módulo **não existe**: o arquivo real é `src/authorization/catalogoCapabilities.ts` e
+  `catalogoCapacidades.ts` não existe em nenhum ponto do repositório. A guarda de grafo de imports já
+  documenta o caso: `src/authorization/ciclosEdgeImportGraph.test.ts:24,153,233`.
+- **Impacto:** o **bundle Deno** da Edge `avaliacoes` não é produzível (a função não inicializa).
+  Escapa de `npm test`/`build`/`lint`/`tsc` porque o código Deno de `supabase/functions/**` não entra
+  no build TypeScript; **não** afeta a autorização (a autoridade é o servidor: Policy Engine + RLS +
+  RPC).
+- **Classificação:** **FINDING BLOQUEANTE** (não é dívida aceita).
+- **Motivo de bloqueio:** é defeito funcional concreto com evidência direta, e não um resíduo de
+  apresentação; mantê-lo como dívida aceita mascararia uma Edge quebrada.
+- **Momento de reavaliação:** **Issue própria e correção ANTES do fechamento da #258**, conforme
+  decisão do orquestrador.
+- **Status:** `bloqueante — pendente de Issue`.
 
 ## 1. Dívidas registradas
 
@@ -186,21 +219,8 @@
 - **Momento de reavaliação:** junto de DT-009 (mesmo par de arquivos).
 - **Status:** `aberta`.
 
-#### DT-013 — Defeito pré-existente na Edge `avaliacoes` (import de módulo inexistente)
-- **Título curto:** `supabase/functions/avaliacoes/index.ts` importa `catalogoCapacidades.ts` inexistente.
-- **Origem:** F5-06/F5-07 (registrado no handoff como defeito preexistente em `main`, não corrigido).
-- **Evidência:** `.ai/handoff.md:1738-1742` ("a Edge `supabase/functions/avaliacoes/index.ts:8` importa
-  `src/authorization/catalogoCapacidades.ts` (inexistente; o módulo real é `catalogoCapabilities.ts`), o
-  que impede o bundle da função F5-06. Não afeta `npm test`/`build`/`lint`/`tsc` (apenas o bundle Deno
-  da Edge)") — **confirmado por leitura direta na consolidação**:
-  `supabase/functions/avaliacoes/index.ts:8` ainda contém o import citado.
-- **Impacto:** o **bundle Deno** da Edge `avaliacoes` não é produzível; não afeta os gates de
-  `npm test`/`build`/`lint` nem a autorização (a base é o servidor).
-- **Classificação:** **dívida não bloqueante**.
-- **Motivo de não bloqueio:** fora do alcance dos gates locais e das fases de observações; nenhum
-  caminho de autorização depende do bundle daquela Edge.
-- **Momento de reavaliação:** atividade própria da Edge de avaliações (ou hardening F6).
-- **Status:** `aberta`.
+> **`DT-013` não é dívida:** foi **reclassificado como FINDING BLOQUEANTE** — ver **§0.1** (ID
+> preservado e não reutilizável; a correção exige **Issue própria antes do fechamento da #258**).
 
 ### D. Documentação
 
