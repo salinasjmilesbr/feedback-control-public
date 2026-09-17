@@ -1,7 +1,7 @@
 # F6-A11 — Completar o bootstrap funcional do primeiro Admin GREENFIELD (desenho técnico curto)
 
-> **Status:** desenho **proposto** — decisões **D22–D27 FECHADAS** neste documento (§3) e dúvidas
-> residuais **Q4–Q6** (§8) para ratificação na revisão.
+> **Status:** desenho **FECHADO — pronto para implementação** — decisões **D22–D30 FECHADAS** neste
+> documento (§3) e **Q4–Q6 FECHADAS na alternativa A** (§8), conforme a revisão da **PR #274**.
 > **Atividade:** F6-A11 — Issue **#273**.
 > **Base:** `main` = `ba04dfd` (`fix(F6-A09): restaura o boot das Edges…` **#272** integrado;
 > `feat(F6-A04)…` **#269** em `0982359`).
@@ -36,7 +36,7 @@ fixtures nem da simulação DEV.
 | Exceção de autorização para o Admin, ou contorno de `membership_collaborator_links` | Issue #273 §5: proibido |
 | Estrutura organizacional do founder (unidade, cargo, posição, colegiado, reporting line) | **Não** é dado mínimo: a projeção soberana devolve `NULL` para ausência de estrutura, nunca erro (`20260913000000:406` e `LEFT JOIN`s `:494-510`) |
 | Portal SaaS, listagem de tenants, lifecycle de organização, gestão de operadores/roles | F6-A03 **D21**; `docs/F5-03-desenho-tecnico.md:217-222` (organização sem lifecycle) |
-| Backfill/migração de tenants já provisionados | Ver **D27** e **Q6** — exige decisão operacional própria |
+| Backfill/migração de tenants já provisionados | Ver **D27** e **D30** — a remediação é organização nova, não backfill |
 | Tabela `platform_operators` e a nomenclatura da allowlist | F6-A03 **D14**/**D12** (follow-ups registrados) |
 
 ## 2. Estado atual auditado (evidência arquivo:linha)
@@ -150,7 +150,7 @@ o colaborador do founder **tem** de nascer no bootstrap.
 | `organization_id` | a organização criada **na mesma transação** | server-side (nunca do corpo) | F6-A03 D3/D7 (`:260-261`) |
 | `full_name` | nome humano do primeiro Admin | **novo parâmetro** validado (trim, não vazio) | **D22**; check da tabela (`F5-07:366`) |
 | `email` | e-mail da **identidade autenticada** do founder | **resolvido server-side** pela Edge e revalidado pela RPC (`@`, não vazio) | obrigatório em `colaborador_criar:73-75`; nunca um segundo e-mail vindo do corpo |
-| `matricula` (`business_code`) | matrícula declarada do founder na nova organização | **novo parâmetro** informado no formulário (ver **D26**/Q4) | **obrigatória** no contrato canônico (`:76-78`; `F5-07:504,540`) |
+| `matricula` (`business_code`) | matrícula declarada do founder na nova organização | **novo parâmetro** informado no formulário (ver **D26**/**D28**) | **obrigatória** no contrato canônico (`:76-78`; `F5-07:504,540`) |
 | `admission_date` | `NULL` | — | não inventar data; a vigência de identificador/status/evento inicia em `now()` (`:62-64`) |
 | `status_inicial` | `'active'` | default canônico | `:54,151-152` |
 | Estrutura (ocupação/cargo/unidade/colegiado) | **nenhuma** | — | **não-escopo** §1.2; ausência ⇒ `NULL` na projeção (`:406,494-510`) |
@@ -260,14 +260,14 @@ RPC.
 
 - **Trilha append-only não é reescrita (D18):** nenhum `UPDATE`/`DELETE` em
   `platform_provisioning_events`; nenhum backfill silencioso; nenhuma nova coluna nessa tabela
-  (ver Q5).
+  (ver **D29**).
 - **Replay de intenção registrada ANTES desta mudança:** o hash recalculado (com os campos novos)
   diverge do registrado ⇒ **recusa fail-closed** (`F6_A03_CONFLICT`), sem qualquer efeito. É o
   comportamento desejado: divergência de intenção **nunca** passa em silêncio.
 - **Tenant GREENFIELD já criado e incompleto** (o caso auditado: 1 organização, 0 colaboradores,
-  0 vínculos) **não** é retro-completado por replay; a remediação é decisão operacional própria
-  (**Q6**). Não há lifecycle de organização (D10; `docs/F5-03:217-222`), então o tenant antigo
-  permanece válido e vazio — sem perda de dado e sem efeito colateral.
+  0 vínculos) **não** é retro-completado por replay; a remediação é provisionar uma organização
+  **nova** pelo fluxo completo (**D30**). Não há lifecycle de organização (D10; `docs/F5-03:217-222`),
+  então o tenant antigo permanece válido e vazio — sem perda de dado e sem efeito colateral.
 - **Tenants/bootstrap que já tenham colaborador + vínculo:** **nenhuma** migração de dados; a
   mudança é aditiva e restrita ao caminho do bootstrap.
 - **Idempotência preservada:** `operation_id` continua a chave única da âncora; a unicidade
@@ -277,6 +277,54 @@ RPC.
   exatamente 4, `supabase/validacao/02-validar-f4-08.sql:42-44`), `EXECUTE` somente `service_role`,
   RLS/policies/grants de cliente inalterados, catálogo com 31 capabilities e bundle `admin` com 9
   funcionais intactos (`20260937000000:397-418`).
+
+### D28 — A matrícula do primeiro Admin é **campo obrigatório** do formulário de plataforma (Q4 = A)
+
+- **Decisão:** o formulário mínimo de plataforma passa a coletar a **matrícula** do primeiro Admin
+  (`founder_matricula`), validada por **forma** (trim, não vazia) e transportada como **intenção** —
+  exatamente como o `full_name` (D26). Ela é o `business_code` da linha **aberta** de
+  `collaborator_identifiers` criada pelo primitivo canônico (`colaborador_criar:147-149`).
+- **Fundamento:** o contrato F5-07 **exige** matrícula na criação do colaborador (`:76-78`;
+  `docs/F5-07:504,540`) e a define como código de negócio **declarado**, nunca inventado (F5-07
+  **D2**). Em tenant recém-nascido a matrícula é livre por construção; a unicidade
+  `(organization_id, business_code)` (`20260907103100:164-165`) permanece como backstop do banco.
+- **Consequência de UI:** **dois** campos novos na tela de plataforma (nome e matrícula); **nenhum**
+  código público novo (a taxonomia fechada é reutilizada — `INVALID_FOUNDER` para matrícula
+  inválida); nenhuma alteração de rota, guard ou autorização.
+- **Alternativas rejeitadas:** (a) derivar a matrícula server-side (ex.: parte local do e-mail) —
+  **inventaria** identidade de negócio, contra F5-07 **D2**; (b) criar o colaborador **sem**
+  matrícula — exigiria um caminho de criação paralelo ao primitivo canônico (duplicação de regra);
+  (c) deixar a matrícula para definição posterior pelo próprio Admin — **inalcançável**: sem âncora
+  funcional o Admin não executa operação funcional alguma (§2.6).
+
+### D29 — A trilha `platform_provisioning_events` **não** ganha coluna do colaborador criado (Q5 = A)
+
+- **Decisão:** nenhuma coluna nova na trilha de plataforma; o colaborador do primeiro Admin
+  permanece **derivável** pelo vínculo ativo da membership do founder
+  (`membership_collaborator_links` → `collaborators`), sem duplicar um UUID **imutável** em registro
+  append-only.
+- **Fundamento:** o precedente do `organization_name` na trilha (`20260937000000:71,100-102`) existe
+  porque o nome da organização é **mutável** e a trilha o congela como *snapshot*; o UUID do
+  colaborador não muda e não precisa de snapshot. Evita ainda alterar tabela e validador da F6-A03
+  sem necessidade (menor superfície).
+- **Alternativa registrada como follow-up reversível:** coluna aditiva e anulável
+  `founder_collaborator_id` (trilha auto-contida), caso a auditoria futura a prefira — **não**
+  adotada agora, sem reabrir nenhuma decisão da F6-A03.
+
+### D30 — O tenant GREENFIELD já provisionado e incompleto é remediado por **organização nova** (Q6 = A)
+
+- **Decisão:** a remediação do tenant incompleto (auditado na F6-A08: 1 organização, 0
+  colaboradores, 0 vínculos) é **provisionar uma organização nova** pelo fluxo completo
+  (D22–D29). O tenant antigo **permanece válido e vazio**: não há lifecycle de organização (D10;
+  `docs/F5-03:217-222`) e **nenhum** backfill, replay forçado ou reescrita de trilha é executado
+  (D27).
+- **Fundamento:** preserva o **escopo fechado** do plano de plataforma (F6-A03 **D21**: exatamente
+  duas operações) e o caráter **aditivo** da mudança; o tenant de teste não carrega dado de negócio,
+  e a trilha append-only continua sendo o registro fiel do que cada operação criou.
+- **Alternativas rejeitadas nesta atividade (follow-up reversível, exige decisão explícita do
+  orquestrador):** (a) nova operação de plataforma "completar bootstrap" — ampliaria **D21** e
+  criaria uma segunda porta de escrita no plano de plataforma; (b) procedimento administrativo único
+  pelo proprietário, fora do produto — não auditável pela trilha de provisionamento.
 
 ## 4. Invariantes preservados (inegociáveis na implementação)
 
@@ -340,26 +388,32 @@ RPC.
 | `src/services/plataforma/formularioPlataforma.ts`, `src/application/ports/ProvisionamentoPlataforma.ts`, `src/pages/plataforma/NovaOrganizacaoPlataformaPage.tsx`, `src/infrastructure/supabase/plataforma/edgePlataforma.ts` | campos novos e transporte |
 | Testes correspondentes | `edgeProvisionamento.test.ts`, `formularioPlataforma.test.ts` (+ guarda estática) |
 
-## 8. Q4–Q6 — dúvidas residuais (com recomendação)
+## 8. Q4–Q6 — **FECHADAS (alternativa A)** na revisão da PR #274
 
-| # | Dúvida | Alternativas | Recomendação |
+| # | Pergunta | Resposta | Decisão e consequências |
 | --- | --- | --- | --- |
-| **Q4** | Qual a origem da **matrícula** do primeiro Admin, dado que o contrato canônico a exige (`F5-07:504,540`)? | **A)** campo obrigatório no formulário de plataforma; **B)** derivada server-side (ex.: parte local do e-mail); **C)** bootstrap cria o colaborador sem matrícula (exigiria outro caminho de criação) | **A** — a matrícula é código de negócio **declarado**, nunca inventado (F5-07 **D2**); **B** inventaria identidade de negócio e **C** duplicaria o caminho de criação |
-| **Q5** | Registrar o `founder_collaborator_id` na trilha `platform_provisioning_events`? | **A)** não registrar (derivável pelo vínculo ativo da membership do founder); **B)** coluna aditiva e anulável (trilha auto-contida, precedente do `organization_name`) | **A** — evita campo redundante para um UUID **imutável** e derivável sem ambiguidade; a trilha permanece intocada (D18) |
-| **Q6** | Como remediar o tenant GREENFIELD **já** provisionado e incompleto (auditoria F6-A08)? | **A)** provisionar uma organização **nova** pelo fluxo completo (a antiga permanece válida e vazia); **B)** nova operação de plataforma "completar bootstrap" (amplia **D21**); **C)** procedimento administrativo único pelo proprietário, fora do produto | **A** para o tenant de teste; **B**/**C** só por decisão explícita do orquestrador (não decidir por conta própria) |
+| **Q4** | Qual a origem da **matrícula** do primeiro Admin, dado que o contrato canônico a exige (`F5-07:504,540`)? | **A — campo obrigatório no formulário de plataforma** | **D28** — dois campos novos na UI de plataforma (nome + matrícula); **nenhum** código público novo; a matrícula segue código de negócio **declarado** (F5-07 **D2**) e a unicidade por organização permanece no banco como backstop |
+| **Q5** | Registrar o `founder_collaborator_id` na trilha `platform_provisioning_events`? | **A — não registrar** | **D29** — trilha e validador da F6-A03 **intocados**; o colaborador é derivável pelo vínculo ativo da membership do founder; a alternativa "trilha auto-contida" fica como follow-up reversível |
+| **Q6** | Como remediar o tenant GREENFIELD **já** provisionado e incompleto (auditoria F6-A08)? | **A — provisionar organização nova pelo fluxo completo** | **D30** — o tenant antigo permanece válido e vazio; **nenhum** backfill ou replay forçado; o escopo fechado **D21** é preservado; "completar bootstrap" e procedimento administrativo ficam como follow-up reversível |
+
+**Nenhuma dúvida permanece aberta** nesta atividade. O contrato F6-A11 está **FECHADO** (D22–D30) e
+autoriza a implementação, que é atividade/branch própria e é ela que **encerra a Issue #273**.
 
 ## 9. Autoauditoria deste documento
 
 - [x] **Natureza respeitada:** nenhum arquivo de código, SQL, CI ou teste alterado nesta atividade.
 - [x] **D22 fecha** a fonte canônica do nome com base no modelo **existente** (sem campo novo).
 - [x] **D23 fecha** os dados mínimos do colaborador inicial, com a exigência de matrícula
-  justificada pelo contrato canônico (e **Q4** registra a ratificação).
+  justificada pelo contrato canônico e **ratificada em D28** (Q4 = A).
 - [x] **D24 fecha** criação + vínculo **atômicos** na mesma transação, por primitivos existentes,
   sem `INSERT` direto no vínculo e sem exceção de autorização.
 - [x] **D25 fecha** assinatura/idempotência, incluindo o **`DROP` explícito** (sobrecarga) e o
   inventário de chamadas da assinatura.
 - [x] **D26 fecha** o impacto no formulário (menor superfície, taxonomia fechada, zero código novo).
 - [x] **D27 fecha** a compatibilidade (replay, trilha append-only, tenants existentes, aditividade).
+- [x] **D28–D30 fecham Q4–Q6 na alternativa A** (matrícula como campo obrigatório do formulário;
+  trilha de plataforma sem coluna nova; remediação do tenant incompleto por organização nova),
+  conforme a revisão da **PR #274** — com as alternativas B/C registradas como follow-up reversível.
 - [x] **Invariantes** de autorização, RLS, tenant isolation, autoria e fail-closed explicitados (§4).
 - [x] **Nenhuma decisão fechada da F6-A03/F5-02/F5-07 é reaberta**; as alternativas rejeitadas estão
   registradas com o motivo.

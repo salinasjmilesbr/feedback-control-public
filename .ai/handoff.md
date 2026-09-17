@@ -34,7 +34,7 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
-### 3.29 F6-A11 — desenho do bootstrap funcional do primeiro Admin GREENFIELD (Issue #273) — DESENHO PROPOSTO · PR/MERGE PENDENTES
+### 3.29 F6-A11 — desenho do bootstrap funcional do primeiro Admin GREENFIELD (Issue #273) — DESENHO **FECHADO** (D22–D30) · PR **#274** ABERTA
 
 - **Atividade/branch:** **F6-A11** (Issue **#273**), branch **`docs/f6-a11-bootstrap-funcional-admin`**,
   base **`main` = `ba04dfd`** (`fix(F6-A09)…` **#272** e `feat(F6-A04)…` **#269** já integrados).
@@ -50,15 +50,19 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   sobrecarga viva sem âncora funcional) + inventário das chamadas; **D26** impacto mínimo no
   formulário (2 chaves na allowlist estrita, taxonomia fechada, zero código público novo); **D27**
   compatibilidade (trilha append-only intocada; replay de intenção antiga recusa fail-closed; tenant
-  já provisionado **não** é retro-completado). **Q4–Q6** registradas com recomendação (origem da
-  matrícula; coluna opcional na trilha; remediação do tenant incompleto).
+  já provisionado **não** é retro-completado). **D28–D30** fecham **Q4–Q6 na alternativa A** na
+  revisão da **PR #274**: matrícula como **campo obrigatório** do formulário de plataforma (D28);
+  trilha `platform_provisioning_events` **sem** coluna nova, colaborador derivável pelo vínculo ativo
+  (D29); remediação do tenant incompleto por **organização nova** pelo fluxo completo (D30) — as
+  alternativas B/C ficam registradas como follow-up reversível, sem reabrir D22–D27 nem a F6-A03.
 - **Nada de código nesta entrega:** nenhum arquivo de `src/`, `supabase/`, teste, CI ou configuração
   foi alterado — a implementação é atividade própria, em branch própria (`.ai/workflow.md` §2).
 - **Gates proporcionais (docs-only):** `git diff --check` exit 0; `git status --short` restrito aos
   **2 arquivos** previstos (o desenho + este handoff). Sem gate de produto: nenhum artefato
   executável foi tocado.
-- **Próximo passo:** revisão/fechamento (GPT) das **Q4–Q6**; com o desenho em `main`, a implementação
-  segue exclusivamente o contrato D22–D27.
+- **Próximo passo:** desenho **FECHADO** e pronto para implementação — a implementação é
+  atividade/branch própria, **encerra a Issue #273** e segue exclusivamente o contrato **D22–D30**.
+  A **PR #274** aguarda merge pelo orquestrador (o agente de implementação/desenho **não** faz merge).
 
 ### 3.28 F6-A09 — boot das Edges: specifier relativo sem extensão (Deno) — CORRIGIDO · INTEGRADO (squash #272 em `ba04dfd`)
 
