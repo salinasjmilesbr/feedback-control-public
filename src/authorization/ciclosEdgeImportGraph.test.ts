@@ -147,11 +147,14 @@ const ENTRY_CICLOS = "supabase/functions/ciclos/index.ts";
 /**
  * Defeitos PRÉ-EXISTENTES tolerados (nenhum deles na Edge `ciclos`). Se o import
  * passar a resolver, o teste falha pedindo a remoção da exceção.
+ *
+ * DT-013 (Issue #260): o único import quebrado declarado aqui
+ * (`supabase/functions/avaliacoes/index.ts` → `catalogoCapacidades.ts`) foi
+ * CORRIGIDO para o módulo canônico `catalogoCapabilities.ts`. O mapa fica VAZIO
+ * e o teste abaixo trava o estado "sem exceções": uma regressão deve aparecer no
+ * teste de integridade do grafo, nunca numa exceção nova e silenciosa.
  */
-const EXCECOES_CONHECIDAS: Readonly<Record<string, string>> = {
-  "supabase/functions/avaliacoes/index.ts":
-    'import quebrado: "../../../src/authorization/catalogoCapacidades.ts" em supabase/functions/avaliacoes/index.ts',
-};
+const EXCECOES_CONHECIDAS: Readonly<Record<string, string>> = {};
 
 const grafoCiclos = percorrerGrafo(ENTRY_CICLOS);
 
@@ -208,6 +211,10 @@ describe("F5-09 P7 — import graph das DEMAIS Edge Functions (regressão)", () 
   });
 
   it("as exceções conhecidas continuam NECESSÁRIAS (remova-as quando corrigidas)", () => {
+    // DT-013 corrigido (Issue #260): hoje NÃO há exceções toleradas. Esta
+    // asserção trava esse estado — reintroduzir uma exceção exige justificativa
+    // explícita e não pode mascarar um import quebrado novo.
+    expect(Object.keys(EXCECOES_CONHECIDAS)).toEqual([]);
     for (const [entry, quebrado] of Object.entries(EXCECOES_CONHECIDAS)) {
       const grafo = entry === ENTRY_CICLOS ? grafoCiclos : percorrerGrafo(entry);
       if (!grafo.quebrados.includes(quebrado)) {
