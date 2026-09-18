@@ -1025,6 +1025,18 @@ reset role;
 -- ============================================================================
 -- G) HIGIENE — nenhum residuo do cenario
 -- ============================================================================
+-- F6-A14: scopes sao filhos da assignment; removê-los antes da assignment
+-- preserva a FK e trata o scope ORGANIZATION do bootstrap como parte legitima
+-- do fixture, sem alterar a implementacao ou enfraquecer a restricao.
+delete from public.access_role_assignment_scopes s
+ using public.membership_access_role_assignments a,
+       public.user_organization_memberships m,
+       public.organizations o
+ where s.assignment_id = a.id
+   and a.membership_id = m.id
+   and m.organization_id = o.id
+   and (o.name like 'F6-A03 %' or o.id = 'f6a30000-0000-4000-8000-0000000000a1');
+
 delete from public.membership_access_role_assignments a
  using public.user_organization_memberships m, public.organizations o
  where a.membership_id = m.id and m.organization_id = o.id
