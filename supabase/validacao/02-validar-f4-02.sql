@@ -141,6 +141,23 @@ begin
   raise notice '[PASS] mesma capability opera com scopes diferentes (collaborator.read × 3 scopes)';
 end $$;
 
+-- A Edge chama o resolver com service_role, mas identidade e organização
+-- continuam parâmetros distintos. ADMIN_A só é membro de Alfa: consultar Beta
+-- deve falhar fechado antes de qualquer assignment/scope aparecer.
+do $$
+declare
+  v_n int;
+begin
+  select count(*) into v_n
+    from public.resolver_capabilities_escopos_efetivas(
+      'd1b00000-0000-0000-0000-0000000000a1',
+      'd1a00000-0000-0000-0000-0000000000b1');
+  if v_n <> 0 then
+    raise exception '[FAIL] ADMIN_A sem membership ativa em Beta resolveu % capabilities/scopes', v_n;
+  end if;
+  raise notice '[PASS] resolver de capabilities/scopes falha fechado cross-tenant sem membership ativa';
+end $$;
+
 do $$
 declare
   v_n int;
