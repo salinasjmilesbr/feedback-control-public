@@ -77,6 +77,10 @@ function resultadoDeArray(valor: unknown): unknown {
   return valor;
 }
 
+/**
+ * Registra falhas internas de RPC sem expor credenciais ou o payload bruto.
+ * A chamada continua fail-closed: o chamador nunca recebe este diagnóstico.
+ */
 /** Normaliza o código público do Policy Engine (fail-closed para o resto). */
 function codigoPublicoDaNegacao(valor: unknown): CodigoPublico {
   switch (valor) {
@@ -600,7 +604,7 @@ Deno.serve(async (req) => {
 
       const { data, error } = await admin
         .from("collaborators")
-        .select("id, organization_id, status, version")
+        .select("id, organization_id, version")
         .eq("id", target.id)
         .eq("organization_id", organizationId)
         .maybeSingle();
@@ -647,9 +651,10 @@ Deno.serve(async (req) => {
         .eq("user_profile_id", authUserId)
         .eq("status", "active");
       if (error) return [];
-      return ((data ?? []) as { organization_id: string }[]).map(
+      const organizationIds = ((data ?? []) as { organization_id: string }[]).map(
         (linha) => linha.organization_id
       );
+      return organizationIds;
     },
 
     colaboradorPertenceAoAtor: async ({ organizationId, collaboratorId }) => {
