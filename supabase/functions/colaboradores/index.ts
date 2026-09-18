@@ -77,6 +77,33 @@ function resultadoDeArray(valor: unknown): unknown {
   return valor;
 }
 
+/**
+ * Registra falhas internas de RPC sem expor credenciais ou o payload bruto.
+ * A chamada continua fail-closed: o chamador nunca recebe este diagnóstico.
+ */
+function registrarFalhaResolver(
+  erro: { code?: unknown; status?: unknown; message?: unknown },
+  url: string,
+  authUserId: string,
+  organizationId: string
+): void {
+  let host = "invalid-url";
+  try {
+    host = new URL(url).host;
+  } catch {
+    // A configuração inválida já será tratada como falha de RPC; não logar a URL.
+  }
+
+  console.error("[colaboradores] resolver_collaborador_vinculado failed", {
+    code: typeof erro.code === "string" ? erro.code : null,
+    status: typeof erro.status === "number" ? erro.status : null,
+    message: typeof erro.message === "string" ? erro.message.slice(0, 300) : null,
+    projectHost: host,
+    authUserId,
+    organizationId,
+  });
+}
+
 /** Normaliza o código público do Policy Engine (fail-closed para o resto). */
 function codigoPublicoDaNegacao(valor: unknown): CodigoPublico {
   switch (valor) {
@@ -486,7 +513,10 @@ Deno.serve(async (req) => {
       p_user_profile_id: authUserId,
       p_organization_id: organizationId,
     });
-    if (error) return null;
+    if (error) {
+      registrarFalhaResolver(error, url, authUserId, organizationId);
+      return null;
+    }
     const primeira = ((data ?? []) as { collaborator_id: string | null }[])[0];
     return primeira?.collaborator_id ?? null;
   };
