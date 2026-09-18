@@ -10,8 +10,60 @@ permissions:
   contents: read
 
 jobs:
+  scope:
+    name: Determine change scope
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Classify changed paths
+        id: classify
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+
+          base_sha="$BASE_SHA"
+          head_sha="$HEAD_SHA"
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            diff_args=("$base_sha...$head_sha")
+          else
+            if [[ "$base_sha" == "0000000000000000000000000000000000000000" ]]; then
+              base_sha=$(git hash-object -t tree /dev/null)
+            fi
+            diff_args=("$base_sha" "$head_sha")
+          fi
+
+          mapfile -d '' changed < <(git diff --name-only -z "${diff_args[@]}")
+          docs_only=true
+          if (( ${#changed[@]} == 0 )); then
+            docs_only=false
+          fi
+
+          for path in "${changed[@]}"; do
+            case "$path" in
+              docs/*|.ai/*|*.md|*.mdx) ;;
+              *) docs_only=false; break ;;
+            esac
+          done
+
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+
   quality:
     name: Test, build, lint and diff-check
+    needs: scope
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -25,6 +77,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Node.js
+        if: needs.scope.result != 'success' || needs.scope.outputs.docs_only != 'true'
         uses: actions/setup-node@v7
         with:
           node-version: '24'
@@ -32,15 +85,19 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install dependencies
+        if: needs.scope.result != 'success' || needs.scope.outputs.docs_only != 'true'
         run: npm ci
 
       - name: Test
+        if: needs.scope.result != 'success' || needs.scope.outputs.docs_only != 'true'
         run: npm test
 
       - name: Build
+        if: needs.scope.result != 'success' || needs.scope.outputs.docs_only != 'true'
         run: npm run build
 
       - name: Lint
+        if: needs.scope.result != 'success' || needs.scope.outputs.docs_only != 'true'
         run: npm run lint
 
       - name: Check diff whitespace
@@ -62,6 +119,8 @@ jobs:
 
   supabase-local:
     name: Supabase local — RLS/policy validation
+    needs: scope
+    if: always() && (needs.scope.result != 'success' || needs.scope.outputs.docs_only != 'true')
     runs-on: ubuntu-latest
     # Cenarios/validadores SQL: F4-08, F5-04, F5-08 P6, F5-09 P1 e regressao F5-06/F5-07.
     timeout-minutes: 40
