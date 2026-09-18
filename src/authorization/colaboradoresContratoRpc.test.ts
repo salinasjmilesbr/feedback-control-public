@@ -868,6 +868,11 @@ describe("F5-07 — plano administrativo (D19) não usa a allowlist funcional", 
 });
 
 describe("F5-07 — a Edge importa apenas módulos REAIS do repositório", () => {
+  it("carrega colaborador.listar sem selecionar coluna inexistente em collaborators", () => {
+    expect(edgeFonte as string).toContain('.select("id, organization_id, version")');
+    expect(edgeFonte as string).not.toContain('.select("id, organization_id, status, version")');
+  });
+
   it("todo import relativo de `index.ts`/`core.ts` resolve para um arquivo existente", () => {
     const arquivos: readonly (readonly [string, string])[] = [
       ["supabase/functions/colaboradores", edgeFonte as string],

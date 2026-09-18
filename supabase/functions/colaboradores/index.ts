@@ -81,29 +81,6 @@ function resultadoDeArray(valor: unknown): unknown {
  * Registra falhas internas de RPC sem expor credenciais ou o payload bruto.
  * A chamada continua fail-closed: o chamador nunca recebe este diagnóstico.
  */
-function registrarFalhaResolver(
-  erro: { code?: unknown; status?: unknown; message?: unknown },
-  url: string,
-  authUserId: string,
-  organizationId: string
-): void {
-  let host = "invalid-url";
-  try {
-    host = new URL(url).host;
-  } catch {
-    // A configuração inválida já será tratada como falha de RPC; não logar a URL.
-  }
-
-  console.error("[colaboradores] resolver_collaborador_vinculado failed", {
-    code: typeof erro.code === "string" ? erro.code : null,
-    status: typeof erro.status === "number" ? erro.status : null,
-    message: typeof erro.message === "string" ? erro.message.slice(0, 300) : null,
-    projectHost: host,
-    authUserId,
-    organizationId,
-  });
-}
-
 /** Normaliza o código público do Policy Engine (fail-closed para o resto). */
 function codigoPublicoDaNegacao(valor: unknown): CodigoPublico {
   switch (valor) {
@@ -513,18 +490,9 @@ Deno.serve(async (req) => {
       p_user_profile_id: authUserId,
       p_organization_id: organizationId,
     });
-    if (error) {
-      registrarFalhaResolver(error, url, authUserId, organizationId);
-      return null;
-    }
+    if (error) return null;
     const primeira = ((data ?? []) as { collaborator_id: string | null }[])[0];
-    const collaboratorId = primeira?.collaborator_id ?? null;
-    console.info("[colaboradores] resolver_collaborador_vinculado result", {
-      authUserId,
-      organizationId,
-      collaboratorId,
-    });
-    return collaboratorId;
+    return primeira?.collaborator_id ?? null;
   };
 
   const autorizacao: DepsContextoAutorizacao = {
@@ -636,7 +604,7 @@ Deno.serve(async (req) => {
 
       const { data, error } = await admin
         .from("collaborators")
-        .select("id, organization_id, status, version")
+        .select("id, organization_id, version")
         .eq("id", target.id)
         .eq("organization_id", organizationId)
         .maybeSingle();
@@ -682,19 +650,10 @@ Deno.serve(async (req) => {
         .select("organization_id")
         .eq("user_profile_id", authUserId)
         .eq("status", "active");
-      if (error) {
-        console.error("[colaboradores] membership lookup failed", {
-          code: error.code ?? null,
-          status: error.status ?? null,
-          message: typeof error.message === "string" ? error.message.slice(0, 300) : null,
-          authUserId,
-        });
-        return [];
-      }
+      if (error) return [];
       const organizationIds = ((data ?? []) as { organization_id: string }[]).map(
         (linha) => linha.organization_id
       );
-      console.info("[colaboradores] active memberships", { authUserId, organizationIds });
       return organizationIds;
     },
 
