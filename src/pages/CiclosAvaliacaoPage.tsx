@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import type { Capability } from "../authorization/Capability";
 import { can } from "../authorization/authorizationPolicy";
 import { useAuth } from "../auth/AuthContext";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
+import { listarCapabilitiesEfetivas } from "../services/capabilitiesSoberanas";
+import { possuiCapabilityCiclos } from "./ciclosCapabilityGate";
 /**
  * Único símbolo aproveitado do módulo legado: formatação PURA de período para
  * apresentação (função de string/Data — não lê storage, não decide e não
@@ -36,6 +39,10 @@ function CiclosAvaliacaoPage({
   const navigate = useNavigate();
   const { usuarioAtual } = useUsuarioAtual();
   const { organizacaoAtivaId } = useAuth();
+  const [snapshotCapabilities, setSnapshotCapabilities] = useState<{
+    organizationId: string | null;
+    capabilities: ReadonlySet<Capability>;
+  }>({ organizationId: null, capabilities: new Set() });
   /**
    * F5-09 P8 (Bloco 3): estados sem função foram removidos — `versao/setVersao`
    * (contador artificial de rerender; o estado agora vem do controlador),
@@ -72,6 +79,23 @@ function CiclosAvaliacaoPage({
   // Carga ao entrar/trocar de organização (o controlador invalida a geração
   // anterior, então resposta antiga não substitui o contexto novo).
   useEffect(() => {
+    let vigente = true;
+    if (organizacaoAtivaId) {
+      void listarCapabilitiesEfetivas(organizacaoAtivaId).then((items) => {
+        if (vigente) {
+          setSnapshotCapabilities({
+            organizationId: organizacaoAtivaId,
+            capabilities: new Set(items),
+          });
+        }
+      });
+    }
+    return () => {
+      vigente = false;
+    };
+  }, [organizacaoAtivaId]);
+
+  useEffect(() => {
     let ativo = true;
     void (async () => {
       await controlador.carregar(organizacaoAtivaId ?? null, {
@@ -91,21 +115,11 @@ function CiclosAvaliacaoPage({
     },
     [controlador]
   );
-  const podeGerenciarCiclos = usuarioAtual
-    ? can(
-        {
-          actor: {
-            matricula: usuarioAtual.matricula,
-            funcao: usuarioAtual.funcao,
-            status: usuarioAtual.status,
-          },
-        },
-        "cycle.management.view",
-        { kind: "global" }
-      )
-    : false;
+  const podeAcessarCiclos =
+    snapshotCapabilities.organizationId === organizacaoAtivaId &&
+    possuiCapabilityCiclos([...snapshotCapabilities.capabilities]);
 
-  if (!usuarioAtual || !podeGerenciarCiclos) {
+  if (!podeAcessarCiclos) {
     return (
       <main className="virtus-page">
         <section className="cycle-empty">
@@ -402,7 +416,8 @@ function CiclosAvaliacaoPage({
           </div>
         ) : (
           ciclos.map((item) => {
-            const podeCorrigirPeriodo = can(
+            const podeCorrigirPeriodo = usuarioAtual
+              ? can(
               {
                 actor: {
                   matricula: usuarioAtual.matricula,
@@ -412,7 +427,8 @@ function CiclosAvaliacaoPage({
               },
               "cycle.period.correct.manager",
               { kind: "cycle", cycle: item }
-            );
+                )
+              : false;
             const statusLabel =
               item.status === "ATIVO"
                 ? "Ativo"
@@ -648,7 +664,8 @@ function CiclosAvaliacaoPage({
                     )}
                   </div>
 
-                  {can(
+                  {(usuarioAtual
+                    ? can(
                     {
                       actor: {
                         matricula: usuarioAtual.matricula,
@@ -658,7 +675,8 @@ function CiclosAvaliacaoPage({
                     },
                     "cycle.reopen.manager",
                     { kind: "cycle", cycle: item }
-                  ) && (
+                    )
+                    : false) && (
                     <button
                       className="cycle-link-button"
                       onClick={() => {
@@ -669,7 +687,8 @@ function CiclosAvaliacaoPage({
                     </button>
                   )}
 
-                  {can(
+                  {(usuarioAtual
+                    ? can(
                     {
                       actor: {
                         matricula: usuarioAtual.matricula,
@@ -679,7 +698,8 @@ function CiclosAvaliacaoPage({
                     },
                     "cycle.cancel.manager",
                     { kind: "cycle", cycle: item }
-                  ) && (
+                    )
+                    : false) && (
                     <button
                       className="cycle-link-button cycle-link-button--danger"
                       onClick={() => {

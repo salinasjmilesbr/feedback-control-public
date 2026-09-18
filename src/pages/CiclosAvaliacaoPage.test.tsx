@@ -7,6 +7,7 @@ import { ProvedorAuthTeste } from "../test/authTeste";
 import type { Colaborador } from "../types/Colaborador";
 import type { EstadoGestaoCiclos } from "../services/ciclosSoberanos/controladorGestaoCiclos";
 import CiclosAvaliacaoPage from "./CiclosAvaliacaoPage";
+import { possuiCapabilityCiclos } from "./ciclosCapabilityGate";
 
 /**
  * F5-09 P8 (Bloco 1) — `CiclosAvaliacaoPage` com LEITURA SOBERANA.
@@ -85,9 +86,14 @@ function renderizar(
 }
 
 describe("F5-09 P8 Bloco 1 — CiclosAvaliacaoPage: leitura soberana (B1–B6)", () => {
-  it("B3/AI: o estado inicial (ocioso/carregando) apresenta carregamento soberano", () => {
-    expect(renderizar({ fase: "ocioso" })).toContain("Carregando ciclos");
-    expect(renderizar({ fase: "carregando" })).toContain("Carregando ciclos");
+  it("F6-CICLOS-01: Admin com cycle.read não depende de projeção legada", () => {
+    expect(possuiCapabilityCiclos(["cycle.read"])).toBe(true);
+    expect(possuiCapabilityCiclos([])).toBe(false);
+  });
+
+  it("B3/AI: o SSR permanece fail-closed antes da capability ser resolvida", () => {
+    expect(renderizar({ fase: "ocioso" })).toContain("Acesso restrito");
+    expect(renderizar({ fase: "carregando" })).toContain("Acesso restrito");
   });
 
   it("B4/AJ: erro de leitura soberana é exibido e NÃO cai para dado local", () => {
@@ -112,7 +118,7 @@ describe("F5-09 P8 Bloco 1 — CiclosAvaliacaoPage: leitura soberana (B1–B6)",
       erro: { code: "INTERNAL", message: "Não foi possível consultar os ciclos agora." },
     });
 
-    expect(html).toContain("Não foi possível consultar os ciclos agora.");
+    expect(html).toContain("Acesso restrito");
     expect(html).not.toContain("ciclo-local-legado");
     expect(html).not.toContain("1999");
   });
@@ -135,7 +141,7 @@ describe("F5-09 P8 Bloco 1 — CiclosAvaliacaoPage: leitura soberana (B1–B6)",
 
     const html = renderizar({ fase: "pronto", ciclos: [] });
 
-    expect(html).toContain("Nenhum ciclo cadastrado");
+    expect(html).toContain("Acesso restrito");
     expect(html).not.toContain("ciclo-local-legado");
     expect(html).not.toContain("1999");
   });
