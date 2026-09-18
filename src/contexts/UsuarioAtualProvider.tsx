@@ -1,6 +1,8 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { simulacaoDevPermitida } from "../config/ambiente";
+import { listarColaboradores, type ColaboradorSoberano } from "../services/colaboradoresSoberanos/acessoColaboradoresSoberanos";
 import { getColaboradores } from "../services/colaboradorStorage";
+import type { Colaborador } from "../types/Colaborador";
 import { UsuarioAtualContext } from "./UsuarioAtualContext";
 import {
   candidatosImpersonacaoDev,
@@ -25,38 +27,88 @@ import {
  * - a troca de identidade é bloqueada (fail-closed) — HOMOLOG/PROD não expõem
  *   o seletor nem aceitam impersonação local.
  */
+function mapearColaboradorSoberanoParaApresentacao(
+  colaborador: ColaboradorSoberano
+): Colaborador {
+  const matricula = Number(colaborador.matricula);
+  if (!Number.isSafeInteger(matricula)) {
+    throw new Error("Colaborador soberano sem matricula numerica para apresentacao.");
+  }
+  return {
+    matricula,
+    status: colaborador.status === "active" ? "ATIVO" : colaborador.status === "leave" ? "LICENCA" : "DESLIGADO",
+    nome: colaborador.fullName,
+    email: colaborador.email,
+    cargo: colaborador.jobRoleName ?? "",
+    area: colaborador.unitName ?? "",
+    respondePara: colaborador.managerFullName ?? "",
+    dataAdmissao: colaborador.admissionDate ?? undefined,
+  };
+}
+
 export function UsuarioAtualProvider({
   children,
   simulacaoDev = simulacaoDevPermitida,
   organizacaoAtivaId = null,
+  usuarioAutenticadoEmail = null,
 }: {
   children: ReactNode;
   /** F2-09: permite injetar o gate nos testes; em runtime usa a config central. */
   simulacaoDev?: boolean;
   /** Tenant autenticado ativo; impede contaminar sua apresentação com fixture global. */
   organizacaoAtivaId?: string | null;
+  usuarioAutenticadoEmail?: string | null;
 }) {
   const simulacaoDevDaSessao = simulacaoDev && !organizacaoAtivaId;
-  const usuariosDisponiveis = useMemo(
+  const usuariosDev = useMemo(
     () =>
       simulacaoDevDaSessao
         ? candidatosImpersonacaoDev(true, getColaboradores())
         : [],
     [simulacaoDevDaSessao]
   );
+  const [leituraSoberana, setLeituraSoberana] = useState<{
+    chave: string;
+    usuarios: Colaborador[];
+  } | null>(null);
+  const chaveSoberana = `${organizacaoAtivaId ?? "sem-organizacao"}|${usuarioAutenticadoEmail ?? "sem-usuario"}`;
+
+  useEffect(() => {
+    if (!organizacaoAtivaId || !usuarioAutenticadoEmail) {
+      return;
+    }
+    let vigente = true;
+    void listarColaboradores({ organizationId: organizacaoAtivaId }).then((resultado) => {
+      if (!vigente) return;
+      setLeituraSoberana({
+        chave: chaveSoberana,
+        usuarios:
+        resultado.ok
+          ? resultado.dados
+              .filter((item) => item.email.toLowerCase() === usuarioAutenticadoEmail.toLowerCase())
+              .map(mapearColaboradorSoberanoParaApresentacao)
+          : [],
+      });
+    });
+    return () => { vigente = false; };
+  }, [chaveSoberana, organizacaoAtivaId, usuarioAutenticadoEmail]);
+
+  const usuariosSoberanos =
+    leituraSoberana?.chave === chaveSoberana ? leituraSoberana.usuarios : [];
+  const usuariosDisponiveis = organizacaoAtivaId ? usuariosSoberanos : usuariosDev;
 
   const [matriculaAtual, setMatriculaAtual] = useState<number | undefined>(() => {
     if (!simulacaoDevDaSessao) return undefined;
     const salva = Number(localStorage.getItem(CHAVE_USUARIO_ATUAL_DEV) ?? "");
     return resolverMatriculaInicialDev(
       Number.isFinite(salva) ? salva : undefined,
-      usuariosDisponiveis
+      usuariosDev
     );
   });
 
-  const usuarioAtual = usuariosDisponiveis.find(
-    (usuario) => usuario.matricula === matriculaAtual
-  );
+  const usuarioAtual = organizacaoAtivaId
+    ? usuariosSoberanos[0]
+    : usuariosDisponiveis.find((usuario) => usuario.matricula === matriculaAtual);
 
   function selecionarUsuario(matricula: number) {
     const proxima = selecionarMatriculaDev(simulacaoDevDaSessao, matricula);
