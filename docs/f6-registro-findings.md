@@ -29,6 +29,11 @@ Achados observados até 18/09/2026:
 - Catálogos expõe “RÓTULOS”, UUID, “code imutável por contrato”, “verificadas no servidor” e “versão 0”.
 - Código do cargo é exibido de forma redundante junto ao nome em seletores/cards, por exemplo `GER-VENDAS — Gerente de Vendas`. Para superfícies operacionais, o nome `Gerente de Vendas` é suficiente; o código pode permanecer onde tiver função administrativa/integracional.
 
+### F6-CICLOS-01 — Admin autenticado vê menu Ciclos, mas rota nega acesso
+**Classificação:** QUEBRADO / possível regressão de autorização; requer investigação antes de correção.
+
+Na ORG5, o Admin autenticado vê `Ciclos` no menu (gate por `cycle.read`), mas ao acessar `/ciclos` recebe `Acesso restrito — A gestão dos ciclos está disponível apenas para gerentes.` Há inconsistência entre discoverability/capability do menu e autorização/guard da superfície. Não assumir ainda se o defeito está no menu, na rota ou no papel/capability do Admin.
+
 ## Findings de UX observados durante a estrutura ORG5
 
 ### F6-UX-01 — campos de texto estreitos em Unidades
