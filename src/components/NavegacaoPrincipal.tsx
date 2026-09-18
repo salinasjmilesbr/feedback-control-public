@@ -1,8 +1,10 @@
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
-import { can } from "../authorization/authorizationPolicy";
-import { perfilPossuiFluxosPropriosAtuais } from "../authorization/perfisOperacionaisAtuais";
+import type { Capability } from "../authorization/Capability";
+import { useAuth } from "../auth/AuthContext";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
+import { listarCapabilitiesEfetivas } from "../services/capabilitiesSoberanas";
 
 function IconHome() {
   return (
@@ -97,21 +99,26 @@ function NavItem({ to, end, icon, children }: ItemProps) {
 }
 
 function NavegacaoPrincipal() {
+  const { organizacaoAtivaId } = useAuth();
   const { usuarioAtual } = useUsuarioAtual();
-  if (!usuarioAtual) return null;
-
-  const avaliado = perfilPossuiFluxosPropriosAtuais(usuarioAtual.funcao);
-  const podeVerRelatorios = can(
-    {
-      actor: {
-        matricula: usuarioAtual.matricula,
-        funcao: usuarioAtual.funcao,
-        status: usuarioAtual.status,
-      },
-    },
-    "report.view",
-    { kind: "global" }
+  const [capabilities, setCapabilities] = useState<ReadonlySet<Capability>>(
+    new Set()
   );
+  useEffect(() => {
+    let vigente = true;
+    setCapabilities(new Set());
+    if (organizacaoAtivaId) {
+      void listarCapabilitiesEfetivas(organizacaoAtivaId).then((items) => {
+        if (vigente) setCapabilities(new Set(items));
+      });
+    }
+    return () => {
+      vigente = false;
+    };
+  }, [organizacaoAtivaId]);
+
+  const possui = (capability: Capability) => capabilities.has(capability);
+  if (!usuarioAtual) return null;
   /**
    * Bug #170: `cycle.management.view` e `cycle.coordinator.list` são ALIASES da
    * MESMA capability canônica (`cycle.read`, colapso Q1 da F4-09 em
@@ -126,28 +133,11 @@ function NavegacaoPrincipal() {
    * painel do coordenador (`/painel-ciclos`) permanece rota autorizada e
    * alcançável a partir de "Minha equipe" (Início).
    */
-  const podeAcessarCiclos = can(
-    {
-      actor: {
-        matricula: usuarioAtual.matricula,
-        funcao: usuarioAtual.funcao,
-        status: usuarioAtual.status,
-      },
-    },
-    "cycle.read",
-    { kind: "global" }
-  );
-  const podeGerenciarConfiguracoes = can(
-    {
-      actor: {
-        matricula: usuarioAtual.matricula,
-        funcao: usuarioAtual.funcao,
-        status: usuarioAtual.status,
-      },
-    },
-    "settings.manage",
-    { kind: "global" }
-  );
+  const podeAcessarCiclos = possui("cycle.read");
+  const podeVerAvaliacoes = possui("evaluation.read");
+  const podeVerMetas = possui("goal.read");
+  const podeVerRelatorios = possui("report.read");
+  const podeGerenciarConfiguracoes = possui("settings.manage");
 
   return (
     <nav className="app-nav" aria-label="Navegação principal">
@@ -162,7 +152,7 @@ function NavegacaoPrincipal() {
           </NavItem>
         )}
 
-        {avaliado && (
+        {podeVerAvaliacoes && (
           <NavItem
             to="/minha-avaliacao"
             icon={<IconClipboard />}
@@ -171,7 +161,7 @@ function NavegacaoPrincipal() {
           </NavItem>
         )}
 
-        {avaliado && (
+        {podeVerMetas && (
           <NavItem to="/minhas-metas" icon={<IconTarget />}>
             Minhas metas
           </NavItem>
