@@ -234,27 +234,6 @@ begin
   --      anti-self-escalation (D5).
   perform public.conceder_acesso_role(v_membership, v_role, p_actor_user_profile_id);
 
-  -- F6-A14: uma atribuição sem scope não é uma capability efetiva
-  -- (`resolver_capabilities_escopos_efetivas` exclui assignments sem scope).
-  -- O primeiro Admin já possui `collaborator.read`; materializar o alcance do
-  -- tenant na própria atribuição permite `collaborator.listar` sobre a âncora
-  -- F5-02, sem criar exceção no Policy Engine nem capability nova.
-  insert into public.access_role_assignment_scopes (
-    assignment_id, scope_type, status
-  )
-  select a.id, 'ORGANIZATION', 'active'
-    from public.membership_access_role_assignments a
-   where a.membership_id = v_membership
-     and a.access_role_id = v_role
-     and a.organization_id = v_org
-     and a.status = 'active'
-     and not exists (
-       select 1
-         from public.access_role_assignment_scopes s
-        where s.assignment_id = a.id
-          and s.scope_type = 'ORGANIZATION'
-     );
-
   -- (11) Trilha D18 append-only, com autoria SOBERANA do operador verificado.
   insert into public.privilege_mutation_audit (
     organization_id, membership_id, access_role_id, action, actor_user_profile_id
