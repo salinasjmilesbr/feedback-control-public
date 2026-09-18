@@ -28,18 +28,25 @@ import {
 export function UsuarioAtualProvider({
   children,
   simulacaoDev = simulacaoDevPermitida,
+  organizacaoAtivaId = null,
 }: {
   children: ReactNode;
   /** F2-09: permite injetar o gate nos testes; em runtime usa a config central. */
   simulacaoDev?: boolean;
+  /** Tenant autenticado ativo; impede contaminar sua apresentação com fixture global. */
+  organizacaoAtivaId?: string | null;
 }) {
+  const simulacaoDevDaSessao = simulacaoDev && !organizacaoAtivaId;
   const usuariosDisponiveis = useMemo(
-    () => candidatosImpersonacaoDev(simulacaoDev, getColaboradores()),
-    [simulacaoDev]
+    () =>
+      simulacaoDevDaSessao
+        ? candidatosImpersonacaoDev(true, getColaboradores())
+        : [],
+    [simulacaoDevDaSessao]
   );
 
   const [matriculaAtual, setMatriculaAtual] = useState<number | undefined>(() => {
-    if (!simulacaoDev) return undefined;
+    if (!simulacaoDevDaSessao) return undefined;
     const salva = Number(localStorage.getItem(CHAVE_USUARIO_ATUAL_DEV) ?? "");
     return resolverMatriculaInicialDev(
       Number.isFinite(salva) ? salva : undefined,
@@ -52,7 +59,7 @@ export function UsuarioAtualProvider({
   );
 
   function selecionarUsuario(matricula: number) {
-    const proxima = selecionarMatriculaDev(simulacaoDev, matricula);
+    const proxima = selecionarMatriculaDev(simulacaoDevDaSessao, matricula);
     if (proxima === undefined) return;
     setMatriculaAtual(proxima);
     localStorage.setItem(CHAVE_USUARIO_ATUAL_DEV, String(proxima));
@@ -64,7 +71,7 @@ export function UsuarioAtualProvider({
         usuarioAtual,
         usuariosDisponiveis,
         selecionarUsuario,
-        simulacaoDevAtiva: simulacaoDev,
+        simulacaoDevAtiva: simulacaoDevDaSessao,
       }}
     >
       {children}

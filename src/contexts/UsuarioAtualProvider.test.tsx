@@ -63,9 +63,12 @@ function ContextoAtual() {
   );
 }
 
-function renderizar(gate: boolean): string {
+function renderizar(gate: boolean, organizacaoAtivaId?: string | null): string {
   return renderToStaticMarkup(
-    <UsuarioAtualProvider simulacaoDev={gate}>
+    <UsuarioAtualProvider
+      simulacaoDev={gate}
+      organizacaoAtivaId={organizacaoAtivaId}
+    >
       <ContextoAtual />
     </UsuarioAtualProvider>
   );
@@ -130,6 +133,17 @@ describe("impersonação DEV (F2-09) — provider e helpers", () => {
   });
 
   describe("HOMOLOG/PROD (fail-closed)", () => {
+    it("não usa a fixture DEV quando há tenant autenticado ativo", () => {
+      semearColaboradores();
+
+      const html = renderizar(true, "org-teste-1");
+
+      expect(html).toContain('data-simulacao="inativa"');
+      expect(html).toContain('data-quantidade="0"');
+      expect(html).toContain("sem-identidade-simulada");
+      expect(html).not.toContain("Gerente Sintetico Um");
+    });
+
     it("não carrega identidade simulada mesmo com seed e seleção antiga presentes", () => {
       semearColaboradores();
       localStorage.setItem(CHAVE_USUARIO_ATUAL_DEV, "1002");
