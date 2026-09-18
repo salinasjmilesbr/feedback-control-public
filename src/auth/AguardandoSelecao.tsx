@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "./AuthContext";
 import EntradaPlataforma from "./EntradaPlataforma";
 import "../styles/auth.css";
@@ -10,6 +11,7 @@ import "../styles/auth.css";
  */
 function AguardandoSelecao() {
   const { estado, organizacoesDisponiveis, selecionarOrganizacao, sair } = useAuth();
+  const navigate = useNavigate();
   const email =
     estado.status === "aguardandoSelecao"
       ? estado.sessao.usuario.email ?? estado.sessao.usuario.id
@@ -37,7 +39,15 @@ function AguardandoSelecao() {
                 type="button"
                 role="listitem"
                 className="brand-button brand-button--primary"
-                onClick={() => selecionarOrganizacao(organizacao.id)}
+                onClick={() => {
+                  if (!organizacoesDisponiveis.some(({ id }) => id === organizacao.id)) {
+                    return;
+                  }
+                  selecionarOrganizacao(organizacao.id);
+                  // `/login` é uma rota pública; selecionar a organização libera
+                  // o guard, mas não troca a rota por si só.
+                  navigate("/", { replace: true });
+                }}
               >
                 {organizacao.name}
               </button>
