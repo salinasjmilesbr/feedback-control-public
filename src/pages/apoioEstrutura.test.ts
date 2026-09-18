@@ -16,6 +16,7 @@ import {
   colegiadoVigente,
   decidirVersaoOtimista,
   estaVigente,
+  formatarData,
   ocupanteDaPosicao,
   periodoParentVigente,
   profundidadeDaUnidade,
@@ -86,6 +87,10 @@ describe("F5-08 P4 — vigência meio-aberta [valid_from, valid_to)", () => {
     expect(rotuloVigencia(PASSADO, "2026-03-01T00:00:00.000Z", REF)).toBe(
       "Encerrada em 01/03/2026"
     );
+  });
+
+  it("preserva a data civil de um effective_date em UTC", () => {
+    expect(formatarData("2026-09-18T00:00:00+00:00")).toBe("18/09/2026");
   });
 });
 

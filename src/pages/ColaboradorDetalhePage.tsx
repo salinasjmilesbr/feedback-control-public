@@ -85,6 +85,7 @@ import { getStatusAvaliacaoAdministrativa } from "./statusAvaliacaoAdministrativ
 import {
   colegiadoVigente,
   nomeDoColaborador,
+  formatarData as formatarDataCivil,
   rotuloDaPosicao,
   rotuloVigencia,
   type EstadoEstrutura,
@@ -920,7 +921,7 @@ function ColaboradorDetalhePage({
                     <header>
                       <div>
                         <strong>{rotuloEvento(evento.eventType)}</strong>
-                        <span>{formatarData(evento.effectiveDate)}</span>
+                        <span>{formatarDataCivil(evento.effectiveDate)}</span>
                       </div>
                       <span className="collaborator-org-event__scope">
                         {rotuloEscopo(evento.cycleScope)}
