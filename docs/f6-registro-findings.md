@@ -53,7 +53,9 @@ Os seletores de Posições reconhecem corretamente as duas unidades, portanto n�
 - Catálogos: cargo `Gerente de Vendas`, código `GER-VENDAS`, criado com sucesso.
 - Posições: posição `Gerência de Vendas + Gerente de Vendas`, sem senioridade, criada com sucesso e exibida como sem ocupante.
 - Fluxo de alocação foi descoberto pela própria UI: `Ver histórico → Administrar alocação` abre `Editar colaborador`, seção `04 Alocação`.
-- A tela de edição oferece `Posição vigente`, vigência e motivo para `Definir ocupação`; próximo passo é confirmar que a posição criada aparece no seletor e alocar James Salinas.
+- A tela de edição oferece `Posição vigente`, vigência e motivo para `Definir ocupação`; a posição criada apareceu no seletor e James Salinas foi alocado com sucesso em `Gerência de Vendas / Gerente de Vendas`.
+- Após a alocação, a seção passa a mostrar a ocupação vigente e ações `Trocar posição`, `Encerrar ocupação` e `Definir gestor`. Como só existe uma posição vigente, os seletores de nova posição/gestor ficam sem alternativas; isso é coerente com os dados atuais.
+- A apresentação pós-alocação reforça F6-A15 ao expor `GER-VENDAS` junto ao cargo, UUID da posição, `reporting line`, `posição raiz` e texto técnico sobre duas operações soberanas/ausência de transação única no cliente.
 
 ## Regra de manutenção
 
