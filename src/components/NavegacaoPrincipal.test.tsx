@@ -71,7 +71,7 @@ describe("NavegacaoPrincipal — gates soberanos", () => {
       "goal.read",
       "report.read",
       "settings.manage",
-    ]) expect(menuFonte).toContain(`possui(\"${capability}\")`);
+    ]) expect(menuFonte).toContain(`possui("${capability}")`);
     expect(menuFonte).toContain("listarCapabilitiesEfetivas");
     expect(menuFonte).not.toContain("perfilPossuiFluxosPropriosAtuais");
     expect(menuFonte).not.toContain("report.view");

@@ -101,15 +101,20 @@ function NavItem({ to, end, icon, children }: ItemProps) {
 function NavegacaoPrincipal() {
   const { organizacaoAtivaId } = useAuth();
   const { usuarioAtual } = useUsuarioAtual();
-  const [capabilities, setCapabilities] = useState<ReadonlySet<Capability>>(
-    new Set()
-  );
+  const [snapshot, setSnapshot] = useState<{
+    organizationId: string | null;
+    capabilities: ReadonlySet<Capability>;
+  }>({ organizationId: null, capabilities: new Set() });
   useEffect(() => {
     let vigente = true;
-    setCapabilities(new Set());
     if (organizacaoAtivaId) {
       void listarCapabilitiesEfetivas(organizacaoAtivaId).then((items) => {
-        if (vigente) setCapabilities(new Set(items));
+        if (vigente) {
+          setSnapshot({
+            organizationId: organizacaoAtivaId,
+            capabilities: new Set(items),
+          });
+        }
       });
     }
     return () => {
@@ -117,7 +122,9 @@ function NavegacaoPrincipal() {
     };
   }, [organizacaoAtivaId]);
 
-  const possui = (capability: Capability) => capabilities.has(capability);
+  const possui = (capability: Capability) =>
+    snapshot.organizationId === organizacaoAtivaId &&
+    snapshot.capabilities.has(capability);
   if (!usuarioAtual) return null;
   /**
    * Bug #170: `cycle.management.view` e `cycle.coordinator.list` são ALIASES da
