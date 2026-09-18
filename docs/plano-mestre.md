@@ -1,4 +1,4 @@
-# Plano Mestre — Virtus (v16.2)
+# Plano Mestre — Virtus (v16.3)
 
 > ## NOTA DE RASTREABILIDADE — LEIA ANTES DE USAR ESTE DOCUMENTO
 >
@@ -27,11 +27,11 @@
 
 | Campo | Valor |
 |---|---|
-| Versão | **v16.2** |
-| Data-ação | Registro de governança documental das Issues **#258** (reorganização do Plano Mestre) e **#278** (estratégia de agentes e tarifas DeepSeek) |
+| Versão | **v16.3** |
+| Data-ação | Atualização documental do checkpoint da Etapa 6 e da regra de CI proporcional da Issue **#275** |
 | Escopo | Reorganizar e preservar TODO o conhecimento vigente de doutrina, processo, roadmap e estado |
 | Modelo | história + roadmap + manual operacional |
-| Fontes | `.ai/*`, `AGENTS.md`, `docs/etapa-5-certificacao.md`, `docs/F5-11-certificacao.md`, `docs/auditorias/*`, desenhos `docs/F3-*/F4-*/F5-*`; Issue **#278** (tarifas de referência de 17/09/2026 e regra de escolha de agente) |
+| Fontes | `.ai/*`, `AGENTS.md`, `docs/etapa-5-certificacao.md`, `docs/F5-11-certificacao.md`, `docs/auditorias/*`, desenhos `docs/F3-*/F4-*/F5-*`; Issues **#275** e **#278** |
 | Registro de dívidas | `docs/dividas-tecnicas.md` (canônico — **não enumerado nem duplicado aqui**) |
 | Handoff operacional | `.ai/handoff.md` |
 
@@ -120,6 +120,7 @@ registro de gate) — o que não tem evidência é **dívida** ou **lacuna**, nu
 | **F5-10** | Metas soberanas (P1–P7, matriz integrada) | Concluída |
 | **F5-11** | Observações soberanas: P1, P1.1, P2, P3, P4, P5, P5.1, P5.2, P5.3, P5.4 e P6 (certificação integrada) | Concluída |
 | **Etapa 5 — certificação transversal** | Issue #256 = **F5-12**: validação integrada e fechamento da Etapa 5 (matriz B1–B3, T1–T11, R1–R10) | Concluída; ver Parte III |
+| **F6-01** | Primeiro checkpoint da Etapa 6 | Concluída |
 
 Detalhamento por fase (critérios, decisões, evidências): `docs/F5-01-desenho-tecnico.md` …
 `docs/F5-11-desenho-tecnico.md`, `docs/F5-09-p9-matriz-integrada.md`,
@@ -133,21 +134,18 @@ sem inventar detalhe além do que o roadmap vigente define. Notação única: **
 | Etapa | Conteúdo esperado | Observação |
 |---|---|---|
 | **F5-12 (Issue #256)** | Validação integrada e fechamento formal da Etapa 5 | **É a certificação transversal já produzida** — não há fase posterior de fechamento dentro da F5 |
-| **Etapa 6 (F6)** | **Auditoria visual/funcional READ-ONLY**, classificando cada achado como **QUEBRADO**, **REGRESSÃO** ou **MELHORIA**, com **consolidação de causas ANTES de criar trabalho** (nenhuma correção começa antes da consolidação) | **Próxima fase.** Escopo definido pelo roadmap vigente; exige Issue + desenho fechado (Parte VI) |
 | **Etapa 7 (F7)** | **Segurança/hardening para produção** | Escopo definido pelo roadmap vigente; exige Issue + desenho fechado |
 | **Etapas 8–10 (F8–F10)** | **Arquitetura-alvo**, **migração**, **pré-produção** e **produção** (posteriores) | Vêm do roadmap vigente; o detalhamento exige Issue + desenho próprios e **não** é fabricado nesta v16 |
-| Backlog: dívidas e findings bloqueantes | Limpeza de resíduos legados, provas literais faltantes, defeitos de diagnóstico; **findings bloqueantes** (hoje: **nenhum em aberto** — o `DT-013` foi resolvido pela Issue #260 / PR #261) | Registro canônico: `docs/dividas-tecnicas.md` (seção de **FINDINGS BLOQUEANTES**); conversão em Issue só por decisão explícita (Parte XV) |
+| Backlog: dívidas e findings bloqueantes | Limpeza de resíduos legados, provas literais faltantes, defeitos de diagnóstico; **DT-013 resolvido**, com defeito separado da Edge `avaliacoes` (**503 / BOOT_ERROR**) ainda pendente | Registro canônico: `docs/dividas-tecnicas.md` (seção de **FINDINGS BLOQUEANTES**); conversão em Issue só por decisão explícita (Parte XV) |
 
-### II.3 Próxima fase
-**A próxima fase é a Etapa 6 (F6): auditoria visual/funcional READ-ONLY**, que classifica cada achado
-como **QUEBRADO**, **REGRESSÃO** ou **MELHORIA** e **consolida as causas antes de criar qualquer
-trabalho** — nenhuma correção começa antes dessa consolidação. O que já está pronto para alimentá-la é
-o **insumo documental**: a matriz da Etapa 5, o registro de dívidas/findings e o handoff. Como
-qualquer fase, começa obrigatoriamente por **Issue + desenho fechado** (Parte VI).
+### II.3 Próxima fase estrutural após a Etapa 6
+Após a conclusão dos itens pendentes da Etapa 6, a próxima etapa estrutural do roadmap é a **Etapa 7
+(F7): segurança/hardening para produção**. O detalhamento continua dependente de **Issue + desenho
+fechado**; os itens F6 ainda pendentes permanecem no estado da Etapa 6 descrito na Parte III.
 
 ---
 
-## Parte III — Estado atual e próxima fase
+## Parte III — Estado atual e checkpoint da Etapa 6
 
 ### III.1 Certificado
 - **Etapa 5 certificada transversalmente** (`docs/etapa-5-certificacao.md`): os três blockers
@@ -160,24 +158,36 @@ qualquer fase, começa obrigatoriamente por **Issue + desenho fechado** (Parte V
   (§24) e a cadeia de validadores `34…43` verde.
 - **Nenhuma lacuna material bloqueante** foi encontrada na certificação transversal.
 
-### III.2 Pendente de CI/PR/merge
+### III.2 Checkpoint da Etapa 6
+- **F6-01** está concluída.
+- **F6-A03, F6-A04, F6-A09, F6-A12, F6-A13 e F6-A14** estão resolvidas e validadas.
+- **F6-A11** está implementada, com o bootstrap validado.
+- **F6-A17** foi corrigida pelos PRs **#289/#290**; resta somente a validação runtime final na
+  **ORG5**.
+- **F6-A01, F6-A02, F6-A06, F6-A10, F6-A15 e F6-A16** ficam registradas como melhorias pendentes;
+  não são tratadas como defeitos resolvidos neste checkpoint.
+- **F6-A18** entra no backlog: administração segura e exclusão de organizações pelo Admin Virtus.
+- Permanece pendente, em registro separado, o defeito da Edge `avaliacoes` que retorna **503 /
+  `BOOT_ERROR`**. Ele não deve ser confundido com o **DT-013**, que corresponde ao import inexistente
+  já corrigido pela Issue #260 / PR #261.
+
+### III.3 Pendente de CI/PR/merge/runtime
 - O **CI oficial do PR/SHA** é a **autoridade final** (em especial para os pares de concorrência) e é
   responsabilidade do **orquestrador** — as certificações registram isso explicitamente.
 - **PR e merge são do orquestrador** (`gh` ausente no ambiente do agente; DEV-04): o agente entrega
   branch + SHA + título/corpo quando não há mecanismo autorizado de abertura de PR.
-- **Estado da `main` de referência deste registro:** `f8bf8e33429b11d66e0f8ac9c7bf617c9b2788af`, com
-  **CI #306 verde** (squash do PR #261 — correção do import da Edge `avaliacoes`, DT-013).
-- **Esta branch (`docs/governanca-v16`, PR #259) segue ABERTA e não mergeada** — pode estar à frente
-  da `main` acima; nenhum resultado de CI é afirmado aqui para esta branch.
+- **Estado da `main` de referência deste registro:** `c07d87204a10b99db135efe00fa3c8a19eaf4a03`.
+- A validação runtime final da **ORG5** para F6-A17 permanece sob responsabilidade do orquestrador;
+  este plano não a declara concluída antes dessa evidência.
 
-### III.3 Dívida e findings (resumo; lista canônica em `docs/dividas-tecnicas.md`)
+### III.4 Dívida e findings (resumo; lista canônica em `docs/dividas-tecnicas.md`)
 Resíduos legados de ciclo em módulos de apresentação (incluindo o caso **R1**, agora **verificado e
 fechado** como não-autoritativo, restando limpeza de UX), `localCycleRepository` legado por decisão,
 fixtures de teste que pré-carregam chaves locais, provas literais ainda ausentes em validadores e um
 defeito latente de **diagnóstico** em validador da F5-11. O **finding BLOQUEANTE** registrado
 (Edge `avaliacoes` com import de módulo inexistente — `DT-013`) foi **RESOLVIDO pela Issue #260 /
-PR #261** (squash-merged; `main` = `f8bf8e33429b11d66e0f8ac9c7bf617c9b2788af`; **CI #306 verde**) e
-**não há findings bloqueantes abertos**. Classificação e detalhes: Parte XV e o registro canônico de
+PR #261**. O defeito separado da Edge `avaliacoes` que retorna **503 / `BOOT_ERROR`** permanece
+pendente e não é o DT-013. Classificação e detalhes: Parte XV e o registro canônico de
 dívidas (`docs/dividas-tecnicas.md`, seção **FINDINGS BLOQUEANTES**).
 
 ---
@@ -406,6 +416,11 @@ Fonte detalhada: `.ai/git-rules.md`.
     decisão humana pendente; bloqueios reais são registrados com a responsabilidade correspondente.
 11. **Não reabrir sem informação nova**: gate, auditoria ou decisão encerrados não são reabertos sem
     informação relevante nova que altere a análise.
+12. **CI proporcional por escopo (Issue #275)**: PRs exclusivamente documentais, limitados a
+    `docs/**`, `.ai/**`, `*.md` e `*.mdx`, usam validação leve com `diff-check`; alterações de código
+    funcional usam o CI normal; alterações em segurança, auth, banco, migrations, RPC ou RLS usam os
+    gates completos. A detecção é fail-closed e não usa filtros `paths` no trigger, evitando checks
+    required eternamente pendentes.
 
 ---
 
@@ -502,11 +517,10 @@ Fonte detalhada: `.ai/git-rules.md`.
 4. **Nem todo item registrado é dívida aceita.** O registro separa duas coisas: **dívidas** (não
    bloqueantes, aceitas) e **FINDINGS BLOQUEANTES** — defeitos funcionais concretos e demonstrados,
    que **exigem Issue e correção antes do fechamento** da atividade correspondente. Um finding
-   bloqueante **não** pode ser tratado como dívida nem silenciado por conveniência de cronograma
-   (o único registrado até aqui, `DT-013` — Edge `avaliacoes` com import de módulo inexistente —, foi
-   **resolvido pela Issue #260 / PR #261**, squash-merged em `main`
-   `f8bf8e33429b11d66e0f8ac9c7bf617c9b2788af` com **CI #306 verde**; **não há findings bloqueantes
-   abertos**).
+    bloqueante **não** pode ser tratado como dívida nem silenciado por conveniência de cronograma.
+    O `DT-013` — Edge `avaliacoes` com import de módulo inexistente — foi **resolvido pela Issue #260 /
+    PR #261**. O defeito separado de **503 / `BOOT_ERROR`** da mesma Edge permanece pendente e deve ser
+    acompanhado sem ser confundido com o DT-013.
 
 ---
 
@@ -546,8 +560,9 @@ fontes. Itens conhecidos:
    - Fonte B (vigente): `docs/etapa-5-certificacao.md`, `.ai/handoff.md` e `.ai/virtus-context.md`
      após a correção da Issue #258 registram que **a Issue #256 É a própria F5-12** — não há fase
      posterior de fechamento dentro da F5.
-   - **Vigente:** Fonte B. A F5-12 **é esta entrega**; a **próxima fase é a Etapa 6 (F6)** —
-     auditoria visual/funcional READ-ONLY (Parte II.2/II.3), com escopo definido pelo roadmap vigente.
+   - **Vigente na v16.2:** Fonte B. A F5-12 **é aquela entrega**; naquele checkpoint a **próxima fase
+     era a Etapa 6 (F6)** — auditoria visual/funcional READ-ONLY. O estado posterior da F6 está
+     registrado na Parte III desta v16.3.
 3. **Guarda *point-in-time* da P3 × emenda de D15.**
    - Fonte A: migration da P3 (integrada) proíbe `observation.*` em role de sistema fora de
      `observacoes_gestor` — coerente à época.
@@ -568,15 +583,15 @@ fontes. Itens conhecidos:
      Etapas 8–10 (arquitetura-alvo, migração, pré-produção e produção).
    - Fonte B (v16, primeira versão versionada aqui): a primeira redação desta v16 **omitiu** esse
      roadmap e chegou a afirmar que a F6 estava “sem escopo”.
-   - **Desfecho registrado:** a omissão foi **corrigida nesta v16 por decisão do orquestrador** — as
-     Etapas 6–10 constam da Parte II.2/II.3, a próxima fase é a **Etapa 6 (F6)** com o escopo acima, e
-     **não há mais nenhuma afirmação de que a F6/Etapa 6 esteja “sem escopo”**. O detalhamento das
+   - **Desfecho registrado na v16.2:** a omissão foi **corrigida por decisão do orquestrador** — as
+     Etapas 6–10 constavam da Parte II.2/II.3, e a próxima fase era a **Etapa 6 (F6)** com o escopo
+     acima. **Não há afirmação de que a F6/Etapa 6 esteja sem escopo**. O detalhamento das
      Etapas 8–10 **não** foi fabricado: permanece o que o roadmap vigente define, e o detalhamento
      exige Issue + desenho próprios. A causa de a v16 não trazer esse conteúdo antes é a mesma do item
      1 (o v15 **não está versionado** neste repositório).
 
 ---
 
-*Fim da v16.2. Este documento é história + roadmap + manual operacional. Em caso de divergência com
+*Fim da v16.3. Este documento é história + roadmap + manual operacional. Em caso de divergência com
 `.ai/*` ou com o desenho de uma atividade, prevalece a fonte normativa — e a divergência deve ser
 registrada aqui.*
