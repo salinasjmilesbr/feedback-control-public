@@ -1,4 +1,4 @@
-# Plano Mestre — Virtus (v16.1)
+# Plano Mestre — Virtus (v16.2)
 
 > ## NOTA DE RASTREABILIDADE — LEIA ANTES DE USAR ESTE DOCUMENTO
 >
@@ -27,11 +27,11 @@
 
 | Campo | Valor |
 |---|---|
-| Versão | **v16.1** |
-| Data-ação | Registro de governança documental da Issue #258 (reorganização do Plano Mestre) |
+| Versão | **v16.2** |
+| Data-ação | Registro de governança documental das Issues **#258** (reorganização do Plano Mestre) e **#278** (estratégia de agentes e tarifas DeepSeek) |
 | Escopo | Reorganizar e preservar TODO o conhecimento vigente de doutrina, processo, roadmap e estado |
 | Modelo | história + roadmap + manual operacional |
-| Fontes | `.ai/*`, `AGENTS.md`, `docs/etapa-5-certificacao.md`, `docs/F5-11-certificacao.md`, `docs/auditorias/*`, desenhos `docs/F3-*/F4-*/F5-*` |
+| Fontes | `.ai/*`, `AGENTS.md`, `docs/etapa-5-certificacao.md`, `docs/F5-11-certificacao.md`, `docs/auditorias/*`, desenhos `docs/F3-*/F4-*/F5-*`; Issue **#278** (tarifas de referência de 17/09/2026 e regra de escolha de agente) |
 | Registro de dívidas | `docs/dividas-tecnicas.md` (canônico — **não enumerado nem duplicado aqui**) |
 | Handoff operacional | `.ai/handoff.md` |
 
@@ -265,6 +265,29 @@ auditoria (GPT) / revisão (Codex) → squash merge em `main` → auditoria fina
 
 Regra de ouro: **nenhum agente se autoconcede autoridade** — nem técnica, nem de elevação de acesso.
 
+### VII.1 Escolha dinâmica de agente (complexidade × risco × janela × custo)
+
+A escolha de **quem executa** não é fixa: combina **complexidade + risco + horário (janela) + custo
+efetivo + ciclos humanos**. Os **números** de tarifa e as **janelas** vigentes ficam na **Parte XIII,
+item 8** (fonte única — não repetir aqui).
+
+- **Identidade do agente DeepSeek:** `deepseek-flash` = **DeepSeek V4.1 Flash**, modelo **atual**.
+  `deepseek-v4-flash` (e `deepseek-v4-flash-vision-exp`) é **alias legado** roteado ao V4.1 Flash —
+  **não** é um modelo separado e, por isso, **não** é uma opção de custo (tarifa idêntica; números na
+  **Parte XIII, item 8**).
+- **`deepseek-v4-pro` (V4 Pro):** permanece a opção **mais cara** e só deve ser usada com
+  **justificativa técnica concreta**, registrada na entrega (nunca por hábito, preferência ou
+  impressão de “parecer melhor”).
+- **Off-peak:** o **V4.1 Flash é o padrão** do DeepSeek. Trabalho **pesado e flexível** pode ser
+  deslocado para a janela off-peak **sem** criar rodada humana adicional e **sem** prometer execução
+  futura — deslocar janela **não** autoriza adiar entrega, relaxar gate, reduzir verificação nem
+  anunciar trabalho futuro.
+- **Peak:** quando houver **vantagem econômica/operacional**, o **Codex** pode assumir atividades
+  **complexas** no lugar do DeepSeek; a decisão é do **orquestrador** e fica registrada na rodada.
+- **Autoridade inalterada:** esta regra é de **custo/eficiência**. Ela **não** altera autonomia e
+  regras de parada (Parte VIII), o papel de auditoria do GPT, a separação desenho × implementação
+  (Parte VI) nem qualquer regra de segurança, autorização ou arquitetura.
+
 ---
 
 ## Parte VIII — Autonomia e regras de parada dos DEVs
@@ -406,7 +429,13 @@ Fonte detalhada: `.ai/git-rules.md`.
    **US$ 0,15/M** e output **US$ 0,60/M**; **peak** — cache hit **US$ 0,006/M**, cache miss
    **US$ 0,30/M** e output **US$ 1,20/M**. Priorizar off-peak quando isso não interromper o
    trabalho nem criar rodadas adicionais; a preferência de janela nunca autoriza prometer execução
-   futura.
+   futura. Janela **oficial** em dias úteis (UTC): **peak 01:00–04:00 e 06:00–10:00** — exatamente o
+   que corresponde, em São Paulo (UTC−3), a **22h–01h e 03h–07h**. Para o **DeepSeek V4 Pro**
+   (`deepseek-v4-pro`), os preços de referência são: **off-peak** — cache hit **US$ 0,022/M**, cache
+   miss **US$ 0,66/M** e output **US$ 1,98/M**; **peak** — cache hit **US$ 0,044/M**, cache miss
+   **US$ 1,32/M** e output **US$ 3,96/M** (mais caro que o Flash em **todas** as faixas; a regra de
+   **quando** usar cada modelo está na Parte VII.1). O alias legado `deepseek-v4-flash` é roteado ao
+   V4.1 Flash e **cobrado à mesma tarifa** — **não** há economia em escolhê-lo.
 9. **Snapshot de consumo da API (informado pelo orquestrador):** total **US$ 69,68**; saldo
    **US$ 9,31**; últimos **7 dias US$ 29,39**; **13.744 requests**; **4.518.439.425 tokens**. O saldo
    é o recurso mais escasso do projeto e reforça as regras 1 a 4 desta parte (não repetir gate sem
@@ -548,6 +577,6 @@ fontes. Itens conhecidos:
 
 ---
 
-*Fim da v16.1. Este documento é história + roadmap + manual operacional. Em caso de divergência com
+*Fim da v16.2. Este documento é história + roadmap + manual operacional. Em caso de divergência com
 `.ai/*` ou com o desenho de uma atividade, prevalece a fonte normativa — e a divergência deve ser
 registrada aqui.*

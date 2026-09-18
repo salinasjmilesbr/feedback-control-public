@@ -34,7 +34,35 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
-### 3.30 F6-A11 — bootstrap funcional do primeiro Admin GREENFIELD (Issue #273) — IMPLEMENTADO · PR/MERGE PENDENTES
+### 3.31 Governança #278 — Plano Mestre v16.2: estratégia de agentes e tarifas DeepSeek — DOCUMENTADO · PR/MERGE PENDENTES
+
+- **Atividade/branch:** Issue **#278** (governança **documental**), branch
+  **`docs/issue-278-agentes-tarifas`**, base **`main` = `f7985e0`** (F6-A11 **#273** já integrado).
+- **Entregue (2 arquivos, só documentação):** **`docs/plano-mestre.md`** — v16.1 → **v16.2**;
+  `Data-ação`/`Fontes` passam a registrar a Issue **#278** (preservando a #258); **nova Parte VII.1
+  “Escolha dinâmica de agente (complexidade × risco × janela × custo)”** — `deepseek-flash` = **V4.1
+  Flash**; `deepseek-v4-flash` é **alias legado**, **não** é opção de custo; **V4 Pro** só com
+  justificativa técnica concreta registrada; **off-peak** ⇒ V4.1 Flash é o padrão e trabalho pesado/
+  flexível pode ser deslocado **sem** rodada humana adicional e **sem** prometer execução futura;
+  **peak** ⇒ o **Codex** pode assumir atividades complexas quando houver vantagem econômica/
+  operacional; a regra é de **custo/eficiência** e **não** altera autoridade, autonomia (Parte VIII),
+  auditoria do GPT nem a separação desenho × implementação; e **Parte XIII, item 8** ampliado com a
+  janela **oficial em UTC** (peak 01:00–04:00 e 06:00–10:00 ⇔ **22h–01h e 03h–07h** em São Paulo), os
+  preços de referência do **V4 Pro** (off-peak **0,022/0,66/1,98**; peak **0,044/1,32/3,96** por M) e a
+  **equivalência tarifária** do alias — mantendo a Parte XIII como **fonte única dos números** (a Parte
+  VII.1 aponta para ela, sem repetir valores). **`.ai/handoff.md`**: esta entrada + correção do status
+  do §3.30 (F6-A11 integrado como **#273** em `f7985e0`).
+- **GATES (docs-only):** `git diff --check` **exit 0**; `git status --short` restrito aos **2 arquivos**;
+  **sem** gate de produto (nenhum artefato executável foi tocado). Autoauditoria documental de
+  cobertura: **todos** os pontos da Issue #278 presentes e **cada número de tarifa aparecendo uma única
+  vez** (anti-duplicação conferida por contagem).
+- **Observação de fonte (deliberadamente NÃO incorporada ao plano):** a página oficial de preços da
+  DeepSeek segue afirmando que o **V4 Pro continua** com cobrança inalterada após 14/09/2026, enquanto a
+  nota de lançamento do V4.1-Flash anunciava roteamento — o plano registra **apenas** o que a Issue #278
+  define, para não criar segunda versão de regra.
+- **Próximo passo:** revisão e merge do PR pelo **orquestrador** (o agente não abre PR nem faz merge).
+
+### 3.30 F6-A11 — bootstrap funcional do primeiro Admin GREENFIELD (Issue #273) — INTEGRADO (squash #273 em `f7985e0`)
 
 - **Atividade/branch:** **F6-A11** (Issue **#273**), branch **`feat/f6-a11-bootstrap-funcional-admin`**, base
   **`main` = `5a9a5ca4dad567c1d15a6746e9a9e3b9090ce352`** (desenho **FECHADO** D22–D30 já integrado).
