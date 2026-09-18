@@ -375,6 +375,27 @@ begin
     raise exception '[FAIL] D5: atribuicao da role admin ausente/incorreta';
   end if;
 
+  -- (D5.1) F6-A14: o bootstrap cria o scope ORGANIZATION completo na
+  -- assignment real; fixtures/concessoes normais nao passam por esse caminho.
+  if not exists (
+    select 1 from public.access_role_assignment_scopes s
+     where s.assignment_id = (
+       select a.id
+         from public.membership_access_role_assignments a
+        where a.membership_id = v_memb
+          and a.access_role_id = v_role
+          and a.organization_id = v_org
+          and a.status = 'active'
+          and a.created_by = v_operador
+     )
+       and s.organization_id = v_org
+       and s.scope_type = 'ORGANIZATION'
+       and s.status = 'active'
+       and s.created_by = v_operador
+  ) then
+    raise exception '[FAIL] D5.1: scope ORGANIZATION do bootstrap ausente/incompleto';
+  end if;
+
   -- (D6) Trilha D18: EXATAMENTE um `grant` humano com ator = operador.
   select count(*) into v_n from public.privilege_mutation_audit p
    where p.organization_id = v_org and p.membership_id = v_memb
@@ -1004,6 +1025,18 @@ reset role;
 -- ============================================================================
 -- G) HIGIENE — nenhum residuo do cenario
 -- ============================================================================
+-- F6-A14: scopes sao filhos da assignment; removê-los antes da assignment
+-- preserva a FK e trata o scope ORGANIZATION do bootstrap como parte legitima
+-- do fixture, sem alterar a implementacao ou enfraquecer a restricao.
+delete from public.access_role_assignment_scopes s
+ using public.membership_access_role_assignments a,
+       public.user_organization_memberships m,
+       public.organizations o
+ where s.assignment_id = a.id
+   and a.membership_id = m.id
+   and m.organization_id = o.id
+   and (o.name like 'F6-A03 %' or o.id = 'f6a30000-0000-4000-8000-0000000000a1');
+
 delete from public.membership_access_role_assignments a
  using public.user_organization_memberships m, public.organizations o
  where a.membership_id = m.id and m.organization_id = o.id
