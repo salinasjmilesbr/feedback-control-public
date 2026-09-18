@@ -22,7 +22,7 @@
 Achados observados até 18/09/2026:
 
 - Home/Colaboradores expõe linguagem técnica como “cadastro soberano”, PostgreSQL, “ocupação vigente” e explicações de persistência.
-- Ficha/edição de colaborador já havia exposto termos como “versão da projeção”, UUID, “operações soberanas”, legado/arquivo e linguagem excessivamente técnica de vigência.
+- Ficha/edição de colaborador expõe termos como “versão da projeção”, UUID/identificador funcional, “cadastro soberano”, PostgreSQL, “operações soberanas”, “ocupação soberana”, “reporting line”, “controle otimista”, “leitura soberana”, “trilha soberana append-only”, legado/arquivo e linguagem excessivamente técnica de vigência. Também há `Status: active` em inglês no histórico.
 - Unidades expõe “entidade formal com vigência própria”, “relação pai/filho é temporal”, “não admite ciclo”, “versão 0”, “relação pai registrada” e “decisão D21”.
 - Fluxo Definir/Alterar unidade pai expõe UUID como `identidade <uuid>`.
 - Posições expõe “IMUTÁVEIS”, “D5”, “I4”, “reporting line”, “recusado pelo servidor”, “versão 0” e UUID/`identidade`.
@@ -52,7 +52,8 @@ Os seletores de Posições reconhecem corretamente as duas unidades, portanto n�
 - Hierarquia de unidades: `Gerência de Vendas → Diretoria Comercial` funcionou.
 - Catálogos: cargo `Gerente de Vendas`, código `GER-VENDAS`, criado com sucesso.
 - Posições: posição `Gerência de Vendas + Gerente de Vendas`, sem senioridade, criada com sucesso e exibida como sem ocupante.
-- Próximo passo da auditoria: localizar pela UI o fluxo de alocação e alocar James Salinas à posição criada.
+- Fluxo de alocação foi descoberto pela própria UI: `Ver histórico → Administrar alocação` abre `Editar colaborador`, seção `04 Alocação`.
+- A tela de edição oferece `Posição vigente`, vigência e motivo para `Definir ocupação`; próximo passo é confirmar que a posição criada aparece no seletor e alocar James Salinas.
 
 ## Regra de manutenção
 
