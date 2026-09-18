@@ -65,3 +65,10 @@ Os seletores de Posições reconhecem corretamente as duas unidades, portanto n�
 ## Regra de manutenção
 
 Durante a Etapa 6, novos achados relevantes devem ser acrescentados a este arquivo antes de depender de consolidação futura. Duplicidades devem ser absorvidas por findings transversais existentes (especialmente F6-A15) em vez de criar IDs desnecessários.
+
+### F6-COLAB-02 — Histórico de ocupação expõe payload técnico e data inconsistente
+**Classificação:** QUEBRADO a investigar + F6-A15 para apresentação.
+
+Após a alocação inicial de James Salinas em 18/09/2026, a ficha mostra no Histórico organizacional um evento `Ocupação iniciada` datado visualmente como `17/09/2026`, embora o próprio payload exiba `valid_from: 2026-09-18T00:00:00+00:00` e o rodapé registre a operação em 18/09/2026 19:06. Investigar causa da divergência de data (provável transformação/fuso/apresentação; não assumir causa antes do diagnóstico).
+
+O mesmo card expõe dados internos inadequados ao usuário: `occupation_id`, `occupacoes_encerradas: []`, `position_id`, `valid_from` e UUIDs. Consolidar a remoção/tradução desses detalhes em F6-A15, preservando internamente a auditabilidade.
