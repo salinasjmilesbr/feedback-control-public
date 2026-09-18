@@ -419,6 +419,11 @@ export async function resolverContextoAtor(
   // A organização do payload é INTENÇÃO: só vale se houver membership ATIVA.
   const organizacoes = await deps.resolverOrganizacoesDoAtor(authUserId);
   if (!organizacoes.includes(intencao.organizationId)) {
+    console.error("[colaboradores] contexto denied: organization membership", {
+      authUserId,
+      requestedOrganizationId: intencao.organizationId,
+      activeOrganizationIds: organizacoes,
+    });
     return { ok: false, code: "FORBIDDEN" };
   }
 
@@ -462,6 +467,13 @@ export async function resolverContextoAtor(
     ehOperacaoFuncional(intencao.operacao) && !operacaoTemAlvo(intencao.operacao)
       ? await deps.resolverColaboradorVinculado(authUserId, intencao.organizationId)
       : null;
+
+  console.info("[colaboradores] contexto resolved", {
+    authUserId,
+    organizationId: intencao.organizationId,
+    operation: intencao.operacao,
+    actorCollaboratorId: atorCollaboratorId,
+  });
 
   return {
     ok: true,
@@ -651,6 +663,13 @@ export async function colaboradores(
 
   if (!decisao.permitido) {
     const code = decisao.code ?? "FORBIDDEN";
+    console.error("[colaboradores] policy denied", {
+      authUserId: callerId,
+      organizationId: contexto.organizationId,
+      operation: operacao,
+      actorCollaboratorId: contexto.atorCollaboratorId,
+      code,
+    });
     return erro(code, mensagemDoCodigo(code), statusDoCodigo(code));
   }
 

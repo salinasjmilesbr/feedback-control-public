@@ -518,7 +518,13 @@ Deno.serve(async (req) => {
       return null;
     }
     const primeira = ((data ?? []) as { collaborator_id: string | null }[])[0];
-    return primeira?.collaborator_id ?? null;
+    const collaboratorId = primeira?.collaborator_id ?? null;
+    console.info("[colaboradores] resolver_collaborador_vinculado result", {
+      authUserId,
+      organizationId,
+      collaboratorId,
+    });
+    return collaboratorId;
   };
 
   const autorizacao: DepsContextoAutorizacao = {
@@ -676,10 +682,20 @@ Deno.serve(async (req) => {
         .select("organization_id")
         .eq("user_profile_id", authUserId)
         .eq("status", "active");
-      if (error) return [];
-      return ((data ?? []) as { organization_id: string }[]).map(
+      if (error) {
+        console.error("[colaboradores] membership lookup failed", {
+          code: error.code ?? null,
+          status: error.status ?? null,
+          message: typeof error.message === "string" ? error.message.slice(0, 300) : null,
+          authUserId,
+        });
+        return [];
+      }
+      const organizationIds = ((data ?? []) as { organization_id: string }[]).map(
         (linha) => linha.organization_id
       );
+      console.info("[colaboradores] active memberships", { authUserId, organizationIds });
+      return organizationIds;
     },
 
     colaboradorPertenceAoAtor: async ({ organizationId, collaboratorId }) => {
