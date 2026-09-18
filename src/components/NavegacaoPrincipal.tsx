@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import type { Capability } from "../authorization/Capability";
 import { useAuth } from "../auth/AuthContext";
-import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import { listarCapabilitiesEfetivas } from "../services/capabilitiesSoberanas";
 
 function IconHome() {
@@ -100,7 +99,6 @@ function NavItem({ to, end, icon, children }: ItemProps) {
 
 function NavegacaoPrincipal() {
   const { organizacaoAtivaId } = useAuth();
-  const { usuarioAtual } = useUsuarioAtual();
   const [snapshot, setSnapshot] = useState<{
     organizationId: string | null;
     capabilities: ReadonlySet<Capability>;
@@ -125,7 +123,6 @@ function NavegacaoPrincipal() {
   const possui = (capability: Capability) =>
     snapshot.organizationId === organizacaoAtivaId &&
     snapshot.capabilities.has(capability);
-  if (!usuarioAtual) return null;
   /**
    * Bug #170: `cycle.management.view` e `cycle.coordinator.list` são ALIASES da
    * MESMA capability canônica (`cycle.read`, colapso Q1 da F4-09 em

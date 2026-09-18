@@ -18,7 +18,7 @@ const usuario: Colaborador = {
   respondePara: "",
 };
 
-function renderizar(): string {
+function renderizar(usuarioAtual?: Colaborador): string {
   return renderToStaticMarkup(
     <AuthContext.Provider value={{
       estado: {
@@ -44,8 +44,8 @@ function renderizar(): string {
       organizacaoVersao: 0,
     }}>
       <UsuarioAtualContext.Provider value={{
-        usuarioAtual: usuario,
-        usuariosDisponiveis: [usuario],
+        usuarioAtual,
+        usuariosDisponiveis: usuarioAtual ? [usuarioAtual] : [],
         selecionarUsuario: () => undefined,
       }}>
         <MemoryRouter><NavegacaoPrincipal /></MemoryRouter>
@@ -55,8 +55,9 @@ function renderizar(): string {
 }
 
 describe("NavegacaoPrincipal — gates soberanos", () => {
-  it("mantém estrutura/catálogos visíveis no primeiro render sem capabilities carregadas", () => {
+  it("mantém a navegação estrutural visível com sessão/organização ativa e usuário atual ausente", () => {
     const html = renderizar();
+    expect(html).toContain("Início");
     expect(html).toContain("Unidades");
     expect(html).toContain("Posições");
     expect(html).toContain("Colegiado");
