@@ -31,9 +31,9 @@ begin
      )
   then
     insert into public.access_role_assignment_scopes (
-      assignment_id, scope_type, status
+      assignment_id, organization_id, scope_type, status
     )
-    values (new.id, 'ORGANIZATION', 'active')
+    values (new.id, new.organization_id, 'ORGANIZATION', 'active')
     on conflict (assignment_id, scope_type) do nothing;
   end if;
 
@@ -54,6 +54,8 @@ comment on function public.f6_a14_materializar_scope_bootstrap_admin() is
   'tenant GREENFIELD sem colaboradores; nao faz backfill de tenants existentes.';
 
 do $guarda$
+declare
+  v_def text;
 begin
   if not exists (
     select 1
@@ -64,6 +66,16 @@ begin
        and not t.tgisinternal
   ) then
     raise exception 'F6_A14: trigger do scope do bootstrap ausente';
+  end if;
+
+  select pg_get_functiondef(
+    'public.f6_a14_materializar_scope_bootstrap_admin()'::regprocedure
+  ) into v_def;
+  if position('new.organization_id' in lower(v_def)) = 0
+     or position('organization_id' in lower(v_def)) = 0
+     or position('organization' in lower(v_def)) = 0
+  then
+    raise exception 'F6_A14: scope ORGANIZATION sem tenant soberano completo';
   end if;
 end;
 $guarda$;
