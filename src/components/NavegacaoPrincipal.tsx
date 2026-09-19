@@ -142,6 +142,7 @@ function NavegacaoPrincipal() {
   const podeVerMetas = possui("goal.read");
   const podeVerRelatorios = possui("report.read");
   const podeGerenciarConfiguracoes = possui("settings.manage");
+  const podeAdministrarAvaliadores = possui("access_role.manage");
 
   return (
     <nav className="app-nav" aria-label="Navegação principal">
@@ -209,6 +210,11 @@ function NavegacaoPrincipal() {
             icon={<IconSettings />}
           >
             Configurações
+          </NavItem>
+        )}
+        {podeAdministrarAvaliadores && (
+          <NavItem to="/administracao/avaliadores" icon={<IconSettings />}>
+            Acesso às avaliações
           </NavItem>
         )}
       </div>

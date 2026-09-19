@@ -16,6 +16,7 @@ import {
 const MEMBERSHIP = "11111111-1111-4111-8111-111111111111";
 const ROLE = "22222222-2222-4222-8222-222222222222";
 const ACTOR = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const ORG = "33333333-3333-4333-8333-333333333333";
 
 function makeDeps(
   overrides?: Partial<DepsGerenciarAcessoRole>
@@ -77,6 +78,30 @@ describe("F5-04 D16 — identidade × execução privilegiada separadas", () => 
       ROLE,
       ACTOR
     );
+  });
+
+  it("fluxo evaluator transporta somente tenant e e-mail alvo; não aceita actor do corpo", async () => {
+    const deps = makeDeps();
+    const res = await gerenciarAcessoRole(
+      makeRequest({ action: "grant-evaluator", organization_id: ORG, target_email: "alvo@exemplo.test" }, "Bearer jwt-do-usuario"),
+      deps
+    );
+    expect(res.status).toBe(200);
+    expect(deps.executarRpc).toHaveBeenCalledWith("grant-evaluator", "", "", ACTOR, ORG, "alvo@exemplo.test");
+  });
+
+  it("evaluator sem autoridade administrativa não pode conceder nem revogar roles", async () => {
+    for (const action of ["grant-evaluator", "revoke-evaluator"] as const) {
+      const deps = makeDeps({
+        executarRpc: vi.fn(async () => ({ code: "F6_306_FORBIDDEN", message: "role admin exigida" })),
+      });
+      const res = await gerenciarAcessoRole(
+        makeRequest({ action, organization_id: ORG, target_email: "alvo@exemplo.test" }, "Bearer jwt-evaluator"),
+        deps
+      );
+      expect(res.status).toBe(403);
+      expect(deps.executarRpc).toHaveBeenCalledWith(action, "", "", ACTOR, ORG, "alvo@exemplo.test");
+    }
   });
 
   it("sem Authorization ⇒ 401 (identidade soberana ausente)", async () => {

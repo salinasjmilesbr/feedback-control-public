@@ -24,7 +24,7 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-export type AcaoAcessoRole = "grant" | "revoke";
+export type AcaoAcessoRole = "grant" | "revoke" | "grant-evaluator" | "revoke-evaluator";
 
 export interface ErroRpc {
   code?: string;
@@ -43,7 +43,9 @@ export interface DepsGerenciarAcessoRole {
     action: AcaoAcessoRole,
     membershipId: string,
     accessRoleId: string,
-    actorUserId: string
+    actorUserId: string,
+    organizationId?: string,
+    targetEmail?: string
   ): Promise<ErroRpc | null>;
 }
 
@@ -114,19 +116,25 @@ export async function gerenciarAcessoRole(
     typeof campos.access_role_id === "string" ? campos.access_role_id : "";
   const actionRaw = campos.action;
   const action: AcaoAcessoRole | "" =
-    actionRaw === "grant" || actionRaw === "revoke" ? actionRaw : "";
+    actionRaw === "grant" || actionRaw === "revoke" ||
+    actionRaw === "grant-evaluator" || actionRaw === "revoke-evaluator" ? actionRaw : "";
 
-  if (!UUID_RE.test(membershipId) || !UUID_RE.test(accessRoleId) || !action) {
+  const evaluatorAction = action === "grant-evaluator" || action === "revoke-evaluator";
+  if (!action || (evaluatorAction
+    ? !UUID_RE.test(typeof campos.organization_id === "string" ? campos.organization_id : "") ||
+      typeof campos.target_email !== "string" || !/^\S+@\S+\.\S+$/.test(campos.target_email)
+    : !UUID_RE.test(membershipId) || !UUID_RE.test(accessRoleId))) {
     return erro("INVALID_INPUT", "Parâmetros inválidos.", 400);
   }
 
   // 2) execução privilegiada com o ator VERIFICADO (nunca o JWT, nunca actor_id).
-  const rpcError = await deps.executarRpc(
-    action,
-    membershipId,
-    accessRoleId,
-    callerId
-  );
+  const rpcError = evaluatorAction
+    ? await deps.executarRpc(
+        action, "", "", callerId,
+        typeof campos.organization_id === "string" ? campos.organization_id : undefined,
+        typeof campos.target_email === "string" ? campos.target_email.trim().toLowerCase() : undefined
+      )
+    : await deps.executarRpc(action, membershipId, accessRoleId, callerId);
   if (rpcError) {
     // Self-escalation/cross-tenant/tenant inválido/sem autoridade administrativa
     // => 403 (fail-closed).

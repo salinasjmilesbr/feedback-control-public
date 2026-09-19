@@ -130,7 +130,7 @@ begin
   --       ser EXATAMENTE esse: role de sistema fora dele significa papel inventado.
   if (select array_agg(r.name order by r.name)
         from public.access_roles r where r.is_system = true)
-     is distinct from array['admin', 'metas_aprovador', 'metas_dono', 'observacoes_avaliado', 'observacoes_gestor'] then
+     is distinct from array['admin', 'evaluator', 'metas_aprovador', 'metas_dono', 'observacoes_avaliado', 'observacoes_gestor'] then
     v_falhas := v_falhas || format(
       'conjunto de roles de SISTEMA mudou (%s) — a P1 nao cria role/bundle/perfil: D15 e decisao da P3',
       coalesce((select array_to_string(array_agg(r.name order by r.name), ',')
@@ -192,7 +192,7 @@ begin
     raise exception '[FAIL] A/preflight F5-11 P1: %', array_to_string(v_falhas, '; ');
   end if;
 
-  raise notice '[PASS] A/preflight: fixture presente (2 orgs, 4 observacoes, 6 eventos), catalogo intacto (31; 8 de metas/observacoes; nenhuma capability de comunicado), D15 vigente apos a emenda da P5.1 (5 roles de sistema; 2 perfis com observation.%%: `observacoes_gestor` com as 4 de gestao e `observacoes_avaliado` com EXATAMENTE observation.read, concedida AUTOMATICAMENTE aos elegiveis; 4 concessoes de gestao + 1 SELF automatica; admin com 9 e SEM observation.%%), NENHUMA funcao de observacao (fronteira da P1) e as 2 tabelas com RLS ligada e ZERO policy';
+  raise notice '[PASS] A/preflight: fixture presente (2 orgs, 4 observacoes, 6 eventos), catalogo intacto (31; 8 de metas/observacoes; nenhuma capability de comunicado), D15 vigente apos a emenda da P5.1 (6 roles de sistema; 2 perfis com observation.%%: `observacoes_gestor` com as 4 de gestao e `observacoes_avaliado` com EXATAMENTE observation.read, concedida AUTOMATICAMENTE aos elegiveis; 4 concessoes de gestao + 1 SELF automatica; admin com 9 e SEM observation.%%), NENHUMA funcao de observacao (fronteira da P1) e as 2 tabelas com RLS ligada e ZERO policy';
 end $$;
 
 -- ============================================================================
@@ -1223,7 +1223,7 @@ begin
   -- criado pela P5.1 (`observacoes_avaliado`, Issue #252).
   if (select array_agg(r.name order by r.name)
         from public.access_roles r where r.is_system = true)
-     is distinct from array['admin', 'metas_aprovador', 'metas_dono', 'observacoes_avaliado', 'observacoes_gestor'] then
+     is distinct from array['admin', 'evaluator', 'metas_aprovador', 'metas_dono', 'observacoes_avaliado', 'observacoes_gestor'] then
     v_falhas := v_falhas || format(
       'D15: conjunto de roles de SISTEMA mudou (%s) — nenhuma role/bundle/perfil novo fora da emenda da P5.1',
       coalesce((select array_to_string(array_agg(r.name order by r.name), ',')
@@ -1234,7 +1234,7 @@ begin
     raise exception '[FAIL] J/fronteira da P1: %', array_to_string(v_falhas, '; ');
   end if;
 
-  raise notice '[PASS] J/fronteira da P1: as tabelas de observacao sao EXATAMENTE as 2 do contrato (lista FECHADA), NENHUMA funcao de observacao FORA da lista fechada da P1 existe (nenhuma RPC observacao_* ate a P2), nenhuma coluna de observacao se derrama em ciclo/avaliacao/nota e D15 permanece vigente apos a emenda da P5.1 (5 roles de sistema; 4 concessoes de gestao + 1 concessao SELF automatica aos elegiveis em `observacoes_avaliado`; admin SEM observation.%%; nenhum bundle/role de FIXTURE)';
+  raise notice '[PASS] J/fronteira da P1: as tabelas de observacao sao EXATAMENTE as 2 do contrato (lista FECHADA), NENHUMA funcao de observacao FORA da lista fechada da P1 existe (nenhuma RPC observacao_* ate a P2), nenhuma coluna de observacao se derrama em ciclo/avaliacao/nota e D15 permanece vigente apos a emenda da P5.1 (6 roles de sistema; 4 concessoes de gestao + 1 concessao SELF automatica aos elegiveis em `observacoes_avaliado`; admin SEM observation.%%; nenhum bundle/role de FIXTURE)';
 end $$;
 
 -- ============================================================================
@@ -1275,7 +1275,7 @@ begin
   raise notice '  D7 comunicado como FATO (ator + instante) e sem capability nova;';
   raise notice '  D8/D16 exclusao logica com motivo obrigatorio;';
   raise notice '  D9 RLS DENY-BY-DEFAULT INTEGRAL (zero policy, zero privilegio de cliente);';
-  raise notice '  D15 EMENDADO NA P5.1: 5 roles de sistema; observation.* = 4 em observacoes_gestor (gestao) + 1 em observacoes_avaliado (SELF, automatica aos elegiveis); admin ZERO;';
+  raise notice '  D15 EMENDADO NA P5.1: 6 roles de sistema; observation.* = 4 em observacoes_gestor (gestao) + 1 em observacoes_avaliado (SELF, automatica aos elegiveis); admin ZERO;';
   raise notice '  FRONTEIRA DA P1 respeitada: nenhuma RPC, nenhum Edge, nenhum cutover.';
   raise notice '============================================================';
 end $$;

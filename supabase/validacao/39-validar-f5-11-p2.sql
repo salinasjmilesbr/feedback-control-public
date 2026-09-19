@@ -217,7 +217,7 @@ begin
   end if;
   if (select array_agg(r.name order by r.name)
         from public.access_roles r where r.is_system = true)
-     is distinct from array['admin', 'metas_aprovador', 'metas_dono', 'observacoes_avaliado', 'observacoes_gestor'] then
+     is distinct from array['admin', 'evaluator', 'metas_aprovador', 'metas_dono', 'observacoes_avaliado', 'observacoes_gestor'] then
     v_falhas := v_falhas || 'conjunto de roles de SISTEMA mudou';
   end if;
 
@@ -1020,8 +1020,8 @@ begin
   end if;
   select array_to_string(array_agg(r.name order by r.name), ',') into v_roles
     from public.access_roles r where r.is_system = true;
-  if v_roles <> 'admin,metas_aprovador,metas_dono,observacoes_avaliado,observacoes_gestor' then
-    raise exception '[FAIL] D6: roles de sistema = % (esperado admin,metas_aprovador,metas_dono,observacoes_avaliado,observacoes_gestor)', v_roles;
+  if v_roles <> 'admin,evaluator,metas_aprovador,metas_dono,observacoes_avaliado,observacoes_gestor' then
+    raise exception '[FAIL] D6: roles de sistema = % (esperado admin,evaluator,metas_aprovador,metas_dono,observacoes_avaliado,observacoes_gestor)', v_roles;
   end if;
 
   raise notice '[PASS] D/pos-rollback: a fixture transitoria NAO persistiu — nenhuma concessao fora da lista fechada (4 em observacoes_gestor + 1 em observacoes_avaliado), nenhuma role de teste, ZERO observacao/evento, admin com 9 e sem observation.*: o estado entregue pela P2 e EXATAMENTE o estado de producao (DENY ate a P3 para o gestor; SELF pela P5.1)' ;
@@ -1063,6 +1063,6 @@ begin
   raise notice '  eventos na MESMA transacao (D6) e rollback total comprovados;';
   raise notice '  D4/D6/D9 e a P1.1 intactos; catalogo 31; admin SEM observation.*;';
   raise notice '  ZERO concessao de FIXTURE do cenario; D15 vigente apos a emenda da P5.1';
-  raise notice '  (5 roles de sistema; 4 concessoes de gestao + 1 SELF automatica aos elegiveis; admin ZERO).';
+  raise notice '  (6 roles de sistema; 4 concessoes de gestao + 1 SELF automatica aos elegiveis; admin ZERO).';
   raise notice '============================================================';
 end $$;
