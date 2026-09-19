@@ -28,6 +28,11 @@
     flex-direction: column;
     gap: 14px;
   }
+
+  .nova-organizacao-page__back {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 .auth-card {
