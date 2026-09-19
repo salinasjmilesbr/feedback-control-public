@@ -93,6 +93,7 @@ interface Grafo {
   readonly quebrados: readonly string[];
   readonly diagnostico: readonly string[];
   readonly externos: ReadonlySet<string>;
+  readonly bareSupabase: readonly string[];
   readonly semExtensao: readonly string[];
 }
 
@@ -102,6 +103,7 @@ function percorrerGrafo(entry: string): Grafo {
   const quebrados: string[] = [];
   const diagnostico: string[] = [];
   const externos = new Set<string>();
+  const bareSupabase: string[] = [];
   const semExtensao: string[] = [];
 
   while (fila.length > 0) {
@@ -116,6 +118,9 @@ function percorrerGrafo(entry: string): Grafo {
     }
 
     for (const specifier of specifiersDe(conteudo)) {
+      if (specifier === "@supabase/supabase-js") {
+        bareSupabase.push(`bare specifier em ${arquivo}`);
+      }
       if (!specifier.startsWith(".")) {
         externos.add(specifier.split("?")[0]!);
         continue;
@@ -141,7 +146,7 @@ function percorrerGrafo(entry: string): Grafo {
     }
   }
 
-  return { visitados, quebrados, diagnostico, externos, semExtensao };
+  return { visitados, quebrados, diagnostico, externos, bareSupabase, semExtensao };
 }
 
 /** Entries reais das Edge Functions do projeto. */
@@ -215,6 +220,11 @@ describe("F6-A09/#303 — boot da Edge `avaliacoes`", () => {
     const entrada = POR_CAMINHO.get(ENTRY_AVALIACOES);
     expect(entrada).toContain("../../../src/authorization/catalogoCapabilities.ts");
     expect(entrada).not.toContain("catalogoCapacidades");
+  });
+
+  it("não alcança o Supabase por bare specifier", () => {
+    expect(grafoAvaliacoes.bareSupabase).toEqual([]);
+    expect([...grafoAvaliacoes.externos]).toContain("https://esm.sh/@supabase/supabase-js@2");
   });
 });
 

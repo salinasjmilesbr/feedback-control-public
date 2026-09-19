@@ -19,7 +19,8 @@
  * resolvido ⇒ ASSIGNED nega (fail-closed).
  */
 
-import type { SupabaseClient } from "@supabase/supabase-js";
+// @ts-expect-error Deno resolves URL imports; the application TypeScript project does not.
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   carregarDadosAssignedAvaliacoes,
   type DepsAssignedAvaliacoes,
