@@ -35,6 +35,8 @@
 .app-header,
 .app-footer {
   width: calc(100% - 64px);
+  margin-top: 14px;
+  margin-bottom: 14px;
   margin-left: auto;
   margin-right: auto;
   background: var(--virtus-background);
@@ -62,7 +64,14 @@
 .auth-status__sair {
   border-color: var(--virtus-border);
   background: var(--virtus-background);
-  color: var(--virtus-highlight);
+  color: var(--virtus-navy) !important;
+}
+
+.auth-status__sair:hover,
+.auth-status__sair:focus-visible {
+  border-color: var(--virtus-highlight) !important;
+  background: color-mix(in srgb, var(--virtus-highlight) 6%, #fff) !important;
+  color: var(--virtus-highlight) !important;
 }
 
 .app-footer { margin-top: auto; }
@@ -102,11 +111,11 @@
 
 @media (min-width: 621px) {
   .virtus-platform-shell .app-header {
-    margin-top: 32px;
+    margin-top: 14px;
   }
 
   .virtus-platform-shell .app-footer {
-    margin-bottom: 32px;
+    margin-bottom: 14px;
   }
 }
 
@@ -119,7 +128,7 @@
   .app-header__inner {
     min-height: 64px;
     align-items: center;
-    padding: 0 14px !important;
+    padding: 14px !important;
   }
 
   .app-header--platform .app-header__inner {
@@ -153,12 +162,14 @@
 
   .app-footer__inner {
     gap: 8px;
-    padding: 0 14px !important;
+    padding: 10px 14px !important;
   }
 
   .app-footer__brandline {
     flex-wrap: nowrap;
     white-space: nowrap;
+    gap: 5px;
+    font-size: 11px;
   }
 
   .app-footer__version {
@@ -167,6 +178,6 @@
 
   .app-footer__version::after {
     content: "V 1.0.0";
-    font-size: 11px;
+    font-size: 10px;
   }
 }

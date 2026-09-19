@@ -148,7 +148,7 @@ export function FormularioNovaOrganizacao({
       <section className="virtus-page-header nova-organizacao-page__header">
         <div className="virtus-page-header__copy">
           <h1>Nova organização</h1>
-          <p>Crie uma organização e defina o primeiro Admin dela.</p>
+          <p>Cadastre a organização e defina o responsável pela gestão inicial.</p>
         </div>
         <Link to="/" className="brand-button brand-button--secondary nova-organizacao-page__back">
           Voltar
@@ -168,7 +168,7 @@ export function FormularioNovaOrganizacao({
         </label>
 
         <label className="branding-field">
-          <span>Primeiro Admin</span>
+          <span>Responsável pela gestão</span>
           <select
             value={forma}
             onChange={(evento) => aoMudarForma(evento.target.value === "outra" ? "outra" : "eu")}
@@ -192,7 +192,7 @@ export function FormularioNovaOrganizacao({
         )}
 
         <label className="branding-field">
-          <span>Nome do primeiro Admin</span>
+          <span>Nome do responsável</span>
           <input
             type="text"
             autoComplete="off"
@@ -203,7 +203,7 @@ export function FormularioNovaOrganizacao({
         </label>
 
         <label className="branding-field">
-          <span>Matrícula do primeiro Admin</span>
+          <span>Matrícula do responsável</span>
           <input
             type="text"
             autoComplete="off"

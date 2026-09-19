@@ -100,7 +100,7 @@ describe("F6-A03 — UI: formulário mínimo (critério 23)", () => {
     const html = semearFormulario("eu");
 
     expect(html).toContain("Nome da organização");
-    expect(html).toContain("Primeiro Admin");
+    expect(html).toContain("Responsável pela gestão");
     expect(html).toContain("Eu mesmo");
     expect(html).toContain("Outra pessoa (e-mail)");
     // SEM o campo de e-mail enquanto a escolha é "eu mesmo".
@@ -121,16 +121,16 @@ describe("F6-A03 — UI: formulário mínimo (critério 23)", () => {
   it("renderiza os DOIS campos novos do primeiro Admin, obrigatórios e na ordem contratada", () => {
     const html = semearFormulario("eu", false, "Verifique os dados informados e tente novamente.");
 
-    expect(html).toContain("Nome do primeiro Admin");
-    expect(html).toContain("Matrícula do primeiro Admin");
+    expect(html).toContain("Nome do responsável");
+    expect(html).toContain("Matrícula do responsável");
     // Os dois campos são `required`: o formulário continua fail-closed.
-    expect(html).toMatch(/<span>Nome do primeiro Admin<\/span><input[^>]*required/);
-    expect(html).toMatch(/<span>Matrícula do primeiro Admin<\/span><input[^>]*required/);
+    expect(html).toMatch(/<span>Nome do responsável<\/span><input[^>]*required/);
+    expect(html).toMatch(/<span>Matrícula do responsável<\/span><input[^>]*required/);
 
     // Ordem contratada: DEPOIS do bloco de identificação e ANTES do erro.
-    const identificacao = html.indexOf("<span>Primeiro Admin</span>");
-    const nomeAdmin = html.indexOf("Nome do primeiro Admin");
-    const matriculaAdmin = html.indexOf("Matrícula do primeiro Admin");
+    const identificacao = html.indexOf("<span>Responsável pela gestão</span>");
+    const nomeAdmin = html.indexOf("Nome do responsável");
+    const matriculaAdmin = html.indexOf("Matrícula do responsável");
     const erro = html.indexOf("Verifique os dados informados");
     expect(identificacao).toBeGreaterThan(-1);
     expect(nomeAdmin).toBeGreaterThan(identificacao);
