@@ -21,6 +21,7 @@ import type { EstadoSessao } from "../auth/controladorSessao";
 
 /** Rota única da superfície mínima de plataforma (§6.5.4). */
 export const ROTA_PLATAFORMA_NOVA_ORGANIZACAO = "/plataforma/nova-organizacao";
+export const ROTA_PLATAFORMA = "/plataforma";
 
 export type DecisaoRotaPlataforma =
   | { tipo: "carregando" }

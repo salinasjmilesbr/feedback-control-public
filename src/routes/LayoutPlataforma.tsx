@@ -1,7 +1,10 @@
-import { Navigate, Outlet } from "react-router-dom";
+import { Link, Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import SessaoIndisponivel from "../auth/SessaoIndisponivel";
 import { decidirAcessoARotaDePlataforma } from "./plataformaRotas";
+import VirtusFooter from "../components/VirtusFooter";
+import VirtusLogo from "../components/VirtusLogo";
+import "../styles/platform.css";
 
 /**
  * F6-A03 (Issue #266) — layout/guard da superfície mínima de PLATAFORMA (D19).
@@ -16,7 +19,7 @@ import { decidirAcessoARotaDePlataforma } from "./plataformaRotas";
  * Edge `provisionar-organizacao` + RPC soberana.
  */
 export default function LayoutPlataforma() {
-  const { estado } = useAuth();
+  const { estado, sair } = useAuth();
   const decisao = decidirAcessoARotaDePlataforma(estado);
 
   if (decisao.tipo === "carregando") {
@@ -36,8 +39,22 @@ export default function LayoutPlataforma() {
   }
 
   return (
-    <main className="app-main">
-      <Outlet />
-    </main>
+    <div className="platform-shell">
+      <header className="platform-header">
+        <div className="platform-header__inner">
+          <span>
+            <Link to="/plataforma" className="platform-header__brand"><VirtusLogo /></Link>
+            <span className="platform-header__label">Admin Virtus</span>
+          </span>
+          <button type="button" className="platform-header__exit" onClick={() => void sair()}>
+            Sair
+          </button>
+        </div>
+      </header>
+      <main className="platform-main">
+        <Outlet />
+      </main>
+      <VirtusFooter />
+    </div>
   );
 }

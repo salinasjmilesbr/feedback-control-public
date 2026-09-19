@@ -10,10 +10,13 @@ import {
 import UsuarioAtualBar from "../components/UsuarioAtualBar";
 import NavegacaoPrincipal from "../components/NavegacaoPrincipal";
 import AppFooter from "../components/AppFooter";
+import VirtusFooter from "../components/VirtusFooter";
 import LayoutAutenticado from "../auth/LayoutAutenticado";
 import LayoutPlataforma from "./LayoutPlataforma";
 import { ROTA_PLATAFORMA_NOVA_ORGANIZACAO } from "./plataformaRotas";
 import NovaOrganizacaoPlataformaPage from "../pages/plataforma/NovaOrganizacaoPlataformaPage";
+import { ROTA_PLATAFORMA } from "./plataformaRotas";
+import HomePlataformaPage from "../pages/plataforma/HomePlataformaPage";
 import { useAuth } from "../auth/AuthContext";
 import { useEstruturaSoberanaDoCliente } from "../pages/useEstruturaSoberanaDoCliente";
 import LoginPage from "../auth/LoginPage";
@@ -60,9 +63,12 @@ function ScrollToTop() {
 /** Rota pública do fluxo de autenticação (somente o necessário). */
 function LayoutPublico() {
   return (
-    <main className="app-main">
-      <Outlet />
-    </main>
+    <>
+      <main className="app-main">
+        <Outlet />
+      </main>
+      <VirtusFooter />
+    </>
   );
 }
 
@@ -111,6 +117,7 @@ function AppRoutes() {
           soberana — a rota não entra na navegação funcional (D21).
         */}
         <Route element={<LayoutPlataforma />}>
+          <Route path={ROTA_PLATAFORMA} element={<HomePlataformaPage />} />
           <Route
             path={ROTA_PLATAFORMA_NOVA_ORGANIZACAO}
             element={<NovaOrganizacaoPlataformaPage />}

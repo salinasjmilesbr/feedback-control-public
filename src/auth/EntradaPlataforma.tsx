@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { obterProvisionamentoPlataforma } from "../services/plataforma/controladorProvisionamento";
-import { ROTA_PLATAFORMA_NOVA_ORGANIZACAO } from "../routes/plataformaRotas";
+import { ROTA_PLATAFORMA } from "../routes/plataformaRotas";
 import type { ProvisionamentoPlataforma } from "../application/ports/ProvisionamentoPlataforma";
 
 /**
@@ -31,8 +31,8 @@ import type { ProvisionamentoPlataforma } from "../application/ports/Provisionam
 export function EntradaPlataformaVisivel({ visivel }: { readonly visivel: boolean }) {
   if (!visivel) return null;
   return (
-    <Link to={ROTA_PLATAFORMA_NOVA_ORGANIZACAO} className="auth-status__entrar">
-      Criar organização
+    <Link to={ROTA_PLATAFORMA} className="auth-status__entrar">
+      Acessar administração
     </Link>
   );
 }
@@ -43,9 +43,11 @@ export interface PropsEntradaPlataforma {
    * (fail-closed: sem caminho soberano, a entrada não é oferecida).
    */
   readonly provisionamento?: ProvisionamentoPlataforma | null;
+  readonly redirecionar?: boolean;
 }
 
-function EntradaPlataforma({ provisionamento }: PropsEntradaPlataforma = {}) {
+function EntradaPlataforma({ provisionamento, redirecionar = false }: PropsEntradaPlataforma = {}) {
+  const navigate = useNavigate();
   const [visivel, setVisivel] = useState(false);
 
   useEffect(() => {
@@ -58,14 +60,19 @@ function EntradaPlataforma({ provisionamento }: PropsEntradaPlataforma = {}) {
 
     void controlador.souOperadorDaPlataforma().then((operador) => {
       if (vigente) setVisivel(operador);
+      if (!vigente) return;
+      if (operador && redirecionar) {
+        navigate(ROTA_PLATAFORMA, { replace: true });
+        return;
+      }
     });
 
     return () => {
       vigente = false;
     };
-  }, [provisionamento]);
+  }, [navigate, provisionamento, redirecionar]);
 
-  return <EntradaPlataformaVisivel visivel={visivel} />;
+  return redirecionar ? null : <EntradaPlataformaVisivel visivel={visivel} />;
 }
 
 export default EntradaPlataforma;

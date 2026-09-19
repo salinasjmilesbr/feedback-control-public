@@ -7,6 +7,7 @@ import AguardandoSelecao from "./AguardandoSelecao";
 import EntradaPlataforma from "./EntradaPlataforma";
 import SemOrganizacao from "./SemOrganizacao";
 import SessaoIndisponivel from "./SessaoIndisponivel";
+import VirtusLogo from "../components/VirtusLogo";
 import "../styles/auth.css";
 
 function LoginPage() {
@@ -121,16 +122,13 @@ function LoginPage() {
       <div className="virtus-page auth-page">
         <section className="virtus-page-header">
           <div className="virtus-page-header__copy">
-            <h1>Acesso negado</h1>
-            <p>{estado.erro.message}</p>
+            <p className="auth-page__brand">Virtus</p>
+            <h1>Acesso não disponível</h1>
+            <p>Esta conta não possui acesso a uma empresa.</p>
           </div>
         </section>
         <section className="auth-card">
-          {/* F6-A04 (Issue #269/B1): sem esta porta o estado `acessoNegado` — que
-              é o do operador de plataforma sem `user_profiles` (F6-A03 D17) —
-              ficava sem caminho para a superfície (D1/D2). A mensagem da
-              taxonomia F0-05 permanece intacta (D4). */}
-          <EntradaPlataforma />
+          <EntradaPlataforma redirecionar />
           <button
             type="button"
             className="brand-button brand-button--secondary"
@@ -161,6 +159,8 @@ function LoginPage() {
     <div className="virtus-page auth-page">
       <section className="virtus-page-header">
         <div className="virtus-page-header__copy">
+          <VirtusLogo className="auth-page__logo" />
+          <p className="auth-page__tagline">Performance &amp; Feedback Management</p>
           <h1>{titulo}</h1>
           <p>{descricao}</p>
         </div>

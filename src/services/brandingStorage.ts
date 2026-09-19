@@ -3,12 +3,12 @@ import type { BrandingConfig } from "../types/Branding";
 const STORAGE_KEY = "feedback-control-branding";
 
 export const brandingPadrao: BrandingConfig = {
-  nomeSistema: "Feedback Control",
+  nomeSistema: "Virtus",
   subtituloSistema: "Performance & Feedback Management",
-  corPrimaria: "#660099",
-  corSecundaria: "#8A2BE2",
-  corDestaque: "#0078D4",
-  corFundo: "#F6F7FB",
+  corPrimaria: "#0F172A",
+  corSecundaria: "#6366F1",
+  corDestaque: "#0EA5E9",
+  corFundo: "#FFFFFF",
 };
 
 export function getBranding(): BrandingConfig {

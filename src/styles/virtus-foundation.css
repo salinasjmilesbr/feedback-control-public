@@ -21,13 +21,24 @@
   --virtus-font-nav: 14px;
 
   --virtus-card-radius: 14px;
-  --virtus-card-border: #e3dee7;
-  --virtus-card-shadow: 0 4px 14px rgba(35, 27, 43, .045);
+  --virtus-card-border: #e2e8f0;
+  --virtus-card-shadow: 0 4px 14px rgba(15, 23, 42, .06);
   --virtus-card-padding: 20px;
   --virtus-card-padding-lg: 24px;
 
-  --brand-text: #29242f;
-  --brand-text-muted: #5f5869;
+  --brand-primary: #0f172a;
+  --brand-secondary: #6366f1;
+  --brand-accent: #0ea5e9;
+  --brand-bg: #ffffff;
+  --brand-surface: #ffffff;
+  --brand-surface-soft: #f1f5f9;
+  --brand-text: #0f172a;
+  --brand-text-muted: #64748b;
+  --brand-border: #e2e8f0;
+  --brand-success: #10b981;
+  --brand-warning: #f59e0b;
+  --brand-error: #ef4444;
+  --brand-info: #64748b;
 }
 
 /* =========================================================
@@ -312,15 +323,15 @@ body {
 /* Primários */
 .brand-button--primary,
 .cycle-btn--primary {
-  border-color: var(--brand-primary) !important;
-  background: var(--brand-primary) !important;
+  border-color: var(--brand-secondary) !important;
+  background: var(--brand-secondary) !important;
   color: #fff !important;
 }
 
 .brand-button--primary:hover:not(:disabled),
 .cycle-btn--primary:hover:not(:disabled) {
   background:
-    color-mix(in srgb, var(--brand-primary) 90%, #000) !important;
+    color-mix(in srgb, var(--brand-secondary) 90%, #000) !important;
   border-color:
     color-mix(in srgb, var(--brand-primary) 90%, #000) !important;
 }
