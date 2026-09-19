@@ -1,4 +1,4 @@
-# Plano Mestre — Virtus (v17)
+# Plano Mestre — Virtus (v18)
 
 > ## NOTA DE RASTREABILIDADE — LEIA ANTES DE USAR ESTE DOCUMENTO
 >
@@ -27,11 +27,11 @@
 
 | Campo | Valor |
 |---|---|
-| Versão | **v17** |
-| Data-ação | Consolidação documental do checkpoint real da Etapa 6 registrado na Issue **#308** |
+| Versão | **v18** |
+| Data-ação | Consolidação das decisões de identidade visual, Gestão Virtus e fluxo de acesso da Issue **#312**, preservando o checkpoint técnico da Etapa 6 |
 | Escopo | Reorganizar e preservar TODO o conhecimento vigente de doutrina, processo, roadmap e estado |
 | Modelo | história + roadmap + manual operacional |
-| Fontes | `.ai/*`, `AGENTS.md`, `docs/etapa-5-certificacao.md`, `docs/F5-11-certificacao.md`, `docs/auditorias/*`, desenhos `docs/F3-*/F4-*/F5-*`; Issues **#275**, **#278**, **#293** e **#308**; commits F6 **#296**, **#298**, **#299**, **#301**, **#303** e **#306** |
+| Fontes | `.ai/*`, `AGENTS.md`, `docs/etapa-5-certificacao.md`, `docs/F5-11-certificacao.md`, `docs/auditorias/*`, desenhos `docs/F3-*/F4-*/F5-*`; Issues **#275**, **#278**, **#293**, **#308**, **#310** e **#312**; commits F6 **#296**, **#298**, **#299**, **#301**, **#303** e **#306** |
 | Registro de dívidas | `docs/dividas-tecnicas.md` (canônico — **não enumerado nem duplicado aqui**) |
 | Handoff operacional | `.ai/handoff.md` |
 
@@ -196,7 +196,20 @@ fechado**; os itens F6 ainda pendentes permanecem no estado da Etapa 6 descrito 
 - A pendência funcional de runtime deste checkpoint é a validação da entrega **#306**; F6-A17 já tem
   validação runtime concluída.
 
-### III.4 Dívida e findings (resumo; lista canônica em `docs/dividas-tecnicas.md`)
+### III.4 Contrato visual e de acesso — Issue #312
+- A identidade pública/plataforma passa a ter contrato normativo em `docs/brand/virtus-brand-guide.md` e matriz de aceite em `docs/brand/virtus-visual-acceptance.md`.
+- Hierarquia visual: **asset oficial aprovado → guidelines visuais aprovados → contrato textual → implementação existente**.
+- Marca: **VIRTUS**, tagline **Performance & Feedback Management**, tipografia **Inter**.
+- Paleta institucional: `#0F172A`, `#6366F1`, `#0EA5E9`, `#F1F5F9`, `#FFFFFF`, `#E2E8F0`; verde `#10B981` é exclusivamente semântico de sucesso.
+- Nomenclatura de UX: **Gestão Virtus** substitui “Admin Virtus”, sem alterar roles/capabilities internas.
+- Login e `/plataforma/*` usam Virtus puro; branding de cliente é restrito ao contexto da empresa.
+- Header/footer seguem composição simples; não criar navegação, avatar, menu ou hambúrguer sem necessidade funcional real.
+- Fluxo de produto preservado: **Gestão Virtus → cria empresa → define administrador inicial → administração da empresa → estrutura/gestores → equipes**.
+- Sem signup público; autoridade continua server-side. A opção “Eu mesmo” permanece conforme F6-A11/D15 até atividade específica.
+- Processo visual: **asset/tokens → componente → tela isolada → validação desktop/mobile → próxima tela**, começando por **Header/Footer → Login → Gestão Virtus → Nova empresa**.
+- A Issue #312 é documental; não autoriza mudança em auth, RLS, Policy Engine ou contratos F4/F5.
+
+### III.5 Dívida e findings (resumo; lista canônica em `docs/dividas-tecnicas.md`)
 Resíduos legados de ciclo em módulos de apresentação (incluindo o caso **R1**, agora **verificado e
 fechado** como não-autoritativo, restando limpeza de UX), `localCycleRepository` legado por decisão,
 fixtures de teste que pré-carregam chaves locais, provas literais ainda ausentes em validadores e um
@@ -629,6 +642,6 @@ fontes. Itens conhecidos:
 
 ---
 
-*Fim da v17. Este documento é história + roadmap + manual operacional. Em caso de divergência com
+*Fim da v18. Este documento é história + roadmap + manual operacional. Em caso de divergência com
 `.ai/*` ou com o desenho de uma atividade, prevalece a fonte normativa — e a divergência deve ser
 registrada aqui.*
