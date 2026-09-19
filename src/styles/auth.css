@@ -12,6 +12,14 @@
 .nova-organizacao-page__back {
   flex: 0 0 auto;
   text-decoration: none;
+  border-color: var(--virtus-highlight) !important;
+  color: var(--virtus-highlight) !important;
+}
+
+.nova-organizacao-page__back:hover:not(:disabled) {
+  border-color: var(--virtus-navy) !important;
+  background: color-mix(in srgb, var(--virtus-highlight) 6%, #fff) !important;
+  color: var(--virtus-navy) !important;
 }
 
 @media (max-width: 720px) {

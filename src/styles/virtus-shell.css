@@ -47,6 +47,13 @@
   min-height: 72px;
   align-items: center;
 }
+
+.virtus-platform-shell .app-header__inner,
+.virtus-platform-shell .app-footer__inner {
+  width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
 .app-header__brand { min-width: 0; }
 .app-header__user { flex: 0 1 auto; }
 .auth-status__email { color: var(--virtus-navy); }
@@ -88,6 +95,16 @@
 }
 
 .virtus-platform-shell__main { flex: 1; }
+
+@media (min-width: 621px) {
+  .virtus-platform-shell .app-header {
+    margin-top: 32px;
+  }
+
+  .virtus-platform-shell .app-footer {
+    margin-bottom: 32px;
+  }
+}
 
 @media (max-width: 620px) {
   .app-header,
