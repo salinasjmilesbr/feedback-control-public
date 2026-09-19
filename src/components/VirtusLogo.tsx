@@ -21,7 +21,7 @@ export default function VirtusLogo({
             <stop offset="1" stopColor="#6366F1" />
           </linearGradient>
         </defs>
-        <path d="M4 6 12 26 20 13 28 26 36 6" fill="none" stroke="url(#virtus-logo-gradient)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="5" />
+        <path d="M4 5H11L20 25L29 5H36L23 31H17Z" fill="url(#virtus-logo-gradient)" />
       </svg>
       {variant === "horizontal" && <span className="virtus-logo__wordmark">VIRTUS</span>}
     </span>

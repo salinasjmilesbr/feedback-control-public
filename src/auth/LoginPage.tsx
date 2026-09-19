@@ -7,6 +7,7 @@ import AguardandoSelecao from "./AguardandoSelecao";
 import EntradaPlataforma from "./EntradaPlataforma";
 import SemOrganizacao from "./SemOrganizacao";
 import SessaoIndisponivel from "./SessaoIndisponivel";
+import VirtusLogo from "../components/VirtusLogo";
 import "../styles/auth.css";
 
 function LoginPage() {
@@ -158,7 +159,8 @@ function LoginPage() {
     <div className="virtus-page auth-page">
       <section className="virtus-page-header">
         <div className="virtus-page-header__copy">
-          <p className="auth-page__brand">Virtus</p>
+          <VirtusLogo className="auth-page__logo" />
+          <p className="auth-page__tagline">Performance &amp; Feedback Management</p>
           <h1>{titulo}</h1>
           <p>{descricao}</p>
         </div>

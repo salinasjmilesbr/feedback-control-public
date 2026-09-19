@@ -19,7 +19,7 @@ body,
 }
 
 html {
-  background: var(--brand-bg, #f6f7fb);
+  background: var(--brand-bg, #ffffff);
 }
 
 body {
@@ -75,6 +75,7 @@ code,
 .virtus-logo__wordmark { font-size: 16px; }
 .virtus-logo--symbol .virtus-logo__wordmark { display: none; }
 .virtus-logo--dark { color: #fff; }
+.auth-page__logo { margin-bottom: 14px; }
 
 .app-footer__identity {
   display: inline-flex;
@@ -84,6 +85,7 @@ code,
 
 .app-footer__identity .virtus-logo__symbol { width: 24px; height: 20px; }
 .app-footer__identity .virtus-logo__wordmark { font-size: 13px; }
+.app-footer__inner { box-sizing: border-box; }
 
 body {
   background: var(--brand-bg);
@@ -99,21 +101,21 @@ body {
 }
 
 .brand-button--primary {
-  border: 1px solid var(--brand-primary);
-  background: var(--brand-primary);
+  border: 1px solid var(--brand-secondary);
+  background: var(--brand-secondary);
   color: #fff;
 }
 
 .brand-button--secondary {
-  border: 1px solid var(--brand-primary);
+  border: 1px solid var(--brand-secondary);
   background: #fff;
-  color: var(--brand-primary);
+  color: var(--brand-secondary);
 }
 
 .brand-link-button {
   border: 0;
   background: transparent;
-  color: var(--brand-primary);
+  color: var(--brand-secondary);
   font: inherit;
   font-size: 13px;
   font-weight: 700;
@@ -910,7 +912,7 @@ html, body, #root {
 body {
   min-width: 320px;
   color: var(--brand-text);
-  background: #f7f8fc;
+  background: var(--brand-bg);
 }
 
 .virtus-page {
@@ -931,16 +933,16 @@ body {
 .virtus-page-header__copy h1 {
   margin: 0 !important;
   font-family: var(--sans);
-  font-size: 36px !important;
+  font-size: 32px !important;
   line-height: 1.08;
   letter-spacing: -0.8px !important;
   font-weight: 760 !important;
-  color: #17131d;
+  color: var(--brand-text);
 }
 
 .virtus-page-header__copy p {
   margin-top: 8px;
-  color: #655e70;
+  color: var(--brand-text-muted);
   font-size: 14px;
   line-height: 1.45;
 }

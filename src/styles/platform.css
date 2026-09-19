@@ -12,7 +12,7 @@
 
 .platform-header__inner {
   width: min(var(--virtus-container), calc(100% - (var(--virtus-gutter) * 2)));
-  min-height: 72px;
+  min-height: 76px;
   margin: 0 auto;
   display: flex;
   align-items: center;
@@ -23,16 +23,16 @@
 .platform-header__brand {
   color: var(--brand-text);
   text-decoration: none;
-  font-size: 18px;
-  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
 }
 
 .platform-header__label {
   display: block;
   margin-top: 3px;
-  color: var(--brand-primary);
+  color: var(--brand-text-muted);
   font-size: 11px;
-  font-weight: 750;
+  font-weight: 650;
   letter-spacing: .08em;
   text-transform: uppercase;
 }
@@ -40,7 +40,7 @@
 .platform-header__exit {
   border: 0;
   background: transparent;
-  color: var(--brand-primary);
+  color: var(--brand-secondary);
   font: inherit;
   font-size: 13px;
   font-weight: 700;
@@ -60,7 +60,7 @@
 }
 
 .platform-hero {
-  padding: 56px 0 72px;
+  padding: 44px 0 64px;
 }
 
 .platform-eyebrow {
@@ -81,25 +81,25 @@
 
 .platform-hero h1 {
   max-width: 720px;
-  font-size: clamp(32px, 5vw, 52px);
-  line-height: 1.05;
-  letter-spacing: -.04em;
+  font-size: clamp(28px, 3vw, 32px);
+  line-height: 1.15;
+  letter-spacing: -.02em;
 }
 
 .platform-hero__lead {
   max-width: 700px;
   margin-top: 18px;
   color: var(--brand-text-muted);
-  font-size: 17px;
+  font-size: 16px;
   line-height: 1.55;
 }
 
 .platform-panel {
-  margin-top: 36px;
-  padding: 26px 28px;
+  margin-top: 32px;
+  padding: 24px;
   border: 1px solid var(--brand-border);
   border-radius: var(--brand-radius);
-  background: var(--brand-surface);
+  background: var(--brand-surface-soft);
   box-shadow: var(--brand-shadow);
 }
 
@@ -108,6 +108,15 @@
   align-items: center;
   justify-content: space-between;
   gap: 24px;
+}
+
+.platform-panel .brand-button--primary {
+  border-color: var(--brand-secondary) !important;
+  background: var(--brand-secondary) !important;
+}
+
+.platform-panel .brand-button--primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--brand-secondary) 88%, #000) !important;
 }
 
 .platform-panel h2 {
