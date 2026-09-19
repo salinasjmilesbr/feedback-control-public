@@ -31,6 +31,7 @@
  */
 
 import type { CicloAvaliacao } from "../../types/CicloAvaliacao";
+import type { EventoCicloSoberano } from "../../application/ports/CycleRepository";
 import {
   criarGestaoCiclosSoberanos,
   type DependenciasGestaoCiclos,
@@ -48,6 +49,7 @@ export interface EstadoGestaoCiclos {
   readonly erro: FalhaGestaoCiclos | null;
   /** `true` enquanto uma mutação está em voo (botões não presumem sucesso). */
   readonly operacaoEmAndamento: boolean;
+  readonly historicos: ReadonlyMap<string, readonly EventoCicloSoberano[]>;
 }
 
 const ESTADO_INICIAL: EstadoGestaoCiclos = {
@@ -56,6 +58,7 @@ const ESTADO_INICIAL: EstadoGestaoCiclos = {
   ciclos: [],
   erro: null,
   operacaoEmAndamento: false,
+  historicos: new Map(),
 };
 
 /** Mensagens públicas ESTÁVEIS (nenhum detalhe interno, nenhuma autoridade). */
@@ -140,6 +143,7 @@ export function criarControladorGestaoCiclos(deps: DependenciasGestaoCiclos = {}
         ciclos: [],
         erro,
         operacaoEmAndamento: false,
+        historicos: new Map(),
       });
       return { ok: false, error: erro };
     }
@@ -157,6 +161,7 @@ export function criarControladorGestaoCiclos(deps: DependenciasGestaoCiclos = {}
       fase: "carregando",
       organizacaoId: organizationId,
       ciclos: trocouDeOrganizacao ? [] : estado.ciclos,
+      historicos: trocouDeOrganizacao ? new Map() : estado.historicos,
       erro: null,
       operacaoEmAndamento: trocouDeOrganizacao
         ? false
@@ -289,6 +294,17 @@ export function criarControladorGestaoCiclos(deps: DependenciasGestaoCiclos = {}
     versaoDe: (cicloId: string) => versaoSoberanaDe(cicloId),
     registrarVersao,
     carregar,
+    async listarHistorico(cycleId: string): Promise<ResultadoGestao<readonly EventoCicloSoberano[]>> {
+      const organizationId = estado.organizacaoId;
+      if (!organizationId) return { ok: false, error: { code: "FORBIDDEN", message: "Organização ativa ausente." } };
+      const resultado = await gestao.listarHistorico(organizationId, cycleId);
+      if (resultado.ok && estado.organizacaoId === organizationId) {
+        const historicos = new Map(estado.historicos);
+        historicos.set(cycleId, resultado.data);
+        publicar({ historicos });
+      }
+      return resultado;
+    },
 
     async criar(entrada: {
       readonly ano: number;

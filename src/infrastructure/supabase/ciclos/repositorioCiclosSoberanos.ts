@@ -24,6 +24,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { EdgeCiclos } from "./edgeCiclos";
 import { ehUuid, type CodigoPublico } from "../colaboradores/contrato";
 import type {
   CicloSoberano,
@@ -37,6 +38,7 @@ const ERRO_SEM_SESSAO = "Sessão inválida. Entre novamente.";
 const ERRO_NEGADO = "Você não tem permissão para consultar os ciclos desta organização.";
 const ERRO_LEITURA = "Não foi possível consultar os ciclos agora.";
 const ERRO_ID_INVALIDO = "Identificador de ciclo inválido.";
+const ERRO_HISTORICO = "Não foi possível consultar o histórico agora.";
 
 /** Colunas da projeção soberana (espinha §2.2) — nada além do necessário. */
 const COLUNAS =
@@ -126,7 +128,7 @@ function mesmoTenant(ciclo: CicloSoberano, organizationId: string): boolean {
   return ciclo.organizationId === organizationId;
 }
 
-export function criarRepositorioCiclosSoberanos(cliente: SupabaseClient): CycleRepository {
+export function criarRepositorioCiclosSoberanos(cliente: SupabaseClient, edge?: EdgeCiclos): CycleRepository {
   function falha<T>(codigo: CodigoPublico, mensagem: string): ResultadoCiclos<T> {
     return { ok: false, error: { code: codigo, message: mensagem } };
   }
@@ -223,6 +225,37 @@ export function criarRepositorioCiclosSoberanos(cliente: SupabaseClient): CycleR
         .maybeSingle() as unknown as Promise<RespostaPostgrest>);
 
       return tratarUm(resposta, organizationId);
+    },
+
+    async listarEventos(organizationId, cycleId) {
+      if (!organizacaoValida(organizationId)) return falha("FORBIDDEN", ERRO_SEM_ORGANIZACAO);
+      if (!ehUuid(cycleId)) return falha("INVALID_INPUT", ERRO_ID_INVALIDO);
+      if (!(await temSessao())) return falha("NOT_AUTHORIZED", ERRO_SEM_SESSAO);
+      if (!edge) return falha("INTERNAL", ERRO_HISTORICO);
+      const resultado = await edge.listarHistorico({
+        organizationId,
+        cycleId,
+        operationId: crypto.randomUUID(),
+      });
+      if (!resultado.ok || !Array.isArray(resultado.data)) {
+        return falha(resultado.ok ? "INTERNAL" : resultado.error.code, ERRO_HISTORICO);
+      }
+      const eventos = (resultado.data as unknown[]).filter((item): item is Record<string, string> => {
+        if (typeof item !== "object" || item === null) return false;
+        const linha = item as Record<string, unknown>;
+        return ["id", "organization_id", "cycle_id", "event_type", "effective_date", "reason", "actor_user_profile_id", "created_at"]
+          .every((key) => typeof linha[key] === "string") && linha.organization_id === organizationId && linha.cycle_id === cycleId;
+      }).map((linha) => ({
+        id: linha.id,
+        organizationId: linha.organization_id,
+        cycleId: linha.cycle_id,
+        eventType: linha.event_type,
+        effectiveDate: linha.effective_date,
+        reason: linha.reason,
+        actorUserProfileId: linha.actor_user_profile_id,
+        createdAt: linha.created_at,
+      }));
+      return { ok: true, data: eventos };
     },
   };
 }

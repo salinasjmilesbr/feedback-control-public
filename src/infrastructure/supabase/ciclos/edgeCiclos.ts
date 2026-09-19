@@ -92,6 +92,12 @@ export interface EntradaIncluirAdmissao extends EntradaCicloComVersao {
   readonly matricula?: number | string;
 }
 
+export interface EntradaHistoricoCiclo {
+  readonly organizationId: string;
+  readonly cycleId: string;
+  readonly operationId: string;
+}
+
 /**
  * Superfície de escrita da Edge `ciclos`. Cada método devolve o `resultado`
  * bruto da RPC (ex.: `{ version }`, `{ cycleId, version }`) projetado pelo
@@ -106,6 +112,7 @@ export interface EdgeCiclos {
   reabrir(entrada: EntradaCicloComMotivo): Promise<ResultadoEdgeCiclos<unknown>>;
   corrigirPeriodo(entrada: EntradaCorrigirPeriodo): Promise<ResultadoEdgeCiclos<unknown>>;
   incluirAdmissao(entrada: EntradaIncluirAdmissao): Promise<ResultadoEdgeCiclos<unknown>>;
+  listarHistorico(entrada: EntradaHistoricoCiclo): Promise<ResultadoEdgeCiclos<unknown>>;
 }
 
 function corpo(
@@ -249,6 +256,13 @@ export function criarEdgeCiclos(cliente: SupabaseClient): EdgeCiclos {
           ...(entrada.collaboratorId
             ? { collaborator_id: entrada.collaboratorId }
             : { matricula: entrada.matricula }),
+        })
+      ),
+
+    listarHistorico: (entrada) =>
+      invocar(
+        corpo("cycle.historico.listar", entrada.organizationId, entrada.operationId, {
+          cycle_id: entrada.cycleId,
         })
       ),
   };

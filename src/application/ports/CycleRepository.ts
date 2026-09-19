@@ -49,6 +49,17 @@ export interface CicloSoberano {
   readonly atualizadoEm: string;
 }
 
+export interface EventoCicloSoberano {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly cycleId: string;
+  readonly eventType: string;
+  readonly effectiveDate: string;
+  readonly reason: string;
+  readonly actorUserProfileId: string;
+  readonly createdAt: string;
+}
+
 /** Erro público: código estável + mensagem sem detalhe do banco. */
 export interface ErroCiclosSoberanos {
   readonly code: CodigoPublico;
@@ -74,4 +85,5 @@ export interface CycleRepository {
   ): Promise<ResultadoCiclos<CicloSoberano | null>>;
   /** Ciclo ATIVO da organização (no máximo um — I5/D14); `null` = nenhum. */
   obterCicloAtivo(organizationId: string): Promise<ResultadoCiclos<CicloSoberano | null>>;
+  listarEventos?(organizationId: string, cycleId: string): Promise<ResultadoCiclos<readonly EventoCicloSoberano[]>>;
 }

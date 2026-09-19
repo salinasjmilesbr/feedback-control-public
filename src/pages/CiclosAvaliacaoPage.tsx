@@ -64,6 +64,7 @@ function CiclosAvaliacaoPage({
   const [periodoFimCorrecao, setPeriodoFimCorrecao] = useState("");
   const [justificativaCorrecao, setJustificativaCorrecao] = useState("");
   const [erro, setErro] = useState("");
+  const [historicoCarregando, setHistoricoCarregando] = useState<ReadonlySet<string>>(new Set());
 
   /**
    * F5-09 P8 (Bloco 1) — LEITURA SOBERANA: o controlador puro é a ÚNICA fonte da
@@ -107,6 +108,18 @@ function CiclosAvaliacaoPage({
       ativo = false;
     };
   }, [controlador, organizacaoAtivaId, mostrarCancelados]);
+
+  async function carregarHistorico(cycleId: string): Promise<void> {
+    if (estado.historicos.has(cycleId) || !organizacaoAtivaId) return;
+    setHistoricoCarregando((atual) => new Set(atual).add(cycleId));
+    await controlador.listarHistorico(cycleId);
+    setEstado(controlador.estado());
+    setHistoricoCarregando((atual) => {
+      const proximo = new Set(atual);
+      proximo.delete(cycleId);
+      return proximo;
+    });
+  }
 
   // Unmount/logout descartam respostas em voo.
   useEffect(
@@ -723,14 +736,22 @@ function CiclosAvaliacaoPage({
                   )}
                 </div>
 
-                <details className="cycle-history">
+                <details className="cycle-history" onToggle={(evento) => {
+                  if (evento.currentTarget.open) void carregarHistorico(item.id);
+                }}>
                   <summary>Ver histórico</summary>
                   <div className="cycle-history__content">
-                    <p className="cycle-muted">
-                      Histórico detalhado indisponível nesta fase da migração: a
-                      trilha auditada de ciclo não é lida do modelo local nem de
-                      cycle_events (deny-by-default, sem RPC de leitura).
-                    </p>
+                    {historicoCarregando.has(item.id) && <p className="cycle-muted">Carregando histórico…</p>}
+                    {!historicoCarregando.has(item.id) && estado.historicos.get(item.id)?.length === 0 && (
+                      <p className="cycle-muted">Nenhum evento registrado.</p>
+                    )}
+                    {estado.historicos.get(item.id)?.map((evento) => (
+                      <div className="cycle-history__event" key={evento.id}>
+                        <strong>{evento.eventType}</strong>
+                        <span>{new Date(evento.effectiveDate).toLocaleDateString("pt-BR")}</span>
+                        <span>{evento.reason}</span>
+                      </div>
+                    ))}
                   </div>
                 </details>
               </article>
