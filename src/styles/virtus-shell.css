@@ -34,7 +34,7 @@
 
 .app-header,
 .app-footer {
-  width: calc(100% - 32px);
+  width: calc(100% - 48px);
   margin-left: auto;
   margin-right: auto;
   background: var(--virtus-background);

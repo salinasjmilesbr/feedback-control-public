@@ -144,12 +144,15 @@ export function FormularioNovaOrganizacao({
   aoEnviar,
 }: PropsFormularioNovaOrganizacao) {
   return (
-    <div className="virtus-page auth-page">
-      <section className="virtus-page-header">
+    <div className="virtus-page auth-page nova-organizacao-page">
+      <section className="virtus-page-header nova-organizacao-page__header">
         <div className="virtus-page-header__copy">
           <h1>Nova organização</h1>
           <p>Crie uma organização e defina o primeiro Admin dela.</p>
         </div>
+        <Link to="/" className="brand-button brand-button--secondary nova-organizacao-page__back">
+          Voltar
+        </Link>
       </section>
 
       <form className="auth-card auth-form" onSubmit={aoEnviar}>
@@ -220,9 +223,6 @@ export function FormularioNovaOrganizacao({
           {enviando ? "Criando…" : "Criar organização"}
         </button>
 
-        <Link to="/" className="auth-status__entrar">
-          Voltar
-        </Link>
       </form>
     </div>
   );
