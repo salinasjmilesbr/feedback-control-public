@@ -1,0 +1,112 @@
+.virtus-shell-brand {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--virtus-navy);
+  line-height: 1.2;
+}
+
+.virtus-shell-brand__symbol {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  object-fit: contain;
+}
+
+.virtus-shell-brand__wordmark {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+
+.virtus-shell-brand__separator { color: var(--virtus-border); }
+
+.virtus-shell-brand__context {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--virtus-info);
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-header,
+.app-footer {
+  background: var(--virtus-background);
+  border-color: var(--virtus-border);
+}
+
+.app-header__inner { min-height: 72px; }
+.app-header__brand { min-width: 0; }
+.app-header__user { flex: 0 1 auto; }
+.auth-status__email { color: var(--virtus-navy); }
+
+.auth-status__sair {
+  border-color: var(--virtus-border);
+  background: var(--virtus-background);
+  color: var(--virtus-highlight);
+}
+
+.app-footer { margin-top: auto; }
+.app-footer__inner { min-height: 64px; }
+
+.app-footer__brandline {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--virtus-info);
+}
+
+.app-footer__brandline .virtus-shell-brand { gap: 7px; }
+
+.app-footer__brandline .virtus-shell-brand__symbol {
+  width: 24px;
+  height: 24px;
+  flex-basis: 24px;
+}
+
+.app-footer__brandline .virtus-shell-brand__wordmark { font-size: 12px; }
+.app-footer__separator { color: var(--virtus-border); }
+.app-footer__version { color: var(--virtus-info); }
+
+.virtus-platform-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--virtus-background);
+}
+
+.virtus-platform-shell__main { flex: 1; }
+
+@media (max-width: 620px) {
+  .app-header__inner {
+    min-height: 64px;
+    align-items: center;
+  }
+
+  .app-header--platform .app-header__inner { flex-wrap: nowrap; }
+  .virtus-shell-brand { gap: 7px; }
+
+  .virtus-shell-brand__symbol {
+    width: 28px;
+    height: 28px;
+    flex-basis: 28px;
+  }
+
+  .virtus-shell-brand__wordmark { font-size: 14px; }
+
+  .virtus-shell-brand__context {
+    max-width: 34vw;
+    font-size: 12px;
+  }
+
+  .app-footer__inner { gap: 8px; }
+
+  .app-footer__brandline {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+}

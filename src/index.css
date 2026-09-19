@@ -1,6 +1,6 @@
 :root {
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --sans: Inter, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --heading: Inter, system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
 
   color-scheme: light;
@@ -19,7 +19,7 @@ body,
 }
 
 html {
-  background: var(--brand-bg, #f6f7fb);
+  background: var(--brand-bg, #ffffff);
 }
 
 body {
@@ -44,15 +44,30 @@ code,
 
 /* White-label branding foundation */
 :root {
-  --brand-primary: #660099;
-  --brand-secondary: #8a2be2;
-  --brand-accent: #0078d4;
-  --brand-bg: #f6f7fb;
-  --brand-surface: #ffffff;
-  --brand-surface-soft: color-mix(in srgb, var(--brand-primary) 7%, white);
-  --brand-text: #29242f;
-  --brand-text-muted: #6f6877;
-  --brand-border: #e3dfe7;
+  --virtus-navy: #0f172a;
+  --virtus-highlight: #6366f1;
+  --virtus-support: #0ea5e9;
+  --virtus-surface: #f1f5f9;
+  --virtus-background: #ffffff;
+  --virtus-border: #e2e8f0;
+  --virtus-success: #10b981;
+  --virtus-warning: #f59e0b;
+  --virtus-error: #ef4444;
+  --virtus-info: #64748b;
+
+  --brand-primary: var(--virtus-navy);
+  --brand-secondary: var(--virtus-highlight);
+  --brand-accent: var(--virtus-support);
+  --brand-bg: var(--virtus-background);
+  --brand-surface: var(--virtus-background);
+  --brand-surface-soft: var(--virtus-surface);
+  --brand-text: var(--virtus-navy);
+  --brand-text-muted: var(--virtus-info);
+  --brand-border: var(--virtus-border);
+  --brand-success: var(--virtus-success);
+  --brand-warning: var(--virtus-warning);
+  --brand-error: var(--virtus-error);
+  --brand-info: var(--virtus-info);
   --brand-radius: 12px;
   --brand-shadow: 0 6px 24px rgba(34, 24, 42, 0.08);
 }

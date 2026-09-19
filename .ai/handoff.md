@@ -34,6 +34,22 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
+### 3.32 F6 — tokens oficiais e shell Header/Footer Virtus (Issue #315) — IMPLEMENTADO · PR/VALIDAÇÃO VISUAL PENDENTES
+
+- **Atividade/branch:** Issue **#315**, branch **`feat/issue-315-header-footer-virtus`**, base canônica
+  **`main` = `f09a53e19864b1a1f2c20f67e02c9fe8a8a6808b`**.
+- **Entregue:** tokens oficiais do Brand Guide mapeados na fundação existente; marca reutilizável consumindo
+  exclusivamente **`public/brand/virtus-symbol.png`**; header de **Gestão Virtus** e header de empresa com
+  composição simples; footer Virtus fixo com tagline e versão; responsividade do shell sem menu/avatar/hambúrguer.
+  Auth, RLS, Policy Engine, capabilities e contratos F4/F5 permanecem inalterados.
+- **Correção pós-gate visual:** ações primárias da fundação passaram a usar `--virtus-highlight` mesmo quando
+  branding persistido fornece `--brand-primary`; o título/favicon de login/recuperação/plataforma foram fixados
+  em Virtus; o header de Gestão Virtus passou a renderizar somente Sair; o PNG oficial atualizado foi preservado
+  sem edição e incluído na correção.
+- **Gates locais:** testes direcionados **58/58**, `npm run build`, `npm run lint` e `git diff --check` verdes.
+- **Pendente:** abrir/revisar o PR e executar a validação visual runtime desktop/mobile obrigatória antes de
+  avançar para Login.
+
 ### 3.31 Governança #278 — Plano Mestre v16.2: estratégia de agentes e tarifas DeepSeek — DOCUMENTADO · PR/MERGE PENDENTES
 
 - **Atividade/branch:** Issue **#278** (governança **documental**), branch
