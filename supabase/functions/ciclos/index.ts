@@ -218,6 +218,12 @@ Deno.serve(async (req) => {
     const ciclo = execucao.cycleId;
 
     switch (execucao.operacao) {
+      case "cycle.historico.listar":
+        return admin.rpc("ciclo_historico_listar", {
+          p_cycle_id: ciclo,
+          p_organization_id: org,
+          p_actor_user_profile_id: ator,
+        });
       case "cycle.criar":
         return admin.rpc("ciclo_criar", {
           p_organization_id: org,

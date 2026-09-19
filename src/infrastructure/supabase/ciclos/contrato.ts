@@ -41,6 +41,7 @@ export type CodigoPublico =
 
 /** Operações contratadas da F5-09 (todas com RPC soberana já existente). */
 export type OperacaoCiclo =
+  | "cycle.historico.listar"
   | "cycle.criar"
   | "cycle.editar"
   | "cycle.ativar"
@@ -72,6 +73,7 @@ export interface DefinicaoOperacaoCiclo {
 export const DEFINICAO_POR_OPERACAO: Readonly<
   Record<OperacaoCiclo, DefinicaoOperacaoCiclo>
 > = {
+  "cycle.historico.listar": { gate: "funcional", capability: "cycle.read" },
   // D21: a criação é ADMINISTRATIVA — o recurso ainda não existe e alvo
   // sintético é proibido como prova de autorização (F5-05 D19/D22).
   "cycle.criar": { gate: "administrativo", capability: "cycle.manage" },
@@ -163,6 +165,7 @@ function textoObrigatorio(valor: unknown): string | null {
 const CHAVES_COMUNS = ["organization_id", "operacao", "operation_id"] as const;
 
 const CHAVES_POR_OPERACAO: Readonly<Record<OperacaoCiclo, readonly string[]>> = {
+  "cycle.historico.listar": [...CHAVES_COMUNS, "cycle_id"],
   "cycle.criar": [...CHAVES_COMUNS, "ano", "numero", "data_inicio", "data_fim"],
   "cycle.editar": [
     ...CHAVES_COMUNS,
@@ -245,9 +248,11 @@ export function validarEntradaCiclo(corpo: unknown): ValidacaoEntradaCiclo {
     if (!cycleId) return invalido("cycle_id inválido.");
     entrada.cycle_id = cycleId;
 
-    const versao = bruto.expected_version;
-    if (!ehInteiro(versao) || versao < 0) return invalido("expected_version inválido.");
-    entrada.expected_version = versao;
+    if (operacao !== "cycle.historico.listar") {
+      const versao = bruto.expected_version;
+      if (!ehInteiro(versao) || versao < 0) return invalido("expected_version inválido.");
+      entrada.expected_version = versao;
+    }
   }
 
   switch (operacao) {

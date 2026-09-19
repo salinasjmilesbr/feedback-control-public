@@ -276,6 +276,17 @@ describe("F5-09 P7 — happy path por operação (A) e UUID real (B)", () => {
       capabilities: [],
       alvos: 1,
     },
+    {
+      operacao: "cycle.historico.listar",
+      corpo: {
+        organization_id: ORG,
+        operacao: "cycle.historico.listar",
+        cycle_id: CICLO,
+        operation_id: OPERACAO,
+      },
+      capabilities: [],
+      alvos: 1,
+    },
   ] as const;
 
   it.each(casos.map((caso) => [caso.operacao, caso] as const))(
@@ -344,6 +355,22 @@ describe("F5-09 P7 — tenant, membership, perfil e identidade (C/D/E/I)", () =>
     });
     expect(resposta.status).toBe(403);
     expect(capturado.execucoes).toEqual([]);
+  });
+
+  it("histórico cross-tenant ou sem cycle.read falha fechado antes da RPC", async () => {
+    const semMembership = await chamar(
+      { organization_id: ORG_B, operacao: "cycle.historico.listar", cycle_id: CICLO, operation_id: OPERACAO },
+      { identidade: identidade({ memberships: [] }), autorizacao: { permitido: true } }
+    );
+    expect(semMembership.resposta.status).toBe(403);
+    expect(semMembership.capturado.execucoes).toEqual([]);
+
+    const semCapability = await chamar(
+      { organization_id: ORG, operacao: "cycle.historico.listar", cycle_id: CICLO, operation_id: OPERACAO },
+      { autorizacao: { permitido: false, code: "FORBIDDEN" } }
+    );
+    expect(semCapability.resposta.status).toBe(403);
+    expect(semCapability.capturado.execucoes).toEqual([]);
   });
 
   it("perfil inativo ⇒ DENY", async () => {

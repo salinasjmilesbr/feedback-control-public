@@ -353,9 +353,8 @@ describe("F5-09 P8 Bloco 2 — mutations soberanas (C1–C15)", () => {
     expect(fonte).toContain(
       "Configuração de metas será disponibilizada na etapa F5-10"
     );
-    expect(fonte).toContain(
-      "Histórico detalhado indisponível nesta fase da migração"
-    );
+    expect(fonte).toContain("cycle-history__event");
+    expect(fonte).not.toContain("cycle_events (deny-by-default, sem RPC de leitura)");
     expect(fonte).toContain("a ativação é uma operação separada");
     expect(fonte).toContain("Exclusão física indisponível nesta fase");
     // A trilha não é apresentada como lista vazia "real".

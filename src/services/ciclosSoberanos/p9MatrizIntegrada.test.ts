@@ -60,6 +60,7 @@ const CAMINHO_SOBERANO = [
 ] as const;
 
 const OPERACOES_ESPERADAS = [
+  "cycle.historico.listar",
   "cycle.criar",
   "cycle.editar",
   "cycle.ativar",
@@ -97,6 +98,7 @@ function repositorioFake(ciclos: readonly CicloSoberano[]) {
     })),
     obterCiclo: vi.fn(async () => ({ ok: true as const, data: null })),
     obterCicloAtivo: vi.fn(async () => ({ ok: true as const, data: null })),
+    listarEventos: vi.fn(async () => ({ ok: true as const, data: [] })),
   };
 }
 
@@ -114,6 +116,7 @@ function edgeGravador(chamadas: { metodo: string; entrada: Record<string, unknow
     reabrir: registrar("reabrir"),
     corrigirPeriodo: registrar("corrigirPeriodo"),
     incluirAdmissao: registrar("incluirAdmissao"),
+    listarHistorico: registrar("listarHistorico"),
   } as unknown as EdgeCiclos;
 }
 
@@ -122,6 +125,7 @@ describe("F5-09 P9 — matriz integrada: contrato das operações e capabilities
     expect([...OPERACOES_CICLO].sort()).toEqual([...OPERACOES_ESPERADAS].sort());
 
     const esperado: Record<string, string> = {
+      "cycle.historico.listar": "cycle.read",
       "cycle.criar": "cycle.manage",
       "cycle.editar": "cycle.manage",
       "cycle.ativar": "cycle.manage",

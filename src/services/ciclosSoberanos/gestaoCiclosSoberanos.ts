@@ -30,6 +30,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CicloSoberano } from "../../application/ports/CycleRepository";
+import type { EventoCicloSoberano } from "../../application/ports/CycleRepository";
 import type { CicloAvaliacao } from "../../types/CicloAvaliacao";
 import {
   criarEdgeCiclos,
@@ -118,10 +119,11 @@ function compor(deps: DependenciasGestaoCiclos): Composicao {
   if (!cliente) {
     return { cliente: null, repositorio: deps.repositorio ?? null, edge: deps.edge ?? null };
   }
+  const edge = deps.edge ?? criarEdgeCiclos(cliente);
   return {
     cliente,
-    repositorio: deps.repositorio ?? criarRepositorioCiclosSoberanos(cliente),
-    edge: deps.edge ?? criarEdgeCiclos(cliente),
+    repositorio: deps.repositorio ?? criarRepositorioCiclosSoberanos(cliente, edge),
+    edge,
   };
 }
 
@@ -181,6 +183,12 @@ export function criarGestaoCiclosSoberanos(deps: DependenciasGestaoCiclos = {}) 
         ? resultado.data
         : resultado.data.filter((ciclo) => ciclo.status !== "CANCELADO");
       return { ok: true, data: ciclos.map(projetarCicloParaUi) };
+    },
+
+    async listarHistorico(organizationId: string, cycleId: string): Promise<ResultadoGestao<readonly EventoCicloSoberano[]>> {
+      if (!composicao.repositorio?.listarEventos) return falha(SEM_CAMINHO);
+      const resultado = await composicao.repositorio.listarEventos(organizationId, cycleId);
+      return resultado.ok ? resultado : falha(resultado.error);
     },
 
     /** Estado publicado pelo controlador persistente (cache de UX). */

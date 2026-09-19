@@ -31,6 +31,11 @@ import { capabilityCanonica } from "./catalogoCapabilities.ts";
  */
 
 const CONTRATO_EDGE_RPC: Readonly<Record<string, readonly string[]>> = {
+  ciclo_historico_listar: [
+    "p_cycle_id",
+    "p_organization_id",
+    "p_actor_user_profile_id",
+  ],
   ciclo_criar: [
     "p_organization_id",
     "p_ano",
@@ -197,6 +202,7 @@ const MIGRACOES: Readonly<Record<string, string>> = import.meta.glob(
 const SQL_DO_SCHEMA = Object.values(MIGRACOES).join("\n");
 
 const OPERACOES = [
+  "cycle.historico.listar",
   "cycle.criar",
   "cycle.editar",
   "cycle.ativar",
@@ -208,10 +214,10 @@ const OPERACOES = [
 ] as const;
 
 describe("F5-09 P7 — contrato Edge → RPC (nome + argumentos nomeados)", () => {
-  it("a extração encontra as OITO RPCs soberanas de ciclo", () => {
+  it("a extração encontra as RPCs soberanas de ciclo", () => {
     const nomes = chamadasCiclo.map((chamada) => chamada.funcao).sort();
     expect(nomes).toEqual(Object.keys(CONTRATO_EDGE_RPC).sort());
-    // Além das oito, a Edge só chama as TRÊS resolutoras de leitura da fronteira.
+    // Além das RPCs de ciclo, a Edge só chama as resolutoras de leitura da fronteira.
     const outras = Array.from(
       new Set(
         chamadas
@@ -269,7 +275,7 @@ describe("F5-09 P7 — contrato Edge → RPC (nome + argumentos nomeados)", () =
 });
 
 describe("F5-09 P7 — mapa de operações e capabilities (P: nenhuma nova)", () => {
-  it("o mapa cobre EXATAMENTE as oito operações contratadas", () => {
+  it("o mapa cobre EXATAMENTE as operações contratadas", () => {
     expect([...OPERACOES_CICLO].sort()).toEqual([...OPERACOES].sort());
     expect(Object.keys(DEFINICAO_POR_OPERACAO).sort()).toEqual([...OPERACOES].sort());
   });
