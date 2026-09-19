@@ -2,7 +2,7 @@
 
 > ## NOTA DE RASTREABILIDADE — LEIA ANTES DE USAR ESTE DOCUMENTO
 >
-> **(a) A numeração v16 vem do orquestrador.** As versões anteriores do Plano Mestre existem
+> **(a) A numeração original v16 veio do orquestrador.** As versões anteriores do Plano Mestre existem
 > **fora deste repositório**; não há no repo nenhum artefato v1…v15 para comparar, e este documento
 > **não** fabrica “o que mudou em relação à v15”.
 >
@@ -14,7 +14,7 @@
 > próximos passos: Plano Mestre e contratos `docs/F5-XX-desenho-tecnico.md` fechados.” Ou seja: o
 > Plano Mestre era **citado como fonte** sem estar versionado aqui.
 >
-> **(d) Por isso a v16 foi CONSTRUÍDA a partir das fontes vigentes do próprio repositório**, e não
+> **(d) Por isso a v16 histórica foi CONSTRUÍDA a partir das fontes vigentes do próprio repositório**, e não
 > por cópia de uma versão anterior: `AGENTS.md`; `.ai/virtus-context.md`; `.ai/workflow.md`;
 > `.ai/architecture-rules.md`; `.ai/git-rules.md`; `.ai/handoff.md`; `docs/etapa-5-certificacao.md`;
 > `docs/F5-11-certificacao.md`; `docs/auditorias/*`; e os desenhos `docs/F3-*/F4-*/F5-*`.
@@ -31,7 +31,7 @@
 | Data-ação | Consolidação documental do checkpoint real da Etapa 6 registrado na Issue **#308** |
 | Escopo | Reorganizar e preservar TODO o conhecimento vigente de doutrina, processo, roadmap e estado |
 | Modelo | história + roadmap + manual operacional |
-| Fontes | `.ai/*`, `AGENTS.md`, `docs/etapa-5-certificacao.md`, `docs/F5-11-certificacao.md`, `docs/auditorias/*`, desenhos `docs/F3-*/F4-*/F5-*`; Issues **#275**, **#278** e **#308**; commits F6 **#296**, **#298**, **#299**, **#301**, **#303** e **#306** |
+| Fontes | `.ai/*`, `AGENTS.md`, `docs/etapa-5-certificacao.md`, `docs/F5-11-certificacao.md`, `docs/auditorias/*`, desenhos `docs/F3-*/F4-*/F5-*`; Issues **#275**, **#278**, **#293** e **#308**; commits F6 **#296**, **#298**, **#299**, **#301**, **#303** e **#306** |
 | Registro de dívidas | `docs/dividas-tecnicas.md` (canônico — **não enumerado nem duplicado aqui**) |
 | Handoff operacional | `.ai/handoff.md` |
 
@@ -129,15 +129,16 @@ Detalhamento por fase (critérios, decisões, evidências): `docs/F5-01-desenho-
 
 ### II.2 Planejado
 Roadmap **até produção**. As etapas abaixo vêm do **Plano Mestre externo v15** (que **não** está
-versionado neste repositório — ver Parte XVII, item 5) e a v16 as traz por decisão do orquestrador,
+versionado neste repositório — ver Parte XVII, item 5); foram incorporadas originalmente na v16 e
+permanecem preservadas nesta v17 por decisão do orquestrador,
 sem inventar detalhe além do que o roadmap vigente define. Notação única: **Etapa N (FN)**.
 
 | Etapa | Conteúdo esperado | Observação |
 |---|---|---|
 | **F5-12 (Issue #256)** | Validação integrada e fechamento formal da Etapa 5 | **É a certificação transversal já produzida** — não há fase posterior de fechamento dentro da F5 |
 | **Etapa 7 (F7)** | **Segurança/hardening para produção** | Escopo definido pelo roadmap vigente; exige Issue + desenho fechado |
-| **Etapas 8–10 (F8–F10)** | **Arquitetura-alvo**, **migração**, **pré-produção** e **produção** (posteriores) | Vêm do roadmap vigente; o detalhamento exige Issue + desenho próprios e **não** é fabricado nesta v16 |
-| Backlog: dívidas e findings bloqueantes | Limpeza de resíduos legados, provas literais faltantes, defeitos de diagnóstico; **DT-013 resolvido**, com defeito separado da Edge `avaliacoes` (**503 / BOOT_ERROR**) ainda pendente | Registro canônico: `docs/dividas-tecnicas.md` (seção de **FINDINGS BLOQUEANTES**); conversão em Issue só por decisão explícita (Parte XV) |
+| **Etapas 8–10 (F8–F10)** | **Arquitetura-alvo**, **migração**, **pré-produção** e **produção** (posteriores) | Vêm do roadmap vigente; o detalhamento exige Issue + desenho próprios e **não** é fabricado nesta v17 |
+| Backlog: dívidas e findings bloqueantes | Limpeza de resíduos legados, provas literais faltantes e defeitos de diagnóstico; **DT-013** e o defeito distinto de boot da Edge `avaliacoes` estão resolvidos | Registro canônico: `docs/dividas-tecnicas.md` (seção de **FINDINGS BLOQUEANTES**); **#293/F6-A15** é o registro canônico dos findings UX; conversão de outros registros em Issue só por decisão explícita (Parte XV) |
 
 ### II.3 Próxima fase estrutural após a Etapa 6
 Após a conclusão dos itens pendentes da Etapa 6, a próxima etapa estrutural do roadmap é a **Etapa 7
@@ -165,21 +166,24 @@ fechado**; os itens F6 ainda pendentes permanecem no estado da Etapa 6 descrito 
   - **F6-CICLOS-02 (#301)**, com histórico soberano de ciclos disponibilizado pela fronteira
     `ciclos`/RPC e integrado à tela de ciclos;
   - **F6-COLAB-02 (#298)**, preservando a data civil no histórico organizacional;
-  - **correção do boot da Edge `avaliacoes` (#303)**, com o import relativo compatível com Deno;
-  - **papel avaliativo mínimo (#306)**, com capability/role e superfície mínima de acesso do avaliador;
+  - **correção do boot da Edge `avaliacoes` (#303)**, com o import relativo compatível com Deno e
+    validação funcional em runtime concluída; o antigo `503 / BOOT_ERROR` distinto do DT-013 está resolvido;
+  - **papel avaliativo mínimo (#306)** implementado e integrado à `main`, com migrations locais aplicadas;
+    a validação funcional em runtime permanece pendente;
   - alinhamento da capability `cycle.read` (#296) e atualização operacional de snippets locais (#299).
   Essas entregas são fatos integrados na `main` de referência deste checkpoint; não alteram os contratos
   F4/F5 nem transformam melhorias de backlog em itens concluídos.
 - **F6-A03, F6-A04, F6-A09, F6-A12, F6-A13 e F6-A14** estão resolvidas e validadas.
 - **F6-A11** está implementada, com o bootstrap validado.
-- **F6-A17** foi corrigida pelos PRs **#289/#290**; resta somente a validação runtime final na
-  **ORG5**.
-- **F6-A01, F6-A02, F6-A06, F6-A10, F6-A15 e F6-A16** ficam registradas como melhorias pendentes;
+- **F6-A17** foi corrigida pelos PRs **#289/#290** e está **resolvida e validada em runtime** na ORG5.
+- **F6-A01, F6-A02, F6-A06, F6-A10 e F6-A16** ficam registradas como melhorias pendentes;
   não são tratadas como defeitos resolvidos neste checkpoint.
+- **#293/F6-A15** permanece pendente e é o registro canônico dos findings UX; o estado dos itens deve ser consultado ali,
+  sem duplicar uma segunda lista de autoridade neste plano.
+- **F6-COLAB-03** está pendente.
 - **F6-A18** entra no backlog: administração segura e exclusão de organizações pelo Admin Virtus.
-- Permanece pendente, em registro separado, o defeito da Edge `avaliacoes` que retorna **503 /
-  `BOOT_ERROR`**. Ele não deve ser confundido com o **DT-013**, que corresponde ao import inexistente
-  já corrigido pela Issue #260 / PR #261.
+- **Decisão vigente para ciclos:** a quantidade é configurável entre **1–6 por organização/ano**,
+  com **default 3**, sem invalidar ciclos já existentes.
 
 ### III.3 Pendente de CI/PR/merge/runtime
 - O **CI oficial do PR/SHA** é a **autoridade final** (em especial para os pares de concorrência) e é
@@ -189,8 +193,8 @@ fechado**; os itens F6 ainda pendentes permanecem no estado da Etapa 6 descrito 
 - **Estado da `main` de referência deste registro:** `9d41493` (`feat(#306): provisionar papel avaliativo mínimo`).
 - O SHA anterior `c07d872` pertence ao checkpoint da v16.3 e é preservado apenas como histórico no Git,
   não como estado vigente.
-- A validação runtime final da **ORG5** para F6-A17 permanece sob responsabilidade do orquestrador;
-  este plano não a declara concluída antes dessa evidência.
+- A pendência funcional de runtime deste checkpoint é a validação da entrega **#306**; F6-A17 já tem
+  validação runtime concluída.
 
 ### III.4 Dívida e findings (resumo; lista canônica em `docs/dividas-tecnicas.md`)
 Resíduos legados de ciclo em módulos de apresentação (incluindo o caso **R1**, agora **verificado e
@@ -198,9 +202,9 @@ fechado** como não-autoritativo, restando limpeza de UX), `localCycleRepository
 fixtures de teste que pré-carregam chaves locais, provas literais ainda ausentes em validadores e um
 defeito latente de **diagnóstico** em validador da F5-11. O **finding BLOQUEANTE** registrado
 (Edge `avaliacoes` com import de módulo inexistente — `DT-013`) foi **RESOLVIDO pela Issue #260 /
-PR #261**. O defeito separado da Edge `avaliacoes` que retorna **503 / `BOOT_ERROR`** permanece
-pendente e não é o DT-013. Classificação e detalhes: Parte XV e o registro canônico de
-dívidas (`docs/dividas-tecnicas.md`, seção **FINDINGS BLOQUEANTES**).
+PR #261**. O defeito separado de boot da mesma Edge foi **RESOLVIDO e validado em runtime pela
+Issue #303**. Os findings UX têm **#293/F6-A15** como registro canônico. Classificação e detalhes:
+Parte XV e o registro canônico de dívidas (`docs/dividas-tecnicas.md`, seção **FINDINGS BLOQUEANTES**).
 
 ---
 
@@ -280,18 +284,24 @@ auditoria (GPT) / revisão (Codex) → squash merge em `main` → auditoria fina
 
 | Papel | Quem é | Responsabilidade |
 |---|---|---|
-| **Flash (DEV de implementação)** | Agente de implementação (modelo `deepseek-flash`) | Lê as fontes obrigatórias, implementa o lote aprovado, roda validação progressiva, **autoauditoria estática**, autua as **Notas Flash** (Parte X), registra desvios/dívidas e **nunca faz merge**. |
+| **Flash (DEV de implementação)** | Agente-base de implementação (modelo `deepseek-flash`) | Lê as fontes obrigatórias, implementa o lote aprovado, roda validação progressiva, **autoauditoria estática**, autua as **Notas Flash** (Parte X), registra desvios/dívidas e **nunca faz merge**. O papel volta a executar atividades quando o override temporário do Codex for encerrado explicitamente. |
 | **GPT (auditor)** | Auditor externo | Auditoria final: confronta o **SHA auditado** com o contrato e a Issue, verifica evidência × obrigação, aponta findings com severidade (bloqueante/dívida/fora de escopo). |
-| **Codex (revisor)** | Revisor pré-merge | Revisão de código/contrato antes do merge; aponta defeitos materiais (segurança, autorização, integridade, contrato). |
+| **Codex (revisor e executor temporário)** | Revisor pré-merge e, durante o override vigente, executor de todas as atividades | Executa as atividades enquanto durar o override e faz revisão de código/contrato antes do merge; aponta defeitos materiais (segurança, autorização, integridade, contrato). |
 | **Orquestrador** | Humano, autoridade decisória | Cria Issues e PRs, decide arquitetura (abre/fecha `D#`/`Q#`), **autoriza elevação de acesso**, aprova exceções, define escopo/fase, executa **squash merge** e o **CI oficial** é sua responsabilidade. Deve consultar e preservar a memória operacional registrada (`.ai/handoff.md`, decisões, certificações e registros de dívidas), sem depender de memória informal. |
 
 Regra de ouro: **nenhum agente se autoconcede autoridade** — nem técnica, nem de elevação de acesso.
 
 ### VII.1 Escolha dinâmica de agente (complexidade × risco × janela × custo)
 
+> **Override temporário vigente:** o **Codex executa todas as atividades** até decisão explícita do
+> orquestrador de voltar ao DeepSeek. Enquanto o override estiver ativo, ele prevalece sobre a escolha
+> dinâmica e sobre os padrões de janela/custo abaixo; não altera responsabilidades, gates, limites de
+> autonomia nem a proibição de merge pelo agente.
+
 A escolha de **quem executa** não é fixa: combina **complexidade + risco + horário (janela) + custo
 efetivo + ciclos humanos**. Os **números** de tarifa e as **janelas** vigentes ficam na **Parte XIII,
-item 8** (fonte única — não repetir aqui).
+item 8** (fonte única — não repetir aqui). Esta regra volta a reger a seleção somente quando o
+orquestrador encerrar explicitamente o override temporário.
 
 - **Identidade do agente DeepSeek:** `deepseek-flash` = **DeepSeek V4.1 Flash**, modelo **atual**.
   `deepseek-v4-flash` (e `deepseek-v4-flash-vision-exp`) é **alias legado** roteado ao V4.1 Flash —
@@ -433,6 +443,9 @@ Fonte detalhada: `.ai/git-rules.md`.
     funcional usam o CI normal; alterações em segurança, auth, banco, migrations, RPC ou RLS usam os
     gates completos. A detecção é fail-closed e não usa filtros `paths` no trigger, evitando checks
     required eternamente pendentes.
+13. **Pós-merge de migrations:** após qualquer merge que contenha migrations, confirmar se elas estão
+    aplicadas no ambiente local e aplicá-las quando necessário **antes** da validação funcional. A
+    validação runtime não pode ser considerada representativa sobre schema local desatualizado.
 
 ---
 
@@ -531,8 +544,9 @@ Fonte detalhada: `.ai/git-rules.md`.
    que **exigem Issue e correção antes do fechamento** da atividade correspondente. Um finding
     bloqueante **não** pode ser tratado como dívida nem silenciado por conveniência de cronograma.
     O `DT-013` — Edge `avaliacoes` com import de módulo inexistente — foi **resolvido pela Issue #260 /
-    PR #261**. O defeito separado de **503 / `BOOT_ERROR`** da mesma Edge permanece pendente e deve ser
-    acompanhado sem ser confundido com o DT-013.
+    PR #261**. O defeito separado de **503 / `BOOT_ERROR`** da mesma Edge foi **resolvido e validado
+    em runtime pela Issue #303**; ambos permanecem aqui somente como rastreabilidade histórica.
+    **#293/F6-A15** é o registro canônico dos findings UX e deve ser consultado para seu estado vigente.
 
 ---
 
@@ -557,13 +571,14 @@ Fonte detalhada: `.ai/git-rules.md`.
 
 ### XVII.1 Auditoria de obsolescência do checkpoint v17
 
-- As referências da v16.3 ao SHA `c07d872` como estado vigente foram substituídas pelo estado real
+- As referências históricas da v16.3 ao SHA `c07d872` como estado vigente foram substituídas pelo estado real
   da `main` no checkpoint #308: `9d41493`.
 - As referências históricas que descreviam o boot da Edge `avaliacoes` como pendência (`503 / BOOT_ERROR`)
-  ficam superadas pela correção da Issue #303; permanecem somente como rastreabilidade da v16.3 e não
+  estão superadas pela correção e validação runtime da Issue #303; permanecem somente como rastreabilidade da v16.3 e não
   representam o estado vigente. O finding DT-013 continua separado e resolvido pela Issue #260 / PR #261.
-- A validação runtime final da ORG5 para F6-A17 continua explicitamente pendente; nenhum registro desta
-  atualização a promove a concluída.
+- F6-A17 está resolvida e validada em runtime na ORG5.
+- A validação funcional runtime ainda pendente é a da entrega #306, já implementada e integrada, com
+  migrations locais aplicadas.
 
 Registro obrigatório: **contradição não se resolve inventando uma versão** — registram-se as duas
 fontes. Itens conhecidos:
@@ -582,9 +597,9 @@ fontes. Itens conhecidos:
    - Fonte B (vigente): `docs/etapa-5-certificacao.md`, `.ai/handoff.md` e `.ai/virtus-context.md`
      após a correção da Issue #258 registram que **a Issue #256 É a própria F5-12** — não há fase
      posterior de fechamento dentro da F5.
-   - **Vigente na v16.2:** Fonte B. A F5-12 **é aquela entrega**; naquele checkpoint a **próxima fase
+   - **Vigente desde a v16.2:** Fonte B. A F5-12 **é aquela entrega**; naquele checkpoint a **próxima fase
      era a Etapa 6 (F6)** — auditoria visual/funcional READ-ONLY. O estado posterior da F6 está
-     registrado na Parte III desta v16.3.
+     registrado na Parte III desta v17.
 3. **Guarda *point-in-time* da P3 × emenda de D15.**
    - Fonte A: migration da P3 (integrada) proíbe `observation.*` em role de sistema fora de
      `observacoes_gestor` — coerente à época.
@@ -614,6 +629,6 @@ fontes. Itens conhecidos:
 
 ---
 
-*Fim da v16.3. Este documento é história + roadmap + manual operacional. Em caso de divergência com
+*Fim da v17. Este documento é história + roadmap + manual operacional. Em caso de divergência com
 `.ai/*` ou com o desenho de uma atividade, prevalece a fonte normativa — e a divergência deve ser
 registrada aqui.*
