@@ -15,6 +15,7 @@ import LayoutPlataforma from "./LayoutPlataforma";
 import { ROTA_PLATAFORMA_NOVA_ORGANIZACAO } from "./plataformaRotas";
 import NovaOrganizacaoPlataformaPage from "../pages/plataforma/NovaOrganizacaoPlataformaPage";
 import { useAuth } from "../auth/AuthContext";
+import { useBranding } from "../contexts/BrandingContext";
 import { useEstruturaSoberanaDoCliente } from "../pages/useEstruturaSoberanaDoCliente";
 import LoginPage from "../auth/LoginPage";
 import RecuperarSenhaPage from "../auth/RecuperarSenhaPage";
@@ -57,6 +58,19 @@ function ScrollToTop() {
   return null;
 }
 
+function TituloDaAplicacao() {
+  const { pathname } = useLocation();
+  const { branding } = useBranding();
+
+  useEffect(() => {
+    const superficieVirtus = pathname === "/login" || pathname.startsWith("/recuperar-senha") ||
+      pathname.startsWith("/redefinir-senha") || pathname.startsWith("/plataforma");
+    document.title = superficieVirtus ? "Virtus" : branding.nomeSistema || "Virtus";
+  }, [branding.nomeSistema, pathname]);
+
+  return null;
+}
+
 /** Rota pública do fluxo de autenticação (somente o necessário). */
 function LayoutPublico() {
   return (
@@ -95,6 +109,7 @@ function AppRoutes() {
   return (
     <BrowserRouter>
       <ScrollToTop />
+      <TituloDaAplicacao />
       <Routes>
         <Route element={<LayoutPublico />}>
           <Route path="/login" element={<LoginPage />} />

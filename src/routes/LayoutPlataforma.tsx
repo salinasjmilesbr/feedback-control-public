@@ -2,7 +2,6 @@ import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import SessaoIndisponivel from "../auth/SessaoIndisponivel";
 import { decidirAcessoARotaDePlataforma } from "./plataformaRotas";
-import AuthStatus from "../auth/AuthStatus";
 import AppFooter from "../components/AppFooter";
 import VirtusBrand from "../components/VirtusBrand";
 
@@ -19,7 +18,7 @@ import VirtusBrand from "../components/VirtusBrand";
  * Edge `provisionar-organizacao` + RPC soberana.
  */
 export default function LayoutPlataforma() {
-  const { estado } = useAuth();
+  const { estado, sair } = useAuth();
   const decisao = decidirAcessoARotaDePlataforma(estado);
 
   if (decisao.tipo === "carregando") {
@@ -43,7 +42,9 @@ export default function LayoutPlataforma() {
       <header className="app-header app-header--platform">
         <div className="app-header__inner">
           <VirtusBrand context="Gestão Virtus" />
-          <AuthStatus />
+          <button type="button" className="auth-status__sair" onClick={() => void sair()}>
+            Sair
+          </button>
         </div>
       </header>
       <main className="app-main virtus-platform-shell__main">

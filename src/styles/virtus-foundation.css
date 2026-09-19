@@ -312,17 +312,17 @@ body {
 /* Primários */
 .brand-button--primary,
 .cycle-btn--primary {
-  border-color: var(--brand-primary) !important;
-  background: var(--brand-primary) !important;
+  border-color: var(--virtus-highlight) !important;
+  background: var(--virtus-highlight) !important;
   color: #fff !important;
 }
 
 .brand-button--primary:hover:not(:disabled),
 .cycle-btn--primary:hover:not(:disabled) {
   background:
-    color-mix(in srgb, var(--brand-primary) 90%, #000) !important;
+    color-mix(in srgb, var(--virtus-highlight) 90%, #000) !important;
   border-color:
-    color-mix(in srgb, var(--brand-primary) 90%, #000) !important;
+    color-mix(in srgb, var(--virtus-highlight) 90%, #000) !important;
 }
 
 /* Secundários / ações de contorno */
@@ -1239,8 +1239,8 @@ button:not(:disabled) {
 .cycle-btn--primary,
 .collaborator-form-btn--primary,
 .goal-action-btn--primary {
-  border: 1px solid var(--brand-primary) !important;
-  background: var(--brand-primary) !important;
+  border: 1px solid var(--virtus-highlight) !important;
+  background: var(--virtus-highlight) !important;
   color: #fff !important;
 }
 
@@ -1250,9 +1250,9 @@ button:not(:disabled) {
 .collaborator-form-btn--primary:hover:not(:disabled),
 .goal-action-btn--primary:hover:not(:disabled) {
   background:
-    color-mix(in srgb, var(--brand-primary) 88%, black) !important;
+    color-mix(in srgb, var(--virtus-highlight) 88%, black) !important;
   border-color:
-    color-mix(in srgb, var(--brand-primary) 88%, black) !important;
+    color-mix(in srgb, var(--virtus-highlight) 88%, black) !important;
   color: #fff !important;
 }
 

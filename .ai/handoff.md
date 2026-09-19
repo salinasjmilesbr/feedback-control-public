@@ -42,7 +42,11 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   exclusivamente **`public/brand/virtus-symbol.png`**; header de **Gestão Virtus** e header de empresa com
   composição simples; footer Virtus fixo com tagline e versão; responsividade do shell sem menu/avatar/hambúrguer.
   Auth, RLS, Policy Engine, capabilities e contratos F4/F5 permanecem inalterados.
-- **Gates locais:** testes direcionados **56/56**, `npm run build`, `npm run lint` e `git diff --check` verdes.
+- **Correção pós-gate visual:** ações primárias da fundação passaram a usar `--virtus-highlight` mesmo quando
+  branding persistido fornece `--brand-primary`; o título/favicon de login/recuperação/plataforma foram fixados
+  em Virtus; o header de Gestão Virtus passou a renderizar somente Sair; o PNG oficial atualizado foi preservado
+  sem edição e incluído na correção.
+- **Gates locais:** testes direcionados **58/58**, `npm run build`, `npm run lint` e `git diff --check` verdes.
 - **Pendente:** abrir/revisar o PR e executar a validação visual runtime desktop/mobile obrigatória antes de
   avançar para Login.
 

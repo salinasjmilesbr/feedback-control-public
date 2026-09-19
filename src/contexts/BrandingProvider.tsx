@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  brandingPadrao,
   getBranding,
   resetarBranding,
   salvarBranding,
@@ -25,7 +24,6 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     aplicarTema(branding);
-    document.title = branding.nomeSistema || brandingPadrao.nomeSistema;
   }, [branding]);
 
   const value = useMemo<BrandingContextValue>(
