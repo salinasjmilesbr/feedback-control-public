@@ -44,8 +44,8 @@ function authFalso(): AuthContextValue {
       identidade: {
         authUserId: "uuid-auth-1",
         perfil: { id: "uuid-auth-1", status: "active" },
-        memberships: [],
-        organizacoes: [],
+        memberships: [{ id: "m-1", organizationId: "org-1", status: "active" }],
+        organizacoes: [{ id: "org-1", name: "Empresa Sintética" }],
       },
     },
     entrar: async () => {},
@@ -55,8 +55,8 @@ function authFalso(): AuthContextValue {
     convidarUsuario: async () => ({ userId: "uuid-auth-1" }),
     reconhecerExpiracao: () => {},
     revalidar: async () => {},
-    organizacaoAtivaId: null,
-    organizacoesDisponiveis: [],
+    organizacaoAtivaId: "org-1",
+    organizacoesDisponiveis: [{ id: "org-1", name: "Empresa Sintética" }],
     selecionarOrganizacao: () => {},
     organizacaoVersao: 0,
   };
@@ -101,6 +101,10 @@ describe("UsuarioAtualBar (F2-09)", () => {
     expect(html).toContain("Coordenadora Sintetica Beta");
     // A sessão real do Supabase Auth continua separada e visível (AuthStatus).
     expect(html).toContain(EMAIL_AUTENTICADO);
+    expect(html).toContain('src="/brand/virtus-symbol.png"');
+    expect(html).toContain("VIRTUS");
+    expect(html).toContain("Empresa Sintética");
+    expect(html).not.toContain("app-header__avatar");
   });
 
   it("HOMOLOG/PROD: sem impersonação DEV não há seletor nem colaborador simulado", () => {

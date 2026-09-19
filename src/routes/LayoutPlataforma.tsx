@@ -2,6 +2,9 @@ import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import SessaoIndisponivel from "../auth/SessaoIndisponivel";
 import { decidirAcessoARotaDePlataforma } from "./plataformaRotas";
+import AuthStatus from "../auth/AuthStatus";
+import AppFooter from "../components/AppFooter";
+import VirtusBrand from "../components/VirtusBrand";
 
 /**
  * F6-A03 (Issue #266) — layout/guard da superfície mínima de PLATAFORMA (D19).
@@ -36,8 +39,17 @@ export default function LayoutPlataforma() {
   }
 
   return (
-    <main className="app-main">
-      <Outlet />
-    </main>
+    <div className="virtus-platform-shell">
+      <header className="app-header app-header--platform">
+        <div className="app-header__inner">
+          <VirtusBrand context="Gestão Virtus" />
+          <AuthStatus />
+        </div>
+      </header>
+      <main className="app-main virtus-platform-shell__main">
+        <Outlet />
+      </main>
+      <AppFooter />
+    </div>
   );
 }

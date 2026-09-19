@@ -1,15 +1,13 @@
-import { useBranding } from "../contexts/BrandingContext";
+import VirtusBrand from "./VirtusBrand";
 
 function AppFooter() {
-  const { branding } = useBranding();
-
   return (
     <footer className="app-footer">
       <div className="app-footer__inner">
-        <div>
-          <strong>{branding.nomeSistema}</strong>
-          <span aria-hidden="true"> • </span>
-          <span>{branding.subtituloSistema}</span>
+        <div className="app-footer__brandline">
+          <VirtusBrand />
+          <span className="app-footer__separator" aria-hidden="true">·</span>
+          <span>Performance &amp; Feedback Management</span>
         </div>
         <div className="app-footer__version">Versão 1.0.0</div>
       </div>

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import './styles/virtus-foundation.css'
 import './styles/virtus-audit.css'
+import './styles/virtus-shell.css'
 import App from './App.tsx'
 import {
   executarResetBaseDesenvolvimento,
