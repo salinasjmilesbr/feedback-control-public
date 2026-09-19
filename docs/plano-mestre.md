@@ -1,4 +1,4 @@
-# Plano Mestre — Virtus (v16.3)
+# Plano Mestre — Virtus (v17)
 
 > ## NOTA DE RASTREABILIDADE — LEIA ANTES DE USAR ESTE DOCUMENTO
 >
@@ -27,11 +27,11 @@
 
 | Campo | Valor |
 |---|---|
-| Versão | **v16.3** |
-| Data-ação | Atualização documental do checkpoint da Etapa 6 e da regra de CI proporcional da Issue **#275** |
+| Versão | **v17** |
+| Data-ação | Consolidação documental do checkpoint real da Etapa 6 registrado na Issue **#308** |
 | Escopo | Reorganizar e preservar TODO o conhecimento vigente de doutrina, processo, roadmap e estado |
 | Modelo | história + roadmap + manual operacional |
-| Fontes | `.ai/*`, `AGENTS.md`, `docs/etapa-5-certificacao.md`, `docs/F5-11-certificacao.md`, `docs/auditorias/*`, desenhos `docs/F3-*/F4-*/F5-*`; Issues **#275** e **#278** |
+| Fontes | `.ai/*`, `AGENTS.md`, `docs/etapa-5-certificacao.md`, `docs/F5-11-certificacao.md`, `docs/auditorias/*`, desenhos `docs/F3-*/F4-*/F5-*`; Issues **#275**, **#278** e **#308**; commits F6 **#296**, **#298**, **#299**, **#301**, **#303** e **#306** |
 | Registro de dívidas | `docs/dividas-tecnicas.md` (canônico — **não enumerado nem duplicado aqui**) |
 | Handoff operacional | `.ai/handoff.md` |
 
@@ -121,6 +121,7 @@ registro de gate) — o que não tem evidência é **dívida** ou **lacuna**, nu
 | **F5-11** | Observações soberanas: P1, P1.1, P2, P3, P4, P5, P5.1, P5.2, P5.3, P5.4 e P6 (certificação integrada) | Concluída |
 | **Etapa 5 — certificação transversal** | Issue #256 = **F5-12**: validação integrada e fechamento da Etapa 5 (matriz B1–B3, T1–T11, R1–R10) | Concluída; ver Parte III |
 | **F6-01** | Primeiro checkpoint da Etapa 6 | Concluída |
+| **Checkpoint Etapa 6 (Issue #308)** | Histórico soberano de ciclos, preservação de data civil no histórico, correção de boot da Edge `avaliacoes`, papel avaliativo mínimo e alinhamentos de capability/infraestrutura | Consolidado nesta v17; ver Parte III |
 
 Detalhamento por fase (critérios, decisões, evidências): `docs/F5-01-desenho-tecnico.md` …
 `docs/F5-11-desenho-tecnico.md`, `docs/F5-09-p9-matriz-integrada.md`,
@@ -160,6 +161,15 @@ fechado**; os itens F6 ainda pendentes permanecem no estado da Etapa 6 descrito 
 
 ### III.2 Checkpoint da Etapa 6
 - **F6-01** está concluída.
+- **Checkpoint documental da Issue #308:** a base real da Etapa 6 agora inclui:
+  - **F6-CICLOS-02 (#301)**, com histórico soberano de ciclos disponibilizado pela fronteira
+    `ciclos`/RPC e integrado à tela de ciclos;
+  - **F6-COLAB-02 (#298)**, preservando a data civil no histórico organizacional;
+  - **correção do boot da Edge `avaliacoes` (#303)**, com o import relativo compatível com Deno;
+  - **papel avaliativo mínimo (#306)**, com capability/role e superfície mínima de acesso do avaliador;
+  - alinhamento da capability `cycle.read` (#296) e atualização operacional de snippets locais (#299).
+  Essas entregas são fatos integrados na `main` de referência deste checkpoint; não alteram os contratos
+  F4/F5 nem transformam melhorias de backlog em itens concluídos.
 - **F6-A03, F6-A04, F6-A09, F6-A12, F6-A13 e F6-A14** estão resolvidas e validadas.
 - **F6-A11** está implementada, com o bootstrap validado.
 - **F6-A17** foi corrigida pelos PRs **#289/#290**; resta somente a validação runtime final na
@@ -176,7 +186,9 @@ fechado**; os itens F6 ainda pendentes permanecem no estado da Etapa 6 descrito 
   responsabilidade do **orquestrador** — as certificações registram isso explicitamente.
 - **PR e merge são do orquestrador** (`gh` ausente no ambiente do agente; DEV-04): o agente entrega
   branch + SHA + título/corpo quando não há mecanismo autorizado de abertura de PR.
-- **Estado da `main` de referência deste registro:** `c07d87204a10b99db135efe00fa3c8a19eaf4a03`.
+- **Estado da `main` de referência deste registro:** `9d41493` (`feat(#306): provisionar papel avaliativo mínimo`).
+- O SHA anterior `c07d872` pertence ao checkpoint da v16.3 e é preservado apenas como histórico no Git,
+  não como estado vigente.
 - A validação runtime final da **ORG5** para F6-A17 permanece sob responsabilidade do orquestrador;
   este plano não a declara concluída antes dessa evidência.
 
@@ -542,6 +554,16 @@ Fonte detalhada: `.ai/git-rules.md`.
 ---
 
 ## Parte XVII — Contradições e divergências registradas
+
+### XVII.1 Auditoria de obsolescência do checkpoint v17
+
+- As referências da v16.3 ao SHA `c07d872` como estado vigente foram substituídas pelo estado real
+  da `main` no checkpoint #308: `9d41493`.
+- As referências históricas que descreviam o boot da Edge `avaliacoes` como pendência (`503 / BOOT_ERROR`)
+  ficam superadas pela correção da Issue #303; permanecem somente como rastreabilidade da v16.3 e não
+  representam o estado vigente. O finding DT-013 continua separado e resolvido pela Issue #260 / PR #261.
+- A validação runtime final da ORG5 para F6-A17 continua explicitamente pendente; nenhum registro desta
+  atualização a promove a concluída.
 
 Registro obrigatório: **contradição não se resolve inventando uma versão** — registram-se as duas
 fontes. Itens conhecidos:
