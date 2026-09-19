@@ -150,6 +150,7 @@ const ENTRIES = [...POR_CAMINHO.keys()]
   .sort();
 
 const ENTRY_CICLOS = "supabase/functions/ciclos/index.ts";
+const ENTRY_AVALIACOES = "supabase/functions/avaliacoes/index.ts";
 
 /**
  * Defeitos PRÉ-EXISTENTES tolerados (nenhum deles na Edge `ciclos`). Se o import
@@ -164,6 +165,7 @@ const ENTRY_CICLOS = "supabase/functions/ciclos/index.ts";
 const EXCECOES_CONHECIDAS: Readonly<Record<string, string>> = {};
 
 const grafoCiclos = percorrerGrafo(ENTRY_CICLOS);
+const grafoAvaliacoes = percorrerGrafo(ENTRY_AVALIACOES);
 
 describe("F5-09 P7 — import graph da Edge `ciclos` (Deno/Supabase)", () => {
   it("o índice do repositório e o entry da Edge existem (gate não é vazio)", () => {
@@ -197,6 +199,22 @@ describe("F5-09 P7 — import graph da Edge `ciclos` (Deno/Supabase)", () => {
   it("o grafo de `ciclos` é substantivo e só depende da URL externa esperada", () => {
     expect(grafoCiclos.visitados.size).toBeGreaterThanOrEqual(15);
     expect([...grafoCiclos.externos]).toContain("https://esm.sh/@supabase/supabase-js@2");
+  });
+});
+
+describe("F6-A09/#303 — boot da Edge `avaliacoes`", () => {
+  it("resolve todos os imports relativos com extensões compatíveis com Deno", () => {
+    expect({
+      quebrados: grafoAvaliacoes.quebrados,
+      diagnostico: grafoAvaliacoes.diagnostico,
+      semExtensao: grafoAvaliacoes.semExtensao,
+    }).toEqual({ quebrados: [], diagnostico: [], semExtensao: [] });
+  });
+
+  it("mantém o import canônico de capabilities no entrypoint", () => {
+    const entrada = POR_CAMINHO.get(ENTRY_AVALIACOES);
+    expect(entrada).toContain("../../../src/authorization/catalogoCapabilities.ts");
+    expect(entrada).not.toContain("catalogoCapacidades");
   });
 });
 
