@@ -90,6 +90,20 @@ describe("F5-04 D16 — identidade × execução privilegiada separadas", () => 
     expect(deps.executarRpc).toHaveBeenCalledWith("grant-evaluator", "", "", ACTOR, ORG, "alvo@exemplo.test");
   });
 
+  it("evaluator sem autoridade administrativa não pode conceder nem revogar roles", async () => {
+    for (const action of ["grant-evaluator", "revoke-evaluator"] as const) {
+      const deps = makeDeps({
+        executarRpc: vi.fn(async () => ({ code: "F6_306_FORBIDDEN", message: "role admin exigida" })),
+      });
+      const res = await gerenciarAcessoRole(
+        makeRequest({ action, organization_id: ORG, target_email: "alvo@exemplo.test" }, "Bearer jwt-evaluator"),
+        deps
+      );
+      expect(res.status).toBe(403);
+      expect(deps.executarRpc).toHaveBeenCalledWith(action, "", "", ACTOR, ORG, "alvo@exemplo.test");
+    }
+  });
+
   it("sem Authorization ⇒ 401 (identidade soberana ausente)", async () => {
     const deps = makeDeps();
     const res = await gerenciarAcessoRole(
