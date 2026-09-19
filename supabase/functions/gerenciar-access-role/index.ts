@@ -61,14 +61,25 @@ Deno.serve(async (req) => {
     },
     // 2) executa o RPC com service_role SEM o JWT do usuário; o ator é o
     //    user.id verificado (jamais do corpo).
-    executarRpc: async (action, membershipId, accessRoleId, actorUserId) => {
+    executarRpc: async (action, membershipId, accessRoleId, actorUserId, organizationId, targetEmail) => {
       const admin = createClient(url, serviceKey, {
         auth: { persistSession: false, autoRefreshToken: false },
       });
-      const fn =
-        action === "grant"
-          ? "conceder_acesso_role_rpc"
-          : "revogar_acesso_role_rpc";
+      const evaluator = action === "grant-evaluator" || action === "revoke-evaluator";
+      const fn = evaluator
+        ? (action === "grant-evaluator" ? "f6_306_conceder_evaluator" : "f6_306_revogar_evaluator")
+        : (action === "grant" ? "conceder_acesso_role_rpc" : "revogar_acesso_role_rpc");
+      if (evaluator) {
+        const users = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+        const target = users.data.users.find((user) => user.email?.toLowerCase() === targetEmail);
+        if (!target) return { code: "F6_306_TARGET_NOT_FOUND", message: "Usuário não encontrado." };
+        const { error } = await admin.rpc(fn, {
+          p_target_user_profile_id: target.id,
+          p_organization_id: organizationId,
+          p_actor_user_profile_id: actorUserId,
+        });
+        return error ? { code: error.code, message: error.message } : null;
+      }
       const { error } = await admin.rpc(fn, {
         p_membership_id: membershipId,
         p_access_role_id: accessRoleId,

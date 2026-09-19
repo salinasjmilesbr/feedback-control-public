@@ -41,6 +41,7 @@ import CatalogosPage from "../pages/CatalogosPage";
 import UnidadesPage from "../pages/UnidadesPage";
 import PosicoesPage from "../pages/PosicoesPage";
 import ColegiadoPage from "../pages/ColegiadoPage";
+import AcessoAvaliadorPage from "../pages/AcessoAvaliadorPage";
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -160,6 +161,7 @@ function AppRoutes() {
               path="/configuracoes/aparencia"
               element={<ConfiguracoesAparenciaPage />}
             />
+            <Route path="/administracao/avaliadores" element={<AcessoAvaliadorPage />} />
 
             {/*
               F5-08 P4: administração de estrutura e catálogos. A LEITURA é
