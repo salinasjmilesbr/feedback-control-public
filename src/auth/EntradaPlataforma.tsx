@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { obterProvisionamentoPlataforma } from "../services/plataforma/controladorProvisionamento";
-import { ROTA_PLATAFORMA_NOVA_ORGANIZACAO } from "../routes/plataformaRotas";
+import { ROTA_PLATAFORMA } from "../routes/plataformaRotas";
 import type { ProvisionamentoPlataforma } from "../application/ports/ProvisionamentoPlataforma";
 
 /**
@@ -31,8 +31,8 @@ import type { ProvisionamentoPlataforma } from "../application/ports/Provisionam
 export function EntradaPlataformaVisivel({ visivel }: { readonly visivel: boolean }) {
   if (!visivel) return null;
   return (
-    <Link to={ROTA_PLATAFORMA_NOVA_ORGANIZACAO} className="auth-status__entrar">
-      Criar organização
+    <Link to={ROTA_PLATAFORMA} className="auth-status__entrar">
+      Administração da plataforma
     </Link>
   );
 }

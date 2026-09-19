@@ -4,14 +4,24 @@
   max-width: 560px;
 }
 
+.auth-page__brand {
+  margin-bottom: 10px;
+  color: var(--brand-primary);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
 .auth-card {
-  background: #ffffff;
-  border: 1px solid #e6e6ef;
-  border-radius: 12px;
+  background: var(--brand-surface);
+  border: 1px solid var(--brand-border);
+  border-radius: var(--brand-radius);
   padding: 24px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  box-shadow: var(--brand-shadow);
 }
 
 .auth-card__email {

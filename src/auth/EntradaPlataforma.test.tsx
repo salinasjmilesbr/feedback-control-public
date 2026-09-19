@@ -30,7 +30,7 @@ import type { ProvisionamentoPlataforma } from "../application/ports/Provisionam
  * resolve `true` SOMENTE com `ok: true` e `operador === true`, e nunca lança).
  */
 
-const ROTA = "/plataforma/nova-organizacao";
+const ROTA = "/plataforma";
 
 /** Remove comentários: as barreiras valem para o CÓDIGO, não para a prosa. */
 function apenasCodigo(fonte: string): string {
@@ -72,7 +72,7 @@ describe("F6-A04 — entrada de plataforma: apresentação pura (critério 6)", 
     );
 
     expect(html).toContain(`href="${ROTA}"`);
-    expect(html).toContain("Criar organização");
+    expect(html).toContain("Administração da plataforma");
     // Nada de identificador interno, token, hash ou dado de tenant.
     expect(html).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
     expect(html).not.toContain("F6_A03_");
@@ -123,7 +123,7 @@ describe("F6-A04 — barreiras estáticas do componente (D1/D2/D3/D20)", () => {
 
     // O link está DEPOIS da guarda: sem `visivel` nada é renderizado.
     const guarda = codigo.indexOf("if (!visivel) return null;");
-    const link = codigo.indexOf("<Link to={ROTA_PLATAFORMA_NOVA_ORGANIZACAO}");
+    const link = codigo.indexOf("<Link to={ROTA_PLATAFORMA}");
     expect(guarda).toBeGreaterThan(-1);
     expect(link).toBeGreaterThan(guarda);
   });
@@ -147,7 +147,7 @@ describe("F6-A04 — barreiras estáticas do componente (D1/D2/D3/D20)", () => {
       expect(codigo, proibido).not.toContain(proibido);
     }
     // A rota vem do guard único da F6-A03 — nada de literal duplicado.
-    expect(codigo).toContain("ROTA_PLATAFORMA_NOVA_ORGANIZACAO");
+    expect(codigo).toContain("ROTA_PLATAFORMA");
   });
 });
 

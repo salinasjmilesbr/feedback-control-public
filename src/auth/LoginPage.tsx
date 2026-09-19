@@ -121,15 +121,12 @@ function LoginPage() {
       <div className="virtus-page auth-page">
         <section className="virtus-page-header">
           <div className="virtus-page-header__copy">
-            <h1>Acesso negado</h1>
-            <p>{estado.erro.message}</p>
+            <p className="platform-eyebrow">Admin Virtus</p>
+            <h1>Sessão de plataforma</h1>
+            <p>Esta sessão não possui um tenant, mas pode acessar a administração autorizada da plataforma.</p>
           </div>
         </section>
         <section className="auth-card">
-          {/* F6-A04 (Issue #269/B1): sem esta porta o estado `acessoNegado` — que
-              é o do operador de plataforma sem `user_profiles` (F6-A03 D17) —
-              ficava sem caminho para a superfície (D1/D2). A mensagem da
-              taxonomia F0-05 permanece intacta (D4). */}
           <EntradaPlataforma />
           <button
             type="button"
@@ -161,6 +158,7 @@ function LoginPage() {
     <div className="virtus-page auth-page">
       <section className="virtus-page-header">
         <div className="virtus-page-header__copy">
+          <p className="auth-page__brand">Virtus</p>
           <h1>{titulo}</h1>
           <p>{descricao}</p>
         </div>

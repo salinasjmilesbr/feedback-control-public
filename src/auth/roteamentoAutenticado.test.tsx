@@ -121,7 +121,7 @@ describe("roteamento autenticado (F2-04)", () => {
     expect(html).not.toContain(CONTEUDO);
   });
 
-  it("acessoNegado (sessão válida sem perfil) mantém a tela, a mensagem e a saída (F6-A04)", () => {
+  it("acessoNegado (sessão válida sem perfil) usa a experiência de plataforma e mantém a saída (F6-A04/#310)", () => {
     const html = renderizar(
       {
         status: "acessoNegado",
@@ -134,11 +134,8 @@ describe("roteamento autenticado (F2-04)", () => {
       "/login"
     );
 
-    // A tela do estado continua íntegra e a mensagem da taxonomia F0-05 não foi
-    // alterada (F6-A04 D4); a entrada de plataforma é acrescentada como
-    // componente (oculta até a sonda responder) e nada funcional vaza aqui.
-    expect(html).toContain("Acesso negado");
-    expect(html).toContain("Seu acesso ainda não foi liberado");
+    expect(html).toContain("Sessão de plataforma");
+    expect(html).toContain("Admin Virtus");
     expect(html).toContain("Sair");
     expect(html).not.toContain(CONTEUDO);
   });
