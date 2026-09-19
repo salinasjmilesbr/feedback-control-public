@@ -121,13 +121,13 @@ function LoginPage() {
       <div className="virtus-page auth-page">
         <section className="virtus-page-header">
           <div className="virtus-page-header__copy">
-            <p className="platform-eyebrow">Admin Virtus</p>
-            <h1>Sessão de plataforma</h1>
-            <p>Esta sessão não possui um tenant, mas pode acessar a administração autorizada da plataforma.</p>
+            <p className="auth-page__brand">Virtus</p>
+            <h1>Acesso não disponível</h1>
+            <p>Esta conta não possui acesso a uma empresa.</p>
           </div>
         </section>
         <section className="auth-card">
-          <EntradaPlataforma />
+          <EntradaPlataforma redirecionar />
           <button
             type="button"
             className="brand-button brand-button--secondary"

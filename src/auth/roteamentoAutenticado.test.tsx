@@ -134,8 +134,8 @@ describe("roteamento autenticado (F2-04)", () => {
       "/login"
     );
 
-    expect(html).toContain("Sessão de plataforma");
-    expect(html).toContain("Admin Virtus");
+    expect(html).toContain("Acesso não disponível");
+    expect(html).toContain("Virtus");
     expect(html).toContain("Sair");
     expect(html).not.toContain(CONTEUDO);
   });

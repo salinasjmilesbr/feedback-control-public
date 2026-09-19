@@ -10,6 +10,7 @@ import {
 import UsuarioAtualBar from "../components/UsuarioAtualBar";
 import NavegacaoPrincipal from "../components/NavegacaoPrincipal";
 import AppFooter from "../components/AppFooter";
+import VirtusFooter from "../components/VirtusFooter";
 import LayoutAutenticado from "../auth/LayoutAutenticado";
 import LayoutPlataforma from "./LayoutPlataforma";
 import { ROTA_PLATAFORMA_NOVA_ORGANIZACAO } from "./plataformaRotas";
@@ -66,7 +67,7 @@ function LayoutPublico() {
       <main className="app-main">
         <Outlet />
       </main>
-      <AppFooter />
+      <VirtusFooter />
     </>
   );
 }

@@ -1,6 +1,6 @@
 :root {
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --sans: Inter, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --heading: Inter, system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
 
   color-scheme: light;
@@ -44,18 +44,46 @@ code,
 
 /* White-label branding foundation */
 :root {
-  --brand-primary: #660099;
-  --brand-secondary: #8a2be2;
-  --brand-accent: #0078d4;
-  --brand-bg: #f6f7fb;
+  --brand-primary: #0f172a;
+  --brand-secondary: #6366f1;
+  --brand-accent: #0ea5e9;
+  --brand-bg: #ffffff;
   --brand-surface: #ffffff;
-  --brand-surface-soft: color-mix(in srgb, var(--brand-primary) 7%, white);
-  --brand-text: #29242f;
-  --brand-text-muted: #6f6877;
-  --brand-border: #e3dfe7;
+  --brand-surface-soft: #f1f5f9;
+  --brand-text: #0f172a;
+  --brand-text-muted: #64748b;
+  --brand-border: #e2e8f0;
+  --brand-success: #10b981;
+  --brand-warning: #f59e0b;
+  --brand-error: #ef4444;
+  --brand-info: #64748b;
   --brand-radius: 12px;
   --brand-shadow: 0 6px 24px rgba(34, 24, 42, 0.08);
 }
+
+.virtus-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--brand-text);
+  font-weight: 800;
+  letter-spacing: .12em;
+  line-height: 1;
+}
+
+.virtus-logo__symbol { width: 30px; height: 24px; flex: 0 0 auto; }
+.virtus-logo__wordmark { font-size: 16px; }
+.virtus-logo--symbol .virtus-logo__wordmark { display: none; }
+.virtus-logo--dark { color: #fff; }
+
+.app-footer__identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-footer__identity .virtus-logo__symbol { width: 24px; height: 20px; }
+.app-footer__identity .virtus-logo__wordmark { font-size: 13px; }
 
 body {
   background: var(--brand-bg);

@@ -33,9 +33,9 @@ describe("HomePlataforma", () => {
       </MemoryRouter>
     );
 
-    expect(html).toContain("Administração da plataforma");
+    expect(html).toContain("Administração");
     expect(html).toContain('href="/plataforma/nova-organizacao"');
-    expect(html).toContain("Criar organização");
+    expect(html).toContain("Nova empresa");
     expect(html).not.toContain("Acesso negado");
   });
 });

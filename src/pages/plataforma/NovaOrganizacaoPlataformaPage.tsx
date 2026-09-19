@@ -43,8 +43,8 @@ export function NegativaNeutra() {
     <div className="virtus-page auth-page">
       <section className="virtus-page-header">
         <div className="virtus-page-header__copy">
-          <h1>Não autorizado</h1>
-          <p>Esta operação não está disponível para a sua conta.</p>
+          <h1>Acesso não disponível</h1>
+          <p>Esta área não está disponível para esta conta.</p>
         </div>
       </section>
       <section className="auth-card">
@@ -63,7 +63,7 @@ export function ServicoIndisponivel() {
       <section className="virtus-page-header">
         <div className="virtus-page-header__copy">
           <h1>Serviço indisponível</h1>
-          <p>Este ambiente não oferece a operação de provisionamento.</p>
+          <p>Esta operação não está disponível agora.</p>
         </div>
       </section>
       <section className="auth-card">
@@ -84,10 +84,10 @@ export function ConfirmacaoOrganizacao({ nome }: { readonly nome: string }) {
     <div className="virtus-page auth-page">
       <section className="virtus-page-header">
         <div className="virtus-page-header__copy">
-          <h1>Organização criada</h1>
+          <h1>Empresa criada</h1>
           <p>
-            A organização <strong>{nome}</strong> foi criada e o primeiro Admin já
-            pode entrar no Virtus com a identidade definida.
+            A empresa <strong>{nome}</strong> foi criada e o administrador inicial já
+            pode entrar no Virtus.
           </p>
         </div>
       </section>
@@ -147,14 +147,14 @@ export function FormularioNovaOrganizacao({
     <div className="virtus-page auth-page">
       <section className="virtus-page-header">
         <div className="virtus-page-header__copy">
-          <h1>Nova organização</h1>
-          <p>Crie uma organização e defina o primeiro Admin dela.</p>
+          <h1>Nova empresa</h1>
+          <p>Cadastre uma empresa e defina seu administrador inicial.</p>
         </div>
       </section>
 
       <form className="auth-card auth-form" onSubmit={aoEnviar}>
         <label className="branding-field">
-          <span>Nome da organização</span>
+          <span>Nome da empresa</span>
           <input
             type="text"
             autoComplete="off"
@@ -165,7 +165,7 @@ export function FormularioNovaOrganizacao({
         </label>
 
         <label className="branding-field">
-          <span>Primeiro Admin</span>
+          <span>Administrador inicial</span>
           <select
             value={forma}
             onChange={(evento) => aoMudarForma(evento.target.value === "outra" ? "outra" : "eu")}
@@ -177,7 +177,7 @@ export function FormularioNovaOrganizacao({
 
         {forma === "outra" && (
           <label className="branding-field">
-            <span>E-mail do primeiro Admin</span>
+            <span>E-mail do administrador inicial</span>
             <input
               type="email"
               autoComplete="off"
@@ -189,7 +189,7 @@ export function FormularioNovaOrganizacao({
         )}
 
         <label className="branding-field">
-          <span>Nome do primeiro Admin</span>
+          <span>Nome do administrador inicial</span>
           <input
             type="text"
             autoComplete="off"
@@ -200,7 +200,7 @@ export function FormularioNovaOrganizacao({
         </label>
 
         <label className="branding-field">
-          <span>Matrícula do primeiro Admin</span>
+          <span>Matrícula do administrador inicial</span>
           <input
             type="text"
             autoComplete="off"
@@ -217,7 +217,7 @@ export function FormularioNovaOrganizacao({
         )}
 
         <button type="submit" className="brand-button brand-button--primary" disabled={enviando}>
-          {enviando ? "Criando…" : "Criar organização"}
+          {enviando ? "Criando…" : "Criar empresa"}
         </button>
 
         <Link to="/" className="auth-status__entrar">

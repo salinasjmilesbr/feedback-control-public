@@ -20,19 +20,18 @@ export function HomePlataformaAutorizada() {
     <section className="platform-hero">
       <div>
         <p className="platform-eyebrow">Admin Virtus</p>
-        <h1>Administração da plataforma</h1>
+        <h1>Administração</h1>
         <p className="platform-hero__lead">
-          Gerencie a entrada de novas organizações no Virtus em um ambiente separado dos dados e da
-          operação de qualquer organização.
+          Gerencie as empresas que utilizam o Virtus.
         </p>
       </div>
       <div className="platform-panel platform-panel--action">
         <div>
-          <h2>Comece uma nova organização</h2>
-          <p>Crie a organização e defina o primeiro Admin responsável pelo acesso ao tenant.</p>
+          <h2>Nova empresa</h2>
+          <p>Cadastre uma empresa e defina seu administrador inicial.</p>
         </div>
         <Link to={ROTA_PLATAFORMA_NOVA_ORGANIZACAO} className="brand-button brand-button--primary">
-          Criar organização
+          Nova empresa
         </Link>
       </div>
     </section>
@@ -73,9 +72,9 @@ export function HomePlataforma({
   if (estado === "negado") {
     return (
       <section className="platform-panel">
-        <p className="platform-eyebrow">Ambiente administrativo</p>
-        <h1>Área restrita</h1>
-        <p>Esta área está disponível somente para operadores autorizados da plataforma.</p>
+        <p className="platform-eyebrow">Virtus</p>
+        <h1>Acesso não disponível</h1>
+        <p>Esta área não está disponível para esta conta.</p>
       </section>
     );
   }

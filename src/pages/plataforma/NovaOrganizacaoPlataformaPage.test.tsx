@@ -99,12 +99,12 @@ describe("F6-A03 — UI: formulário mínimo (critério 23)", () => {
   it("expõe o nome da organização e a escolha do primeiro Admin", () => {
     const html = semearFormulario("eu");
 
-    expect(html).toContain("Nome da organização");
-    expect(html).toContain("Primeiro Admin");
+    expect(html).toContain("Nome da empresa");
+    expect(html).toContain("Administrador inicial");
     expect(html).toContain("Eu mesmo");
     expect(html).toContain("Outra pessoa (e-mail)");
     // SEM o campo de e-mail enquanto a escolha é "eu mesmo".
-    expect(html).not.toContain("E-mail do primeiro Admin");
+    expect(html).not.toContain("E-mail do administrador inicial");
     // Três controles de entrada: nome da organização + os DOIS campos novos do
     // primeiro Admin (nome humano e matrícula — F6-A11/D28).
     expect((html.match(/<input/g) ?? []).length).toBe(3);
@@ -113,7 +113,7 @@ describe("F6-A03 — UI: formulário mínimo (critério 23)", () => {
 
   it("mostra o campo de e-mail quando o primeiro Admin é outra pessoa", () => {
     const html = semearFormulario("outra");
-    expect(html).toContain("E-mail do primeiro Admin");
+    expect(html).toContain("E-mail do administrador inicial");
     // Nome da organização + e-mail + nome humano + matrícula do primeiro Admin.
     expect((html.match(/<input/g) ?? []).length).toBe(4);
   });
@@ -121,16 +121,16 @@ describe("F6-A03 — UI: formulário mínimo (critério 23)", () => {
   it("renderiza os DOIS campos novos do primeiro Admin, obrigatórios e na ordem contratada", () => {
     const html = semearFormulario("eu", false, "Verifique os dados informados e tente novamente.");
 
-    expect(html).toContain("Nome do primeiro Admin");
-    expect(html).toContain("Matrícula do primeiro Admin");
+    expect(html).toContain("Nome do administrador inicial");
+    expect(html).toContain("Matrícula do administrador inicial");
     // Os dois campos são `required`: o formulário continua fail-closed.
-    expect(html).toMatch(/<span>Nome do primeiro Admin<\/span><input[^>]*required/);
-    expect(html).toMatch(/<span>Matrícula do primeiro Admin<\/span><input[^>]*required/);
+    expect(html).toMatch(/<span>Nome do administrador inicial<\/span><input[^>]*required/);
+    expect(html).toMatch(/<span>Matrícula do administrador inicial<\/span><input[^>]*required/);
 
     // Ordem contratada: DEPOIS do bloco de identificação e ANTES do erro.
-    const identificacao = html.indexOf("<span>Primeiro Admin</span>");
-    const nomeAdmin = html.indexOf("Nome do primeiro Admin");
-    const matriculaAdmin = html.indexOf("Matrícula do primeiro Admin");
+    const identificacao = html.indexOf("<span>Administrador inicial</span>");
+    const nomeAdmin = html.indexOf("Nome do administrador inicial");
+    const matriculaAdmin = html.indexOf("Matrícula do administrador inicial");
     const erro = html.indexOf("Verifique os dados informados");
     expect(identificacao).toBeGreaterThan(-1);
     expect(nomeAdmin).toBeGreaterThan(identificacao);
@@ -175,7 +175,7 @@ describe("F6-A03 — UI: negativa neutra e indisponibilidade", () => {
         <NegativaNeutra />
       </MemoryRouter>
     );
-    expect(html).toContain("Não autorizado");
+    expect(html).toContain("Acesso não disponível");
     expect(html).not.toContain("<input");
     expect(html).not.toContain("organização");
     expect(html).not.toContain("Admin");

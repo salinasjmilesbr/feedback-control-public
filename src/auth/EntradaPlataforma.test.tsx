@@ -72,7 +72,7 @@ describe("F6-A04 — entrada de plataforma: apresentação pura (critério 6)", 
     );
 
     expect(html).toContain(`href="${ROTA}"`);
-    expect(html).toContain("Administração da plataforma");
+    expect(html).toContain("Acessar administração");
     // Nada de identificador interno, token, hash ou dado de tenant.
     expect(html).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
     expect(html).not.toContain("F6_A03_");
@@ -162,7 +162,7 @@ describe("F6-A04 — call sites: componente ÚNICO e sem sonda duplicada (D3)", 
     for (const [nome, fonte] of CALL_SITES) {
       const codigo = apenasCodigo(fonte);
       expect(codigo, nome).toContain('from "./EntradaPlataforma"');
-      expect(codigo, nome).toContain("<EntradaPlataforma />");
+      expect(codigo, nome).toContain("<EntradaPlataforma");
     }
   });
 

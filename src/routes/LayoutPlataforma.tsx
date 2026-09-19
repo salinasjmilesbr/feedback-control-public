@@ -2,8 +2,8 @@ import { Link, Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import SessaoIndisponivel from "../auth/SessaoIndisponivel";
 import { decidirAcessoARotaDePlataforma } from "./plataformaRotas";
-import AppFooter from "../components/AppFooter";
-import { useBranding } from "../contexts/BrandingContext";
+import VirtusFooter from "../components/VirtusFooter";
+import VirtusLogo from "../components/VirtusLogo";
 import "../styles/platform.css";
 
 /**
@@ -20,7 +20,6 @@ import "../styles/platform.css";
  */
 export default function LayoutPlataforma() {
   const { estado, sair } = useAuth();
-  const { branding } = useBranding();
   const decisao = decidirAcessoARotaDePlataforma(estado);
 
   if (decisao.tipo === "carregando") {
@@ -44,8 +43,8 @@ export default function LayoutPlataforma() {
       <header className="platform-header">
         <div className="platform-header__inner">
           <span>
-            <Link to="/plataforma" className="platform-header__brand">{branding.nomeSistema}</Link>
-            <span className="platform-header__label">Administração da plataforma</span>
+            <Link to="/plataforma" className="platform-header__brand"><VirtusLogo /></Link>
+            <span className="platform-header__label">Admin Virtus</span>
           </span>
           <button type="button" className="platform-header__exit" onClick={() => void sair()}>
             Sair
@@ -55,7 +54,7 @@ export default function LayoutPlataforma() {
       <main className="platform-main">
         <Outlet />
       </main>
-      <AppFooter />
+      <VirtusFooter />
     </div>
   );
 }
