@@ -1,4 +1,60 @@
 /* Shell universal Virtus — Issue #317 Fase 2. */
+.virtus-shell-brand {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--virtus-navy);
+  line-height: 1.2;
+}
+
+.virtus-shell-brand__symbol {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  object-fit: contain;
+}
+
+.virtus-shell-brand__wordmark {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+
+.virtus-shell-brand__separator { color: var(--virtus-border); }
+
+.virtus-shell-brand__context {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--virtus-info);
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-status__sair {
+  border-color: var(--virtus-border) !important;
+  background: var(--virtus-background) !important;
+  color: var(--virtus-navy) !important;
+}
+
+.auth-status__sair:hover,
+.auth-status__sair:focus-visible {
+  border-color: var(--virtus-highlight) !important;
+  background: color-mix(in srgb, var(--virtus-highlight) 6%, #fff) !important;
+  color: var(--virtus-highlight) !important;
+}
+
+.virtus-platform-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--virtus-background);
+}
+
+.virtus-platform-shell__main { flex: 1; }
+
 .app-header,
 .app-footer {
   width: calc(100% - (var(--virtus-gutter) * 2));
@@ -60,6 +116,23 @@
 .app-footer__inner strong { color: var(--virtus-navy); }
 .app-footer__version { flex: 0 0 auto; white-space: nowrap; }
 
+.app-footer__brandline {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--virtus-info);
+}
+
+.app-footer__brandline .virtus-shell-brand { gap: 7px; }
+.app-footer__brandline .virtus-shell-brand__symbol {
+  width: 24px;
+  height: 24px;
+  flex-basis: 24px;
+}
+.app-footer__brandline .virtus-shell-brand__wordmark { font-size: 12px; }
+.app-footer__separator { color: var(--virtus-border); }
+
 @media (max-width: 900px) {
   .app-header__inner,
   .app-footer__inner {
@@ -83,6 +156,15 @@
 
   .app-header__user { gap: var(--virtus-space-2); }
 
+  .virtus-shell-brand { gap: 7px; }
+  .virtus-shell-brand__symbol {
+    width: 32px;
+    height: 32px;
+    flex-basis: 32px;
+  }
+  .virtus-shell-brand__wordmark { font-size: 14px; }
+  .virtus-shell-brand__context { max-width: 28vw; font-size: 12px; }
+
   .app-footer__inner {
     min-height: 0;
     padding: var(--virtus-space-3);
@@ -93,6 +175,15 @@
   .app-footer__inner > :first-child {
     font-size: 11px;
   }
+
+  .app-footer__brandline { gap: 5px; }
+  .app-footer__brandline .virtus-shell-brand { gap: 4px; }
+  .app-footer__brandline .virtus-shell-brand__symbol {
+    width: 20px;
+    height: 20px;
+    flex-basis: 20px;
+  }
+  .app-footer__brandline .virtus-shell-brand__wordmark { font-size: 10px; }
 
   .app-footer__version {
     font-size: 0;
