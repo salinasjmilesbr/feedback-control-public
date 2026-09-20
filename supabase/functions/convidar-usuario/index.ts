@@ -8,7 +8,7 @@
 // Autorização (mínima, até a Fase 4 definir capabilities):
 //   1. o chamador precisa de um JWT válido (resolvido via auth.getUser);
 //   2. o `auth.uid()` do chamador precisa estar no allowlist server-side
-//      `usuario_eh_administrador` para o tenant-alvo (fail-closed);
+//      capability efetiva `membership.manage` para o tenant-alvo (fail-closed);
 //   3. o chamador precisa ter `user_profiles.status = 'active'`.
 //
 // Consistência: a criação no Auth é externa ao Postgres, então não há
@@ -18,6 +18,7 @@
 // (não sobra estado parcial silencioso).
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { podeConvidarPorMembershipManage } from "./core.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -100,17 +101,17 @@ Deno.serve(async (req) => {
     return erro("INVALID_ORGANIZATION", "Organização inválida.", 400);
   }
 
-  // 4) autoridade administrativa server-side no tenant-alvo. A RPC rederiva
-  // membership ativa + a role de sistema `admin` para o ator autenticado;
+  // 4) autoridade administrativa server-side no tenant-alvo. A primitive
+  // canônica resolve as capabilities efetivas do ator no tenant informado;
   // qualquer falha ou resposta ambígua permanece DENY.
-  const { data: administrador, error: autoridadeError } = await admin.rpc(
-    "usuario_eh_administrador",
+  const { data: capabilities, error: autoridadeError } = await admin.rpc(
+    "resolver_capabilities_efetivas",
     {
       p_user_profile_id: callerId,
       p_organization_id: organizationId,
     }
   );
-  if (autoridadeError || administrador !== true) {
+  if (!podeConvidarPorMembershipManage(capabilities, autoridadeError)) {
     return erro("NOT_AUTHORIZED", "Não autorizado.", 403);
   }
 
