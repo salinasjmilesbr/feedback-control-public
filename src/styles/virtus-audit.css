@@ -1413,13 +1413,6 @@ html {
 }
 
 @media (max-width: 430px) {
-  .app-header__inner {
-    gap: 10px !important;
-  }
-
-  .app-header__user {
-    gap: 8px !important;
-  }
 
   .evaluation-history-card__score,
   .goal-card__top,
@@ -1464,9 +1457,8 @@ html {
 
 /* VIRTUS SHELL RESPONSIVO — navegação e contornos em viewport estreita */
 @media (max-width: 900px) {
-  .app-header,
-  .app-nav,
-  .app-footer {
+  .app-nav
+{
     width: calc(100% - (var(--virtus-gutter) * 2));
     margin-left: auto;
     margin-right: auto;
@@ -1476,21 +1468,11 @@ html {
     border-radius: var(--virtus-card-radius);
     background: var(--brand-surface);
   }
-
-  .app-header {
-    margin-top: var(--virtus-gutter);
-  }
-
-  .app-header__inner,
-  .app-nav__inner,
-  .app-footer__inner {
+  .app-nav__inner
+{
     width: 100% !important;
     margin-left: 0 !important;
     margin-right: 0 !important;
-  }
-
-  .app-header__inner {
-    padding: 12px 14px !important;
   }
 
   .app-nav {
@@ -1525,15 +1507,6 @@ html {
     left: 10px !important;
     right: 10px;
     bottom: 2px;
-  }
-
-  .app-footer {
-    margin-top: 32px;
-    margin-bottom: var(--virtus-gutter);
-  }
-
-  .app-footer__inner {
-    padding: 14px !important;
   }
 }
 /* FIM VIRTUS SHELL RESPONSIVO */

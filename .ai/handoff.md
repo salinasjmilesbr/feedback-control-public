@@ -34,6 +34,42 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
+### 3.33 Issue #317 — reconstrução limpa, Fase 2: Shell universal + tema escopado ao container — IMPLEMENTADO · PR/MERGE PENDENTES
+
+- **Atividade/branch:** Issue **#317** (Fase 2), branch **`feat/issue-317-shell-universal`**, base
+  **`main` = `5f93010`** (Fase 1 squash-merged). Escopo estrito: **apenas o Shell universal** — sem
+  `PageLayout`/`PageHeader` e sem redesenho de páginas.
+- **Novos:** `src/components/shell/identidadeVirtus.ts` (constantes oficiais da marca, #312 §1/§4/§6/§7),
+  `src/components/shell/MarcaVirtus.tsx` (`[V oficial] VIRTUS · contexto`, consumindo o asset
+  versionado `public/brand/virtus-symbol.png`), `src/components/shell/ShellVirtus.tsx` (moldura
+  header + conteúdo + footer com **contexto explícito** `plataforma | empresa`),
+  `src/styles/virtus-shell.css` (namespace próprio, consome `--virtus-*` e `--brand-*`, **sem `:root`**
+  e sem declarar token algum, responsivo em 900/620) e `src/components/shell/ShellVirtus.test.tsx`.
+- **Tema escopado (fim da dívida da Fase 1):** o mapa `temaDoTenant(...).variaveis` é aplicado por
+  `style` inline **no container `.virtus-shell`** e somente na montagem de EMPRESA
+  (`AppRoutes.LayoutFuncional`). A plataforma (`LayoutPlataforma`) monta o shell **sem** `tema` e o
+  componente **ignora** mapa de tema no contexto de plataforma (fail-closed): operador com organização
+  ativa continua vendo virtus puro. Nenhuma escrita em `documentElement`/`body`.
+- **Chrome legado substituído (só o que o Shell substitui):** `UsuarioAtualBar` ficou restrito aos
+  controles do TENANT (organização ativa + simulação DEV) — marca, sessão (`AuthStatus`, agora do
+  shell) e avatar/perfil (reprovados por #312 §6) saíram; `AppFooter` removido; purga cirúrgica de
+  **74 intervenções** de CSS do chrome em `index.css`, `virtus-foundation.css` e `virtus-audit.css`
+  (seletores `.app-header*`/`.app-footer*`/`.app-role-badge`), **preservando** todas as regras de
+  `.app-nav*`; o eixo horizontal único da foundation passou a incluir
+  `.virtus-shell__header-inner`/`.virtus-shell__footer-inner`.
+- **Guardas novas (não vacuosas, `node:fs` — `?raw` de CSS é stub no Vitest):** plataforma não recebe
+  variável de tenant (nem quando um chamador passa `tema`); empresa aplica o tema apenas no container;
+  ausência de `.app-header*`/`.app-footer*`/`.app-role-badge` em qualquer CSS de `src/`; shell participa
+  do eixo único; identidade do shell confere com o contrato #312.
+- **Decisão registrada (dívida aberta para o aprovador):** `LayoutPublico` (login/recuperação/redefinição)
+  **não** foi envolvido pelo shell — §8 do brand guide limita o login ao conteúdo mínimo (marca, tagline,
+  formulário, CTA, recuperação) e envolver a página duplicaria a marca já desenhada nela. Cobertura do
+  shell em superfícies públicas fica como item explícito de decisão, não como omissão silenciosa.
+- **Fora de escopo (dívidas mantidas):** `tokensFoundation` centraliza só os tokens de estrutura; tokens
+  legados `--virtus-card-*` permanecem em `virtus-foundation.css`; doc histórico
+  `docs/F5-01-desenho-tecnico.md` ainda cita `UsuarioAtualBar.tsx`; aprovação **visual** (screenshots)
+  do shell não é executável pelo agente.
+
 ### 3.32 Issue #317 — reconstrução limpa, Fase 1: Foundation + theming mínimo — IMPLEMENTADO · PR/MERGE PENDENTES
 
 - **Atividade/branch:** Issue **#317** (Fase 1), branch **`feat/issue-317-foundation-ui-clean`**, base

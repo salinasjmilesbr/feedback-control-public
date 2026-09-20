@@ -1,13 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it } from "vitest";
 import { AuthContext, type AuthContextValue } from "../auth/AuthContext";
-import { BrandingProvider } from "../contexts/BrandingProvider";
 import {
   UsuarioAtualContext,
   type UsuarioAtualContextValue,
 } from "../contexts/UsuarioAtualContext";
-import { instalarLocalStorageEmMemoria } from "../test/localStorageMock";
 import type { Colaborador } from "../types/Colaborador";
 import UsuarioAtualBar from "./UsuarioAtualBar";
 
@@ -66,26 +64,26 @@ function contextoUsuario(valor: UsuarioAtualContextValue): UsuarioAtualContextVa
   return valor;
 }
 
+/**
+ * Issue #317 (Fase 2): a MARCA (`VIRTUS · [empresa]`) e a SESSÃO real
+ * (`AuthStatus`) passaram a ser do `ShellVirtus` — cobertas em
+ * `shell/ShellVirtus.test.tsx`. Aqui o alvo é o que ficou exclusivo do contexto
+ * de empresa: o gate da simulação DEV (F2-09).
+ */
 function renderizar(impersonacao: UsuarioAtualContextValue): string {
   return renderToStaticMarkup(
     <AuthContext.Provider value={authFalso()}>
-      <BrandingProvider>
-        <MemoryRouter>
-          <UsuarioAtualContext.Provider value={impersonacao}>
-            <UsuarioAtualBar />
-          </UsuarioAtualContext.Provider>
-        </MemoryRouter>
-      </BrandingProvider>
+      <MemoryRouter>
+        <UsuarioAtualContext.Provider value={impersonacao}>
+          <UsuarioAtualBar />
+        </UsuarioAtualContext.Provider>
+      </MemoryRouter>
     </AuthContext.Provider>
   );
 }
 
 describe("UsuarioAtualBar (F2-09)", () => {
-  beforeEach(() => {
-    instalarLocalStorageEmMemoria();
-  });
-
-  it("DEV: exibe o seletor de impersonação sintética claramente rotulado, junto da sessão real", () => {
+  it("DEV: exibe o seletor de impersonação sintética claramente rotulado", () => {
     const html = renderizar(
       contextoUsuario({
         usuarioAtual: GERENTE,
@@ -99,8 +97,9 @@ describe("UsuarioAtualBar (F2-09)", () => {
     expect(html).toContain("simulação DEV");
     expect(html).toContain("Gerente Sintetico Alfa");
     expect(html).toContain("Coordenadora Sintetica Beta");
-    // A sessão real do Supabase Auth continua separada e visível (AuthStatus).
-    expect(html).toContain(EMAIL_AUTENTICADO);
+    // O componente NÃO apresenta identidade nem sessão: isso é do shell.
+    expect(html).not.toContain("VIRTUS");
+    expect(html).not.toContain(EMAIL_AUTENTICADO);
   });
 
   it("HOMOLOG/PROD: sem impersonação DEV não há seletor nem colaborador simulado", () => {
@@ -116,8 +115,9 @@ describe("UsuarioAtualBar (F2-09)", () => {
     expect(html).not.toContain('id="usuario-atual"');
     expect(html).not.toContain("simulação DEV");
     expect(html).not.toContain("Gerente Sintetico Alfa");
-    // Auth real permanece soberano: o usuário autenticado continua visível.
-    expect(html).toContain(EMAIL_AUTENTICADO);
+    // Sem controles no contexto de plataforma/uma única organização, não há
+    // markup algum deste componente (o shell segue renderizando o resto).
+    expect(html).toBe("");
   });
 
   it("HOMOLOG/PROD: mesmo com lista presente, o gate desligado não expõe o seletor (defesa em profundidade)", () => {
@@ -132,6 +132,5 @@ describe("UsuarioAtualBar (F2-09)", () => {
 
     expect(html).not.toContain('id="usuario-atual"');
     expect(html).not.toContain("Gerente Sintetico Alfa");
-    expect(html).toContain(EMAIL_AUTENTICADO);
   });
 });

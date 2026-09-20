@@ -1,6 +1,7 @@
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import SessaoIndisponivel from "../auth/SessaoIndisponivel";
+import ShellVirtus from "../components/shell/ShellVirtus";
 import { decidirAcessoARotaDePlataforma } from "./plataformaRotas";
 
 /**
@@ -36,8 +37,8 @@ export default function LayoutPlataforma() {
   }
 
   return (
-    <main className="app-main">
+    <ShellVirtus contexto="plataforma">
       <Outlet />
-    </main>
+    </ShellVirtus>
   );
 }

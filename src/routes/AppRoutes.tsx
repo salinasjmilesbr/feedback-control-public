@@ -9,12 +9,13 @@ import {
 } from "react-router-dom";
 import UsuarioAtualBar from "../components/UsuarioAtualBar";
 import NavegacaoPrincipal from "../components/NavegacaoPrincipal";
-import AppFooter from "../components/AppFooter";
+import ShellVirtus from "../components/shell/ShellVirtus";
 import LayoutAutenticado from "../auth/LayoutAutenticado";
 import LayoutPlataforma from "./LayoutPlataforma";
 import { ROTA_PLATAFORMA_NOVA_ORGANIZACAO } from "./plataformaRotas";
 import NovaOrganizacaoPlataformaPage from "../pages/plataforma/NovaOrganizacaoPlataformaPage";
 import { useAuth } from "../auth/AuthContext";
+import { useBranding } from "../contexts/BrandingContext";
 import { useEstruturaSoberanaDoCliente } from "../pages/useEstruturaSoberanaDoCliente";
 import LoginPage from "../auth/LoginPage";
 import RecuperarSenhaPage from "../auth/RecuperarSenhaPage";
@@ -67,8 +68,14 @@ function LayoutPublico() {
 }
 
 /**
- * Shell das rotas funcionais: cabeçalho, navegação, conteúdo e rodapé. Só é
- * renderizado quando o `LayoutAutenticado` (guard) permitir o acesso.
+ * Shell das rotas funcionais (contexto de EMPRESA): header universal,
+ * navegação funcional, conteúdo e rodapé. Só é renderizado quando o
+ * `LayoutAutenticado` (guard) permitir o acesso.
+ *
+ * Issue #317 (Fase 2): o chrome vem do `ShellVirtus` e o tema da organização
+ * ativa é aplicado **no container do shell** (`tema.variaveis`), nunca em
+ * `documentElement`/`body` nem na plataforma — esta é a única montagem que
+ * entrega o mapa de tema de tenant.
  *
  * F5-08 P6: aqui a ESTRUTURA SOBERANA é carregada pelo caminho normal já
  * existente (RLS P4 + porta de colaboradores F5-07) e publicada para os
@@ -76,18 +83,25 @@ function LayoutPublico() {
  * produção; falha real ⇒ fail-closed nos consumidores.
  */
 function LayoutFuncional() {
-  const { organizacaoAtivaId } = useAuth();
+  const { organizacaoAtivaId, organizacoesDisponiveis } = useAuth();
   useEstruturaSoberanaDoCliente(organizacaoAtivaId);
+  const { tema } = useBranding();
+
+  // `[empresa]` do header: nome da organização ATIVA (a marca oficial é fixa).
+  const nomeEmpresa = organizacoesDisponiveis.find(
+    (organizacao) => organizacao.id === organizacaoAtivaId
+  )?.name;
 
   return (
-    <>
-      <UsuarioAtualBar />
-      <NavegacaoPrincipal />
-      <main className="app-main">
-        <Outlet />
-      </main>
-      <AppFooter />
-    </>
+    <ShellVirtus
+      contexto="empresa"
+      nomeEmpresa={nomeEmpresa}
+      tema={tema.variaveis}
+      acoes={<UsuarioAtualBar />}
+      navegacao={<NavegacaoPrincipal />}
+    >
+      <Outlet />
+    </ShellVirtus>
   );
 }
 
