@@ -5,42 +5,73 @@ import {
   resetarBranding,
   salvarBranding,
 } from "../services/brandingStorage";
+import { temaDoTenant, tituloDaPagina } from "../services/temaTenant";
 import type { BrandingConfig } from "../types/Branding";
+import { useAuth } from "../auth/AuthContext";
 import {
   BrandingContext,
   type BrandingContextValue,
 } from "./BrandingContext";
 
-function aplicarTema(config: BrandingConfig) {
-  const root = document.documentElement;
-
-  root.style.setProperty("--brand-primary", config.corPrimaria);
-  root.style.setProperty("--brand-secondary", config.corSecundaria);
-  root.style.setProperty("--brand-accent", config.corDestaque);
-  root.style.setProperty("--brand-bg", config.corFundo);
-}
-
+/**
+ * Issue #317 (Fase 1) — provedor da aparência do TENANT.
+ *
+ * O que mudou na reconstrução (e por quê):
+ * - **Nenhum tema é escrito em `documentElement`/`body`.** O provedor apenas
+ *   CALCULA o mapa de custom properties (`temaDoTenant`) para o container do
+ *   tenant; a aplicação escopada é da fase do Shell. Era exatamente a escrita
+ *   global que fazia o branding de um tenant pintar a plataforma (e qualquer
+ *   outro tenant) no mesmo navegador.
+ * - **Segregação por organização:** a aparência é lida/gravada por
+ *   `organizationId` (ver `brandingStorage`). Sem organização ativa o provedor
+ *   opera em escopo `plataforma`, com defaults seguros e mapa VAZIO.
+ * - **Depende do contexto de tenant:** por isso este provedor vive DENTRO de
+ *   `AuthProvider` (ver `App.tsx`) — antes ele ficava acima e não sabia qual
+ *   organização estava ativa.
+ * - **Título por contexto:** plataforma ⇒ título fixo; tenant ⇒ nome da
+ *   organização. O título é lido de `tituloDaPagina` (função pura) e nunca
+ *   recebe valor de tenant quando não há organização ativa.
+ */
 export function BrandingProvider({ children }: { children: ReactNode }) {
-  const [branding, setBranding] = useState<BrandingConfig>(() => getBranding());
+  const { organizacaoAtivaId } = useAuth();
+  const [versao, setVersao] = useState(0);
+
+  const branding = useMemo<BrandingConfig>(() => {
+    // `versao` é a invalidação EXPLÍCITA após gravar/restaurar a aparência da
+    // organização (a leitura é sempre da chave por organização).
+    void versao;
+    return getBranding(organizacaoAtivaId);
+  }, [organizacaoAtivaId, versao]);
+
+  const tema = useMemo(
+    () => temaDoTenant(organizacaoAtivaId, branding),
+    [organizacaoAtivaId, branding]
+  );
+
+  const titulo = tituloDaPagina(organizacaoAtivaId, branding);
 
   useEffect(() => {
-    aplicarTema(branding);
-    document.title = branding.nomeSistema || brandingPadrao.nomeSistema;
-  }, [branding]);
+    document.title = titulo;
+  }, [titulo]);
 
   const value = useMemo<BrandingContextValue>(
     () => ({
       branding,
+      tema,
       atualizarBranding: (config) => {
-        salvarBranding(config);
-        setBranding(config);
+        // Fail-closed: sem organização ativa (plataforma) não há o que gravar.
+        if (!organizacaoAtivaId) return;
+        salvarBranding(organizacaoAtivaId, config);
+        setVersao((atual) => atual + 1);
       },
       restaurarPadrao: () => {
-        const padrao = resetarBranding();
-        setBranding(padrao);
+        if (!organizacaoAtivaId) return brandingPadrao;
+        const padrao = resetarBranding(organizacaoAtivaId);
+        setVersao((atual) => atual + 1);
+        return padrao;
       },
     }),
-    [branding]
+    [branding, tema, organizacaoAtivaId]
   );
 
   return (

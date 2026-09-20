@@ -1,5 +1,6 @@
-﻿import { useState, type ChangeEvent } from "react";
+import { useState, type ChangeEvent } from "react";
 import { useBranding } from "../contexts/BrandingContext";
+import { brandingPadrao } from "../services/brandingStorage";
 import { can } from "../authorization/authorizationPolicy";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import type { BrandingConfig } from "../types/Branding";
@@ -205,14 +206,8 @@ function ConfiguracoesAparenciaPage() {
     if (!confirmar) return;
 
     restaurarPadrao();
-    setForm({
-      nomeSistema: "Feedback Control",
-      subtituloSistema: "Performance & Feedback Management",
-      corPrimaria: "#660099",
-      corSecundaria: "#8A2BE2",
-      corDestaque: "#0078D4",
-      corFundo: "#F6F7FB",
-    });
+    // Fonte única do padrão: identidade OFICIAL Virtus (Issue #312).
+    setForm({ ...brandingPadrao });
     setMensagem("Identidade visual restaurada.");
   }
 

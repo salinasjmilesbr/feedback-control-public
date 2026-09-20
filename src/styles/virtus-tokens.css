@@ -1,0 +1,72 @@
+/* =========================================================
+   VIRTUS — FOUNDATION DE TOKENS (Issue #317, Fase 1)
+   ---------------------------------------------------------
+   FONTE ÚNICA das declarações deste arquivo. Nenhum outro CSS pode
+   declarar os mesmos tokens — há guarda estática em
+   `src/styles/tokensFoundation.test.ts`.
+
+   Duas camadas, com DONOS distintos:
+
+   1) `--virtus-*` — ESTRUTURA E IDENTIDADE DA PLATAFORMA.
+      Imutável por tenant: nunca recebe valor de organização.
+      Consumida pelo chrome da plataforma (shell/LayoutPlataforma, em
+      fase posterior) e pelo restante do produto.
+      Os valores aqui são os valores EFETIVOS anteriores: centralizar
+      não muda a aparência.
+
+   2) `--brand-*` — SUPERFÍCIE DE THEMING DO TENANT.
+      Defaults SEGUROS (identidade da plataforma). Podem ser
+      sobrescritos APENAS dentro do escopo do tenant e NUNCA em
+      `documentElement`/`body`: ver `src/contexts/BrandingProvider.tsx`
+      e `src/services/temaTenant.ts`.
+
+   Aplicação do tema (Fase 1): o tema do tenant é apenas CALCULADO
+   (mapa de custom properties, por organização). Aplicá-lo ao container
+   do tenant pertence à fase do Shell — por isso não há, nesta rodada,
+   nenhuma escrita de tema em elemento global.
+   ========================================================= */
+
+:root {
+  /* --- Estrutura da plataforma --- */
+  --virtus-container: 1440px;
+
+  --virtus-gutter-desktop: 32px;
+  --virtus-gutter-tablet: 20px;
+  --virtus-gutter-mobile: 14px;
+  --virtus-gutter: var(--virtus-gutter-desktop);
+
+  --virtus-font-aux: 13px;
+  --virtus-font-label: 14px;
+  --virtus-font-body: 15px;
+  --virtus-font-body-strong: 15px;
+  --virtus-font-nav: 14px;
+
+  /* --- Superfície de theming do tenant (defaults SEGUROS = identidade Virtus
+     aprovada: `docs/brand/virtus-brand-guide.md` §2, Issue #312).
+     Papéis: `primary` = destaque azul/violeta (CTA, seleção, foco);
+     `secondary` = primário navy (gradiente com a primária); `accent` = apoio;
+     `bg` = superfície de página; `surface` = fundo de card. --- */
+  --brand-primary: #6366f1; /* Destaque #6366F1 — CTA primário */
+  --brand-secondary: #0f172a; /* Primário #0F172A — navy/estabilidade */
+  --brand-accent: #0ea5e9; /* Apoio #0EA5E9 */
+  --brand-bg: #f1f5f9; /* Superfície #F1F5F9 — fundo da página */
+  --brand-surface: #ffffff; /* Fundo #FFFFFF — superfície de card */
+  --brand-surface-soft: color-mix(in srgb, var(--brand-primary) 7%, white);
+  --brand-text: #0f172a; /* Primário #0F172A — texto principal */
+  --brand-text-muted: #64748b; /* Informação #64748B */
+  --brand-border: #e2e8f0; /* Borda #E2E8F0 */
+  --brand-radius: 12px;
+  --brand-shadow: 0 6px 24px rgba(15, 23, 42, 0.08);
+}
+
+@media (max-width: 900px) {
+  :root {
+    --virtus-gutter: var(--virtus-gutter-tablet);
+  }
+}
+
+@media (max-width: 620px) {
+  :root {
+    --virtus-gutter: var(--virtus-gutter-mobile);
+  }
+}

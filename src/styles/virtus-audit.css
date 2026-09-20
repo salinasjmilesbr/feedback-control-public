@@ -261,17 +261,7 @@ textarea:focus-visible {
    12. RESPONSIVO
    ========================================================= */
 
-@media (max-width: 900px) {
-  :root {
-    --virtus-gutter: 20px;
-  }
-}
-
-@media (max-width: 620px) {
-  :root {
-    --virtus-gutter: 14px;
-  }
-}
+/* Overrides de '--virtus-gutter': FONTE UNICA em 'styles/virtus-tokens.css' (#317). */
 
 /* =========================================================
    VIRTUS FINAL AUDIT — refinement v3
