@@ -126,7 +126,7 @@
   }
 
   .app-header__inner {
-    min-height: 64px;
+    min-height: 0;
     align-items: center;
     padding: 14px !important;
   }
@@ -163,14 +163,29 @@
   .app-footer__inner {
     gap: 8px;
     padding: 10px 14px !important;
+    min-height: 0;
+    flex-direction: row !important;
+    align-items: center;
+    flex-wrap: nowrap;
   }
 
   .app-footer__brandline {
     flex-wrap: nowrap;
     white-space: nowrap;
     gap: 5px;
-    font-size: 11px;
+    font-size: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
+
+  .app-footer__brandline .virtus-shell-brand { gap: 4px; }
+  .app-footer__brandline .virtus-shell-brand__symbol {
+    width: 20px;
+    height: 20px;
+    flex-basis: 20px;
+  }
+
+  .app-footer__brandline .virtus-shell-brand__wordmark { font-size: 10px; }
 
   .app-footer__version {
     font-size: 0;

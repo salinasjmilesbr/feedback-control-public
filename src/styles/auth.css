@@ -4,6 +4,12 @@
   max-width: 560px;
 }
 
+.auth-page > .virtus-page-header,
+.auth-page > .auth-form {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .nova-organizacao-page__header {
   align-items: center;
   flex-direction: row;
