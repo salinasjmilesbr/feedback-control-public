@@ -15,6 +15,7 @@ import {
   selecaoValida,
 } from "./organizacaoAtiva";
 import { criarClienteAuthSupabase } from "./cliente";
+import { isInviteCallback } from "./callbackAuth";
 import { mapearErroConvite } from "./conviteAdministrativo";
 import { criarControladorSessao, type EstadoSessao } from "./controladorSessao";
 import { INTERVALO_VERIFICACAO_SESSAO_MS } from "./politicaSessao";
@@ -31,6 +32,9 @@ function origemParaRedefinicao(): string {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const cliente = useMemo(() => criarClienteAuthSupabase(), []);
   const [estado, setEstado] = useState<EstadoSessao>({ status: "verificando" });
+  const [primeiroAcessoPendente, setPrimeiroAcessoPendente] = useState(() =>
+    typeof window !== "undefined" && isInviteCallback(window.location.href)
+  );
 
   const autenticador = useMemo(
     () => (cliente ? criarAutenticador(cliente) : null),
@@ -150,6 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const sair = useCallback(async () => {
     const userId = identidade?.authUserId ?? null;
     await controlador.sair();
+    setPrimeiroAcessoPendente(false);
     setOrganizacaoSelecionadaId(null);
     if (userId) armazenamentoUltimaOrganizacao.remover(userId);
   }, [controlador, identidade, armazenamentoUltimaOrganizacao]);
@@ -185,7 +190,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!cliente) throw new TechnicalError();
       try {
         const { data, error } = await cliente.functions.invoke("convidar-usuario", {
-          body: { email, organization_id: organizationId },
+          body: {
+            email,
+            organization_id: organizationId,
+            redirect_to:
+              typeof window === "undefined"
+                ? undefined
+                : `${window.location.origin}/redefinir-senha`,
+          },
         });
         if (error) throw error;
         if (!data || typeof data.userId !== "string") throw new TechnicalError();
@@ -208,6 +220,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sair,
         solicitarRecuperacaoDeSenha,
         redefinirSenha,
+        primeiroAcessoPendente,
         convidarUsuario,
         reconhecerExpiracao,
         revalidar,

@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
   }
 
   // 3) entradas.
-  let body: { email?: unknown; organization_id?: unknown };
+  let body: { email?: unknown; organization_id?: unknown; redirect_to?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -116,7 +116,29 @@ Deno.serve(async (req) => {
   }
 
   // 5) cria o usuário no Auth (convite por e-mail).
-  const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email);
+  const redirectTo = typeof body?.redirect_to === "string" ? body.redirect_to : "";
+  if (redirectTo) {
+    try {
+      const redirectUrl = new URL(redirectTo);
+      const requestOrigin = req.headers.get("Origin");
+      if (
+        !requestOrigin ||
+        redirectUrl.origin !== requestOrigin ||
+        redirectUrl.pathname !== "/redefinir-senha" ||
+        redirectUrl.search ||
+        redirectUrl.hash
+      ) {
+        return erro("INVALID_REDIRECT", "Destino de convite inválido.", 400);
+      }
+    } catch {
+      return erro("INVALID_REDIRECT", "Destino de convite inválido.", 400);
+    }
+  }
+
+  const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(
+    email,
+    redirectTo ? { redirectTo } : undefined
+  );
   if (inviteError) {
     const duplicado = inviteError.code === "email_exists" || inviteError.status === 422;
     return duplicado

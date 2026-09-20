@@ -16,7 +16,7 @@ const MENSAGEM_LINK_INVALIDO =
  * só é aceita com essa sessão válida; sem sessão, falha de forma segura.
  */
 function RedefinirSenhaPage() {
-  const { estado, redefinirSenha, sair } = useAuth();
+  const { estado, redefinirSenha, sair, primeiroAcessoPendente } = useAuth();
   const [senha, setSenha] = useState("");
   const [confirmacao, setConfirmacao] = useState("");
   const [mensagem, setMensagem] = useState("");
@@ -107,14 +107,18 @@ function RedefinirSenhaPage() {
     <div className="virtus-page auth-page">
       <section className="virtus-page-header">
         <div className="virtus-page-header__copy">
-          <h1>Definir nova senha</h1>
-          <p>Escolha uma nova senha para a sua conta.</p>
+          <h1>{primeiroAcessoPendente ? "Defina sua senha inicial" : "Definir nova senha"}</h1>
+          <p>
+            {primeiroAcessoPendente
+              ? "Escolha a senha que você usará para acessar sua conta."
+              : "Escolha uma nova senha para a sua conta."}
+          </p>
         </div>
       </section>
 
       <form className="auth-card auth-form" onSubmit={enviar}>
         <label className="branding-field">
-          <span>Nova senha</span>
+          <span>{primeiroAcessoPendente ? "Senha inicial" : "Nova senha"}</span>
           <input
             type="password"
             autoComplete="new-password"
@@ -125,7 +129,7 @@ function RedefinirSenhaPage() {
         </label>
 
         <label className="branding-field">
-          <span>Confirmar nova senha</span>
+          <span>{primeiroAcessoPendente ? "Confirmar senha inicial" : "Confirmar nova senha"}</span>
           <input
             type="password"
             autoComplete="new-password"
@@ -146,7 +150,11 @@ function RedefinirSenhaPage() {
           className="brand-button brand-button--primary"
           disabled={enviando}
         >
-          {enviando ? "Salvando…" : "Salvar nova senha"}
+          {enviando
+            ? "Salvando…"
+            : primeiroAcessoPendente
+            ? "Definir senha e continuar"
+            : "Salvar nova senha"}
         </button>
       </form>
     </div>
