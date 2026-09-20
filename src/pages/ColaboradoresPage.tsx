@@ -21,23 +21,23 @@
 
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { can } from "../authorization/authorizationPolicy";
-import type { AuthorizationContext } from "../authorization/AuthorizationContext";
+import type { Capability } from "../authorization/Capability";
 import { useAuth } from "../auth/AuthContext";
 import { simulacaoDevPermitida } from "../config/ambiente";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import type { CodigoPublico } from "../infrastructure/supabase/colaboradores/contrato";
 import { getCiclosAdministrativos } from "../services/cicloAvaliacaoStorage";
+import { listarCapabilitiesEfetivas } from "../services/capabilitiesSoberanas";
 import {
   listarColaboradores,
   type ColaboradorSoberano,
   type DependenciasAcessoColaboradores,
 } from "../services/colaboradoresSoberanos/acessoColaboradoresSoberanos";
 import { gerarDadosTesteDoCiclo } from "../services/geradorDadosTeste";
-import type { Colaborador, StatusColaborador } from "../types/Colaborador";
 import "../styles/collaborator-identity.css";
 import "../styles/dados-teste.css";
 import "../styles/equipe-colegiado.css";
+import { podeCriarColaboradorPorCapability } from "./colaboradoresCapabilityGate";
 
 /** Estado explícito da leitura: carregando, erro público ou projeção pronta. */
 export type EstadoColaboradores =
@@ -105,38 +105,6 @@ function possuiAlocacao(colaborador: ColaboradorSoberano): boolean {
   );
 }
 
-function statusLegado(status: string): StatusColaborador {
-  if (status === "leave") return "LICENCA";
-  if (status === "inactive") return "DESLIGADO";
-  return "ATIVO";
-}
-
-/**
- * Projeção MÍNIMA da projeção soberana para o vocabulário legado usado pelo
- * Policy Engine de UX (`can()`). Nenhum campo de estrutura é inventado: o que não
- * existe na projeção permanece vazio. Isto NÃO é autoridade — a decisão real é do
- * servidor, que devolve `FORBIDDEN`/`NOT_FOUND` quando nega.
- */
-function paraVocabularioUx(
-  colaboradores: readonly ColaboradorSoberano[]
-): readonly Colaborador[] {
-  return colaboradores.flatMap((colaborador) => {
-    const matricula = Number(colaborador.matricula);
-    if (!Number.isInteger(matricula) || matricula <= 0) return [];
-    return [
-      {
-        matricula,
-        nome: colaborador.fullName,
-        email: colaborador.email,
-        cargo: colaborador.jobRoleName ?? "",
-        area: colaborador.unitName ?? "",
-        status: statusLegado(colaborador.status),
-        respondePara: "",
-      },
-    ];
-  });
-}
-
 function ColaboradoresPage({
   deps,
   estadoInicial,
@@ -144,6 +112,10 @@ function ColaboradoresPage({
   const navigate = useNavigate();
   const { usuarioAtual } = useUsuarioAtual();
   const { organizacaoAtivaId } = useAuth();
+  const [capabilities, setCapabilities] = useState<{
+    readonly organizationId: string | null;
+    readonly values: ReadonlySet<Capability>;
+  }>({ organizationId: null, values: new Set() });
   const [depsInjetadas] = useState<DependenciasAcessoColaboradores>(
     () => deps ?? SEM_DEPENDENCIAS
   );
@@ -155,6 +127,27 @@ function ColaboradoresPage({
   const [busca, setBusca] = useState("");
   const [statusFiltro, setStatusFiltro] = useState("TODOS");
   const [cicloTesteId, setCicloTesteId] = useState("");
+
+  useEffect(() => {
+    let vigente = true;
+    if (!organizacaoAtivaId) {
+      return () => {
+        vigente = false;
+      };
+    }
+
+    void listarCapabilitiesEfetivas(organizacaoAtivaId).then((items) => {
+      if (!vigente) return;
+      setCapabilities({
+        organizationId: organizacaoAtivaId,
+        values: new Set(items),
+      });
+    });
+
+    return () => {
+      vigente = false;
+    };
+  }, [organizacaoAtivaId]);
 
   /** Chave da leitura corrente: organização ativa + versão de recarga. */
   const chaveCarregamento = `${organizacaoAtivaId ?? "sem-organizacao"}|${versao}`;
@@ -207,25 +200,14 @@ function ColaboradoresPage({
 
   const colaboradores =
     estado.fase === "pronto" ? estado.colaboradores : [];
-  const vocabularioUx = paraVocabularioUx(colaboradores);
-  const contextoUx: AuthorizationContext | undefined = usuarioAtual
-    ? {
-        actor: {
-          matricula: usuarioAtual.matricula,
-          funcao: usuarioAtual.funcao,
-          status: usuarioAtual.status,
-        },
-      }
-    : undefined;
-  // UX apenas: sem dataset soberano não há decisão local — o botão é omitido e o
-  // servidor continua sendo o gate real da operação.
-  const podeCriarColaborador =
-    contextoUx && vocabularioUx.length > 0
-      ? can(contextoUx, "collaborator.create", {
-          kind: "global",
-          collaborators: vocabularioUx,
-        })
-      : false;
+  // UX apenas: a capability efetiva vem da fronteira server-side e o servidor
+  // continua sendo o gate final da criação. `collaborator.manage` é deprecated
+  // neste catálogo; a ação canônica equivalente é `collaborator.create`.
+  const podeCriarColaborador = podeCriarColaboradorPorCapability(
+    organizacaoAtivaId,
+    capabilities.organizationId,
+    capabilities.values
+  );
 
   const termo = busca.trim().toLowerCase();
   const colaboradoresFiltrados = colaboradores.filter((colaborador) => {
