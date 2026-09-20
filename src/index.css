@@ -42,7 +42,9 @@ code,
   font-family: var(--mono);
 }
 
-/* White-label branding foundation */
+/* White-label branding foundation — legado congelado pela Issue #317.
+   Novas regras universais devem ser adicionadas somente em
+   styles/virtus-foundation.css. */
 :root {
   --brand-primary: #660099;
   --brand-secondary: #8a2be2;
