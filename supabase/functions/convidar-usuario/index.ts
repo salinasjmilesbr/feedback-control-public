@@ -8,7 +8,7 @@
 // Autorização (mínima, até a Fase 4 definir capabilities):
 //   1. o chamador precisa de um JWT válido (resolvido via auth.getUser);
 //   2. o `auth.uid()` do chamador precisa estar no allowlist server-side
-//      `INVITE_ADMIN_USER_IDS` (fail-closed: sem variável => 403);
+//      `usuario_eh_administrador` para o tenant-alvo (fail-closed);
 //   3. o chamador precisa ter `user_profiles.status = 'active'`.
 //
 // Consistência: a criação no Auth é externa ao Postgres, então não há
@@ -74,16 +74,7 @@ Deno.serve(async (req) => {
     return erro("NOT_AUTHORIZED", "Não autorizado.", 401);
   }
 
-  // 2) allowlist server-side (fail-closed).
-  const allowlist = (Deno.env.get("INVITE_ADMIN_USER_IDS") ?? "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-  if (!allowlist.includes(callerId)) {
-    return erro("NOT_AUTHORIZED", "Não autorizado.", 403);
-  }
-
-  // 3) piso mínimo: perfil interno ativo.
+  // 2) piso mínimo: perfil interno ativo.
   const { data: perfil, error: perfilError } = await admin
     .from("user_profiles")
     .select("id, status")
@@ -93,7 +84,7 @@ Deno.serve(async (req) => {
     return erro("NOT_AUTHORIZED", "Não autorizado.", 403);
   }
 
-  // 4) entradas.
+  // 3) entradas.
   let body: { email?: unknown; organization_id?: unknown };
   try {
     body = await req.json();
@@ -107,6 +98,20 @@ Deno.serve(async (req) => {
   }
   if (!UUID_RE.test(organizationId)) {
     return erro("INVALID_ORGANIZATION", "Organização inválida.", 400);
+  }
+
+  // 4) autoridade administrativa server-side no tenant-alvo. A RPC rederiva
+  // membership ativa + a role de sistema `admin` para o ator autenticado;
+  // qualquer falha ou resposta ambígua permanece DENY.
+  const { data: administrador, error: autoridadeError } = await admin.rpc(
+    "usuario_eh_administrador",
+    {
+      p_user_profile_id: callerId,
+      p_organization_id: organizationId,
+    }
+  );
+  if (autoridadeError || administrador !== true) {
+    return erro("NOT_AUTHORIZED", "Não autorizado.", 403);
   }
 
   // 5) cria o usuário no Auth (convite por e-mail).

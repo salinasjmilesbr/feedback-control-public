@@ -32,6 +32,7 @@ interface SeletorPosicaoProps {
   /** Exibe o ocupante da posição como rótulo auxiliar. */
   readonly mostrarOcupante?: boolean;
   readonly desabilitado?: boolean;
+  readonly unidadeId?: string;
 }
 
 function SeletorPosicao({
@@ -44,9 +45,12 @@ function SeletorPosicao({
   excluirPosicaoId,
   mostrarOcupante = false,
   desabilitado = false,
+  unidadeId,
 }: SeletorPosicaoProps) {
   const posicoes = posicoesVigentes(estrutura).filter(
-    (posicao) => posicao.posicaoId !== excluirPosicaoId
+    (posicao) =>
+      posicao.posicaoId !== excluirPosicaoId &&
+      (unidadeId === undefined || posicao.unitId === unidadeId)
   );
 
   return (

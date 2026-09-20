@@ -87,12 +87,15 @@ describe("F5-08 P5 — Novo colaborador: alocação por POSIÇÃO soberana", () 
     expect(html).toContain("Alocação (opcional)");
     expect(html).toContain("Alocar este colaborador agora");
     expect(html).toContain("Posição (unidade • cargo • senioridade) *");
-    expect(html).toContain("Unidade Fictícia • FICT — Cargo Fictício");
+    expect(html).toContain("Unidade *");
+    expect(html).toContain("Unidade Fictícia");
+    expect(html).not.toContain("Unidade Fictícia • FICT — Cargo Fictício");
     expect(html).toContain("Vigência da ocupação *");
     expect(html).toContain("Motivo da alocação *");
     expect(html).toContain("Definir também o gestor (reporting line)");
     // O UUID da posição é o valor enviado (identidade), nunca o rótulo.
-    expect(html).toContain(`value="${POSICAO}"`);
+    expect(html).toContain('id="novo-colaborador-posicao"');
+    expect(html).toContain("disabled");
   });
 
   it("sem posição VIGENTE a alocação fica indisponível (nada é criado automaticamente)", () => {
