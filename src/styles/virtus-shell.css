@@ -122,6 +122,7 @@
   align-items: center;
   gap: 9px;
   color: var(--virtus-info);
+  line-height: 1;
 }
 
 .app-footer__brandline .virtus-shell-brand { gap: 7px; }
@@ -132,6 +133,11 @@
 }
 .app-footer__brandline .virtus-shell-brand__wordmark { font-size: 12px; }
 .app-footer__separator { color: var(--virtus-border); }
+.app-footer__brandline > span:last-child {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
 
 @media (max-width: 900px) {
   .app-header__inner,
@@ -150,6 +156,8 @@
 
   .app-header__inner {
     min-height: 0;
+    flex-direction: row;
+    align-items: center;
     padding: var(--virtus-space-3);
     gap: var(--virtus-space-2);
   }
