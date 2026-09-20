@@ -11,6 +11,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { UsuarioAtualContext } from "../contexts/UsuarioAtualContext";
+import type { Capability } from "../authorization/Capability";
 import {
   listarColaboradores,
   redefinirAcessoColaboradoresSoberanos,
@@ -21,9 +22,12 @@ import type { ServiceColaboradores } from "../services/colaboradoresSoberanos/se
 import { instalarLocalStorageEmMemoria } from "../test/localStorageMock";
 import { ORGANIZACAO_TESTE, ProvedorAuthTeste } from "../test/authTeste";
 import type { Colaborador } from "../types/Colaborador";
-import ColaboradoresPage, {
-  type EstadoColaboradores,
-} from "./ColaboradoresPage";
+import ColaboradoresPage, { type EstadoColaboradores } from "./ColaboradoresPage";
+import { podeCriarColaboradorPorCapability } from "./colaboradoresCapabilityGate";
+
+vi.mock("../services/capabilitiesSoberanas", () => ({
+  listarCapabilitiesEfetivas: vi.fn(async () => ["collaborator.create"]),
+}));
 
 const ator: Colaborador = {
   matricula: 1,
@@ -101,6 +105,26 @@ describe("listagem soberana em ColaboradoresPage", () => {
   beforeEach(() => {
     instalarLocalStorageEmMemoria();
     redefinirAcessoColaboradoresSoberanos();
+  });
+
+  it("exibe a ação quando a capability efetiva canônica de criação está presente", () => {
+    expect(
+      podeCriarColaboradorPorCapability(
+        ORGANIZACAO_TESTE,
+        ORGANIZACAO_TESTE,
+        new Set<Capability>(["collaborator.create"])
+      )
+    ).toBe(true);
+  });
+
+  it("oculta a ação sem a capability efetiva", () => {
+    expect(
+      podeCriarColaboradorPorCapability(
+        ORGANIZACAO_TESTE,
+        ORGANIZACAO_TESTE,
+        new Set<Capability>()
+      )
+    ).toBe(false);
   });
 
   it("renderiza a projeção devolvida pelo serviço da porta, com UUID no link", async () => {
