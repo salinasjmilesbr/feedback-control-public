@@ -34,6 +34,50 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
+### 3.32 Issue #317 — reconstrução limpa, Fase 1: Foundation + theming mínimo — IMPLEMENTADO · PR/MERGE PENDENTES
+
+- **Atividade/branch:** Issue **#317** (Fase 1), branch **`feat/issue-317-foundation-ui-clean`**, base
+  **`main` = `f09a53e`**. **Não** reaproveita a branch experimental `feat/issue-317-foundation-ui` nem
+  faz cherry-pick da #315 (decisão da auditoria independente #317 — recomendação B).
+- **Entregue (12 arquivos, sendo 6 novos):** **`src/styles/virtus-tokens.css`** (novo) — **FONTE ÚNICA**
+  de `--virtus-*` (estrutura/plataforma) e dos **defaults seguros** de `--brand-*` (superfície do
+  tenant), com o override responsivo de gutter no MESMO arquivo e **sem `!important`**; remoção das
+  declarações duplicadas/conflitantes em `src/index.css` (`--brand-*`, `--virtus-container` 1280,
+  gutter, fontes 11–13), `src/styles/virtus-foundation.css` (container/gutter/fontes,
+  `--brand-text*`, gutter responsivo) e `src/styles/virtus-audit.css` (override de gutter) — a
+  **centralização** dos tokens de ESTRUTURA preserva os valores efetivos anteriores; os **defaults de
+  `--brand-*` foram alinhados à identidade oficial Virtus** (`docs/brand/virtus-brand-guide.md`, Issue
+  **#312**): nome **"Virtus"** na plataforma e na organização sem personalização (nunca "Feedback
+  Control") e paleta aprovada — destaque **#6366F1** (CTA/seleção/foco), primário **#0F172A**, apoio
+  **#0EA5E9**, superfície **#F1F5F9**, borda **#E2E8F0**, informação **#64748B** (verde só como estado
+  de sucesso); `src/main.tsx` (importa a fundação antes do
+  legado); **`src/services/temaTenant.ts`** (novo) — tradução PURA da aparência da organização para
+  custom properties com escopo `plataforma`/`tenant`, sanitização de cor e título por contexto;
+  `src/services/brandingStorage.ts` — **chave por `organizationId`** (a chave legada global é
+  **ignorada de propósito**: adotá-la reintroduziria o vazamento entre tenants);
+  `src/contexts/BrandingContext.tsx` (+`tema`); `src/contexts/BrandingProvider.tsx` — **zero escrita em
+  `documentElement`/`body`/`setProperty`**, passa a depender de `organizacaoAtivaId`; `src/App.tsx` —
+  provider movido para **DENTRO** do `AuthProvider`; **4 arquivos de teste** novos.
+- **GATES:** `npm run build` **exit 0**; `npm run lint` **exit 0**; `git diff --check` **exit 0**;
+  **`npm test` = 3 falhas | 2440 passam (2443)** — exatamente as 3 já conhecidas (2 CRLF
+  pré-existentes + 1 ambiental de `.env.local`), com **28 testes novos verdes** (4 arquivos de teste
+  novos; 153 arquivos no total).
+- **Barreiras criadas:** fonte única de tokens **lida do disco** (28 folhas de CSS: nenhuma além do
+  arquivo de tokens declara `--virtus-*`/`--brand-*`) + ordem do entrypoint; barreiras do provider (sem
+  DOM global, por organização, chave legada não usada); isolamento entre organizações e fail-closed
+  testados; plataforma imune (escopo `plataforma` ⇒ mapa vazio).
+- **ACHADO RELEVANTE (vale para futuras guardas):** o **`?raw` de CSS no Vitest devolve string VAZIA**
+  (`css: false` é o padrão e não há bloco `test` no `vite.config.ts`) ⇒ guarda que lê CSS por `?raw`
+  passa **vacuamente** — era o caso da guarda da #315 (`VirtusShell.test.tsx`,
+  `expect(ShellFonte).not.toContain("#10b981")`). A guarda da Fase 1 usa `node:fs`.
+- **Não implementado nesta rodada (por escopo):** Shell, PageLayout, PageHeader e a **aplicação** do
+  tema no container do tenant (o provider apenas CALCULA o mapa, com escopo explícito).
+- **Dívidas registradas:** (1) aplicar o tema no container do tenant (fase do Shell); (2)
+  `ConfiguracoesAparenciaPage` segue sem teste; (3) nenhuma guarda que leia CSS por `?raw` é confiável
+  — qualquer guarda futura de CSS deve ler do disco; (4) migração explícita da chave legada global de
+  branding, por organização, caso exista instalação real; (5) `public/favicon.svg` órfão (limpeza de
+  marca pertence à fase de Shell).
+
 ### 3.31 Governança #278 — Plano Mestre v16.2: estratégia de agentes e tarifas DeepSeek — DOCUMENTADO · PR/MERGE PENDENTES
 
 - **Atividade/branch:** Issue **#278** (governança **documental**), branch

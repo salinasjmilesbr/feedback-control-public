@@ -42,20 +42,8 @@ code,
   font-family: var(--mono);
 }
 
-/* White-label branding foundation */
-:root {
-  --brand-primary: #660099;
-  --brand-secondary: #8a2be2;
-  --brand-accent: #0078d4;
-  --brand-bg: #f6f7fb;
-  --brand-surface: #ffffff;
-  --brand-surface-soft: color-mix(in srgb, var(--brand-primary) 7%, white);
-  --brand-text: #29242f;
-  --brand-text-muted: #6f6877;
-  --brand-border: #e3dfe7;
-  --brand-radius: 12px;
-  --brand-shadow: 0 6px 24px rgba(34, 24, 42, 0.08);
-}
+/* Tokens de branding (--brand-*) e de estrutura (--virtus-*): FONTE UNICA em
+   'styles/virtus-tokens.css' (Issue #317, Fase 1). Nao redeclarar aqui. */
 
 body {
   background: var(--brand-bg);
@@ -1534,10 +1522,7 @@ body {
 /* =========================================================
    VIRTUS UI — unified shell + page ending
    ========================================================= */
-:root {
-  --virtus-container: 1280px;
-  --virtus-gutter: 32px;
-}
+/* Tokens de estrutura: FONTE UNICA em 'styles/virtus-tokens.css' (#317). */
 
 /* Header background remains full width; content aligns with the page. */
 .app-header {
@@ -1621,10 +1606,6 @@ body {
 }
 
 @media (max-width: 900px) {
-  :root {
-    --virtus-gutter: 20px;
-  }
-
   .app-header__inner {
     flex-wrap: wrap;
     gap: 12px;
@@ -1636,10 +1617,6 @@ body {
 }
 
 @media (max-width: 620px) {
-  :root {
-    --virtus-gutter: 14px;
-  }
-
   .app-footer__inner {
     min-height: 74px;
     padding: 14px 0;
@@ -1657,13 +1634,7 @@ body {
    13px = operational content/values
    10–11px = auxiliary-only information
    ========================================================= */
-:root {
-  --virtus-font-aux: 11px;
-  --virtus-font-label: 12px;
-  --virtus-font-body: 13px;
-  --virtus-font-body-strong: 13px;
-  --virtus-font-nav: 13px;
-}
+/* Escala tipografica: FONTE UNICA em 'styles/virtus-tokens.css' (#317). */
 
 /* Product shell */
 .app-header__subtitle {

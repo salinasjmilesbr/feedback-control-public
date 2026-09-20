@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import './styles/virtus-tokens.css'
 import './index.css'
 import './styles/virtus-foundation.css'
 import './styles/virtus-audit.css'

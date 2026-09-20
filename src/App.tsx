@@ -24,13 +24,16 @@ function UsuarioAtualComTenant({ children }: { children: ReactNode }) {
 
 function App() {
   return (
-    <BrandingProvider>
-      <AuthProvider>
+    <AuthProvider>
+      {/* Issue #317 (Fase 1): o branding depende da ORGANIZAÇÃO ATIVA, portanto
+          vive DENTRO do AuthProvider. Sem organização ativa (plataforma) ele
+          opera em escopo `plataforma`, com defaults seguros. */}
+      <BrandingProvider>
         <UsuarioAtualComTenant>
           <AppRoutes />
         </UsuarioAtualComTenant>
-      </AuthProvider>
-    </BrandingProvider>
+      </BrandingProvider>
+    </AuthProvider>
   );
 }
 
