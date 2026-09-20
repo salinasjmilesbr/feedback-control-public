@@ -1,0 +1,105 @@
+/* Shell universal Virtus — Issue #317 Fase 2. */
+.app-header,
+.app-footer {
+  width: calc(100% - (var(--virtus-gutter) * 2));
+  max-width: var(--virtus-container);
+  margin: 14px auto;
+  box-sizing: border-box;
+  background: var(--virtus-background);
+  border: 1px solid var(--virtus-border);
+  border-radius: var(--brand-radius);
+}
+
+.app-header__inner,
+.app-footer__inner {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 14px 24px;
+}
+
+.app-header__inner {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--virtus-space-6);
+  flex-wrap: nowrap;
+}
+
+.app-header__brand,
+.app-header__user {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.app-header__brand { flex: 1 1 auto; }
+.app-header__user { flex: 0 1 auto; justify-content: flex-end; gap: var(--virtus-space-3); }
+
+.app-footer { margin-top: auto; }
+
+.app-footer__inner {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--virtus-space-4);
+  color: var(--virtus-info);
+  font-size: var(--virtus-font-aux);
+}
+
+.app-footer__inner > :first-child {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--virtus-navy);
+}
+
+.app-footer__inner strong { color: var(--virtus-navy); }
+.app-footer__version { flex: 0 0 auto; white-space: nowrap; }
+
+@media (max-width: 900px) {
+  .app-header__inner,
+  .app-footer__inner {
+    padding-left: var(--virtus-space-4);
+    padding-right: var(--virtus-space-4);
+  }
+}
+
+@media (max-width: 620px) {
+  .app-header,
+  .app-footer {
+    margin-top: var(--virtus-space-3);
+    margin-bottom: var(--virtus-space-3);
+  }
+
+  .app-header__inner {
+    min-height: 0;
+    padding: var(--virtus-space-3);
+    gap: var(--virtus-space-2);
+  }
+
+  .app-header__user { gap: var(--virtus-space-2); }
+
+  .app-footer__inner {
+    min-height: 0;
+    padding: var(--virtus-space-3);
+    gap: var(--virtus-space-2);
+    flex-wrap: nowrap;
+  }
+
+  .app-footer__inner > :first-child {
+    font-size: 11px;
+  }
+
+  .app-footer__version {
+    font-size: 0;
+  }
+
+  .app-footer__version::after {
+    content: "V 1.0.0";
+    font-size: 11px;
+  }
+}

@@ -1541,25 +1541,6 @@ body {
   --virtus-gutter: 32px;
 }
 
-/* Header background remains full width; content aligns with the page. */
-.app-header {
-  width: 100%;
-  min-height: 82px;
-  padding: 0;
-}
-
-.app-header__inner {
-  width: min(var(--virtus-container), calc(100% - (var(--virtus-gutter) * 2)));
-  min-height: 82px;
-  margin: 0 auto;
-  padding: 12px 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 40px;
-  box-sizing: border-box;
-}
-
 /* Navigation shares the exact same left/right anchors. */
 .app-nav__inner {
   width: min(var(--virtus-container), calc(100% - (var(--virtus-gutter) * 2)));
@@ -1592,65 +1573,6 @@ body {
 .virtus-view-toggle {
   cursor: default;
 }
-
-/* Simple white-label footer to mark the end of the application. */
-.app-footer {
-  width: 100%;
-  margin-top: 44px;
-  border-top: 1px solid var(--brand-border);
-  background: var(--brand-surface);
-}
-
-.app-footer__inner {
-  width: min(var(--virtus-container), calc(100% - (var(--virtus-gutter) * 2)));
-  min-height: 64px;
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  color: var(--brand-text-muted);
-  font-size: 11px;
-}
-
-.app-footer__inner strong {
-  color: var(--brand-text);
-  font-weight: 720;
-}
-
-.app-footer__version {
-  white-space: nowrap;
-}
-
-@media (max-width: 900px) {
-  :root {
-    --virtus-gutter: 20px;
-  }
-
-  .app-header__inner {
-    flex-wrap: wrap;
-    gap: 12px;
-  }
-
-  .app-header__user {
-    width: 100%;
-  }
-}
-
-@media (max-width: 620px) {
-  :root {
-    --virtus-gutter: 14px;
-  }
-
-  .app-footer__inner {
-    min-height: 74px;
-    padding: 14px 0;
-    align-items: flex-start;
-    flex-direction: column;
-    justify-content: center;
-  }
-}
-
 
 /* =========================================================
    VIRTUS DESIGN SYSTEM — Typography scale

@@ -263,18 +263,6 @@ textarea:focus-visible {
    12. RESPONSIVO
    ========================================================= */
 
-@media (max-width: 900px) {
-  :root {
-    --virtus-gutter: 20px;
-  }
-}
-
-@media (max-width: 620px) {
-  :root {
-    --virtus-gutter: 14px;
-  }
-}
-
 /* =========================================================
    VIRTUS FINAL AUDIT — refinement v3
    Complementa a foundation v2.
