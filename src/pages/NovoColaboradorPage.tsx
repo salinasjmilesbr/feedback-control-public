@@ -37,7 +37,7 @@ import {
 } from "./alocacaoNovoColaborador";
 import { posicoesVigentes } from "./alocacaoSoberana";
 import type { DependenciasAcessoColaboradores } from "../services/colaboradoresSoberanos/acessoColaboradoresSoberanos";
-import { hojeLocal, type EstadoEstrutura } from "./apoioEstrutura";
+import { estaVigente, hojeLocal, type EstadoEstrutura } from "./apoioEstrutura";
 import { useEstruturaSoberana } from "./useEstruturaSoberana";
 import "../styles/colaborador-form.css";
 
@@ -130,7 +130,7 @@ function NovoColaboradorPage({
   alocacaoEstadoInicial,
 }: NovoColaboradorPageProps = {}) {
   const navigate = useNavigate();
-  const { organizacaoAtivaId } = useAuth();
+  const { organizacaoAtivaId, convidarUsuario } = useAuth();
   const [depsInjetadas] = useState<DependenciasAcessoColaboradores>(
     () => deps ?? SEM_DEPENDENCIAS
   );
@@ -148,9 +148,16 @@ function NovoColaboradorPage({
   const [statusInicial, setStatusInicial] =
     useState<StatusInicialSoberano>("active");
   const [erroLocal, setErroLocal] = useState("");
+  const [estadoConvite, setEstadoConvite] = useState<
+    | { fase: "inativo" }
+    | { fase: "processando" }
+    | { fase: "enviado"; userId: string }
+    | { fase: "erro"; mensagem: string }
+  >({ fase: "inativo" });
 
   // Alocação opcional (ocupação + gestor), decidida pelo usuário no formulário.
   const [alocar, setAlocar] = useState(alocacaoInicial ?? false);
+  const [unidadeId, setUnidadeId] = useState("");
   const [posicaoId, setPosicaoId] = useState("");
   const [vigenciaAlocacao, setVigenciaAlocacao] = useState(hojeLocal);
   const [motivoAlocacao, setMotivoAlocacao] = useState("");
@@ -184,7 +191,7 @@ function NovoColaboradorPage({
    * - `sem-ocupacao` ⇒ não houve mutação: recarrega apenas em CONFLICT/NOT_FOUND
    *   (fotografia desatualizada), como nas demais telas do P4/P5.
    */
-  function aplicarAlocacao(alocacao: AlocacaoResultante, collaboratorId: string) {
+  function aplicarAlocacao(alocacao: AlocacaoResultante) {
     if (alocacao.estado === "sem-gestor" || alocacao.estado === "sem-ocupacao") {
       // A decisão da recarga é do módulo (regra explícita e testada): em
       // `sem-gestor` houve mutação soberana bem-sucedida, então recarrega SEMPRE.
@@ -199,7 +206,20 @@ function NovoColaboradorPage({
     }
 
     setEstadoAlocacao({ fase: "concluida" });
-    navigate(`/colaborador/${collaboratorId}`);
+  }
+
+  async function handleConvite() {
+    if (!colaboradorCriado || !organizacaoAtivaId || estadoConvite.fase === "processando") return;
+    setEstadoConvite({ fase: "processando" });
+    try {
+      const resultado = await convidarUsuario(email.trim(), organizacaoAtivaId);
+      setEstadoConvite({ fase: "enviado", userId: resultado.userId });
+    } catch (erro) {
+      setEstadoConvite({
+        fase: "erro",
+        mensagem: erro instanceof Error ? erro.message : "Não foi possível enviar o convite.",
+      });
+    }
   }
 
   async function handleSalvar() {
@@ -209,7 +229,7 @@ function NovoColaboradorPage({
 
     setErroLocal("");
 
-    if (!matricula.trim() || !nome.trim() || !email.trim()) {
+    if (!matricula.trim() || !nome.trim() || !email.trim() || !dataAdmissao) {
       setErroLocal("Preencha todos os campos obrigatórios.");
       return;
     }
@@ -279,7 +299,7 @@ function NovoColaboradorPage({
     }
 
     setEstado({ fase: "sucesso", collaboratorId: desfecho.collaboratorId });
-    aplicarAlocacao(desfecho.alocacao, desfecho.collaboratorId);
+    aplicarAlocacao(desfecho.alocacao);
   }
 
   /**
@@ -304,7 +324,7 @@ function NovoColaboradorPage({
       },
       depsInjetadas
     );
-    aplicarAlocacao(alocacao, collaboratorId);
+    aplicarAlocacao(alocacao);
   }
 
   /**
@@ -329,7 +349,7 @@ function NovoColaboradorPage({
       },
       depsInjetadas
     );
-    aplicarAlocacao(alocacao, collaboratorId);
+    aplicarAlocacao(alocacao);
   }
 
   return (
@@ -383,12 +403,13 @@ function NovoColaboradorPage({
           </label>
 
           <label className="collaborator-field">
-            <span>Data de admissão</span>
+            <span>Data de admissão *</span>
             <input
               type="date"
               value={dataAdmissao}
               onChange={(event) => setDataAdmissao(event.target.value)}
               disabled={pessoaEncerrada}
+              required
             />
           </label>
 
@@ -485,12 +506,33 @@ function NovoColaboradorPage({
 
             {alocar && (
               <div className="collaborator-form-grid">
+                <label className="collaborator-field collaborator-field--wide">
+                  <span>Unidade *</span>
+                  <select
+                    value={unidadeId}
+                    onChange={(evento) => {
+                      setUnidadeId(evento.target.value);
+                      setPosicaoId("");
+                    }}
+                    disabled={ocupado || pessoaEncerrada}
+                  >
+                    <option value="">Selecione uma unidade…</option>
+                    {estrutura.estado.estrutura.unidades
+                      .filter((unidade) => estaVigente(unidade.validFrom, unidade.validTo))
+                      .map((unidade) => (
+                        <option key={unidade.unitId} value={unidade.unitId}>
+                          {unidade.nome}
+                        </option>
+                      ))}
+                  </select>
+                </label>
                 <SeletorPosicao
                   id="novo-colaborador-posicao"
                   estrutura={estrutura.estado.estrutura}
                   valor={posicaoId}
                   aoMudar={setPosicaoId}
                   rotulo="Posição (unidade • cargo • senioridade) *"
+                  unidadeId={unidadeId}
                   desabilitado={ocupado || pessoaEncerrada}
                 />
 
@@ -564,6 +606,29 @@ function NovoColaboradorPage({
       {estado.fase === "sucesso" && (
         <div className="collaborator-form-info" role="status">
           Colaborador criado no cadastro soberano.
+          {estadoConvite.fase === "inativo" && (
+            <button
+              type="button"
+              className="collaborator-form-btn collaborator-form-btn--primary"
+              onClick={() => void handleConvite()}
+            >
+              Enviar convite para {email.trim()}
+            </button>
+          )}
+          {estadoConvite.fase === "processando" && <p>Enviando convite…</p>}
+          {estadoConvite.fase === "enviado" && <p>Convite enviado para {email.trim()}.</p>}
+          {estadoConvite.fase === "erro" && (
+            <>
+              <p role="alert">{estadoConvite.mensagem}</p>
+              <button
+                type="button"
+                className="collaborator-form-btn collaborator-form-btn--secondary"
+                onClick={() => void handleConvite()}
+              >
+                Tentar enviar novamente
+              </button>
+            </>
+          )}
         </div>
       )}
 
