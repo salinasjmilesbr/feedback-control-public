@@ -301,19 +301,6 @@ body {
   background: var(--brand-bg);
 }
 
-.app-header {
-  min-height: 76px;
-  padding: 12px clamp(18px, 4vw, 48px);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
-  background: var(--brand-surface);
-  border-bottom: 1px solid var(--brand-border);
-  box-sizing: border-box;
-}
-
 .app-header__brand,
 .app-header__user {
   display: flex;
@@ -440,14 +427,6 @@ body {
   margin: 0 auto;
   box-sizing: border-box;
 }
-
-@media (max-width: 820px) {
-  .app-header { align-items: flex-start; }
-  .app-header__user { width: 100%; flex-wrap: wrap; }
-  .app-header__user-copy { display: none; }
-  .app-header__user select { min-width: 0; flex: 1; }
-}
-
 
 /* Modern page foundation */
 .app-header__subtitle {
@@ -1217,14 +1196,6 @@ body {
   font-size: 13px;
 }
 
-/* Keep the product shell compact, like the approved mockup. */
-.app-header {
-  max-width: none;
-  min-height: 90px;
-  padding-left: clamp(28px, 4vw, 64px);
-  padding-right: clamp(28px, 4vw, 64px);
-}
-
 .app-nav__inner {
   max-width: none;
   padding-left: clamp(28px, 4vw, 64px);
@@ -1289,14 +1260,6 @@ body {
 /* =========================================================
    VIRTUS UI — shell refinement (approved direction)
    ========================================================= */
-
-/* Header: align brand and user controls on a common visual axis. */
-.app-header {
-  min-height: 82px;
-  padding: 12px max(32px, calc((100vw - 1440px) / 2));
-  flex-wrap: nowrap;
-  gap: 40px;
-}
 
 .app-header__brand {
   min-width: 300px;
@@ -1468,13 +1431,6 @@ body {
 }
 
 /* Keep the nav and content aligned at all wide desktop sizes. */
-@media (min-width: 1505px) {
-  .app-header {
-    padding-left: calc((100vw - 1440px) / 2);
-    padding-right: calc((100vw - 1440px) / 2);
-  }
-}
-
 @media (max-width: 1504px) {
   .app-nav__inner {
     width: calc(100% - 64px);
@@ -1482,23 +1438,8 @@ body {
 }
 
 @media (max-width: 900px) {
-  .app-header {
-    padding: 12px 20px;
-    flex-wrap: wrap;
-    gap: 12px;
-  }
-
   .app-header__brand {
     min-width: 0;
-  }
-
-  .app-header__user {
-    width: 100%;
-    align-items: end;
-  }
-
-  .app-header__user-control {
-    flex: 1;
   }
 
   .app-header__user select {

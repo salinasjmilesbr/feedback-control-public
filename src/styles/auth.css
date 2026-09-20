@@ -67,16 +67,6 @@
   font-weight: 600;
 }
 
-.auth-status__sair {
-  background: none;
-  border: 1px solid #d8d8e6;
-  border-radius: 6px;
-  padding: 4px 10px;
-  cursor: pointer;
-  font: inherit;
-  color: #444;
-}
-
 /* Estado neutro durante a verificação/restauração da sessão (F2-04): nenhum
    conteúdo protegido é renderizado antes da resolução. */
 .auth-loading {

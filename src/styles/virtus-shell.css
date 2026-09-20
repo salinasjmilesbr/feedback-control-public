@@ -140,6 +140,17 @@
 }
 
 @media (max-width: 900px) {
+  .app-header__inner {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: nowrap;
+  }
+
+  .app-header__user {
+    width: auto;
+    flex-wrap: nowrap;
+  }
+
   .app-header__inner,
   .app-footer__inner {
     padding-left: var(--virtus-space-4);
