@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  codigoPublicoAposCompensacao,
+  codigoPublicoQuandoNaoCompensado,
   decidirFalhaDoVinculo,
   podeConvidarComoAdministradorDoTenant,
   validarEntradaDoConvite,
@@ -13,8 +15,10 @@ import {
  *   autoriza (não-admin, erro e valores "verdadeiros" genéricos ⇒ DENY);
  * - a colaboradora é obrigatória e identificada por UUID (a conta nunca fica
  *   "solta" e e-mail/matrícula não identificam pessoa — F5-02 D4);
- * - falhas do provisionamento atômico são traduzidas com fail-closed e com a
- *   decisão de compensação correta (nunca apagar conta pré-existente).
+ * - falhas do provisionamento atômico são traduzidas com fail-closed, e o
+ *   CÓDIGO SQL nunca decide apagar ou não apagar (correção da auditoria do SHA
+ *   62bcd54): `23505` é `unique_violation` e pode vir do perfil, da membership
+ *   ou do vínculo, inclusive para um usuário que a Edge acabou de criar.
  */
 
 const ORG = "11111111-1111-4111-8111-111111111111";
@@ -104,35 +108,35 @@ describe("F6-A19 — forma da entrada do convite", () => {
 });
 
 describe("F6-A19 — falha do provisionamento atômico (retry/consistência)", () => {
-  it("P0002 (colaborador inexistente no tenant) ⇒ inválido, com compensação", () => {
+  it("P0002 (colaborador inexistente no tenant) ⇒ inválido", () => {
     const decisao = decidirFalhaDoVinculo({ code: "P0002" });
     expect(decisao.codigo).toBe("INVALID_COLLABORATOR");
     expect(decisao.status).toBe(400);
-    expect(decisao.compensar).toBe(true);
   });
 
-  it("23503 (organização inexistente) ⇒ inválido, com compensação", () => {
+  it("23503 (organização inexistente) ⇒ inválido", () => {
     const decisao = decidirFalhaDoVinculo({ code: "23503" });
     expect(decisao.codigo).toBe("INVALID_ORGANIZATION");
     expect(decisao.status).toBe(400);
-    expect(decisao.compensar).toBe(true);
   });
 
-  it("22023 (parâmetros obrigatórios) ⇒ inválido, com compensação", () => {
+  it("22023 (parâmetros obrigatórios) ⇒ inválido", () => {
     const decisao = decidirFalhaDoVinculo({ code: "22023" });
     expect(decisao.codigo).toBe("INVALID_INPUT");
     expect(decisao.status).toBe(400);
-    expect(decisao.compensar).toBe(true);
   });
 
-  it("23505 (perfil/membership já existentes) ⇒ NUNCA compensa (conta real preservada)", () => {
+  it("23505 ORIGINADO NO PROVISIONAMENTO não prova usuário pré-existente no Auth (auditoria 62bcd54)", () => {
+    // `unique_violation` pode vir do perfil, da membership ou do vínculo. O
+    // código público é de conflito, mas NÃO existe aqui — em nenhum campo —
+    // uma decisão de dispensar a compensação.
     const decisao = decidirFalhaDoVinculo({ code: "23505" });
     expect(decisao.codigo).toBe("USER_EXISTS");
     expect(decisao.status).toBe(409);
-    expect(decisao.compensar).toBe(false);
+    expect(Object.keys(decisao).sort()).toEqual(["codigo", "mensagem", "status"]);
   });
 
-  it("falha do primitivo, erro desconhecido ou ausente ⇒ INTERNAL com compensação (nada parcial)", () => {
+  it("falha do primitivo, erro desconhecido ou ausente ⇒ INTERNAL", () => {
     for (const erro of [
       { code: "P0001", message: "vinculo ja existente" },
       { code: "XX000" },
@@ -143,7 +147,36 @@ describe("F6-A19 — falha do provisionamento atômico (retry/consistência)", (
       const decisao = decidirFalhaDoVinculo(erro);
       expect(decisao.codigo).toBe("INTERNAL");
       expect(decisao.status).toBe(500);
-      expect(decisao.compensar).toBe(true);
     }
+  });
+
+  it("após compensação BEM-SUCEDIDA, conflito não pode ser reportado como 'já existe'", () => {
+    const compensado = codigoPublicoAposCompensacao({
+      codigo: "USER_EXISTS",
+      mensagem: "Já existe um usuário com este e-mail.",
+      status: 409,
+    });
+    // Nada permanece (Auth removido + RPC revertida): "já existe" seria FALSO.
+    expect(compensado.codigo).toBe("INTERNAL");
+    expect(compensado.status).toBe(500);
+
+    // Falha de forma/tenant continua sendo a causa acionável do convite.
+    const forma = codigoPublicoAposCompensacao({
+      codigo: "INVALID_COLLABORATOR",
+      mensagem: "Colaborador inválido.",
+      status: 400,
+    });
+    expect(forma.codigo).toBe("INVALID_COLLABORATOR");
+    expect(forma.status).toBe(400);
+  });
+
+  it("sem compensação, SÓ o perfil sobrevivente prova conta real (retry não destrutivo)", () => {
+    const contaReal = codigoPublicoQuandoNaoCompensado(true);
+    expect(contaReal.codigo).toBe("USER_EXISTS");
+    expect(contaReal.status).toBe(409);
+
+    const semProva = codigoPublicoQuandoNaoCompensado(false);
+    expect(semProva.codigo).toBe("INTERNAL");
+    expect(semProva.status).toBe(500);
   });
 });

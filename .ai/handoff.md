@@ -54,10 +54,16 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   `20260946000000`) faz **perfil + membership + vínculo** em UMA transação reutilizando os primitivos
   `criar_perfil_membership` (F2-06) e `vincular_colaborador` (F5-02 D9). Tenant validado no banco
   (`P0002` para colaboradora de outro tenant) e **nenhuma role concedida**.
-- **Retry/consistência:** a RPC é atômica (falha ⇒ nada parcial; `P0001` do primitivo não deixa
-  perfil/membership); `23505` (perfil/membership já existentes) ⇒ `USER_EXISTS` **sem** compensação
-  (nunca apagar conta pré-existente); demais falhas ⇒ `INTERNAL` com remoção do usuário recém-criado no
-  Auth, agora com a compensação **verificada** (falha da compensação é registrada no log da função).
+- **Retry/consistência (corrigido pela auditoria do SHA `62bcd54`):** a RPC é atômica (falha ⇒ nada
+  parcial; `P0001` do primitivo não deixa perfil/membership). Depois de criar o usuário no Auth, **toda**
+  falha do provisionamento dispara a compensação: a Edge **sempre tenta remover** o usuário que criou e
+  **nunca** decide isso pelo SQLSTATE (`23505` é `unique_violation` e pode vir do perfil, da membership ou
+  do vínculo — não prova existência prévia no Auth). Sem remoção, a **prova explícita** de conta real é o
+  **perfil sobrevivente** (a RPC é atômica ⇒ perfil que sobrevive não foi escrito pela tentativa): aí o
+  retorno é `USER_EXISTS` **não destrutivo**; sem essa prova o órfão é reportado como `INTERNAL` (nada é
+  destruído) e a falha da compensação vai para o log. Conflito **após** compensação bem-sucedida nunca é
+  reportado como "já existe" (nada permanece): `INTERNAL` com retry seguro. E-mail já existente continua
+  recusado **antes** de qualquer escrita (`email_exists`/`422` ⇒ `USER_EXISTS`).
 - **Arquivos:** Edge (`index.ts`, `core.ts`, `core.test.ts`), migration `20260946000000`, clientes
   (`AuthContext`, `AuthProvider`, `conviteAdministrativo` + teste, `NovoColaboradorPage`,
   `ConvidarUsuarioPage` + teste), guarda estática `src/authorization/f6A19ConviteVinculo.test.ts` e

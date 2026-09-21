@@ -24,15 +24,21 @@
 // que cria perfil + membership + o vínculo da membership ao colaborador pelo
 // primitivo canônico da F5-02. NENHUMA role é concedida ao convidado.
 //
-// Consistência: a criação no Auth é externa ao Postgres, então não há transação
-// única entre Auth e banco. Estratégia: criar o usuário no Auth; provisionar
-// perfil+membership+vínculo em UMA transação (RPC); em falha do provisionamento,
-// compensar removendo o usuário recém-criado no Auth (não sobra estado parcial
-// silencioso). A compensação é VERIFICADA: se ela própria falhar, isso é
-// registrado no log da função (o retorno continua sendo erro, nunca sucesso).
+// CONSISTÊNCIA (correção da auditoria do SHA 62bcd54): a criação no Auth é
+// externa ao Postgres, então não há transação única entre Auth e banco. Depois
+// de criar o usuário no Auth, QUALQUER falha do provisionamento dispara a
+// compensação — a Edge SEMPRE tenta remover o usuário que ela criou, porque o
+// SQLSTATE NÃO prova existência prévia (um `23505` pode vir do perfil, da
+// membership ou do vínculo). A remoção só deixa de acontecer com PROVA explícita
+// de pré-provisionamento: perfil sobrevivente — a RPC é atômica, então um perfil
+// que sobrevive à falha não foi escrito por esta tentativa (conta real,
+// PRESERVADA). Se a própria remoção falhar sem essa prova, o órfão é reportado
+// como falha interna (nada é destruído) e registrado no log da função.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
+  codigoPublicoAposCompensacao,
+  codigoPublicoQuandoNaoCompensado,
   decidirFalhaDoVinculo,
   podeConvidarComoAdministradorDoTenant,
   validarEntradaDoConvite,
@@ -125,7 +131,8 @@ Deno.serve(async (req) => {
     return erro("NOT_AUTHORIZED", "Não autorizado.", 403);
   }
 
-  // 5) cria o usuário no Auth (convite por e-mail).
+  // 5) cria o usuário no Auth (convite por e-mail). E-mail já existente é
+  // recusado AQUI, antes de qualquer escrita: retry continua não destrutivo.
   const { data: invited, error: inviteError } =
     await admin.auth.admin.inviteUserByEmail(entrada.email);
   if (inviteError) {
@@ -151,19 +158,33 @@ Deno.serve(async (req) => {
   if (vinculoError) {
     const decisao = decidirFalhaDoVinculo(vinculoError);
 
-    // Nunca apagar conta pré-existente: `23505` prova que o usuário já existia.
-    if (decisao.compensar) {
-      const { error: compensacaoError } = await admin.auth.admin.deleteUser(userId);
-      if (compensacaoError) {
-        // Estado parcial no Auth (sem perfil/membership): fica registrado para
-        // limpeza operacional. Nenhum dado pessoal é logado.
+    // Compensação INCONDICIONAL do usuário criado nesta tentativa: a RPC
+    // reverteu por completo, então nada dele sobrevive no banco, e o SQLSTATE
+    // não é usado como prova de pré-existência no Auth.
+    const { error: compensacaoError } = await admin.auth.admin.deleteUser(userId);
+
+    if (compensacaoError) {
+      // Sem remoção: buscar a PROVA explícita de pré-provisionamento.
+      const { data: perfilSobrevivente, error: consultaError } = await admin
+        .from("user_profiles")
+        .select("id")
+        .eq("id", userId)
+        .maybeSingle();
+
+      const contaReal = !consultaError && Boolean(perfilSobrevivente);
+      if (!contaReal) {
         console.error(
           "convidar-usuario: compensacao do usuario Auth falhou apos falha do vinculo soberano"
         );
       }
+
+      const publica = codigoPublicoQuandoNaoCompensado(contaReal);
+      return erro(publica.codigo, publica.mensagem, publica.status);
     }
 
-    return erro(decisao.codigo, decisao.mensagem, decisao.status);
+    // Compensado: nada permanece no Auth nem no banco (retry é seguro).
+    const publica = codigoPublicoAposCompensacao(decisao);
+    return erro(publica.codigo, publica.mensagem, publica.status);
   }
 
   return json({ userId, email: entrada.email }, 200);

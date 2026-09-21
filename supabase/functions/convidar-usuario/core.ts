@@ -16,6 +16,16 @@
  *   trigger `trg_access_role_capabilities_grantable` — nenhuma role pode
  *   carregá-la e, portanto, nenhum ator jamais a tem como capability efetiva.
  *   Exigi-la tornava o convite impossível para TODO administrador legítimo.
+ *
+ * SEMÂNTICA DE COMPENSAÇÃO (auditoria do SHA 62bcd54 — corrigida aqui):
+ *   o código SQL NÃO prova nada sobre a existência prévia do usuário no Auth.
+ *   `23505` é `unique_violation` e pode vir do perfil, da membership OU do
+ *   vínculo — inclusive para um usuário que a Edge ACABOU de criar. Portanto
+ *   NENHUMA decisão de apagar ou não apagar é derivada de SQLSTATE: a Edge
+ *   SEMPRE tenta compensar o usuário que criou, e só deixa de removê-lo quando
+ *   existe PROVA explícita de pré-provisionamento (perfil sobrevivente — como a
+ *   RPC é atômica, um perfil que sobrevive à falha não foi criado por esta
+ *   tentativa). O que este módulo decide é apenas o CÓDIGO PÚBLICO resultante.
  */
 
 /** Forma do e-mail (a mesma validação que a Edge já aplicava). */
@@ -92,34 +102,25 @@ export function validarEntradaDoConvite(corpo: unknown): EntradaConvite {
   return { ok: true, email, organizationId, collaboratorId };
 }
 
-export interface DecisaoFalhaDoVinculo {
+export interface DecisaoPublica {
   /** Código público estável devolvido ao cliente. */
   readonly codigo: string;
   readonly mensagem: string;
   readonly status: number;
-  /**
-   * `true` ⇒ o usuário recém-criado no Auth deve ser REMOVIDO (nada parcial
-   * sobrevive). `false` ⇒ o erro prova que o usuário é PRÉ-EXISTENTE e removê-lo
-   * seria destrutivo.
-   */
-  readonly compensar: boolean;
 }
 
 /**
- * Traduz a falha do provisionamento atômico (perfil + membership + vínculo) para
- * código público + decisão de compensação.
+ * Código público da falha do provisionamento atômico, apenas por SQLSTATE.
+ * NÃO há decisão de compensação aqui: o código SQL não prova existência prévia
+ * no Auth (ver a nota do cabeçalho) — quem decide remover é a Edge, e ela sempre
+ * tenta remover o usuário que criou.
  *
- * - `P0002` (`no_data_found`): colaborador inexistente NO tenant ⇒ cross-tenant
- *   negado pelo banco;
- * - `23503` (FK): organização inexistente;
- * - `23505` (unique): o perfil/membership já existem ⇒ o usuário do Auth é
- *   PRÉ-EXISTENTE (um UUID novo não teria perfil) — NÃO compensar, para nunca
- *   apagar uma conta real (`inviteUserByEmail` devolveu usuário já existente);
- * - `22023`: parâmetros obrigatórios ausentes;
- * - qualquer outra (`P0001` do primitivo, erro de rede/indefinido) ⇒ `INTERNAL`
- *   com compensação: a transação do banco é atômica e o Auth não pode ficar órfão.
+ * `P0002` = colaborador inexistente no tenant (cross-tenant); `23503` =
+ * organização inexistente; `22023` = parâmetros obrigatórios ausentes; `23505` =
+ * conflito de provisionamento (perfil/membership/vínculo); qualquer outra
+ * (P0001 do primitivo, rede, indefinido) ⇒ `INTERNAL`.
  */
-export function decidirFalhaDoVinculo(erro: unknown): DecisaoFalhaDoVinculo {
+export function decidirFalhaDoVinculo(erro: unknown): DecisaoPublica {
   const codigo = (erro as { code?: unknown } | null | undefined)?.code;
 
   switch (codigo) {
@@ -128,35 +129,71 @@ export function decidirFalhaDoVinculo(erro: unknown): DecisaoFalhaDoVinculo {
         codigo: "INVALID_COLLABORATOR",
         mensagem: "Colaborador inválido.",
         status: 400,
-        compensar: true,
       };
     case "23503":
       return {
         codigo: "INVALID_ORGANIZATION",
         mensagem: "Organização inválida.",
         status: 400,
-        compensar: true,
       };
     case "22023":
       return {
         codigo: "INVALID_INPUT",
         mensagem: "Corpo da requisição inválido.",
         status: 400,
-        compensar: true,
       };
     case "23505":
       return {
         codigo: "USER_EXISTS",
         mensagem: "Já existe um usuário com este e-mail.",
         status: 409,
-        compensar: false,
       };
     default:
       return {
         codigo: "INTERNAL",
         mensagem: "Não foi possível concluir o convite.",
         status: 500,
-        compensar: true,
       };
   }
+}
+
+/**
+ * Código público depois de uma compensação BEM-SUCEDIDA (o usuário do Auth foi
+ * removido e a transação da RPC reverteu): nada permanece, então `USER_EXISTS`
+ * seria FALSO e induziria o operador a não tentar de novo. As falhas de forma e
+ * de tenant continuam sendo a causa acionável do convite.
+ */
+export function codigoPublicoAposCompensacao(decisao: DecisaoPublica): DecisaoPublica {
+  return decisao.codigo === "USER_EXISTS"
+    ? {
+        codigo: "INTERNAL",
+        mensagem: "Não foi possível concluir o convite.",
+        status: 500,
+      }
+    : decisao;
+}
+
+/**
+ * Código público quando a remoção do usuário do Auth NÃO foi possível.
+ *
+ * `perfilSobrevivente` é a PROVA explícita de pré-provisionamento: a RPC é
+ * ATÔMICA, logo um perfil que sobrevive à falha NÃO foi escrito por esta
+ * tentativa — a conta é real e não pode ser apagada (retry não destrutivo).
+ * Sem perfil sobrevivente não há prova de conta real: o órfão é reportado como
+ * `INTERNAL` (nada foi destruído) e a falha da compensação vai para o log.
+ */
+export function codigoPublicoQuandoNaoCompensado(
+  perfilSobrevivente: boolean
+): DecisaoPublica {
+  return perfilSobrevivente
+    ? {
+        codigo: "USER_EXISTS",
+        mensagem: "Já existe um usuário com este e-mail.",
+        status: 409,
+      }
+    : {
+        codigo: "INTERNAL",
+        mensagem: "Não foi possível concluir o convite.",
+        status: 500,
+      };
 }

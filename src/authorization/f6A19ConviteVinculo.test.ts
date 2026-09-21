@@ -92,6 +92,22 @@ describe("F6-A19 — a Edge não volta ao gate impossível", () => {
     expect(core).toContain("valor === true");
     expect(core).not.toContain("!!valor");
   });
+
+  it("compensa SEMPRE o usuário do Auth e nunca decide por SQLSTATE (auditoria 62bcd54)", () => {
+    const index = semComentariosTs(fonte(EDGE_INDEX));
+    const core = semComentariosTs(fonte(EDGE_CORE));
+
+    // Depois de criar o usuário no Auth, a remoção em falha do vínculo é
+    // incondicional: o código SQL não prova existência prévia.
+    expect(index).toContain("deleteUser");
+    expect(index).not.toContain("23505");
+    expect(index).toContain("codigoPublicoQuandoNaoCompensado");
+    expect(index).toContain("codigoPublicoAposCompensacao");
+    // A prova explícita de conta real (para NÃO remover) é o perfil sobrevivente.
+    expect(index).toContain('from("user_profiles")');
+    // Nenhum campo/fluxo "compensar" derivado de SQLSTATE volta ao módulo puro.
+    expect(core).not.toContain("compensar");
+  });
 });
 
 describe("F6-A19 — o convite exige e encaminha a colaboradora", () => {
