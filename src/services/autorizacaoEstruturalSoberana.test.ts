@@ -50,7 +50,7 @@ describe("#327/P2B — leitura da projeção de autorização estrutural", () =>
 
     expect(captura.view).toBe("estrutura_autorizacao");
     expect(captura.filtro).toBe("org-1");
-    expect(valor).toEqual({ podeEstrutura: true, podeCatalogo: false });
+    expect(valor).toEqual({ podeEstrutura: true, podeCatalogo: false, collaboratorId: null });
   });
 
   it("projeta as duas capabilities quando a view as concede", async () => {
@@ -61,7 +61,7 @@ describe("#327/P2B — leitura da projeção de autorização estrutural", () =>
       )
     );
 
-    expect(valor).toEqual({ podeEstrutura: true, podeCatalogo: true });
+    expect(valor).toEqual({ podeEstrutura: true, podeCatalogo: true, collaboratorId: null });
   });
 
   it("sem linha ⇒ nada (membership-only não projeta superfície administrativa)", async () => {
@@ -93,5 +93,37 @@ describe("#327/P2B — leitura da projeção de autorização estrutural", () =>
     );
 
     expect(valor).toEqual(SEM_AUTORIZACAO_ESTRUTURAL);
+  });
+});
+
+describe("#333 — vínculo soberano exposto pela view", () => {
+  it("devolve collaborator_id quando a view traz o vínculo", async () => {
+    const valor = await lerAutorizacaoEstrutural(
+      "org-1",
+      clienteFake({
+        data: {
+          organization_id: "org-1",
+          pode_estrutura: false,
+          pode_catalogo: false,
+          collaborator_id: "11111111-1111-4111-8111-111111111111",
+        },
+        error: null,
+      })
+    );
+
+    expect(valor.collaboratorId).toBe("11111111-1111-4111-8111-111111111111");
+  });
+
+  it("vínculo ausente/vazio/não textual => null (fail-closed, sem inventar identidade)", async () => {
+    for (const collaborator_id of [null, "", 123, undefined]) {
+      const valor = await lerAutorizacaoEstrutural(
+        "org-1",
+        clienteFake({
+          data: { organization_id: "org-1", pode_estrutura: true, pode_catalogo: true, collaborator_id },
+          error: null,
+        })
+      );
+      expect(valor.collaboratorId).toBeNull();
+    }
   });
 });

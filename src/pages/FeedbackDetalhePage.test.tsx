@@ -75,6 +75,7 @@ function renderizar(
       <UsuarioAtualContext.Provider
         value={{
           usuarioAtual: actor,
+          usuarioAtualLegado: actor,
           usuariosDisponiveis: colaboradores,
           selecionarUsuario: () => undefined,
         }}

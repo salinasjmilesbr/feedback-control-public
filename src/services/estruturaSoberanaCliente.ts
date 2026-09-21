@@ -470,17 +470,18 @@ export function carregarEstruturaSoberana(
         listarColaboradores({ organizationId }, deps),
       ]);
 
-      if (!leituraEstrutura.ok || !leituraColaboradores.ok) {
-        const falha = leituraEstrutura.ok ? leituraColaboradores : leituraEstrutura;
+      // #333: a leitura PESSOAL é OBRIGATÓRIA; a listagem do universo é
+      // COMPLEMENTAR (rótulos legados: matrícula/cargo/área). Negação da
+      // listagem (FORBIDDEN de collaborator.read) NÃO apaga a projeção pessoal —
+      // ela é apenas omitida da ponte de matrículas.
+      if (!leituraEstrutura.ok) {
         return publicarSeVigente(
           {
             fase: "indisponivel",
             organizacaoId: organizationId,
             estrutura: ESTRUTURA_SOBERANA_VAZIA,
-            codigo: falha.ok ? "INTERNAL" : falha.codigo,
-            mensagem: falha.ok
-              ? "Não foi possível carregar a estrutura."
-              : falha.mensagem,
+            codigo: leituraEstrutura.codigo,
+            mensagem: leituraEstrutura.mensagem,
           },
           minhaGeracao,
           organizationId
@@ -494,10 +495,10 @@ export function carregarEstruturaSoberana(
         colegiados: leituraEstrutura.dados.colegiados,
       });
 
-      const estrutura = criarEstruturaDoCliente({
-        projecao,
-        ...montarPonte(leituraColaboradores.dados),
-      });
+      const ponte = montarPonte(
+        leituraColaboradores.ok ? leituraColaboradores.dados : []
+      );
+      const estrutura = criarEstruturaDoCliente({ projecao, ...ponte });
 
       return publicarSeVigente(
         { fase: "pronta", organizacaoId: organizationId, estrutura },

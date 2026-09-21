@@ -9,7 +9,7 @@ import MinhaAvaliacaoPage from "./MinhaAvaliacaoPage";
 const colaborador: Colaborador = { matricula: 10, funcao: "ANALISTA", status: "ATIVO", nome: "Pessoa Avaliada", email: "pessoa@example.com", cargo: "Analista", area: "Área", respondePara: "" };
 
 function renderizar() {
-  return renderToStaticMarkup(<UsuarioAtualContext.Provider value={{ usuarioAtual: colaborador, usuariosDisponiveis: [colaborador], selecionarUsuario: () => undefined }}><MemoryRouter><MinhaAvaliacaoPage /></MemoryRouter></UsuarioAtualContext.Provider>);
+  return renderToStaticMarkup(<UsuarioAtualContext.Provider value={{ usuarioAtual: colaborador, usuarioAtualLegado: colaborador, usuariosDisponiveis: [colaborador], selecionarUsuario: () => undefined }}><MemoryRouter><MinhaAvaliacaoPage /></MemoryRouter></UsuarioAtualContext.Provider>);
 }
 
 describe("histórico pessoal de ciclo cancelado", () => {

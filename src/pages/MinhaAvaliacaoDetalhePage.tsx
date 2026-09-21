@@ -63,7 +63,7 @@ interface LeituraPublicadaDasMetas {
 function MinhaAvaliacaoDetalhePage() {
   const navigate = useNavigate();
   const { feedbackId } = useParams();
-  const { usuarioAtual } = useUsuarioAtual();
+  const { usuarioAtual, usuarioAtualLegado } = useUsuarioAtual();
   const { organizacaoAtivaId } = useAuth();
   const [mostrarRegua, setMostrarRegua] = useState(false);
   /**
@@ -351,10 +351,9 @@ function MinhaAvaliacaoDetalhePage() {
   // soberana a decisão é fail-closed (nenhuma seção de papel é presumida).
   const colaboradores = getColaboradores();
   const estruturaSoberana = estruturaSoberanaEfetiva(colaboradores);
-  const visaoEstrutural = visaoEstruturalLegada(
-    estruturaSoberana,
-    usuarioAtual.matricula
-  );
+  const visaoEstrutural = usuarioAtualLegado
+    ? visaoEstruturalLegada(estruturaSoberana, usuarioAtualLegado.matricula)
+    : null;
   const usaEstruturaAvaliacaoAnalista = visaoEstrutural?.temCadeiaDeGestao ?? false;
 
   // A avaliação do ator é a MESMA identidade derivada acima (chave funcional do
@@ -441,9 +440,9 @@ function MinhaAvaliacaoDetalhePage() {
       ? undefined
       : colaboradores.find((item) => item.matricula === matriculaGerente);
 
-  const avaliacoesHistorico = getFeedbacksByColaborador(
-    usuarioAtual.matricula
-  )
+  const avaliacoesHistorico = (usuarioAtualLegado
+    ? getFeedbacksByColaborador(usuarioAtualLegado.matricula)
+    : [])
     .filter((item) => item.status === "CONCLUIDA")
     .sort((a, b) => b.ano - a.ano || b.ciclo - a.ciclo);
 
@@ -535,7 +534,7 @@ function MinhaAvaliacaoDetalhePage() {
     // componente NAO atravessa a fronteira da função. Capturamos os valores
     // ja estreitados e recusamos explicitamente quando faltar identidade ou
     // avaliação.
-    const ator = usuarioAtual;
+    const ator = usuarioAtualLegado;
     const avaliacao = feedback;
     if (!ator || !avaliacao) {
       setErroPdf("Não foi possível exportar: avaliação ou usuário indisponível.");

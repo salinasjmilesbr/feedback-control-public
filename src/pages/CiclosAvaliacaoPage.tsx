@@ -37,7 +37,7 @@ function CiclosAvaliacaoPage({
   controlador: controladorInjetado,
 }: CiclosAvaliacaoPageProps = {}) {
   const navigate = useNavigate();
-  const { usuarioAtual } = useUsuarioAtual();
+  const { usuarioAtualLegado } = useUsuarioAtual();
   const { organizacaoAtivaId } = useAuth();
   const [snapshotCapabilities, setSnapshotCapabilities] = useState<{
     organizationId: string | null;
@@ -429,13 +429,13 @@ function CiclosAvaliacaoPage({
           </div>
         ) : (
           ciclos.map((item) => {
-            const podeCorrigirPeriodo = usuarioAtual
+            const podeCorrigirPeriodo = usuarioAtualLegado
               ? can(
               {
                 actor: {
-                  matricula: usuarioAtual.matricula,
-                  funcao: usuarioAtual.funcao,
-                  status: usuarioAtual.status,
+                  matricula: usuarioAtualLegado.matricula,
+                  funcao: usuarioAtualLegado.funcao,
+                  status: usuarioAtualLegado.status,
                 },
               },
               "cycle.period.correct.manager",
@@ -677,13 +677,13 @@ function CiclosAvaliacaoPage({
                     )}
                   </div>
 
-                  {(usuarioAtual
+                  {(usuarioAtualLegado
                     ? can(
                     {
                       actor: {
-                        matricula: usuarioAtual.matricula,
-                        funcao: usuarioAtual.funcao,
-                        status: usuarioAtual.status,
+                        matricula: usuarioAtualLegado.matricula,
+                        funcao: usuarioAtualLegado.funcao,
+                        status: usuarioAtualLegado.status,
                       },
                     },
                     "cycle.reopen.manager",
@@ -700,13 +700,13 @@ function CiclosAvaliacaoPage({
                     </button>
                   )}
 
-                  {(usuarioAtual
+                  {(usuarioAtualLegado
                     ? can(
                     {
                       actor: {
-                        matricula: usuarioAtual.matricula,
-                        funcao: usuarioAtual.funcao,
-                        status: usuarioAtual.status,
+                        matricula: usuarioAtualLegado.matricula,
+                        funcao: usuarioAtualLegado.funcao,
+                        status: usuarioAtualLegado.status,
                       },
                     },
                     "cycle.cancel.manager",

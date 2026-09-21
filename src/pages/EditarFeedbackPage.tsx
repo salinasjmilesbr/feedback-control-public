@@ -302,7 +302,7 @@ function criarEstadoInicialDaOrigem(
 function EditarFeedbackPage() {
   const { id, feedbackId } = useParams();
   const navigate = useNavigate();
-  const { usuarioAtual } = useUsuarioAtual();
+  const { usuarioAtual, usuarioAtualLegado } = useUsuarioAtual();
   const { organizacaoAtivaId } = useAuth();
 
   const matricula = Number(id);
@@ -528,12 +528,12 @@ function EditarFeedbackPage() {
     )
     .filter((item) => item !== undefined);
 
-  const authorizationContext: AuthorizationContext | undefined = usuarioAtual
+  const authorizationContext: AuthorizationContext | undefined = usuarioAtualLegado
     ? {
         actor: {
-          matricula: usuarioAtual.matricula,
-          funcao: usuarioAtual.funcao,
-          status: usuarioAtual.status,
+          matricula: usuarioAtualLegado.matricula,
+          funcao: usuarioAtualLegado.funcao,
+          status: usuarioAtualLegado.status,
         },
       }
     : undefined;

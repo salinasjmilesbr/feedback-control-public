@@ -19,7 +19,7 @@ import {
 } from "../services/expectativaCargoStorage";
 
 function ConfiguracoesAparenciaPage() {
-  const { usuarioAtual } = useUsuarioAtual();
+  const { usuarioAtual, usuarioAtualLegado } = useUsuarioAtual();
   const { branding, atualizarBranding, restaurarPadrao } = useBranding();
   const [form, setForm] = useState<BrandingConfig>(branding);
   const [mensagem, setMensagem] = useState("");
@@ -30,13 +30,13 @@ function ConfiguracoesAparenciaPage() {
   const [expectativasCargo, setExpectativasCargo] =
     useState<ExpectativasCargo>(getExpectativasCargo());
   const [mensagemExpectativas, setMensagemExpectativas] = useState("");
-  const podeGerenciarConfiguracoes = usuarioAtual
+  const podeGerenciarConfiguracoes = usuarioAtualLegado
     ? can(
         {
           actor: {
-            matricula: usuarioAtual.matricula,
-            funcao: usuarioAtual.funcao,
-            status: usuarioAtual.status,
+            matricula: usuarioAtualLegado.matricula,
+            funcao: usuarioAtualLegado.funcao,
+            status: usuarioAtualLegado.status,
           },
         },
         "settings.manage",

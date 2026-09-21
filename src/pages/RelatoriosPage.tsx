@@ -56,7 +56,7 @@ function labelFuncao(
 
 function RelatoriosPage() {
   const navigate = useNavigate();
-  const { usuarioAtual } = useUsuarioAtual();
+  const { usuarioAtual, usuarioAtualLegado } = useUsuarioAtual();
 
   const ciclosDisponiveis = useMemo(
     () =>
@@ -78,13 +78,13 @@ function RelatoriosPage() {
   const [faixaFiltro, setFaixaFiltro] = useState("");
   const [incluirCanceladas, setIncluirCanceladas] = useState(false);
   const [criterioAbertoId, setCriterioAbertoId] = useState<string | null>(null);
-  const podeVerRelatorios = usuarioAtual
+  const podeVerRelatorios = usuarioAtualLegado
     ? can(
         {
           actor: {
-            matricula: usuarioAtual.matricula,
-            funcao: usuarioAtual.funcao,
-            status: usuarioAtual.status,
+            matricula: usuarioAtualLegado.matricula,
+            funcao: usuarioAtualLegado.funcao,
+            status: usuarioAtualLegado.status,
           },
         },
         "report.view",
@@ -124,7 +124,20 @@ function RelatoriosPage() {
     ciclosDisponiveis.find((item) => item.id === cicloId) ??
     ciclosDisponiveis[0];
 
-  const relatorioBase = getRelatorioVisaoGeral(ciclo, usuarioAtual);
+  // #333: os relatórios legados são indexados por matrícula; sem matrícula
+  // informada não há relatório a exibir (nenhum número é inventado).
+  if (!usuarioAtualLegado) {
+    return (
+      <main className="virtus-page reports-page">
+        <section className="reports-empty">
+          <h2>Relatórios indisponíveis</h2>
+          <p>Sua matrícula não está informada neste tenant.</p>
+        </section>
+      </main>
+    );
+  }
+
+  const relatorioBase = getRelatorioVisaoGeral(ciclo, usuarioAtualLegado);
 
   const filtros: FiltrosRelatorio = {
     coordenadorMatricula:
@@ -139,7 +152,7 @@ function RelatoriosPage() {
     incluirCanceladas,
   };
 
-  const relatorio = getRelatorioVisaoGeral(ciclo, usuarioAtual, filtros);
+  const relatorio = getRelatorioVisaoGeral(ciclo, usuarioAtualLegado, filtros);
 
   const colaboradoresCadastro = getColaboradores();
   const coordenadoresDisponiveis = Array.from(
@@ -189,14 +202,14 @@ function RelatoriosPage() {
   const comparacao = getRelatorioComparacaoCiclos(
     ciclo,
     cicloAnterior,
-    usuarioAtual,
+    usuarioAtualLegado,
     filtros
   );
 
   const evolucaoIndividual = getRelatorioEvolucaoIndividual(
     ciclo,
     cicloAnterior,
-    usuarioAtual,
+    usuarioAtualLegado,
     filtros
   );
   const evolucaoPorMatricula = new Map(
@@ -206,7 +219,7 @@ function RelatoriosPage() {
   const historicoCiclos = getRelatorioHistoricoCiclos(
     ciclosDisponiveis,
     ciclo,
-    usuarioAtual,
+    usuarioAtualLegado,
     filtros
   );
 
@@ -220,7 +233,7 @@ function RelatoriosPage() {
         criterioAbertoId,
         ciclo,
         cicloAnterior,
-        usuarioAtual,
+        usuarioAtualLegado,
         filtros
       )
     : undefined;
@@ -230,7 +243,7 @@ function RelatoriosPage() {
         criterioAbertoId,
         ciclosDisponiveis,
         ciclo,
-        usuarioAtual,
+        usuarioAtualLegado,
         filtros
       )
     : undefined;

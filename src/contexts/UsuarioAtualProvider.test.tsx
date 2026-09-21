@@ -11,6 +11,13 @@ import {
 } from "./impersonacaoDev";
 import { useUsuarioAtual } from "./UsuarioAtualContext";
 import { UsuarioAtualProvider } from "./UsuarioAtualProvider";
+import {
+  carregarIdentidadeSoberana,
+  colaboradorLegadoDaIdentidade,
+  type DependenciasIdentidadeSoberana,
+} from "./identidadeSoberana";
+import type { ColaboradorSoberano } from "../services/colaboradoresSoberanos/acessoColaboradoresSoberanos";
+import type { EstruturaSoberana } from "../infrastructure/supabase/estrutura/repositorioEstruturaSoberana";
 
 const CHAVE_COLABORADORES = "feedback-control-colaboradores";
 const CHAVE_SESSAO_SUPABASE = "supabase.auth.token";
@@ -73,6 +80,163 @@ function renderizar(gate: boolean, organizacaoAtivaId?: string | null): string {
     </UsuarioAtualProvider>
   );
 }
+
+const VINCULO_FICTICIO = "11111111-1111-4111-8111-111111111111";
+const OUTRO_COLLABORATOR = "22222222-2222-4222-8222-222222222222";
+
+function estruturaPessoalDe(
+  colaboradores: readonly { readonly collaboratorId: string; readonly nome: string }[]
+): EstruturaSoberana {
+  return {
+    unidades: [],
+    periodosParent: [],
+    posicoes: [],
+    reportingLines: [],
+    ocupacoes: [],
+    cargos: [],
+    senioridades: [],
+    colegiados: [],
+    colaboradores,
+  };
+}
+
+function colaboradorSoberanoDe(
+  collaboratorId: string,
+  matricula: string | null
+): ColaboradorSoberano {
+  return {
+    collaboratorId,
+    matricula,
+    fullName: "Pessoa Fictícia",
+    email: "pessoa.ficticia@example.invalid",
+    status: "active",
+    admissionDate: null,
+    unitId: null,
+    unitName: null,
+    jobRoleCode: null,
+    jobRoleName: null,
+    seniorityName: null,
+    managerCollaboratorId: null,
+    managerFullName: null,
+    version: 1,
+  };
+}
+
+function dependencias(
+  over: Partial<DependenciasIdentidadeSoberana> = {}
+): DependenciasIdentidadeSoberana {
+  return {
+    lerAutorizacao: async () => ({
+      podeEstrutura: false,
+      podeCatalogo: false,
+      collaboratorId: VINCULO_FICTICIO,
+    }),
+    lerEstruturaPessoal: async () => ({
+      ok: true,
+      dados: estruturaPessoalDe([
+        { collaboratorId: VINCULO_FICTICIO, nome: "Carolina Fictícia" },
+      ]),
+    }),
+    listarColaboradores: async () => ({
+      ok: false,
+      codigo: "FORBIDDEN",
+      mensagem: "sem permissão",
+    }),
+    ...over,
+  };
+}
+
+describe("#333 — identidade pessoal pelo VÍNCULO soberano (sem matrícula/e-mail)", () => {
+  it("vinculado SEM ocupação/hierarquia => identidade definida e sem matrícula", async () => {
+    const identidade = await carregarIdentidadeSoberana("org-1", dependencias());
+
+    expect(identidade?.collaboratorId).toBe(VINCULO_FICTICIO);
+    expect(identidade?.nome).toBe("Carolina Fictícia");
+    expect(identidade?.matricula).toBeUndefined();
+    // Sem matrícula não há projeção legada — e nenhum número é inventado.
+    expect(colaboradorLegadoDaIdentidade(identidade!)).toBeUndefined();
+  });
+
+  it("universo NEGADO (collaborator.listar FORBIDDEN) => identidade preservada", async () => {
+    const identidade = await carregarIdentidadeSoberana("org-1", dependencias());
+
+    expect(identidade).toBeDefined();
+    expect(identidade?.collaboratorId).toBe(VINCULO_FICTICIO);
+    expect(identidade?.nome).toBe("Carolina Fictícia");
+  });
+
+  it("universo disponível => matrícula é COMPLEMENTO da apresentação, não requisito", async () => {
+    const identidade = await carregarIdentidadeSoberana(
+      "org-1",
+      dependencias({
+        listarColaboradores: async () => ({
+          ok: true,
+          dados: [colaboradorSoberanoDe(VINCULO_FICTICIO, "4242")],
+        }),
+      })
+    );
+
+    expect(identidade?.matricula).toBe(4242);
+    expect(colaboradorLegadoDaIdentidade(identidade!)?.matricula).toBe(4242);
+  });
+
+  it("collaborator_id AUSENTE => fail-closed sem sequer ler a estrutura pessoal", async () => {
+    let leuPessoal = false;
+
+    const identidade = await carregarIdentidadeSoberana(
+      "org-1",
+      dependencias({
+        lerAutorizacao: async () => ({
+          podeEstrutura: false,
+          podeCatalogo: false,
+          collaboratorId: null,
+        }),
+        lerEstruturaPessoal: async () => {
+          leuPessoal = true;
+          return { ok: true, dados: estruturaPessoalDe([]) };
+        },
+      })
+    );
+
+    expect(identidade).toBeUndefined();
+    expect(leuPessoal).toBe(false);
+  });
+
+  it("estrutura pessoal NEGADA => fail-closed", async () => {
+    const identidade = await carregarIdentidadeSoberana(
+      "org-1",
+      dependencias({
+        lerEstruturaPessoal: async () => ({
+          ok: false,
+          codigo: "FORBIDDEN",
+          mensagem: "sem permissão",
+        }),
+      })
+    );
+
+    expect(identidade).toBeUndefined();
+  });
+
+  it("cross-tenant NÃO amplia identidade: linha de terceiro nunca vira identidade", async () => {
+    const identidade = await carregarIdentidadeSoberana(
+      "org-1",
+      dependencias({
+        lerEstruturaPessoal: async () => ({
+          ok: true,
+          dados: estruturaPessoalDe([
+            { collaboratorId: OUTRO_COLLABORATOR, nome: "Terceiro Fictício" },
+          ]),
+        }),
+        listarColaboradores: async () => ({
+          ok: true,
+          dados: [colaboradorSoberanoDe(OUTRO_COLLABORATOR, "9999")],
+        }),
+      })
+    );
+
+    expect(identidade).toBeUndefined();
+  });
+});
 
 describe("impersonação DEV (F2-09) — provider e helpers", () => {
   beforeEach(() => {

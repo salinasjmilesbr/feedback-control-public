@@ -255,7 +255,10 @@ function MinhasMetasPage({
     };
   }, []);
 
-  const matriculaApresentacao = usuarioAtual ? String(usuarioAtual.matricula) : null;
+  const matriculaApresentacao =
+    usuarioAtual && usuarioAtual.matricula !== undefined
+      ? String(usuarioAtual.matricula)
+      : null;
   /** Chave da leitura corrente: organização + ator + versão de recarga. */
   const chaveLeitura = `${organizacaoAtivaId ?? "sem-organizacao"}|${
     matriculaApresentacao ?? "sem-ator"

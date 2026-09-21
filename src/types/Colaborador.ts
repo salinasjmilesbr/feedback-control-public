@@ -41,6 +41,29 @@ export interface Colaborador {
 
 
 /**
+ * #333 — IDENTIDADE SOBERANA do ator, reconhecida pelo VÍNCULO
+ * (estrutura_autorizacao.collaborator_id) + a PRÓPRIA entrada em
+ * estrutura_pessoal. Difere do `Colaborador` legado em dois pontos:
+ *
+ * - `collaboratorId` é a chave CANÔNICA (UUID soberano);
+ * - `matricula` é RÓTULO OPCIONAL (complemento da listagem do universo, gated
+ *   por `collaborator.read`): sua ausência significa "não informada" e NUNCA
+ *   impede reconhecer o usuário nem inventa um número.
+ *
+ * Quem exige matrícula numérica continua consumindo `Colaborador` (domínio
+ * legado, inalterado); as superfícies pessoais consomem esta identidade.
+ */
+export interface IdentidadeColaborador extends Omit<Colaborador, "matricula"> {
+  /**
+   * UUID soberano do vínculo. Presente em toda identidade resolvida pelo
+   * provider (#333); opcional no TIPO apenas porque o contexto também recebe
+   * fixtures legadas (impersonação DEV), que não conhecem UUID.
+   */
+  readonly collaboratorId?: string;
+  readonly matricula?: number;
+}
+
+/**
  * Funções avaliadas pela estrutura com gerente, coordenador direto e colegiado.
  * Estagiário segue o mesmo fluxo operacional de avaliação do Analista,
  * mas sem senioridade.
