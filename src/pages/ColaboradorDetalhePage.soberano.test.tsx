@@ -329,6 +329,17 @@ describe("detalhe soberano em ColaboradorDetalhePage", () => {
     expect(getColaboradorByMatricula).not.toHaveBeenCalled();
   });
 
+  it("expõe o convite na ficha quando há e-mail soberano", () => {
+    const html = renderizar({
+      fase: "pronto",
+      colaborador: soberano({ email: "convite@example.invalid" }),
+      historico: [],
+      erroHistorico: null,
+    });
+
+    expect(html).toContain("Enviar convite");
+  });
+
   it("exibe posição, gestor derivado da reporting line e colegiado vigentes", () => {
     const html = renderizar(
       {

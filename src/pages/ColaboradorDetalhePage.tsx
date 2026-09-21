@@ -412,7 +412,7 @@ function ColaboradorDetalhePage({
 }: ColaboradorDetalhePageProps = {}) {
   const { collaboratorId } = useParams();
   const navigate = useNavigate();
-  const { organizacaoAtivaId } = useAuth();
+  const { organizacaoAtivaId, convidarUsuario } = useAuth();
   const [depsInjetadas] = useState<DependenciasAcessoColaboradores>(
     () => deps ?? SEM_DEPENDENCIAS
   );
@@ -421,6 +421,12 @@ function ColaboradorDetalhePage({
     readonly estado: EstadoDetalheColaborador;
   } | null>(null);
   const [versao, setVersao] = useState(0);
+  const [estadoConvite, setEstadoConvite] = useState<
+    | { readonly fase: "inativo" }
+    | { readonly fase: "processando" }
+    | { readonly fase: "enviado" }
+    | { readonly fase: "erro"; readonly mensagem: string }
+  >({ fase: "inativo" });
 
   /**
    * Fotografia soberana (posições/ocupações/reporting lines/colegiado) — usada
@@ -520,6 +526,35 @@ function ColaboradorDetalhePage({
           (carregamento?.chave === chaveCarregamento
             ? carregamento.estado
             : { fase: "carregando" }));
+
+  async function enviarConvite() {
+    if (
+      estado.fase !== "pronto" ||
+      !organizacaoAtivaId ||
+      !estado.colaborador.email.trim() ||
+      estadoConvite.fase === "processando"
+    ) {
+      return;
+    }
+
+    setEstadoConvite({ fase: "processando" });
+    try {
+      await convidarUsuario(
+        estado.colaborador.email.trim(),
+        organizacaoAtivaId,
+        estado.colaborador.collaboratorId
+      );
+      setEstadoConvite({ fase: "enviado" });
+    } catch (erro) {
+      setEstadoConvite({
+        fase: "erro",
+        mensagem:
+          erro instanceof Error
+            ? erro.message
+            : "Não foi possível enviar o convite.",
+      });
+    }
+  }
 
   /**
    * F5-11 P5 (Issue #250), L4 — leitura SOBERANA das observações do ALVO pela
@@ -735,6 +770,33 @@ function ColaboradorDetalhePage({
             <IconEdit />
             Editar cadastro
           </Link>
+          {colaborador.email.trim() && estadoConvite.fase === "inativo" && (
+            <button
+              type="button"
+              className="virtus-btn virtus-btn--outline collaborator-link-button"
+              onClick={() => void enviarConvite()}
+            >
+              Enviar convite
+            </button>
+          )}
+          {estadoConvite.fase === "processando" && (
+            <span role="status">Enviando convite…</span>
+          )}
+          {estadoConvite.fase === "enviado" && (
+            <span role="status">Convite enviado para {colaborador.email}.</span>
+          )}
+          {estadoConvite.fase === "erro" && (
+            <>
+              <span role="alert">{estadoConvite.mensagem}</span>
+              <button
+                type="button"
+                className="virtus-btn virtus-btn--outline collaborator-link-button"
+                onClick={() => void enviarConvite()}
+              >
+                Tentar enviar novamente
+              </button>
+            </>
+          )}
         </div>
       </section>
 
