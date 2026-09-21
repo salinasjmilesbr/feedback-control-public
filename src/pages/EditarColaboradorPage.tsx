@@ -25,6 +25,7 @@ import SeletorPosicao from "../components/SeletorPosicao";
 import type { EstruturaSoberana } from "../infrastructure/supabase/estrutura/repositorioEstruturaSoberana";
 import {
   ehUuid,
+  matriculaTextual,
   type CodigoPublico,
 } from "../infrastructure/supabase/colaboradores/contrato";
 import {
@@ -686,8 +687,11 @@ function FormularioEdicao({
     setErro("");
     setAviso("");
 
-    if (!/^\d+$/.test(novaMatricula.trim()) || Number(novaMatricula.trim()) <= 0) {
-      setErro("Informe uma matrícula válida (somente dígitos).");
+    // Issue #319: a nova matrícula segue a regra canônica (texto, com `trim`,
+    // não vazio) — a premissa legada numérica não se aplica; formato e
+    // unicidade são do servidor.
+    if (!matriculaTextual(novaMatricula)) {
+      setErro("Informe a nova matrícula (números, letras ou ambos; ex.: ACME002).");
       return;
     }
     if (!vigenciaMatricula || !motivoMatricula.trim()) {
@@ -864,9 +868,9 @@ function FormularioEdicao({
             <span>Nova matrícula *</span>
             <input
               type="text"
-              inputMode="numeric"
               value={novaMatricula}
               onChange={(event) => setNovaMatricula(event.target.value)}
+              placeholder="Ex.: 123456, ACME002 ou MARIA"
             />
           </label>
 

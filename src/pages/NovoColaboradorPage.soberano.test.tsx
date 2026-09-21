@@ -1,3 +1,7 @@
+/// <reference types="node" />
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 /**
  * F5-07/F5-08 P5 — testes de tela do cadastro soberano de colaborador.
  *
@@ -80,6 +84,30 @@ describe("cadastro soberano em NovoColaboradorPage", () => {
   beforeEach(() => {
     instalarLocalStorageEmMemoria();
     redefinirAcessoColaboradoresSoberanos();
+  });
+
+  /**
+   * Issue #319 — matrícula é identificador TEXTUAL: a tela usa a regra CANÔNICA
+   * da fronteira soberana (`matriculaTextual`) e não pode voltar a exigir teclado
+   * numérico nem a reprovar ACME002/MARIA.
+   */
+  it("trata a matrícula como identificador textual (ACME002/MARIA), sem teclado numérico", () => {
+    const html = renderizar();
+
+    expect(html).toContain("Matrícula *");
+    expect(html.toLowerCase()).not.toContain("inputmode");
+    // Exemplos textuais explícitos no próprio formulário.
+    expect(html).toContain("ACME002");
+    expect(html).toContain("MARIA");
+
+    const fonte = readFileSync(
+      fileURLToPath(new URL("./NovoColaboradorPage.tsx", import.meta.url)),
+      "utf8"
+    );
+    // A premissa legada (só dígitos) não pode voltar.
+    expect(fonte).not.toContain("Number(matricula.trim()) <= 0");
+    expect(fonte).not.toContain("somente dígitos");
+    expect(fonte).toContain("matriculaTextual(");
   });
 
   it("mantém no formulário pessoa/matrícula/status + ALOCAÇÃO soberana (sem texto livre de estrutura)", () => {

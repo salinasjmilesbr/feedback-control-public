@@ -580,18 +580,36 @@ function texto(valor: unknown, max: number): string | null {
 }
 
 /**
- * Matrícula como INTENÇÃO: inteiro positivo, aceita em número ou texto.
- * Devolve a forma canônica em texto (o banco compara `business_code` textual).
+ * Matrícula como INTENÇÃO: identificador **TEXTUAL** de negócio (`business_code`).
+ *
+ * Regra (Issue #319): obrigatória, com `trim`, NÃO vazia — e nada além disso.
+ * O banco NÃO impõe formato: `ck_collaborator_identifiers_business_code` exige
+ * apenas `business_code <> '' and business_code = btrim(business_code)`
+ * (`20260907103100:169-170`) e a RPC só recusa vazio
+ * (`20260913010000:76-78`).
+ *
+ * A premissa anterior — "inteiro positivo, somente dígitos" — era LEGADA do
+ * cliente e reprovava matrículas válidas (`ACME002`, `MARIA`, `ABC123`). Esta
+ * função é a FONTE ÚNICA da regra: as telas a reutilizam para o mesmo critério,
+ * em vez de repetir um regex próprio.
+ *
+ * A fronteira continua validando SOMENTE FORMA: nenhuma classe de caractere,
+ * nenhum teto de tamanho e nenhuma normalização de caixa são inventados aqui.
+ * Formato, unicidade por organização e conflito
+ * (`unique (organization_id, business_code)`) permanecem no servidor e voltam
+ * como código público (`CONFLICT`).
+ *
+ * `number` segue aceito apenas por COMPATIBILIDADE de chamadores legados e é
+ * canonizado para texto (`7` ⇒ `"7"`), como o banco já fazia ao comparar
+ * `business_code` textual; fracionário/NaN/Infinity ⇒ `null` (fail-closed).
  */
-function matricula(valor: unknown): string | null {
+export function matriculaTextual(valor: unknown): string | null {
   if (typeof valor === "number") {
-    return Number.isInteger(valor) && valor > 0 ? String(valor) : null;
+    return Number.isSafeInteger(valor) ? String(valor) : null;
   }
-  if (typeof valor === "string") {
-    const limpo = valor.trim();
-    return /^\d+$/.test(limpo) && Number(limpo) > 0 ? limpo : null;
-  }
-  return null;
+  if (typeof valor !== "string") return null;
+  const limpo = valor.trim();
+  return limpo.length > 0 ? limpo : null;
 }
 
 /** Formato literal estrito: a interpretação/rotação de data é do banco. */
@@ -919,7 +937,7 @@ export function validarEntradaColaborador(corpo: unknown): ResultadoValidacaoCol
         };
       }
       if (temMatricula) {
-        const normalizada = matricula(cru.matricula);
+        const normalizada = matriculaTextual(cru.matricula);
         if (!normalizada) {
           return { ok: false, code: "INVALID_INPUT", message: "matricula inválida." };
         }
@@ -946,7 +964,7 @@ export function validarEntradaColaborador(corpo: unknown): ResultadoValidacaoCol
       if (falta) return falta;
       const full_name = texto(cru.full_name, 200);
       const email = texto(cru.email, 320);
-      const matriculaNormalizada = matricula(cru.matricula);
+      const matriculaNormalizada = matriculaTextual(cru.matricula);
       if (!full_name) {
         return { ok: false, code: "INVALID_INPUT", message: "full_name inválido." };
       }
@@ -1056,7 +1074,7 @@ export function validarEntradaColaborador(corpo: unknown): ResultadoValidacaoCol
       if (!ehUuid(cru.collaborator_id)) {
         return { ok: false, code: "INVALID_INPUT", message: "collaborator_id inválido." };
       }
-      const nova_matricula = matricula(cru.nova_matricula);
+      const nova_matricula = matriculaTextual(cru.nova_matricula);
       if (!nova_matricula) {
         return { ok: false, code: "INVALID_INPUT", message: "nova_matricula inválida." };
       }
