@@ -358,6 +358,7 @@ declare
   v_n         integer;
   v_sem_inv   boolean;
   v_mesmo_dono boolean;
+  v_tab       text;
 begin
   -- (a) Semântica OWNER: as views não declaram `security_invoker=true` e
   --     pertencem ao MESMO owner das tabelas (mecanismo de leitura privilegiada).
@@ -433,10 +434,35 @@ begin
     raise exception 'F6_A21_P1: D15 alterada (membership.manage deveria seguir nao concedivel)';
   end if;
 
-  -- (f) P1 é ADITIVO: a leitura direta existente permanece INTACTA (P3 a fecha).
-  if not has_table_privilege('authenticated', 'public.organizational_positions', 'SELECT') then
-    raise exception 'F6_A21_P1: leitura direta ja revogada — P1 deve ser aditivo';
+  -- (f) Leitura direta. A P1 e ADITIVA (quem fecha e a P3), mas uma migration
+  --     REAPLICADA por `migration up` pode encontrar um banco PERSISTENTE que ja
+  --     recebeu o fechamento — correcao pos-merge (#327): sao aceitos os DOIS
+  --     estados coerentes, e nada e reaberto:
+  --       (a) pre-P3 — leitura direta presente (P1 puramente aditivo);
+  --       (b) pos-P3 — as 10 tabelas que `lerEstrutura` lia direto estao
+  --                    FECHADAS ao cliente (zero policy e zero privilegio) e as 3
+  --                    views seguem sendo a superficie legivel (verificado em (c)).
+  --     Estado MISTO (fechamento parcial, ou policy remanescente) continua
+  --     reprovando.
+  if has_table_privilege('authenticated', 'public.organizational_positions', 'SELECT') then
+    raise notice '[PASS] F6-A21 P1(f): leitura direta presente (estado pre-P3) — camada aditiva preservada';
+  else
+    foreach v_tab in array array[
+      'collaborators','job_roles','seniority_levels','organizational_units',
+      'organizational_unit_parent_periods','organizational_positions',
+      'position_reporting_lines','occupations','collegiate_configurations',
+      'collegiate_configuration_members'] loop
+      if has_table_privilege('authenticated', format('public.%I', v_tab), 'SELECT')
+         or has_table_privilege('anon', format('public.%I', v_tab), 'SELECT') then
+        raise exception 'F6_A21_P1: estado invalido — fechamento parcial (cliente ainda le public.%)', v_tab;
+      end if;
+      if exists (select 1 from pg_policies p
+                  where p.schemaname = 'public' and p.tablename = v_tab) then
+        raise exception 'F6_A21_P1: estado invalido — public.% com policy no estado fechado', v_tab;
+      end if;
+    end loop;
+    raise notice '[PASS] F6-A21 P1(f): as 10 tabelas estruturais estao FECHADAS com o fechamento P3 integro — sequencia P1->P2->P3 reaplicavel';
   end if;
 
-  raise notice '[PASS] F6-A21 P1: 3 views owner-semantics, service do ator, SELECT so em authenticated, zero privilegio novo em tabela autorizativa, 4 DEFINER/D15 intactos e leitura direta preservada (aditivo)';
+  raise notice '[PASS] F6-A21 P1: 3 views owner-semantics, service do ator, SELECT so em authenticated, zero privilegio novo em tabela autorizativa, 4 DEFINER/D15 intactos e leitura direta em estado coerente (pre-P3 aditivo ou pos-P3 fechado)';
 end $guarda$;
