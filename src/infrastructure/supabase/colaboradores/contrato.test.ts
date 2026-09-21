@@ -623,15 +623,57 @@ describe("F5-07 contrato.ts — motivo, domínios fechados e vigência", () => {
   it.each([
     ["vazia", ""],
     ["em branco", "   "],
-    ["texto", "abc"],
-    ["zero", 0],
-    ["negativa", -1],
+    ["ausente", undefined],
+    ["booleana", true],
     ["fracionária", 1.5],
+    ["NaN", Number.NaN],
   ])("recusa matrícula %s na criação", (_nome, matricula) => {
     const resultado = validar({ ...corpoValido("collaborator.criar"), matricula });
     expect(resultado.ok).toBe(false);
     if (resultado.ok) return;
     expect(resultado.message).toBe("matricula inválida.");
+  });
+
+  /**
+   * Issue #319 — a matrícula é identificador TEXTUAL de negócio. O schema só
+   * exige não vazio e sem espaços nas bordas
+   * (`ck_collaborator_identifiers_business_code` — 20260907103100:169-170) e a
+   * RPC só recusa vazio (20260913010000:76-78). "Somente dígitos" era premissa
+   * LEGADA do cliente e reprovava casos reais (ACME002, MARIA, ABC123).
+   */
+  it.each([
+    ["somente números", "123456"],
+    ["letras e números", "ACME002"],
+    ["somente letras", "MARIA"],
+    ["letras e números mistos", "ABC123"],
+    ["com espaços nas bordas", "  ACME002  "],
+    ["numérica com zeros à esquerda", "007"],
+  ])("aceita matrícula %s na criação (#319)", (_nome, matricula) => {
+    const resultado = validar({ ...corpoValido("collaborator.criar"), matricula });
+    expect(resultado.ok).toBe(true);
+    if (!resultado.ok) return;
+    expect(resultado.entrada).toMatchObject({ matricula: String(matricula).trim() });
+  });
+
+  it("aceita matrícula textual também ao DEFINIR novo identificador (#319)", () => {
+    const resultado = validar({
+      ...corpoValido("collaborator.identificador.definir"),
+      nova_matricula: "ACME002",
+    });
+    expect(resultado.ok).toBe(true);
+    if (!resultado.ok) return;
+    expect(resultado.entrada).toMatchObject({ nova_matricula: "ACME002" });
+  });
+
+  it("aceita matrícula textual como INTENÇÃO de leitura por matrícula (#319)", () => {
+    const resultado = validar({
+      operacao: "collaborator.obter",
+      organization_id: ORG,
+      matricula: "MARIA",
+    });
+    expect(resultado.ok).toBe(true);
+    if (!resultado.ok) return;
+    expect(resultado.entrada).toMatchObject({ matricula: "MARIA" });
   });
 
   it.each([

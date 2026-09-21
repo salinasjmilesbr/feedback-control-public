@@ -34,6 +34,43 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
+### 3.34 Issue #319 — matrícula como identificador TEXTUAL (fim da premissa de dígitos) — IMPLEMENTADO · PR/MERGE PENDENTES
+
+- **Atividade/branch:** Issue **#319** (correção de regra; blocker de runtime do cadastro), branch
+  **`fix/issue-319-matricula-textual`**, base **`main` = `fa92dd1`**.
+- **Regra REAL do banco (inspecionada, não presumida):** `collaborator_identifiers.business_code` é
+  `text not null`, único por organização (`unique (organization_id, business_code)`) e o ÚNICO check é
+  `ck_collaborator_identifiers_business_code check (business_code <> '' and business_code = btrim(business_code))`
+  (`20260907103100:157-170`); a RPC `colaborador_criar` recebe `p_matricula text`, faz `btrim` e só
+  recusa vazio (`20260913010000:40-78`). **Não há restrição numérica, classe de caractere nem teto de
+  tamanho** — e os próprios validadores SQL já usam códigos alfanuméricos (`MAT-1001`, `F507-0100`,
+  `P3-N1`), o que confirma que a premissa numérica era só do cliente.
+- **Causa do blocker:** premissa legada "inteiro positivo / somente dígitos" em **três** níveis do
+  caminho de cadastro: `NovoColaboradorPage.tsx` (regex `^\d+$`, `inputMode="numeric"`, placeholder e
+  mensagem numéricos), `EditarColaboradorPage.tsx` (mesma regex em "Nova matrícula" + teclado numérico)
+  e `colaboradores/contrato.ts` (`matricula()` aceitava apenas inteiro positivo, inclusive em
+  `collaborator.criar`, `collaborator.obter` por matrícula e `collaborator.identificador.definir`).
+- **Correção (uma fonte da regra):** **`matriculaTextual(valor)` exportada do contrato** — texto, com
+  `trim`, não vazio; `number` segue aceito só por compatibilidade de chamadores legados e é canonizado
+  para texto (`7` ⇒ `"7"`), com fracionário/NaN ⇒ `null` (fail-closed). As duas telas passam a
+  reutilizá-la (nenhum regex próprio) e perderam o teclado numérico; mensagem e placeholder citam
+  exemplos textuais. Nenhuma classe de caractere, teto de tamanho ou normalização de caixa foi
+  inventada; **autoridade, tenant isolation, RLS, schema e unicidade não foram tocados** (conflito
+  continua vindo do servidor como `CONFLICT`).
+- **GATES:** vitest **6 arquivos / 350 testes passando** (contrato 234, Edge 31, RPC 28, telas 5 + 7,
+  guardas de UI 45); `npm run lint` exit 0; `npm run build` exit 0; `git diff --check` exit 0.
+- **Testes explícitos (#319):** o contrato aceita `123456`, `ACME002`, `MARIA`, `ABC123`, valor com
+  espaços nas bordas e `007`, e mantém a recusa de vazio/branco/ausente/booleana/fracionária/NaN; cada
+  tela ganhou guarda própria (sem teclado numérico, sem a premissa legada, reutilizando a regra
+  canônica).
+- **Dívida registrada (FORA do caminho afetado — domínio LEGADO de avaliação/ciclo):** a matrícula
+  numérica ainda é premissa em `avaliacoes/ponteMatricula.ts` (`normalizarMatricula` devolve `number`),
+  `avaliacoes/contrato.ts` (`matricula_avaliado` exige dígitos), `avaliacoes/cutover.ts` (chave por
+  número), `ciclos/contrato.ts` (aceita `number`), `services/estruturaSoberanaCliente.ts`
+  (`matriculaLegadaNumerica` devolve `null` para matrícula textual) e no tipo legado
+  `types/Colaborador.ts:19` (`matricula: number`). Um tenant com matrícula textual continua sem
+  resolução nessas telas: exige atividade própria (a ponte alimenta chaves de cutover numéricas).
+
 ### 3.32 Issue #317 — reconstrução limpa, Fase 1: Foundation + theming mínimo — IMPLEMENTADO · PR/MERGE PENDENTES
 
 - **Atividade/branch:** Issue **#317** (Fase 1), branch **`feat/issue-317-foundation-ui-clean`**, base

@@ -1,3 +1,7 @@
+/// <reference types="node" />
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 /**
  * F5-07/F5-08 P5 — testes de tela da edição soberana.
  *
@@ -158,6 +162,27 @@ describe("edição soberana em EditarColaboradorPage", () => {
   beforeEach(() => {
     instalarLocalStorageEmMemoria();
     redefinirAcessoColaboradoresSoberanos();
+  });
+
+  /**
+   * Issue #319 — a NOVA matrícula segue a MESMA regra canônica (texto, com
+   * `trim`, não vazio): sem teclado numérico e sem regex de dígitos.
+   */
+  it("trata a nova matrícula como identificador textual (ACME002/MARIA)", () => {
+    const html = renderizar({ fase: "pronto", colaborador: soberano() });
+
+    expect(html).toContain("Nova matrícula *");
+    expect(html.toLowerCase()).not.toContain("inputmode");
+    expect(html).toContain("ACME002");
+    expect(html).toContain("MARIA");
+
+    const fonte = readFileSync(
+      fileURLToPath(new URL("./EditarColaboradorPage.tsx", import.meta.url)),
+      "utf8"
+    );
+    expect(fonte).not.toContain("Number(novaMatricula.trim()) <= 0");
+    expect(fonte).not.toContain("somente dígitos");
+    expect(fonte).toContain("matriculaTextual(");
   });
 
   it("carrega a projeção por UUID com versão e operações separadas", () => {

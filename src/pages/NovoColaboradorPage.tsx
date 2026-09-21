@@ -25,7 +25,10 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import SeletorPosicao from "../components/SeletorPosicao";
-import type { CodigoPublico } from "../infrastructure/supabase/colaboradores/contrato";
+import {
+  matriculaTextual,
+  type CodigoPublico,
+} from "../infrastructure/supabase/colaboradores/contrato";
 import type { EstruturaSoberana } from "../infrastructure/supabase/estrutura/repositorioEstruturaSoberana";
 import {
   criarColaboradorComAlocacao,
@@ -229,13 +232,16 @@ function NovoColaboradorPage({
 
     setErroLocal("");
 
-    if (!matricula.trim() || !nome.trim() || !email.trim() || !dataAdmissao) {
+    if (!nome.trim() || !email.trim() || !dataAdmissao) {
       setErroLocal("Preencha todos os campos obrigatórios.");
       return;
     }
 
-    if (!/^\d+$/.test(matricula.trim()) || Number(matricula.trim()) <= 0) {
-      setErroLocal("Informe uma matrícula válida (somente dígitos).");
+    // Issue #319: a matrícula é identificador TEXTUAL (obrigatório, com `trim`)
+    // e a regra é a MESMA da fronteira soberana e do banco — a premissa legada
+    // numérica não se aplica. Formato e unicidade continuam no servidor.
+    if (!matriculaTextual(matricula)) {
+      setErroLocal("Informe a matrícula (números, letras ou ambos; ex.: ACME002).");
       return;
     }
 
@@ -391,14 +397,14 @@ function NovoColaboradorPage({
             <span>Matrícula *</span>
             <input
               type="text"
-              inputMode="numeric"
               value={matricula}
               onChange={(event) => setMatricula(event.target.value)}
-              placeholder="Ex.: 123456"
+              placeholder="Ex.: 123456, ACME002 ou MARIA"
               disabled={pessoaEncerrada}
             />
             <small>
               A matrícula é uma intenção: o servidor resolve o identificador.
+              Aceita números, letras ou ambos.
             </small>
           </label>
 
