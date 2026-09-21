@@ -34,6 +34,40 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
+### 3.36 Issue #321 (F6-A20) — atomicidade da conclusão do primeiro acesso — IMPLEMENTADO · PR/MERGE PENDENTES
+
+- **Atividade/branch:** Issue **#321**, branch **`feat/issue-321-onboarding-senha`** (mesma branch da
+  entrega F6-A20); SHA auditado **`d538862`** (BLOQUEADO pela auditoria).
+- **Blocker auditado:** `concluir-primeiro-acesso` alterava a senha no Supabase Auth e só depois limpava
+  `user_profiles.first_access_pending`; falha no segundo passo deixava a senha alterada com o onboarding
+  pendente e — pior — o `UPDATE` **não provava linha alterada** (nenhuma representação devolvida), de modo
+  que a fronteira podia responder `completed: true` sem **prova soberana** de conclusão.
+- **Estratégia de consistência (não há transação única Auth ↔ Postgres):** SAGA com o **estado soberano como
+  ponto de commit** — (1) senha no Auth PRIMEIRO (idempotente e repetível; falha aqui não altera estado);
+  (2) `first_access_pending` limpo por ÚLTIMO com **predicado de pendência + representação devolvida**
+  (`update … eq(id).eq(first_access_pending, true).select(id)`), exigindo **exatamente 1 linha**;
+  (3) sem essa prova, o estado corrente é **verificado por leitura** e a conclusão só é reportada se a
+  leitura comprovar que a pendência não existe mais (conclusão concorrente). **Nunca** se responde
+  `completed` sem prova; a pendência permanece `true` até a conclusão confirmada e o **retry converge**
+  porque o gate aceita nova tentativa enquanto a pendência existir (a fonte é o perfil soberano — nada de
+  URL/`localStorage`).
+- **Códigos públicos:** `NOT_AUTHORIZED` 403 (sem perfil/erro de leitura), `ALREADY_COMPLETED` 409
+  (pendência inexistente = fato soberano), `INVALID_PASSWORD` 400, `INCOMPLETE` 500 (escrita não provada
+  com pendência ainda ativa) e `INTERNAL` 500 (nada pôde ser provado).
+- **Arquivos:** `supabase/functions/concluir-primeiro-acesso/core.ts` (novo — decisões puras),
+  `index.ts` (fronteira fina), `core.test.ts` (novo) e
+  `src/authorization/f6A20PrimeiroAcessoSenha.test.ts` (novo — guarda estática de ordem, prova e escopo).
+- **GATES:** vitest **2 arquivos / 22 testes passando**; `npm run lint` exit 0; `npm run build` exit 0;
+  `git diff --check` exit 0. `npm test` completo **não** executado (diretriz).
+- **Escopo preservado:** nenhuma migration, nenhum RPC novo, nenhuma alteração de roles/capabilities/tenant,
+  nenhum redesenho de tela e nenhuma mudança no cliente (a tela já falha fechada sem `completed`).
+- **Dívida residual:** (1) a senha anterior é desconhecida, então não existe compensação possível — a
+  convergência é o **retry**; se o usuário abandonar a tela após a falha do segundo passo, a conta fica com
+  a senha nova e a pendência ativa (acesso bloqueado, só um novo retry conclui — comportamento seguro);
+  (2) não há fila/registro de tentativas parciais nesta fronteira; (3) uma RPC que devolvesse a contagem de
+  linhas alteradas seria marginalmente mais barata que `.select(id)`, mas exigiria RPC novo — desnecessário
+  para a correção.
+
 ### 3.35 Issue #319 — convite administrativo: gate canônico + vínculo soberano da conta — IMPLEMENTADO · PR/MERGE PENDENTES
 
 - **Atividade/branch:** Issue **#319** (correção do convite), branch
