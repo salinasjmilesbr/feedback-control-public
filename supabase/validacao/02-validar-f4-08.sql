@@ -426,13 +426,20 @@ end $$;
 do $$
 declare v_t text;
 begin
+  -- F6-A21 P1 (Issue #327): as TRES views soberanas de leitura estrutural sao
+  -- APROVADAS por contrato fechado — `estrutura_administrativa` (leitura
+  -- administrativa gated por org.structure.manage/org.catalog.manage),
+  -- `estrutura_pessoal` (subgrafo do proprio ator) e `estrutura_autorizacao`
+  -- (projecao minima para a UI). Qualquer OUTRA view continua REPROVADA (D19).
   select string_agg(c.relname, ', ' order by c.relname) into v_t
   from pg_class c join pg_namespace n on n.oid=c.relnamespace
-  where n.nspname='public' and c.relkind in ('v','m');
+  where n.nspname='public' and c.relkind in ('v','m')
+    and c.relname not in ('estrutura_autorizacao','estrutura_administrativa',
+                          'estrutura_pessoal');
   if v_t is not null then
     raise exception '[FAIL] view/materialized view public nao aprovada (D19 — contrato atual nao preve views): %', v_t;
   end if;
-  raise notice '[PASS] nenhuma view/materialized view public nao aprovada (D19)';
+  raise notice '[PASS] nenhuma view nao aprovada (D19): somente as 3 views do #327 P1 sao aceitas';
 end $$;
 
 do $$
