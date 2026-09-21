@@ -23,6 +23,7 @@ import type { EstadoSessao } from "./controladorSessao";
 export type DecisaoRotaFuncional =
   | { tipo: "carregando" }
   | { tipo: "permitir" }
+  | { tipo: "primeiroAcessoPendente" }
   | { tipo: "semOrganizacao" }
   | { tipo: "aguardandoSelecao" }
   | { tipo: "indisponivelTemporaria" }
@@ -39,6 +40,9 @@ export function decidirAcessoARotasFuncionais(
 
     case "autenticado":
       return { tipo: "permitir" };
+
+    case "primeiroAcessoPendente":
+      return { tipo: "primeiroAcessoPendente" };
 
     case "semOrganizacao":
       return { tipo: "semOrganizacao" };

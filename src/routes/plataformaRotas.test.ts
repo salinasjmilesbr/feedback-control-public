@@ -29,6 +29,17 @@ const ESTADOS: readonly (readonly [EstadoSessao, DecisaoRotaPlataforma["tipo"]])
   [{ status: "semOrganizacao", sessao, identidade }, "permitir"],
   [{ status: "aguardandoSelecao", sessao, identidade }, "permitir"],
   [
+    {
+      status: "primeiroAcessoPendente",
+      sessao,
+      identidade: {
+        ...identidade,
+        perfil: { ...identidade.perfil, firstAccessPending: true },
+      },
+    },
+    "bloquear",
+  ],
+  [
     { status: "acessoNegado", erro: { code: "ACCESS_NOT_PROVISIONED", category: "authentication", message: "x" } },
     "permitir",
   ],
@@ -41,7 +52,7 @@ const ESTADOS: readonly (readonly [EstadoSessao, DecisaoRotaPlataforma["tipo"]])
 
 describe("F6-A03 — guard de plataforma: decisão por estado", () => {
   it("decide os nove estados de sessão", () => {
-    expect(ESTADOS).toHaveLength(10);
+    expect(ESTADOS).toHaveLength(11);
     for (const [estado, esperado] of ESTADOS) {
       expect(decidirAcessoARotaDePlataforma(estado).tipo, estado.status).toBe(esperado);
     }

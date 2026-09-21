@@ -10,6 +10,8 @@ export type AuthContextValue = {
   solicitarRecuperacaoDeSenha: (email: string) => Promise<void>;
   /** F2-05: define a nova senha na sessão de recuperação corrente. */
   redefinirSenha: (novaSenha: string) => Promise<void>;
+  /** Conclui o onboarding pendente via fronteira server-side. */
+  definirSenhaInicial?: (novaSenha: string) => Promise<void>;
   /**
    * F2-06 + F6-A19: convida um usuário por e-mail via Edge Function
    * (server-side) e VINCULA a conta criada à colaboradora já cadastrada

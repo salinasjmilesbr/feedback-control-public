@@ -16,7 +16,7 @@ const MENSAGEM_LINK_INVALIDO =
  * só é aceita com essa sessão válida; sem sessão, falha de forma segura.
  */
 function RedefinirSenhaPage() {
-  const { estado, redefinirSenha, sair } = useAuth();
+  const { estado, redefinirSenha, definirSenhaInicial, sair } = useAuth();
   const [senha, setSenha] = useState("");
   const [confirmacao, setConfirmacao] = useState("");
   const [mensagem, setMensagem] = useState("");
@@ -25,7 +25,7 @@ function RedefinirSenhaPage() {
 
   const status: EstadoRedefinicao = sucesso
     ? "sucesso"
-    : estado.status === "autenticado"
+    : estado.status === "autenticado" || estado.status === "primeiroAcessoPendente"
     ? "pronto"
     : estado.status === "verificando"
     ? "verificando"
@@ -42,7 +42,12 @@ function RedefinirSenhaPage() {
     setMensagem("");
     setEnviando(true);
     try {
-      await redefinirSenha(senha);
+      if (estado.status === "primeiroAcessoPendente") {
+        if (!definirSenhaInicial) throw new Error("Onboarding indisponível.");
+        await definirSenhaInicial(senha);
+      } else {
+        await redefinirSenha(senha);
+      }
       setSenha("");
       setConfirmacao("");
       await sair();
