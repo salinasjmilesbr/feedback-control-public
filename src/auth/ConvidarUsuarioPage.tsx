@@ -41,8 +41,8 @@ function ConvidarUsuarioPage({ deps, estadoInicial }: ConvidarUsuarioPageProps =
 
   const organizacoes = estado.status === "autenticado" ? estado.identidade.organizacoes : [];
 
-  // Fotografia soberana da organização ESCOLHIDA: leitura own-tenant, sem
-  // capability e sem RPC de listagem (D16). Nada é inventado localmente.
+  // Fotografia soberana da organização ESCOLHIDA: VIEW administrativa do #327
+  // (capability revalidada no servidor). Nada é inventado localmente.
   const estrutura = useEstruturaSoberana({
     organizacaoAtivaId: organizacaoId || null,
     ...(deps ? { deps } : {}),

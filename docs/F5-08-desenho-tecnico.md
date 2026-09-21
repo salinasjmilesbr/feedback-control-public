@@ -666,14 +666,16 @@ ampliada (permanece `[]` para as duas, `capabilityTarget.ts:45-46`, com o teste-
 
 ## 13. RLS / grants / RPCs
 
-### 13.1 Leitura (D16) — sem mudança
+### 13.1 Leitura (D16, revisado pelo #327 P3) — views soberanas
 
-As 8 tabelas já têm policy `*_select_same_tenant` e `grant select` a `authenticated`
-(`20260908110000:33-69, 112-125`). A F5-08 **não** cria policy de leitura, **não** cria RPC de
-listagem administrativa e **não** altera grants de leitura. `anon` permanece sem acesso.
-Consequência registrada: qualquer membro ativo da organização pode ler a estrutura da própria
-organização — exatamente o que a F4-08 fechou; as telas de administração não usam essa
-permissão como autorização de escrita.
+Na F5-08 a leitura era o `SELECT` own-tenant já concedido a `authenticated`, sem policy nova,
+sem RPC de listagem e sem gate administrativo. O **#327** fechou essa superfície: a leitura
+estrutural do cliente passa a existir **somente** pelas views `estrutura_administrativa`
+(capability efetiva), `estrutura_pessoal` (subgrafo vigente do próprio ator) e
+`estrutura_autorizacao` (projeção de menu) — ver D16. `anon` permanece sem acesso e as 11
+tabelas estruturais passaram a deny-by-default integral (`20261005000000`). As telas de
+administração leem a view administrativa e nunca usam essa permissão como autorização de
+escrita.
 
 ### 13.2 Escrita — nenhuma policy, grants mínimos
 
@@ -1122,7 +1124,7 @@ Convenções: **gate** é sempre administrativo; `motivo` é obrigatório em tod
 | `estrutura.posicao.reatribuir` (mover posição de unidade/cargo/senioridade) | **não** — D5 + Q2=A (D22): mover = encerrar a posição antiga e criar nova, com realocação explícita das relações vigentes |
 | `estrutura.unidade.reabrir` / `estrutura.posicao.reabrir` | **não** — Q1=A (D21): encerrado não é reaberto nesta atividade; nova vigência exige nova entidade/novo UUID |
 | qualquer `*.excluir` (DELETE físico) | **proibido** — D8 |
-| RPC de **leitura** administrativa (listar unidades/posições/catálogos) | **não** — leitura é RLS F4-08 (D16) |
+| RPC de **leitura** administrativa (listar unidades/posições/catálogos) | **não** — leitura é a view soberana `estrutura_administrativa` (D16 revisado no #327) |
 | operação de snapshot de colegiado por ciclo | F5-09 |
 
 ## 22. Matriz de autorização
@@ -1138,7 +1140,7 @@ Convenções: **gate** é sempre administrativo; `motivo` é obrigatório em tod
 | `estrutura.colegiado.*` (2) | `org.structure.manage` (D11) | idem | idem | idem |
 | `colaborador.ocupacao.*`, `estrutura.reporting.*`, `estrutura.responsabilidade.*`, `estrutura.sucessao.registrar` (F5-07) | `org.structure.manage` | idem | `colaborador_ator_valido` (padrão F5-07) | idem |
 | `colaborador.catalogo.bootstrap` (F5-07) | `org.catalog.manage` | idem | `colaborador_ator_valido` | idem |
-| Leitura de estrutura/catálogo (UI) | **nenhuma capability** (D16) | — | — | policy own-tenant F4-08 |
+| Leitura de estrutura/catálogo (UI) | `org.structure.manage` / `org.catalog.manage` (D16 revisado no #327) | view filtra por capability | view filtra por capability | view `estrutura_administrativa` (zero linha ⇒ `FORBIDDEN`) |
 
 ### 22.2 Matriz de privilégio × papel
 
@@ -1556,11 +1558,31 @@ FKs compostas `(ref_id, organization_id)` (existentes) + tenant do ator revalida
 resolvida por `(id, organization_id)`; cross-tenant ⇒ DENY/`NOT_FOUND`.
 *Evidência:* `20260907130000:207-214, 303-311`; `.ai/architecture-rules.md`.
 
-### D16 — Leitura permanece no contrato F4-08
+### D16 — Leitura estrutural por VIEWS soberanas (revisado pelo #327 P3)
 
-Sem policy nova, sem RPC de listagem, sem gate administrativo para leitura; SELECT own-tenant já
-concedido a `authenticated`.
-*Evidência:* `20260908110000:33-69, 112-125`; F4-08.
+**Revisão do #327 (P1/P2/P2B/P3), com contrato fechado:** a leitura estrutural deixou de ser
+"SELECT own-tenant por RLS para qualquer membro ativo". Passa a ser:
+
+- **leitura administrativa = capability efetiva pela view** `estrutura_administrativa`
+  (`org.structure.manage` para estrutura/pessoas e `org.catalog.manage` para catálogos, com as
+  seções filtradas). **Membership NÃO concede fotografia administrativa**: sem capability a view
+  devolve ZERO linha e o cliente falha `FORBIDDEN` (fail-closed, nunca "estrutura vazia");
+- **leitura pessoal = subgrafo VIGENTE do próprio ator pela view** `estrutura_pessoal`
+  (vínculo soberano + cadeia de gestão acima/abaixo + colegiado vigente), sem exigir capability;
+- **a UI apenas PROJETA** `estrutura_autorizacao` (menu/rotas). Ocultar no menu nunca é
+  autorização: a URL direta continua dependendo da view que entrega os dados;
+- as 10 tabelas estruturais antes lidas por RLS (`collaborators`, `job_roles`,
+  `seniority_levels`, `organizational_units`, `organizational_unit_parent_periods`,
+  `organizational_positions`, `position_reporting_lines`, `occupations`,
+  `collegiate_configurations`, `collegiate_configuration_members`) e a filha indireta
+  `collaborator_status_periods` (cuja policy referenciava `collaborators`) passaram a
+  **DENY-BY-DEFAULT INTEGRAL**: zero policy e zero privilégio de cliente. Sem policy nova, sem
+  RPC de listagem, sem capability/role nova, sem `SECURITY DEFINER` novo e sem grant em tabela
+  autorizativa.
+
+*Evidência:* `20261003000000` (views), `20261004000000` (vigência), `20261005000000`
+(fechamento); `supabase/validacao/47-*`/`48-*`/`49-*`; F4-08 (`02-validar-f4-08.sql`) com a
+nova classificação.
 
 ### D17 — Catálogos: inativação no lugar; item inativo não é referenciável em relação nova
 

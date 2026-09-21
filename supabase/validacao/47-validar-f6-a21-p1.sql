@@ -5,7 +5,8 @@
 -- Prova, no BANCO: semântica owner das views, ausência de bypass das tabelas
 -- autorizativas, ACL só nas três views, Carolina/membership-only com ZERO dado
 -- administrativo, Admin lendo, projeção pessoal limitada ao subgrafo, cross-tenant
--- zero e leitura direta PRESERVADA (P1 é aditivo).
+-- zero e leitura direta FECHADA pelo P3 (a premissa aditiva do P1 foi invertida
+-- no fechamento — ver 49-validar-f6-a21-p3.sql).
 -- ============================================================================
 
 \set ON_ERROR_STOP on
@@ -64,11 +65,13 @@ begin
     raise exception '[FAIL] A7: DEFINER esperado=4, encontrado=%', v_n;
   end if;
 
-  if not has_table_privilege('authenticated', 'public.organizational_positions', 'SELECT') then
-    raise exception '[FAIL] A8: P1 deve ser ADITIVO (leitura direta foi revogada)';
+  -- F6-A21 P3 (#327): a leitura DIRETA foi revogada no fechamento; a premissa
+  -- aditiva do P1 e verificada aqui no estado final (fechada).
+  if has_table_privilege('authenticated', 'public.organizational_positions', 'SELECT') then
+    raise exception '[FAIL] A8: leitura direta ainda aberta em organizational_positions';
   end if;
 
-  raise notice '[PASS] A: views com owner das tabelas (sem security_invoker), SELECT so em authenticated nas 3 views, zero privilegio em tabela autorizativa/resolver, 4 DEFINER e leitura direta preservada';
+  raise notice '[PASS] A: views com owner das tabelas (sem security_invoker), SELECT so em authenticated nas 3 views, zero privilegio em tabela autorizativa/resolver, 4 DEFINER e leitura direta FECHADA (P3)';
 end $$;
 
 -- ============================================================================

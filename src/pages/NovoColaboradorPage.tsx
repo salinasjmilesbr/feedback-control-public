@@ -18,7 +18,7 @@
  *
  * Nada é gravado localmente: nenhuma chamada a `localStorage`, nenhum dual-write
  * e nenhum fallback. A autorização é do servidor (as mutações devolvem o código
- * público) e a leitura das posições é a fotografia soberana own-tenant (RLS).
+ * público) e a leitura das posições é a VIEW administrativa soberana do #327.
  */
 
 import { useState } from "react";

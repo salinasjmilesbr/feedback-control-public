@@ -164,12 +164,13 @@ function AppRoutes() {
             <Route path="/administracao/avaliadores" element={<AcessoAvaliadorPage />} />
 
             {/*
-              F5-08 P4: administração de estrutura e catálogos. A LEITURA é
-              soberana e own-tenant por RLS (D16) — nenhuma capability é exigida
-              para ler; as MUTAÇÕES vão à Edge `colaboradores`, que decide por
+              F5-08 P4 + #327/P3: administração de estrutura e catálogos. A
+              LEITURA é a VIEW soberana (`estrutura_administrativa`): exige
               capability efetiva (`org.structure.manage` / `org.catalog.manage`)
-              e devolve o código público. Nenhuma regra de autorização é
-              replicada no React.
+              decidida no servidor — membership sozinho não recebe linha. As
+              MUTAÇÕES vão à Edge `colaboradores`, que revalida a capability e
+              devolve o código público. Nenhuma regra de autorização é replicada
+              no React.
             */}
             <Route path="/unidades" element={<UnidadesPage />} />
             <Route path="/posicoes" element={<PosicoesPage />} />

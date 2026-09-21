@@ -118,9 +118,9 @@ export interface ColegiadoSoberano {
 
 /**
  * Colaborador do tenant reduzido ao necessário para EXIBIR/selecionar na
- * estrutura (nome é rótulo; o UUID é a identidade). Lido pela MESMA via RLS
- * own-tenant (`collaborators_select_same_tenant`) — a tela de estrutura não
- * depende da porta de colaboradores para mostrar ocupante/membros.
+ * estrutura (nome é rótulo; o UUID é a identidade). Vem da seção `colaboradores`
+ * da VIEW do escopo (`estrutura_administrativa`/`estrutura_pessoal`): a tabela
+ * `collaborators` está FECHADA ao cliente desde o #327/P3.
  */
 export interface ColaboradorResumidoSoberano {
   readonly collaboratorId: string;

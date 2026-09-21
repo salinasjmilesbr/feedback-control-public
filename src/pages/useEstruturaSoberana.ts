@@ -1,8 +1,8 @@
 /**
  * F5-08 P5 — leitura soberana da estrutura para as telas de ALOCAÇÃO.
  *
- * Encapsula o MESMO caminho já usado pelas telas do P4 (`lerEstrutura` → RLS
- * own-tenant por JWT, sem capability e sem RPC de listagem — D16) no padrão
+ * Encapsula o MESMO caminho já usado pelas telas do P4 (`lerEstrutura` → view
+ * administrativa do #327, por capability efetiva e sem RPC de listagem) no padrão
  * derivado de estado: a leitura é disparada por efeito e o estado exibido é
  * derivado da chave corrente, sem `setState` síncrono em efeito e sem cache de
  * decisão.

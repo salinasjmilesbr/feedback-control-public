@@ -82,7 +82,7 @@ export interface DependenciasServiceColaboradores {
   readonly repositorio?: RepositorioColaboradores;
   /** Cliente Supabase já construído (injetável para teste). */
   readonly cliente?: SupabaseClient | null;
-  /** Leitura soberana de estrutura/catálogo (RLS D16; injetável para teste). */
+  /** Leitura soberana de estrutura/catálogo (views do #327; injetável em teste). */
   readonly leitura?: LeituraEstrutura;
 }
 
@@ -149,7 +149,7 @@ export interface ServiceColaboradores {
     readonly referenceCycleId?: string;
   }): Promise<ResultadoColaboradores<readonly EventoColaboradorProjetado[]>>;
   bootstrapCatalogo(entrada: EntradaBootstrapCatalogo): Promise<ResultadoColaboradores<null>>;
-  // F5-08 P4 — leitura soberana de estrutura/catálogo (RLS F4-08 / D16).
+  // F5-08 P4 — leitura soberana de estrutura/catálogo (views do #327 P1/P2).
   lerEstrutura(entrada: {
     /** "administrativo" (default) ou "pessoal" — a VIEW decide a autorização. */
     escopo?: "administrativo" | "pessoal";
@@ -220,7 +220,7 @@ export function criarRepositorioColaboradoresProducao(
   return criarRepositorioColaboradoresSupabase(resolvido);
 }
 
-/** Leitura soberana de produção (RLS own-tenant); `null` sem configuração. */
+/** Leitura soberana de produção (VIEW do escopo); `null` sem configuração. */
 export function criarLeituraEstruturaProducao(
   cliente?: SupabaseClient | null
 ): LeituraEstrutura | null {
@@ -429,7 +429,7 @@ export function criarServiceColaboradores(
       ),
 
     // -----------------------------------------------------------------------
-    // F5-08 P4 — leitura soberana (RLS F4-08/D16) e 15 operações administrativas
+    // F5-08 P4 — leitura soberana (views do #327) e 15 operações administrativas
     // -----------------------------------------------------------------------
 
     lerEstrutura: (entrada) =>

@@ -47,117 +47,131 @@
 \set ON_ERROR_STOP on
 
 -- ============================================================================
--- 1) LEITURA SOBERANA — RLS own-tenant nas tabelas estruturais
+-- 1) LEITURA ESTRUTURAL FECHADA — a superficie do cliente sao as views (#327 P3)
 -- ============================================================================
+-- D16 REVISADO (#327 P3): a leitura own-tenant por RLS foi FECHADA. O ator
+-- autenticado NAO le mais as tabelas estruturais; a leitura soberana passa a
+-- existir SOMENTE pelas views aprovadas no P1/P2 — estrutura_administrativa
+-- (capability efetiva), estrutura_pessoal (subgrafo vigente do proprio ator) e
+-- estrutura_autorizacao (projecao de menu/rotas).
 
--- Ator de Alfa (membership ativa): a leitura de produção do cliente.
+-- Ator de Alfa COM capability (role de sistema admin + scope ORGANIZATION).
 select set_config('request.jwt.claim.sub', 'f8c00000-0000-0000-0000-0000000000a1', false);
 set role authenticated;
 
 do $$
 declare
-  v_tabelas text[] := array[
-    'collaborators','collaborator_identifiers','job_roles','seniority_levels',
-    'organizational_units','organizational_unit_parent_periods',
-    'organizational_positions','position_reporting_lines','occupations',
-    'temporary_responsibilities','collegiate_configurations',
-    'collegiate_configuration_members','cycle_evaluation_responsibilities',
-    'collegiate_cycle_snapshots','collegiate_cycle_snapshot_positions',
-    'collegiate_cycle_snapshot_members'];
+  v_fechadas text[] := array[
+    'collaborators','job_roles','seniority_levels','organizational_units',
+    'organizational_unit_parent_periods','organizational_positions',
+    'position_reporting_lines','occupations','collegiate_configurations',
+    'collegiate_configuration_members','collaborator_status_periods'];
   v_tab text;
-  v_proprias int;
-  v_alheias int;
-  v_total int := 0;
+  v_ok boolean;
+  v_n int;
+  v_orgs int;
+  v_unidades int;
 begin
-  foreach v_tab in array v_tabelas loop
-    if not has_table_privilege('authenticated', format('public.%I', v_tab), 'SELECT') then
-      raise exception '[FAIL] P6-1: authenticated sem SELECT em public.% — a leitura soberana do cliente esta fechada', v_tab;
+  -- (a) acesso DIRETO as tabelas estruturais: NEGADO (nao ha grant).
+  foreach v_tab in array v_fechadas loop
+    v_ok := false;
+    begin
+      execute format('select count(*) from public.%I', v_tab) into v_n;
+    exception when insufficient_privilege then v_ok := true;
+    end;
+    if not v_ok then
+      raise exception '[FAIL] P6-1: ator autenticado leu public.% (%) — leitura direta deveria estar FECHADA (#327 P3)', v_tab, v_n;
     end if;
-
-    execute format('select count(*) from public.%I where organization_id = %L',
-                   v_tab, 'f8a00000-0000-0000-0000-0000000000a1') into v_proprias;
-    execute format('select count(*) from public.%I where organization_id = %L',
-                   v_tab, 'f8a00000-0000-0000-0000-0000000000b1') into v_alheias;
-
-    if v_alheias <> 0 then
-      raise exception '[FAIL] P6-1 (cross-tenant): membro de Alfa leu % linha(s) de Beta em public.%', v_alheias, v_tab;
-    end if;
-    v_total := v_total + v_proprias;
   end loop;
 
-  -- Filha indireta (sem organization_id): a visibilidade vem do EXISTS no pai.
-  execute 'select count(*) from public.collaborator_status_periods p
-             join public.collaborators c on c.id = p.collaborator_id
-            where c.organization_id = ''f8a00000-0000-0000-0000-0000000000b1''' into v_alheias;
-  if v_alheias <> 0 then
-    raise exception '[FAIL] P6-1 (cross-tenant): membro de Alfa leu % periodo(s) de status de Beta', v_alheias;
+  -- (b) a leitura soberana vem da VIEW, do PROPRIO tenant (cross-tenant zero).
+  select count(*) into v_orgs from public.estrutura_administrativa;
+  if v_orgs <> 1 then
+    raise exception '[FAIL] P6-1: linhas administrativas = % (esperado 1)', v_orgs;
+  end if;
+  select count(*) into v_n from public.estrutura_administrativa
+   where organization_id = 'f8a00000-0000-0000-0000-0000000000b1';
+  if v_n <> 0 then
+    raise exception '[FAIL] P6-1 (cross-tenant): membro de Alfa leu % fotografia(s) de Beta', v_n;
   end if;
 
-  -- Não vacuidade: o glob/sweep precisa enxergar dados reais do próprio tenant.
-  if v_total < 20 then
-    raise exception '[FAIL] P6-1: leitura own-tenant vazia ou parcial (total=%) — prova vacuamente verde', v_total;
-  end if;
-  execute 'select count(*) from public.organizational_units
-            where organization_id = ''f8a00000-0000-0000-0000-0000000000a1''' into v_proprias;
-  if v_proprias < 20 then
-    raise exception '[FAIL] P6-1: membro ativo de Alfa nao ve as unidades do proprio tenant (%)', v_proprias;
+  -- Nao vacuidade: a view devolve dados REAIS do proprio tenant.
+  select jsonb_array_length(unidades) into v_unidades
+    from public.estrutura_administrativa;
+  if coalesce(v_unidades, 0) < 20 then
+    raise exception '[FAIL] P6-1: leitura own-tenant vazia ou parcial (unidades=%) — prova vacuamente verde', v_unidades;
   end if;
 
-  raise notice '[PASS] P6-1: leitura estrutural do cliente e RLS own-tenant — 16 tabelas com organizacao + filha indireta, ZERO linhas de outro tenant e leitura propria nao-vazia (% linhas)', v_total;
+  raise notice '[PASS] P6-1: leitura direta FECHADA nas 11 tabelas estruturais e leitura soberana pela view administrativa do PROPRIO tenant (% unidades, zero de Beta)', v_unidades;
 end $$;
 
 reset role;
 
--- Prova SIMÉTRICA: o membro de Beta lê Beta e nada de Alfa (o isolamento não é
--- um acidente de fixture assimétrica).
+-- Prova NEGATIVA simetrica: o ator de BETA e membership-only (sem capability) e
+-- portanto nao recebe NENHUMA linha das views — nem do proprio tenant.
 select set_config('request.jwt.claim.sub', 'f8c00000-0000-0000-0000-0000000000b1', false);
 set role authenticated;
 
 do $$
 declare
-  v_proprias int;
-  v_alheias int;
+  v_admin int;
+  v_pessoal int;
+  v_auth int;
+  v_ok boolean;
 begin
-  select count(*) into v_proprias from public.organizational_units
-   where organization_id = 'f8a00000-0000-0000-0000-0000000000b1';
-  select count(*) into v_alheias from public.organizational_units
-   where organization_id = 'f8a00000-0000-0000-0000-0000000000a1';
-
-  if v_proprias <> 3 then
-    raise exception '[FAIL] P6-1: membro ativo de Beta nao ve as 3 unidades do proprio tenant (%)', v_proprias;
+  select count(*) into v_admin from public.estrutura_administrativa;
+  if v_admin <> 0 then
+    raise exception '[FAIL] P6-1: membership-only recebeu % linha(s) administrativa(s)', v_admin;
   end if;
-  if v_alheias <> 0 then
-    raise exception '[FAIL] P6-1 (cross-tenant): membro de Beta leu % unidade(s) de Alfa', v_alheias;
+  select count(*) into v_pessoal from public.estrutura_pessoal;
+  if v_pessoal <> 0 then
+    raise exception '[FAIL] P6-1: membership-only sem vinculo recebeu projecao pessoal (%)', v_pessoal;
+  end if;
+  select count(*) into v_auth from public.estrutura_autorizacao;
+  if v_auth <> 1 then
+    raise exception '[FAIL] P6-1: projecao de autorizacao esperada=1, encontrada=%', v_auth;
   end if;
 
-  raise notice '[PASS] P6-1: prova simetrica — membro de Beta ve 3 unidades de Beta e zero de Alfa';
+  v_ok := false;
+  begin perform count(*) from public.organizational_units;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then
+    raise exception '[FAIL] P6-1: membership-only leu tabela estrutural direta';
+  end if;
+
+  raise notice '[PASS] P6-1: prova simetrica — membership-only de Beta recebe ZERO leitura administrativa/pessoal e nao le tabela direta';
 end $$;
 
 reset role;
 
 -- ============================================================================
--- 2) FAIL-CLOSED — sem membership ATIVA não há NENHUMA fonte de estrutura
+-- 2) FAIL-CLOSED — sem capability/vinculo nao ha fotografia; sem membership, nada
 -- ============================================================================
-
--- (a) Controle POSITIVO: o ator a2 tem membership ativa em Alfa e lê o tenant.
+-- (a) Controle NEGATIVO: o ator a2 tem membership ATIVA em Alfa e NAO tem
+--     capability — logo nao recebe fotografia administrativa.
 select set_config('request.jwt.claim.sub', 'f8c00000-0000-0000-0000-0000000000a2', false);
 set role authenticated;
 
 do $$
 declare
-  v_n int;
+  v_admin int;
+  v_flags text;
 begin
-  select count(*) into v_n from public.organizational_units
-   where organization_id = 'f8a00000-0000-0000-0000-0000000000a1';
-  if v_n < 20 then
-    raise exception '[FAIL] P6-2: pre-condicao — ator com membership ATIVA deveria ler o proprio tenant (%)', v_n;
+  select count(*) into v_admin from public.estrutura_administrativa;
+  if v_admin <> 0 then
+    raise exception '[FAIL] P6-2: ator sem capability recebeu % leitura(s) administrativa(s)', v_admin;
   end if;
-  raise notice '[PASS] P6-2: pre-condicao — ator com membership ativa le a estrutura do proprio tenant (%)', v_n;
+  select pode_estrutura::text || '/' || pode_catalogo::text into v_flags
+    from public.estrutura_autorizacao;
+  if v_flags is distinct from 'false/false' then
+    raise exception '[FAIL] P6-2: projecao de autorizacao = % (esperado false/false)', v_flags;
+  end if;
+  raise notice '[PASS] P6-2: ator com membership ATIVA e SEM capability => zero fotografia administrativa (fail-closed)';
 end $$;
 
 reset role;
 
--- (b) Membership DESATIVADA: leitura VAZIA em todas as tabelas estruturais.
+-- (b) Membership DESATIVADA: nenhuma linha nas tres views.
 update public.user_organization_memberships
    set status = 'disabled'
  where id = 'f8d00000-0000-0000-0000-0000000000a2';
@@ -165,29 +179,15 @@ update public.user_organization_memberships
 set role authenticated;
 
 do $$
-declare
-  v_tabelas text[] := array[
-    'collaborators','collaborator_identifiers','job_roles','seniority_levels',
-    'organizational_units','organizational_unit_parent_periods',
-    'organizational_positions','position_reporting_lines','occupations',
-    'temporary_responsibilities','collegiate_configurations',
-    'collegiate_configuration_members','cycle_evaluation_responsibilities',
-    'collegiate_cycle_snapshots','collegiate_cycle_snapshot_positions',
-    'collegiate_cycle_snapshot_members'];
-  v_tab text;
-  v_n int;
-  v_total int := 0;
+declare v_n int;
 begin
-  foreach v_tab in array v_tabelas loop
-    execute format('select count(*) from public.%I', v_tab) into v_n;
-    v_total := v_total + v_n;
-  end loop;
-
-  if v_total <> 0 then
-    raise exception '[FAIL] P6-2 (fail-closed): membership inativa leu % linha(s) de estrutura', v_total;
-  end if;
-
-  raise notice '[PASS] P6-2: membership INATIVA => leitura estrutural vazia nas 16 tabelas (nenhum fallback local ou de outro tenant)';
+  select count(*) into v_n from public.estrutura_administrativa;
+  if v_n <> 0 then raise exception '[FAIL] P6-2: membership inativa recebeu % linha(s) administrativa(s)', v_n; end if;
+  select count(*) into v_n from public.estrutura_pessoal;
+  if v_n <> 0 then raise exception '[FAIL] P6-2: membership inativa recebeu projecao pessoal (%)', v_n; end if;
+  select count(*) into v_n from public.estrutura_autorizacao;
+  if v_n <> 0 then raise exception '[FAIL] P6-2: membership inativa apareceu na projecao de autorizacao (%)', v_n; end if;
+  raise notice '[PASS] P6-2: membership INATIVA => ZERO linha nas tres views (nenhum fallback local ou de outro tenant)';
 end $$;
 
 reset role;
@@ -196,36 +196,28 @@ update public.user_organization_memberships
    set status = 'active'
  where id = 'f8d00000-0000-0000-0000-0000000000a2';
 
--- (c) Ator DESCONHECIDO (sem membership em nenhuma organização): mesmo resultado,
---     sem depender do status de nenhuma linha da fixture.
+-- (c) Ator DESCONHECIDO (sem membership em nenhuma organizacao): mesmo resultado.
 select set_config('request.jwt.claim.sub', 'f8c00000-0000-0000-0000-0000000000a9', false);
 set role authenticated;
 
 do $$
 declare
-  v_tabelas text[] := array[
-    'collaborators','collaborator_identifiers','job_roles','seniority_levels',
-    'organizational_units','organizational_unit_parent_periods',
-    'organizational_positions','position_reporting_lines','occupations',
-    'temporary_responsibilities','collegiate_configurations',
-    'collegiate_configuration_members','cycle_evaluation_responsibilities',
-    'collegiate_cycle_snapshots','collegiate_cycle_snapshot_positions',
-    'collegiate_cycle_snapshot_members'];
-  v_tab text;
   v_n int;
-  v_total int := 0;
+  v_ok boolean;
 begin
-  foreach v_tab in array v_tabelas loop
-    execute format('select count(*) from public.%I where organization_id = %L',
-                   v_tab, 'f8a00000-0000-0000-0000-0000000000a1') into v_n;
-    v_total := v_total + v_n;
-  end loop;
+  select count(*) into v_n from public.estrutura_administrativa;
+  if v_n <> 0 then raise exception '[FAIL] P6-2: ator sem membership recebeu leitura administrativa (%)', v_n; end if;
+  select count(*) into v_n from public.estrutura_pessoal;
+  if v_n <> 0 then raise exception '[FAIL] P6-2: ator sem membership recebeu projecao pessoal (%)', v_n; end if;
+  select count(*) into v_n from public.estrutura_autorizacao;
+  if v_n <> 0 then raise exception '[FAIL] P6-2: ator sem membership apareceu na autorizacao (%)', v_n; end if;
 
-  if v_total <> 0 then
-    raise exception '[FAIL] P6-2 (fail-closed): ator sem membership leu % linha(s) da organizacao', v_total;
-  end if;
+  v_ok := false;
+  begin perform count(*) from public.organizational_units;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception '[FAIL] P6-2: ator sem membership leu tabela estrutural direta'; end if;
 
-  raise notice '[PASS] P6-2: ator SEM membership => leitura estrutural vazia (fail-closed, nunca dados de terceiros)';
+  raise notice '[PASS] P6-2: ator SEM membership => ZERO linha nas views e nenhum acesso direto (fail-closed, nunca dados de terceiros)';
 end $$;
 
 reset role;
@@ -234,18 +226,19 @@ reset role;
 select set_config('request.jwt.claim.sub', '', false);
 
 -- ============================================================================
--- 3) SUPERFÍCIE DO CLIENTE É SOMENTE LEITURA NAS TABELAS ESTRUTURAIS
+-- 3) SUPERFICIE DO CLIENTE — 3 views legiveis; estruturais FECHADAS
 -- ============================================================================
 
 do $$
 declare
-  v_tabelas text[] := array[
-    'collaborators','collaborator_identifiers','job_roles','seniority_levels',
-    'organizational_units','organizational_unit_parent_periods',
-    'organizational_positions','position_reporting_lines','occupations',
-    'temporary_responsibilities','collegiate_configurations',
-    'collegiate_configuration_members','cycle_evaluation_responsibilities',
-    'collaborator_status_periods','collegiate_cycle_snapshots',
+  v_fechadas text[] := array[
+    'collaborators','job_roles','seniority_levels','organizational_units',
+    'organizational_unit_parent_periods','organizational_positions',
+    'position_reporting_lines','occupations','collegiate_configurations',
+    'collegiate_configuration_members','collaborator_status_periods'];
+  v_legiveis text[] := array[
+    'collaborator_identifiers','temporary_responsibilities',
+    'cycle_evaluation_responsibilities','collegiate_cycle_snapshots',
     'collegiate_cycle_snapshot_positions','collegiate_cycle_snapshot_members'];
   v_escrita text[] := array['INSERT','UPDATE','DELETE','TRUNCATE'];
   v_tab text;
@@ -254,8 +247,9 @@ declare
   v_lista text;
   v_def text;
 begin
-  foreach v_tab in array v_tabelas loop
-    -- P1: RLS habilitada + policy SELECT own-tenant + SELECT efetivo.
+  -- P1: as tabelas FECHADAS pelo #327 P3 nao tem policy de NENHUM cmd e nao
+  -- concedem privilegio algum ao cliente (RLS segue habilitada).
+  foreach v_tab in array v_fechadas loop
     select count(*) into v_n
       from pg_class c join pg_namespace n on n.oid = c.relnamespace
      where n.nspname = 'public' and c.relname = v_tab and c.relkind = 'r'
@@ -266,6 +260,21 @@ begin
 
     select count(*) into v_n
       from pg_policies
+     where schemaname = 'public' and tablename = v_tab;
+    if v_n <> 0 then
+      raise exception '[FAIL] P6-3: public.% ainda tem % policy(ies) — deveria ser deny-by-default integral', v_tab, v_n;
+    end if;
+
+    if has_table_privilege('authenticated', format('public.%I', v_tab), 'SELECT') then
+      raise exception '[FAIL] P6-3: authenticated com SELECT em public.% (tabela fechada)', v_tab;
+    end if;
+  end loop;
+
+  -- P2: as tabelas LEGIVEIS remanescentes seguem com policy SELECT own-tenant e
+  -- SELECT efetivo para authenticated.
+  foreach v_tab in array v_legiveis loop
+    select count(*) into v_n
+      from pg_policies
      where schemaname = 'public' and tablename = v_tab
        and cmd = 'SELECT' and 'authenticated'::name = any(roles);
     if v_n < 1 then
@@ -273,10 +282,12 @@ begin
     end if;
 
     if not has_table_privilege('authenticated', format('public.%I', v_tab), 'SELECT') then
-      raise exception '[FAIL] P6-3: authenticated sem SELECT em public.% (leitura soberana fechada)', v_tab;
+      raise exception '[FAIL] P6-3: authenticated sem SELECT em public.%', v_tab;
     end if;
+  end loop;
 
-    -- P2: nenhum privilégio de escrita para o cliente; `anon` sem leitura.
+  -- P3: nenhum privilegio de escrita para o cliente e anon sem leitura.
+  foreach v_tab in array (v_fechadas || v_legiveis) loop
     foreach v_priv in array v_escrita loop
       if has_table_privilege('authenticated', format('public.%I', v_tab), v_priv) then
         raise exception '[FAIL] P6-3: authenticated tem % em public.% — superficie de escrita estrutural aberta', v_priv, v_tab;
@@ -291,16 +302,26 @@ begin
     end if;
   end loop;
 
-  -- P3: nenhuma policy de escrita nas tabelas estruturais (deny-by-default de DML).
+  -- P4: nenhuma policy de escrita nas tabelas estruturais em questao.
   select count(*), string_agg(tablename || ':' || cmd, ', ' order by tablename, cmd)
     into v_n, v_lista
     from pg_policies
-   where schemaname = 'public' and tablename = any(v_tabelas) and cmd <> 'SELECT';
+   where schemaname = 'public' and tablename = any(v_fechadas || v_legiveis) and cmd <> 'SELECT';
   if v_n <> 0 then
     raise exception '[FAIL] P6-3: policy de escrita em tabela estrutural: %', v_lista;
   end if;
 
-  -- P4: `structure_events` é 100% fechada ao cliente (trilha de auditoria) e
+  -- P5: as TRES views do #327 sao a superficie estrutural legivel do cliente.
+  select count(*) into v_n
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relkind = 'v'
+     and c.relname in ('estrutura_administrativa','estrutura_pessoal','estrutura_autorizacao')
+     and has_table_privilege('authenticated', c.oid, 'SELECT');
+  if v_n <> 3 then
+    raise exception '[FAIL] P6-3: % das 3 views aprovadas legiveis', v_n;
+  end if;
+
+  -- P6: structure_events e 100% fechada ao cliente (trilha de auditoria) e
   -- append-only mesmo para quem tem escrita.
   select count(*) into v_n
     from pg_class c join pg_namespace n on n.oid = c.relnamespace
@@ -334,7 +355,7 @@ begin
     raise exception '[FAIL] P6-3: structure_events sem trigger append-only BEFORE UPDATE';
   end if;
 
-  raise notice '[PASS] P6-3: superficie estrutural do cliente e SOMENTE leitura — 17 tabelas com RLS + policy SELECT own-tenant, zero DML para anon/authenticated, nenhuma policy de escrita e trilha fechada/append-only';
+  raise notice '[PASS] P6-3: 11 tabelas estruturais FECHADAS (zero policy, zero privilegio), 6 legiveis remanescentes com policy own-tenant, 3 views como superficie de leitura, zero DML para anon/authenticated e trilha structure_events fechada/append-only';
 end $$;
 
 -- ============================================================================

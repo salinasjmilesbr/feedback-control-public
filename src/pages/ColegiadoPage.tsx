@@ -1,7 +1,7 @@
 /**
  * F5-08 P4 — Colegiado por AVALIADO.
  *
- * - LEITURA: soberana own-tenant pela via RLS (D16). A tela distingue três
+ * - LEITURA: view soberana do #327 (`org.structure.manage`). A tela distingue três
  *   estados com significados diferentes: (i) versão vigente com membros;
  *   (ii) versão vigente com ZERO membros = "sem colegiado" EXPLÍCITO;
  *   (iii) nenhuma versão vigente = nunca configurado / encerrado.

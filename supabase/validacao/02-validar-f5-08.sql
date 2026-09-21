@@ -911,9 +911,10 @@ begin
       v_problemas := v_problemas || (v_tab || ': service_role com DELETE');
     end if;
 
-    -- authenticated: somente SELECT (contrato F4-08).
-    if has_table_privilege('authenticated', format('public.%I', v_tab), 'SELECT') is not true then
-      v_problemas := v_problemas || (v_tab || ': authenticated sem SELECT (regressao F4-08)');
+    -- F6-A21 P3 (#327): DENY-BY-DEFAULT INTEGRAL para o cliente — a leitura
+    -- estrutural passa EXCLUSIVAMENTE pelas 3 views aprovadas (D16 revisado).
+    if has_table_privilege('authenticated', format('public.%I', v_tab), 'SELECT') then
+      v_problemas := v_problemas || (v_tab || ': authenticated com SELECT (leitura direta deveria estar FECHADA)');
     end if;
     if has_table_privilege('authenticated', format('public.%I', v_tab), 'INSERT')
        or has_table_privilege('authenticated', format('public.%I', v_tab), 'UPDATE')
@@ -929,20 +930,19 @@ begin
       v_problemas := v_problemas || (v_tab || ': anon com privilegio');
     end if;
 
-    -- nenhuma policy de escrita (somente SELECT own-tenant da F4-08).
+    -- ZERO policy de QUALQUER cmd: a tabela esta FECHADA ao cliente.
     if exists (
       select 1 from pg_policies
       where schemaname = 'public' and tablename = v_tab
-        and cmd <> 'SELECT'
     ) then
-      v_problemas := v_problemas || (v_tab || ': policy de escrita criada');
+      v_problemas := v_problemas || (v_tab || ': policy presente em tabela fechada');
     end if;
   end loop;
 
   if array_length(v_problemas, 1) is not null then
     raise exception '[FAIL] grants/policies das tabelas administradas: %', array_to_string(v_problemas, '; ');
   end if;
-  raise notice '[PASS] grants: service_role sem DELETE, authenticated so SELECT, anon sem acesso, nenhuma policy de escrita';
+  raise notice '[PASS] grants: as 8 tabelas administradas estao DENY-BY-DEFAULT INTEGRAL (zero policy, zero privilegio de cliente) e a leitura passa pela view do #327; service_role com SELECT/INSERT/UPDATE sem DELETE';
 end $$;
 
 do $$

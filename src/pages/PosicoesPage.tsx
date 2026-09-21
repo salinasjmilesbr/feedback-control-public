@@ -2,7 +2,7 @@
  * F5-08 P4 — Posições: lista por unidade + criar + encerrar, com unidade,
  * cargo, senioridade, ocupante e reporting line exibidos.
  *
- * - LEITURA: soberana own-tenant pela via RLS (D16) — posições, ocupações e
+ * - LEITURA: view soberana do #327 (`org.structure.manage`) — posições, ocupações e
  *   reporting lines vêm da mesma fotografia; o ocupante/superior é DERIVADO das
  *   relações vigentes, nunca de texto de cargo (I4).
  * - ESCRITA: `estrutura.posicao.criar|encerrar` (plano administrativo D19).
