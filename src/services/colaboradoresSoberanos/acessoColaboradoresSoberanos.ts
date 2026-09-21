@@ -350,7 +350,11 @@ export function bootstrapCatalogo(
 export type EstruturaSoberanaProjetada = EstruturaSoberana;
 
 export function lerEstrutura(
-  entrada: { readonly organizationId?: string | null } = {},
+  entrada: {
+    /** #327/P2B: "administrativo" (default) ou "pessoal" — a VIEW decide. */
+    readonly escopo?: "administrativo" | "pessoal";
+    readonly organizationId?: string | null;
+  } = {},
   deps: DependenciasAcessoColaboradores = {}
 ): Promise<ResultadoColaboradores<EstruturaSoberanaProjetada>> {
   return executar(deps, (servico) => servico.lerEstrutura(entrada));

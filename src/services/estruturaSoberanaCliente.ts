@@ -464,7 +464,9 @@ export function carregarEstruturaSoberana(
   const promessa = (async (): Promise<EstadoEstruturaSoberana> => {
     try {
       const [leituraEstrutura, leituraColaboradores] = await Promise.all([
-        lerEstrutura({ organizationId }, deps),
+        // #327/P2B: a projeção das superfícies PESSOAIS usa o subgrafo vigente
+        // do próprio ator (sem exigir capability administrativa).
+        lerEstrutura({ organizationId, escopo: "pessoal" }, deps),
         listarColaboradores({ organizationId }, deps),
       ]);
 

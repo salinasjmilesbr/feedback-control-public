@@ -4,6 +4,11 @@ import { NavLink } from "react-router-dom";
 import type { Capability } from "../authorization/Capability";
 import { useAuth } from "../auth/AuthContext";
 import { listarCapabilitiesEfetivas } from "../services/capabilitiesSoberanas";
+import {
+  lerAutorizacaoEstrutural,
+  SEM_AUTORIZACAO_ESTRUTURAL,
+  type AutorizacaoEstruturalSoberana,
+} from "../services/autorizacaoEstruturalSoberana";
 
 function IconHome() {
   return (
@@ -97,7 +102,17 @@ function NavItem({ to, end, icon, children }: ItemProps) {
   );
 }
 
-function NavegacaoPrincipal() {
+type NavegacaoPrincipalProps = {
+  /** Semente determinística (SSR/teste): desliga a leitura da view. */
+  readonly autorizacaoInicial?: AutorizacaoEstruturalSoberana;
+  /** Injeção de teste da leitura de `estrutura_autorizacao`. */
+  readonly lerAutorizacao?: typeof lerAutorizacaoEstrutural;
+};
+
+function NavegacaoPrincipal({
+  autorizacaoInicial,
+  lerAutorizacao = lerAutorizacaoEstrutural,
+}: NavegacaoPrincipalProps = {}) {
   const { organizacaoAtivaId } = useAuth();
   const [snapshot, setSnapshot] = useState<{
     organizationId: string | null;
@@ -119,6 +134,31 @@ function NavegacaoPrincipal() {
       vigente = false;
     };
   }, [organizacaoAtivaId]);
+
+  // #327/P2B: projeção do MENU a partir de `estrutura_autorizacao` (view do P1).
+  // Ausência de linha/erro ⇒ nenhuma superfície administrativa no menu; a
+  // segurança continua na view que entrega os dados (URL direta não ganha
+  // autoridade pelo cliente).
+  const [autorizacao, setAutorizacao] = useState<{
+    organizationId: string | null;
+    valor: AutorizacaoEstruturalSoberana;
+  }>(() => ({
+    organizationId: autorizacaoInicial ? (organizacaoAtivaId ?? null) : null,
+    valor: autorizacaoInicial ?? SEM_AUTORIZACAO_ESTRUTURAL,
+  }));
+  useEffect(() => {
+    // Semente determinística (SSR/teste) desliga a leitura da view.
+    if (autorizacaoInicial) return;
+    let vigente = true;
+    if (organizacaoAtivaId) {
+      void lerAutorizacao(organizacaoAtivaId).then((valor) => {
+        if (vigente) setAutorizacao({ organizationId: organizacaoAtivaId, valor });
+      });
+    }
+    return () => {
+      vigente = false;
+    };
+  }, [organizacaoAtivaId, autorizacaoInicial, lerAutorizacao]);
 
   const possui = (capability: Capability) =>
     snapshot.organizationId === organizacaoAtivaId &&
@@ -143,6 +183,14 @@ function NavegacaoPrincipal() {
   const podeVerRelatorios = possui("report.read");
   const podeGerenciarConfiguracoes = possui("settings.manage");
   const podeAdministrarAvaliadores = possui("access_role.manage");
+  // #327/P2B: `org.structure.manage` projeta Unidades/Posições/Colegiado e
+  // `org.catalog.manage` projeta Catálogos (decisão da VIEW, não do menu). Uma
+  // leitura de OUTRA organização nunca projeta: na troca de tenant o menu fica
+  // oculto até a resposta da organização ativa (mesma regra de `possui`).
+  const autorizacaoVigente =
+    autorizacao.organizationId === organizacaoAtivaId ? autorizacao.valor : null;
+  const podeAdministrarEstrutura = autorizacaoVigente?.podeEstrutura === true;
+  const podeAdministrarCatalogos = autorizacaoVigente?.podeCatalogo === true;
 
   return (
     <nav className="app-nav" aria-label="Navegação principal">
@@ -179,30 +227,33 @@ function NavegacaoPrincipal() {
         )}
 
         {/*
-          F5-08 P4 — Estrutura e Catálogos. Os itens são VISÍVEIS a qualquer
-          membro ativo porque a LEITURA de estrutura/catálogo é own-tenant por
-          RLS e não exige capability (D16/§13.1). As MUTAÇÕES são decididas
-          SEMPRE no servidor (Edge `colaboradores` → capability efetiva) e a UI
-          exibe o `FORBIDDEN` quando ele nega. Nenhuma capability nova é criada e
-          nenhuma regra de autorização é replicada aqui: o cliente não possui
-          fonte soberana de capabilities para ocultar ações administrativas
-          (registrado no relatório do P4).
+          #327/P2B — Estrutura e Catálogos. O MENU apenas PROJETA a decisão da
+          view `estrutura_autorizacao`: `org.structure.manage` mostra Unidades,
+          Posições e Colegiado; `org.catalog.manage` mostra Catálogos. Sem a
+          capability o item não aparece — e a URL direta continua negada pela
+          view que entrega os dados (ocultar no menu nunca foi autorização).
         */}
-        <NavItem to="/unidades" icon={<IconStructure />}>
-          Unidades
-        </NavItem>
+        {podeAdministrarEstrutura && (
+          <>
+            <NavItem to="/unidades" icon={<IconStructure />}>
+              Unidades
+            </NavItem>
 
-        <NavItem to="/posicoes" icon={<IconStructure />}>
-          Posições
-        </NavItem>
+            <NavItem to="/posicoes" icon={<IconStructure />}>
+              Posições
+            </NavItem>
 
-        <NavItem to="/colegiado" icon={<IconStructure />}>
-          Colegiado
-        </NavItem>
+            <NavItem to="/colegiado" icon={<IconStructure />}>
+              Colegiado
+            </NavItem>
+          </>
+        )}
 
-        <NavItem to="/catalogos" icon={<IconCatalog />}>
-          Catálogos
-        </NavItem>
+        {podeAdministrarCatalogos && (
+          <NavItem to="/catalogos" icon={<IconCatalog />}>
+            Catálogos
+          </NavItem>
+        )}
 
         {podeGerenciarConfiguracoes && (
           <NavItem

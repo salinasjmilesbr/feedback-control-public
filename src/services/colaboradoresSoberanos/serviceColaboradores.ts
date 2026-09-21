@@ -151,6 +151,8 @@ export interface ServiceColaboradores {
   bootstrapCatalogo(entrada: EntradaBootstrapCatalogo): Promise<ResultadoColaboradores<null>>;
   // F5-08 P4 — leitura soberana de estrutura/catálogo (RLS F4-08 / D16).
   lerEstrutura(entrada: {
+    /** "administrativo" (default) ou "pessoal" — a VIEW decide a autorização. */
+    escopo?: "administrativo" | "pessoal";
     readonly organizationId?: string | null;
   }): Promise<ResultadoColaboradores<EstruturaSoberana>>;
   // F5-08 P4 — 15 operações estruturais/catalogais (plano administrativo D19).
