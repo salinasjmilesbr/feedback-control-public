@@ -34,6 +34,42 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
+### 3.35 Issue #319 — convite administrativo: gate canônico + vínculo soberano da conta — IMPLEMENTADO · PR/MERGE PENDENTES
+
+- **Atividade/branch:** Issue **#319** (correção do convite), branch
+  **`fix/issue-319-convite-vinculo-soberano`**, base **`main` = `a8b4585`**.
+- **Causa raiz (diagnóstico aprovado):** a Edge `convidar-usuario` autorizava exigindo a capability
+  **efetiva** `membership.manage` (`resolver_capabilities_efetivas`). Essa capability é do plano de
+  **CONTROLE**: `grantable_via_role = false` (F5-04 D15) e o trigger `trg_access_role_capabilities_grantable`
+  impede que **qualquer** role a carregue — logo nenhum ator jamais a tem como capability efetiva e o gate
+  negava **todo** administrador legítimo (403 `NOT_AUTHORIZED` ⇒ "Você não tem permissão…"). O defeito
+  estava na **Edge/gate** (herança do F2-06), não no bootstrap do papel, no resolver nem na chamada.
+- **Gate corrigido:** a Edge passa a usar o predicado canônico
+  **`usuario_eh_administrador(ator, organização)`** (F5-04 D16/Q3, reafirmado por F5-11 P5.2 e F6-306),
+  aceitando **somente `true`**; erro/ausência/não booleano ⇒ DENY. **Sem allowlist** (dívida G11 não é
+  reintroduzida) e sem tocar catálogo, `grantable_via_role`, RLS ou Policy Engine.
+- **Vínculo soberano:** o convite passa a exigir `collaborator_id` da colaboradora já cadastrada (a tela de
+  cadastro informa `colaboradorCriado`; a tela `/convidar-usuario` ganhou seleção de colaboradora pela
+  fotografia soberana own-tenant). A nova RPC `convidado_acesso_criar` (migration **aditiva**
+  `20260946000000`) faz **perfil + membership + vínculo** em UMA transação reutilizando os primitivos
+  `criar_perfil_membership` (F2-06) e `vincular_colaborador` (F5-02 D9). Tenant validado no banco
+  (`P0002` para colaboradora de outro tenant) e **nenhuma role concedida**.
+- **Retry/consistência:** a RPC é atômica (falha ⇒ nada parcial; `P0001` do primitivo não deixa
+  perfil/membership); `23505` (perfil/membership já existentes) ⇒ `USER_EXISTS` **sem** compensação
+  (nunca apagar conta pré-existente); demais falhas ⇒ `INTERNAL` com remoção do usuário recém-criado no
+  Auth, agora com a compensação **verificada** (falha da compensação é registrada no log da função).
+- **Arquivos:** Edge (`index.ts`, `core.ts`, `core.test.ts`), migration `20260946000000`, clientes
+  (`AuthContext`, `AuthProvider`, `conviteAdministrativo` + teste, `NovoColaboradorPage`,
+  `ConvidarUsuarioPage` + teste), guarda estática `src/authorization/f6A19ConviteVinculo.test.ts` e
+  validadores `46-cenario-f6-a19.sql`/`46-validar-f6-a19.sql`.
+- **Dívida registrada:** (1) o validador SQL `46-*` **não foi executado** nesta sessão (Docker/psql
+  indisponível no sandbox) — é a prova de banco das invariantes e precisa rodar no pipeline local;
+  (2) `criar_perfil_membership` (DEFINER, service_role-only) permanece por compatibilidade de validadores
+  F4-08/F5-*, sem chamador de produto: candidata a deprecação em atividade própria; (3) as duas migrations
+  da F6-306 (`20260944*`/`20260945*`) não estão no índice `supabase/migrations/README.md`;
+  (4) `docs/F4-01-desenho-tecnico.md` ainda apresenta `membership.manage` como capability do bundle
+  `admin`, contradizendo D15/D16 fechadas.
+
 ### 3.34 Issue #319 — matrícula como identificador TEXTUAL (fim da premissa de dígitos) — IMPLEMENTADO · PR/MERGE PENDENTES
 
 - **Atividade/branch:** Issue **#319** (correção de regra; blocker de runtime do cadastro), branch

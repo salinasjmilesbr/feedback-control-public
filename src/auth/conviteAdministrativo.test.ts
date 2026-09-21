@@ -49,6 +49,7 @@ const CODIGOS_PUBLICOS: readonly { readonly codigo: string; readonly status: num
   { codigo: "NOT_AUTHORIZED", status: 401 },
   { codigo: "INVALID_EMAIL", status: 400 },
   { codigo: "INVALID_ORGANIZATION", status: 400 },
+  { codigo: "INVALID_COLLABORATOR", status: 400 },
   { codigo: "INVALID_INPUT", status: 400 },
   { codigo: "USER_EXISTS", status: 409 },
 ];
@@ -82,7 +83,7 @@ describe("mapearErroConvite (F2-06) — Response REAL (Issue #224)", () => {
     expect(erro).toBeInstanceOf(ForbiddenError);
   });
 
-  it.each(["INVALID_EMAIL", "INVALID_ORGANIZATION", "INVALID_INPUT"])(
+  it.each(["INVALID_EMAIL", "INVALID_ORGANIZATION", "INVALID_COLLABORATOR", "INVALID_INPUT"])(
     "entrada inválida %s vira erro de validação",
     async (codigo) => {
       const erro = await mapearErroConvite(erroHttp(codigo, "Dados inválidos.", 400));
