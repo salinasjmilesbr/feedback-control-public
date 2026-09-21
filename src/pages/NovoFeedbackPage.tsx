@@ -160,7 +160,7 @@ function criarEstadoInicial(): Avaliacoes {
 function NovoFeedbackPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { usuarioAtual } = useUsuarioAtual();
+  const { usuarioAtual, usuarioAtualLegado } = useUsuarioAtual();
   const { organizacaoAtivaId } = useAuth();
   const [salvando, setSalvando] = useState(false);
   const [erroAcao, setErroAcao] = useState("");
@@ -235,12 +235,12 @@ function NovoFeedbackPage() {
     );
   }
 
-  const authorizationContext: AuthorizationContext | undefined = usuarioAtual
+  const authorizationContext: AuthorizationContext | undefined = usuarioAtualLegado
     ? {
         actor: {
-          matricula: usuarioAtual.matricula,
-          funcao: usuarioAtual.funcao,
-          status: usuarioAtual.status,
+          matricula: usuarioAtualLegado.matricula,
+          funcao: usuarioAtualLegado.funcao,
+          status: usuarioAtualLegado.status,
         },
       }
     : undefined;

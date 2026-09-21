@@ -42,7 +42,7 @@ const criterioIcons = Array.from({ length: 8 }, (_, index) => (
 function FeedbackDetalhePage() {
   const navigate = useNavigate();
   const { id, feedbackId } = useParams();
-  const { usuarioAtual } = useUsuarioAtual();
+  const { usuarioAtualLegado } = useUsuarioAtual();
   const { organizacaoAtivaId } = useAuth();
   const [versao, setVersao] = useState(0);
   const [processando, setProcessando] = useState(false);
@@ -193,12 +193,12 @@ function FeedbackDetalhePage() {
   const cicloDaAvaliacao = getCiclosAvaliacao().find(
     (item) => item.ano === feedback.ano && item.ciclo === feedback.ciclo
   );
-  const authorizationContext: AuthorizationContext | undefined = usuarioAtual
+  const authorizationContext: AuthorizationContext | undefined = usuarioAtualLegado
     ? {
         actor: {
-          matricula: usuarioAtual.matricula,
-          funcao: usuarioAtual.funcao,
-          status: usuarioAtual.status,
+          matricula: usuarioAtualLegado.matricula,
+          funcao: usuarioAtualLegado.funcao,
+          status: usuarioAtualLegado.status,
         },
       }
     : undefined;

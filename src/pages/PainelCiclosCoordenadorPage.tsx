@@ -7,14 +7,14 @@ import "../styles/painel-ciclos-coordenador.css";
 
 function PainelCiclosCoordenadorPage() {
   const navigate = useNavigate();
-  const { usuarioAtual } = useUsuarioAtual();
-  const podeListarCiclos = usuarioAtual
+  const { usuarioAtual, usuarioAtualLegado } = useUsuarioAtual();
+  const podeListarCiclos = usuarioAtualLegado
     ? can(
         {
           actor: {
-            matricula: usuarioAtual.matricula,
-            funcao: usuarioAtual.funcao,
-            status: usuarioAtual.status,
+            matricula: usuarioAtualLegado.matricula,
+            funcao: usuarioAtualLegado.funcao,
+            status: usuarioAtualLegado.status,
           },
         },
         "cycle.coordinator.list",

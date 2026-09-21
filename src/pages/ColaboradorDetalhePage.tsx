@@ -1060,7 +1060,7 @@ function AcervoLegado({
   /** Semente soberana de ciclos (SSR/teste); produção lê a porta de ciclos. */
   ciclosIniciais?: readonly CicloSoberano[];
 }) {
-  const { usuarioAtual } = useUsuarioAtual();
+  const { usuarioAtualLegado } = useUsuarioAtual();
   // F5-11 P5 — intenção de UX da PÁGINA (filtro de ciclo e visibilidade das
   // excluídas); o painel recebe os setters reais, nunca handler inerte.
   const [filtroObservacoes, setFiltroObservacoes] =
@@ -1329,9 +1329,9 @@ function AcervoLegado({
                 feedback.status,
                 cicloDaAvaliacao?.status
               );
-              const acaoConsulta = usuarioAtual
+              const acaoConsulta = usuarioAtualLegado
                 ? getAcaoConsultaHistoricoAdministrativo(
-                    usuarioAtual,
+                    usuarioAtualLegado,
                     colaboradorLegado,
                     todosLegado,
                     cicloDaAvaliacao,

@@ -110,7 +110,7 @@ function ColaboradoresPage({
   estadoInicial,
 }: ColaboradoresPageProps = {}) {
   const navigate = useNavigate();
-  const { usuarioAtual } = useUsuarioAtual();
+  const { usuarioAtual, usuarioAtualLegado } = useUsuarioAtual();
   const { organizacaoAtivaId } = useAuth();
   const [capabilities, setCapabilities] = useState<{
     readonly organizationId: string | null;
@@ -255,7 +255,8 @@ function ColaboradoresPage({
     if (!confirmar) return;
 
     try {
-      const resultado = gerarDadosTesteDoCiclo(ciclo, usuarioAtual);
+      if (!usuarioAtualLegado) return;
+      const resultado = gerarDadosTesteDoCiclo(ciclo, usuarioAtualLegado);
       window.alert(
         `Dados de teste gerados com sucesso.\n\n` +
           `Colaboradores: ${resultado.colaboradores}\n` +

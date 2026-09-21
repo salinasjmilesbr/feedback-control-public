@@ -154,7 +154,7 @@ function codigoPublicoDaLeitura(codigo: string): CodigoPublico {
 function PainelCicloPage() {
   const { cicloId } = useParams();
   const navigate = useNavigate();
-  const { usuarioAtual } = useUsuarioAtual();
+  const { usuarioAtual, usuarioAtualLegado } = useUsuarioAtual();
   const { organizacaoAtivaId } = useAuth();
   const [mostrarCanceladas, setMostrarCanceladas] = useState(false);
   const [tentativa, setTentativa] = useState(0);
@@ -172,13 +172,13 @@ function PainelCicloPage() {
     readonly aprovacoes: EstadoAprovacoesPainel;
   } | null>(null);
 
-  const podeAcessarPainelCiclo = usuarioAtual
+  const podeAcessarPainelCiclo = usuarioAtualLegado
     ? can(
         {
           actor: {
-            matricula: usuarioAtual.matricula,
-            funcao: usuarioAtual.funcao,
-            status: usuarioAtual.status,
+            matricula: usuarioAtualLegado.matricula,
+            funcao: usuarioAtualLegado.funcao,
+            status: usuarioAtualLegado.status,
           },
         },
         "cycle.team.panel.view",
@@ -387,7 +387,20 @@ function PainelCicloPage() {
     );
   }
 
-  const usuario = usuarioAtual;
+  // #333: o painel legado é indexado por matrícula; sem matrícula informada não
+  // há painel a exibir (nada é presumido e nenhum número é inventado).
+  if (!usuarioAtualLegado) {
+    return (
+      <main className="virtus-page">
+        <section className="cycle-empty">
+          <h1>Painel indisponível</h1>
+          <p>Sua matrícula não está informada neste tenant.</p>
+        </section>
+      </main>
+    );
+  }
+
+  const usuario = usuarioAtualLegado;
   const cicloSoberano = cicloEstado.ciclo;
   const cicloAtual = cicloLegadoDeApresentacao(cicloSoberano);
   const linhas = getPainelCiclo(cicloAtual, usuario, {

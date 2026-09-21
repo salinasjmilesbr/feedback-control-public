@@ -6,17 +6,10 @@ import { AuthProvider } from "./auth/AuthProvider";
 import { useAuth } from "./auth/AuthContext";
 
 function UsuarioAtualComTenant({ children }: { children: ReactNode }) {
-  const { organizacaoAtivaId, estado } = useAuth();
-  const usuarioAutenticadoEmail =
-    estado.status === "autenticado" || estado.status === "aguardandoSelecao" || estado.status === "semOrganizacao"
-      ? estado.sessao.usuario.email
-      : null;
+  const { organizacaoAtivaId } = useAuth();
 
   return (
-    <UsuarioAtualProvider
-      organizacaoAtivaId={organizacaoAtivaId}
-      usuarioAutenticadoEmail={usuarioAutenticadoEmail}
-    >
+    <UsuarioAtualProvider organizacaoAtivaId={organizacaoAtivaId}>
       {children}
     </UsuarioAtualProvider>
   );

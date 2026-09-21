@@ -23,7 +23,7 @@ import "../styles/minhas-avaliacoes.css";
 
 function MinhaAvaliacaoPage() {
   const navigate = useNavigate();
-  const { usuarioAtual } = useUsuarioAtual();
+  const { usuarioAtual, usuarioAtualLegado } = useUsuarioAtual();
 
   if (!usuarioAtual) {
     return (
@@ -65,12 +65,14 @@ function MinhaAvaliacaoPage() {
   const chavesCiclosCancelados = new Set(
     ciclosCancelados.map((ciclo) => `${ciclo.ano}-${ciclo.ciclo}`)
   );
-  const feedbacksDoColaborador = getFeedbacksByColaborador(
-    usuarioAtual.matricula
-  );
-  const avaliacoesConcluidas = getFeedbacksConcluidosByColaborador(
-    usuarioAtual.matricula
-  )
+  // #333: os domínios LEGADOS (localStorage) são indexados por matrícula; sem
+  // matrícula informada não há dado legado a exibir (nunca um número inventado).
+  const feedbacksDoColaborador = usuarioAtualLegado
+    ? getFeedbacksByColaborador(usuarioAtualLegado.matricula)
+    : [];
+  const avaliacoesConcluidas = (usuarioAtualLegado
+    ? getFeedbacksConcluidosByColaborador(usuarioAtualLegado.matricula)
+    : [])
     .filter(
       (feedback) =>
         !chavesCiclosCancelados.has(`${feedback.ano}-${feedback.ciclo}`)

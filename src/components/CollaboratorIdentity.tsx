@@ -1,10 +1,11 @@
-import type { Colaborador } from "../types/Colaborador";
+import type { Colaborador, IdentidadeColaborador } from "../types/Colaborador";
 import "../styles/collaborator-identity.css";
 
 export type CollaboratorIdentityVariant = "compact" | "standard" | "profile";
 
 interface CollaboratorIdentityProps {
-  colaborador: Colaborador;
+  /** Legado (matrícula obrigatória) ou identidade soberana (#333). */
+  colaborador: Colaborador | IdentidadeColaborador;
   variant?: CollaboratorIdentityVariant;
   gestorNome?: string;
   showStatus?: boolean;
@@ -60,7 +61,7 @@ function obterIniciais(nome: string) {
     .toUpperCase();
 }
 
-function labelFuncao(colaborador: Colaborador) {
+function labelFuncao(colaborador: Colaborador | IdentidadeColaborador) {
   if (colaborador.funcao === "GERENTE") return "Gerente";
   if (colaborador.funcao === "COORDENADOR") return "Coordenador";
   if (colaborador.funcao === "CONSULTOR") return "Consultor";
@@ -68,7 +69,7 @@ function labelFuncao(colaborador: Colaborador) {
   return "Analista";
 }
 
-function labelSenioridade(colaborador: Colaborador) {
+function labelSenioridade(colaborador: Colaborador | IdentidadeColaborador) {
   if (colaborador.funcao !== "ANALISTA") return "";
   if (colaborador.senioridade === "JUNIOR") return "Júnior";
   if (colaborador.senioridade === "PLENO") return "Pleno";
@@ -76,13 +77,13 @@ function labelSenioridade(colaborador: Colaborador) {
   return "";
 }
 
-function labelStatus(colaborador: Colaborador) {
+function labelStatus(colaborador: Colaborador | IdentidadeColaborador) {
   if (colaborador.status === "ATIVO") return "Ativo";
   if (colaborador.status === "LICENCA") return "Em licença";
   return "Desligado";
 }
 
-function statusClass(colaborador: Colaborador) {
+function statusClass(colaborador: Colaborador | IdentidadeColaborador) {
   if (colaborador.status === "ATIVO") return "is-active";
   if (colaborador.status === "LICENCA") return "is-leave";
   return "is-inactive";
@@ -165,7 +166,7 @@ export default function CollaboratorIdentity({
                 </span>
               </span>
             )}
-            {showMatricula && (
+            {showMatricula && colaborador.matricula !== undefined && (
               <span className="collaborator-identity__detail">
                 <span className="collaborator-identity__detail-icon">
                   <IconBadge />

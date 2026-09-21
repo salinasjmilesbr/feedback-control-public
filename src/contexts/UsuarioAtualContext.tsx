@@ -1,8 +1,15 @@
 import { createContext, useContext } from "react";
-import type { Colaborador } from "../types/Colaborador";
+import type { Colaborador, IdentidadeColaborador } from "../types/Colaborador";
 
 export type UsuarioAtualContextValue = {
-  usuarioAtual?: Colaborador;
+  /** #333: identidade soberana (vínculo). Matrícula é rótulo opcional. */
+  usuarioAtual?: IdentidadeColaborador;
+  /**
+   * Projeção LEGADA da identidade (domínios antigos que ainda exigem matrícula
+   * numérica). undefined quando a matrícula não foi informada — nenhum número é
+   * inventado. Quem precisa de Colaborador consome este campo.
+   */
+  usuarioAtualLegado?: Colaborador;
   usuariosDisponiveis: Colaborador[];
   selecionarUsuario: (matricula: number) => void;
   /**

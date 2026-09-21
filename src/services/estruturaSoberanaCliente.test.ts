@@ -452,6 +452,24 @@ describe("F5-08 P6 — produtor soberano (caminho normal, sem injeção manual)"
 });
 
 describe("F5-08 P6 — fail-closed real e isolamento de DEV", () => {
+  it("#333: listagem do universo NEGADA não apaga a projeção pessoal", async () => {
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("PROD", true);
+    vi.stubEnv("VITE_APP_ENV", "production");
+
+    const { estado } = await carregarProducao(
+      operacoes({
+        lerEstrutura: async () => ({ ok: true, dados: estruturaSoberanaCoerente() }),
+        listar: async () => ({ ok: false, codigo: "FORBIDDEN", mensagem: "sem permissão" }),
+      })
+    );
+
+    // A leitura PESSOAL é obrigatória e permanece disponível; a listagem do
+    // universo é complementar, então apenas a ponte legada fica vazia.
+    expect(estado.fase).toBe("pronta");
+    expect(estado.estrutura.projecao.vinculos.size).toBeGreaterThan(0);
+    expect(estado.estrutura.ponteMatriculas.size).toBe(0);
+  });
   it("falha real da porta ⇒ indisponível ⇒ decisões negativas (sem localStorage/seed)", async () => {
     vi.stubEnv("DEV", false);
     vi.stubEnv("PROD", true);

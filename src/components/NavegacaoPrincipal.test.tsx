@@ -77,7 +77,7 @@ describe("NavegacaoPrincipal — gates soberanos", () => {
   });
 
   it("membership sem capability não projeta estrutura nem catálogos", () => {
-    const html = renderizar(undefined, { podeEstrutura: false, podeCatalogo: false });
+    const html = renderizar(undefined, { podeEstrutura: false, podeCatalogo: false, collaboratorId: null });
 
     expect(html).toContain("Início");
     expect(html).not.toContain("Unidades");
@@ -85,7 +85,7 @@ describe("NavegacaoPrincipal — gates soberanos", () => {
   });
 
   it("org.structure.manage projeta Unidades/Posições/Colegiado e não Catálogos", () => {
-    const html = renderizar(undefined, { podeEstrutura: true, podeCatalogo: false });
+    const html = renderizar(undefined, { podeEstrutura: true, podeCatalogo: false, collaboratorId: null });
 
     expect(html).toContain("Unidades");
     expect(html).toContain("Posições");
@@ -94,7 +94,7 @@ describe("NavegacaoPrincipal — gates soberanos", () => {
   });
 
   it("org.catalog.manage projeta somente Catálogos", () => {
-    const html = renderizar(undefined, { podeEstrutura: false, podeCatalogo: true });
+    const html = renderizar(undefined, { podeEstrutura: false, podeCatalogo: true, collaboratorId: null });
 
     expect(html).toContain("Catálogos");
     expect(html).not.toContain("Unidades");
@@ -103,7 +103,7 @@ describe("NavegacaoPrincipal — gates soberanos", () => {
   });
 
   it("as duas capabilities projetam as quatro superfícies", () => {
-    const html = renderizar(undefined, { podeEstrutura: true, podeCatalogo: true });
+    const html = renderizar(undefined, { podeEstrutura: true, podeCatalogo: true, collaboratorId: null });
 
     expect(html).toContain("Unidades");
     expect(html).toContain("Posições");
