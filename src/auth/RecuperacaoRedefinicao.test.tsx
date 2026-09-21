@@ -60,6 +60,25 @@ describe("telas de recuperação/redefinição (F2-05)", () => {
     expect(html).not.toContain("Nova senha");
   });
 
+  it("usuário com onboarding pendente vê a definição obrigatória de senha", () => {
+    const html = renderizar(
+      <RedefinirSenhaPage />,
+      {
+        status: "primeiroAcessoPendente",
+        sessao: { usuario: { id: "uuid-1" } },
+        identidade: {
+          authUserId: "uuid-1",
+          perfil: { id: "uuid-1", status: "active", firstAccessPending: true },
+          memberships: [],
+          organizacoes: [],
+        },
+      }
+    );
+
+    expect(html).toContain("Definir nova senha");
+    expect(html).toContain('autoComplete="new-password"');
+  });
+
   it("rotas públicas de recuperação/redefinição não passam pelo guard funcional", () => {
     const arvore = (caminho: string) =>
       renderToStaticMarkup(

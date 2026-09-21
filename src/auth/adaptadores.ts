@@ -16,6 +16,7 @@ import type {
 interface LinhaPerfil {
   id: string;
   status: string;
+  first_access_pending?: boolean;
 }
 
 interface LinhaMembership {
@@ -122,7 +123,7 @@ export function criarRepositorioIdentidade(cliente: SupabaseClient): Repositorio
     async buscarPerfil(authUserId) {
       const { data, error } = await cliente
         .from("user_profiles")
-        .select("id, status")
+        .select("id, status, first_access_pending")
         .eq("id", authUserId)
         .maybeSingle();
 
@@ -133,6 +134,7 @@ export function criarRepositorioIdentidade(cliente: SupabaseClient): Repositorio
       const perfil: PerfilAutenticado = {
         id: linha.id,
         status: normalizarStatus(linha.status),
+        firstAccessPending: linha.first_access_pending === true,
       };
       return perfil;
     },

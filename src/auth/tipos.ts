@@ -24,6 +24,7 @@ export interface SessaoAuth {
 export interface PerfilAutenticado {
   id: string;
   status: StatusPerfil;
+  firstAccessPending?: boolean;
 }
 
 export interface MembershipAutenticada {

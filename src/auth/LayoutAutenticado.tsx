@@ -40,6 +40,10 @@ export default function LayoutAutenticado({
     return <Navigate to="/login" replace />;
   }
 
+  if (decisao.tipo === "primeiroAcessoPendente") {
+    return <Navigate to="/redefinir-senha" replace />;
+  }
+
   if (decisao.tipo === "semOrganizacao") {
     return <SemOrganizacao />;
   }

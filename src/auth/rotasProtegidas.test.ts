@@ -39,6 +39,26 @@ describe("decisão de acesso às rotas funcionais (F2-04)", () => {
     });
   });
 
+  it("convite pendente bloqueia a rota funcional, inclusive navegação direta", () => {
+    const estadoPendente: EstadoSessao = {
+      status: "primeiroAcessoPendente",
+      sessao: { usuario: { id: "uuid-1" } },
+      identidade: {
+        ...identidadeValida,
+        perfil: { ...identidadeValida.perfil, firstAccessPending: true },
+        memberships: [{ id: "m1", organizationId: "org-1", status: "active" }],
+        organizacoes: [{ id: "org-1", name: "Organização fictícia" }],
+      },
+    };
+
+    expect(decidirAcessoARotasFuncionais(estadoPendente, false)).toEqual({
+      tipo: "primeiroAcessoPendente",
+    });
+    expect(decidirAcessoARotasFuncionais(estadoPendente, false, "org-1")).toEqual({
+      tipo: "primeiroAcessoPendente",
+    });
+  });
+
   it("usuário sem organização tem a área funcional bloqueada (semOrganizacao)", () => {
     const estadoSemOrganizacao: EstadoSessao = {
       status: "semOrganizacao",

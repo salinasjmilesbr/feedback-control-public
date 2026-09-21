@@ -39,6 +39,9 @@ export function decidirAcessoARotaDePlataforma(estado: EstadoSessao): DecisaoRot
     case "aguardandoSelecao":
       return { tipo: "permitir" };
 
+    case "primeiroAcessoPendente":
+      return { tipo: "bloquear" };
+
     // Exceção DELIBERADA (D19): a ausência de identidade de tenant é exatamente
     // a condição que a superfície de plataforma existe para resolver. A decisão
     // efetiva continua server-side e fail-closed.

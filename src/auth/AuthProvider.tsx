@@ -180,6 +180,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [autenticador]
   );
 
+  const definirSenhaInicial = useCallback(
+    async (novaSenha: string) => {
+      if (!cliente) throw new TechnicalError();
+      const { data, error } = await cliente.functions.invoke("concluir-primeiro-acesso", {
+        body: { password: novaSenha },
+      });
+      if (error || !data?.completed) throw new TechnicalError({ cause: error });
+    },
+    [cliente]
+  );
+
   const convidarUsuario = useCallback(
     async (email: string, organizationId: string, collaboratorId: string) => {
       if (!cliente) throw new TechnicalError();
@@ -214,6 +225,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sair,
         solicitarRecuperacaoDeSenha,
         redefinirSenha,
+        definirSenhaInicial,
         convidarUsuario,
         reconhecerExpiracao,
         revalidar,

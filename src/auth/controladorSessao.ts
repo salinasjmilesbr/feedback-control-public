@@ -68,6 +68,7 @@ export type EstadoSessao =
   | { status: "autenticado"; sessao: SessaoAuth; identidade: IdentidadeResolvida }
   | { status: "semOrganizacao"; sessao: SessaoAuth; identidade: IdentidadeResolvida }
   | { status: "aguardandoSelecao"; sessao: SessaoAuth; identidade: IdentidadeResolvida }
+  | { status: "primeiroAcessoPendente"; sessao: SessaoAuth; identidade: IdentidadeResolvida }
   | { status: "sessaoIndisponivel" }
   | { status: "acessoNegado"; erro: PublicApplicationError }
   | { status: "indisponivel" }
@@ -231,7 +232,9 @@ export function criarControladorSessao(
       // inventar tenant. (Q4 aprovada/D4/D8): com N>1 memberships, nenhuma
       // escolha é feita silenciosamente — entra em `aguardandoSelecao`, com a
       // área funcional bloqueada até a F5-03 fornecer seleção explícita.
-      if (identidade.memberships.length === 0) {
+      if (identidade.perfil.firstAccessPending === true) {
+        notificar({ status: "primeiroAcessoPendente", sessao, identidade });
+      } else if (identidade.memberships.length === 0) {
         notificar({ status: "semOrganizacao", sessao, identidade });
       } else if (identidade.memberships.length > 1) {
         notificar({ status: "aguardandoSelecao", sessao, identidade });
