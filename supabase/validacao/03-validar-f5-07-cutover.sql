@@ -208,18 +208,41 @@ do $$
 declare
   v_n int;
   v_ok boolean;
+  v_tab text;
 begin
-  -- Leitura de outro tenant por UUID: impossivel (RLS own-tenant).
-  select count(*) into v_n from public.collaborators
-   where id = 'd7c00000-0000-0000-0000-0000000000b1';
-  if v_n <> 0 then
-    raise exception '[FAIL] T-18 authenticated leu colaborador de outro tenant por UUID';
-  end if;
+  -- #327 P3 (D16 revisado): as tabelas estruturais do dominio estao FECHADAS ao
+  -- cliente — o acesso DIRETO e NEGADO (zero grant), o que e estritamente mais
+  -- forte que "RLS devolve zero": nao existe caminho direto para NENHUM tenant.
+  foreach v_tab in array array['collaborators','occupations',
+                               'position_reporting_lines','organizational_units',
+                               'organizational_positions',
+                               'collaborator_status_periods'] loop
+    v_ok := false;
+    begin
+      execute format('select count(*) from public.%I', v_tab) into v_n;
+    exception when insufficient_privilege then v_ok := true;
+    end;
+    if not v_ok then
+      raise exception '[FAIL] T-18 authenticated leu public.% (tabela fechada pelo #327 P3; % linhas)', v_tab, v_n;
+    end if;
+  end loop;
 
-  select count(*) into v_n from public.occupations
+  -- A prova de isolamento segue na tabela LEGIVEL do dominio: proprio tenant
+  -- visivel e outro tenant invisivel, inclusive por UUID direto (IDOR).
+  select count(*) into v_n from public.collaborator_identifiers
+   where organization_id = 'd7a00000-0000-0000-0000-0000000000a1';
+  if v_n < 1 then
+    raise exception '[FAIL] T-18 authenticated nao leu identificadores do proprio tenant';
+  end if;
+  select count(*) into v_n from public.collaborator_identifiers
    where organization_id = 'd7a00000-0000-0000-0000-0000000000b1';
   if v_n <> 0 then
-    raise exception '[FAIL] T-18 authenticated leu occupations de outro tenant';
+    raise exception '[FAIL] T-18 authenticated leu % identificadores de outro tenant', v_n;
+  end if;
+  select count(*) into v_n from public.collaborator_identifiers
+   where collaborator_id = 'd7c00000-0000-0000-0000-0000000000b1';
+  if v_n <> 0 then
+    raise exception '[FAIL] T-18 IDOR: identificador de outro tenant visivel por UUID direto';
   end if;
 
   -- A trilha append-only nao aceita leitura de outro tenant. A leitura direta de
@@ -283,7 +306,7 @@ begin
     raise exception '[FAIL] T-18 authenticated executou estrutura_ocupacao_definir';
   end if;
 
-  raise notice '[PASS] T-18 authenticated: RLS own-tenant em execucao e EXECUTE revogado nas RPC de leitura e de mutacao';
+  raise notice '[PASS] T-18 authenticated: acesso direto NEGADO nas tabelas estruturais fechadas (#327 P3), isolamento own-tenant provado na tabela legivel (inclusive IDOR por UUID) e EXECUTE revogado nas RPC de leitura e de mutacao';
 end $$;
 
 do $$
