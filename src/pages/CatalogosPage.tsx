@@ -2,7 +2,7 @@
  * F5-08 P4 — Catálogos: cargos (`job_roles`) e senioridades
  * (`seniority_levels`).
  *
- * - LEITURA: soberana, own-tenant, pela via RLS (D16) — sem capability.
+ * - LEITURA: view soberana do #327 (`org.catalog.manage`) — só o catálogo.
  * - ESCRITA: pelas operações administrativas do P3 (`catalogo.cargo.*`,
  *   `catalogo.senioridade.*`) via porta única → Edge → RPC; o servidor decide a
  *   autorização (`org.catalog.manage`) e devolve o código público.

@@ -336,8 +336,10 @@ export function bootstrapCatalogo(
 // ---------------------------------------------------------------------------
 // F5-08 P4 — ESTRUTURA ORGANIZACIONAL E CATÁLOGOS
 //
-// Leitura soberana (D16): `select` sob RLS own-tenant, sem capability e sem
-// RPC de listagem. Escrita (D19): as 15 operações administrativas do P3 pela
+// Leitura soberana (D16 revisado no #327/P3): UMA leitura por VIEW do escopo
+// (`estrutura_administrativa` por capability, `estrutura_pessoal` pelo subgrafo
+// vigente do ator); as tabelas estruturais estão FECHADAS ao cliente.
+// Escrita (D19): as 15 operações administrativas do P3 pela
 // Edge `colaboradores`, que revalida capability efetiva e ator no servidor.
 //
 // Esta porta NÃO decide autorização nem tenant: envia `operationId`
@@ -350,7 +352,11 @@ export function bootstrapCatalogo(
 export type EstruturaSoberanaProjetada = EstruturaSoberana;
 
 export function lerEstrutura(
-  entrada: { readonly organizationId?: string | null } = {},
+  entrada: {
+    /** #327/P2B: "administrativo" (default) ou "pessoal" — a VIEW decide. */
+    readonly escopo?: "administrativo" | "pessoal";
+    readonly organizationId?: string | null;
+  } = {},
   deps: DependenciasAcessoColaboradores = {}
 ): Promise<ResultadoColaboradores<EstruturaSoberanaProjetada>> {
   return executar(deps, (servico) => servico.lerEstrutura(entrada));

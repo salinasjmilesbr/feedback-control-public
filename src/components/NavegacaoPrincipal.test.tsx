@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { AuthContext } from "../auth/AuthContext";
 import { UsuarioAtualContext } from "../contexts/UsuarioAtualContext";
 import type { Colaborador } from "../types/Colaborador";
+import type { AutorizacaoEstruturalSoberana } from "../services/autorizacaoEstruturalSoberana";
 import menuFonte from "./NavegacaoPrincipal.tsx?raw";
 import NavegacaoPrincipal from "./NavegacaoPrincipal";
 
@@ -18,7 +19,14 @@ const usuario: Colaborador = {
   respondePara: "",
 };
 
-function renderizar(usuarioAtual?: Colaborador): string {
+/**
+ * #327/P2B — o menu PROJETA `estrutura_autorizacao` (view do P1); a semente
+ * `autorizacaoInicial` fixa a projeção no SSR/teste, sem ler a view.
+ */
+function renderizar(
+  usuarioAtual?: Colaborador,
+  autorizacaoInicial?: AutorizacaoEstruturalSoberana
+): string {
   return renderToStaticMarkup(
     <AuthContext.Provider value={{
       estado: {
@@ -48,21 +56,59 @@ function renderizar(usuarioAtual?: Colaborador): string {
         usuariosDisponiveis: usuarioAtual ? [usuarioAtual] : [],
         selecionarUsuario: () => undefined,
       }}>
-        <MemoryRouter><NavegacaoPrincipal /></MemoryRouter>
+        <MemoryRouter>
+          <NavegacaoPrincipal autorizacaoInicial={autorizacaoInicial} />
+        </MemoryRouter>
       </UsuarioAtualContext.Provider>
     </AuthContext.Provider>
   );
 }
 
 describe("NavegacaoPrincipal — gates soberanos", () => {
-  it("mantém a navegação estrutural visível com sessão/organização ativa e usuário atual ausente", () => {
+  it("sem projeção de autorização não mostra superfícies administrativas", () => {
     const html = renderizar();
+
     expect(html).toContain("Início");
+    expect(html).not.toContain("Unidades");
+    expect(html).not.toContain("Posições");
+    expect(html).not.toContain("Colegiado");
+    expect(html).not.toContain("Catálogos");
+    expect(html).not.toContain("Ciclos");
+  });
+
+  it("membership sem capability não projeta estrutura nem catálogos", () => {
+    const html = renderizar(undefined, { podeEstrutura: false, podeCatalogo: false });
+
+    expect(html).toContain("Início");
+    expect(html).not.toContain("Unidades");
+    expect(html).not.toContain("Catálogos");
+  });
+
+  it("org.structure.manage projeta Unidades/Posições/Colegiado e não Catálogos", () => {
+    const html = renderizar(undefined, { podeEstrutura: true, podeCatalogo: false });
+
+    expect(html).toContain("Unidades");
+    expect(html).toContain("Posições");
+    expect(html).toContain("Colegiado");
+    expect(html).not.toContain("Catálogos");
+  });
+
+  it("org.catalog.manage projeta somente Catálogos", () => {
+    const html = renderizar(undefined, { podeEstrutura: false, podeCatalogo: true });
+
+    expect(html).toContain("Catálogos");
+    expect(html).not.toContain("Unidades");
+    expect(html).not.toContain("Posições");
+    expect(html).not.toContain("Colegiado");
+  });
+
+  it("as duas capabilities projetam as quatro superfícies", () => {
+    const html = renderizar(undefined, { podeEstrutura: true, podeCatalogo: true });
+
     expect(html).toContain("Unidades");
     expect(html).toContain("Posições");
     expect(html).toContain("Colegiado");
     expect(html).toContain("Catálogos");
-    expect(html).not.toContain("Ciclos");
   });
 
   it("usa somente códigos canônicos e snapshot soberano", () => {
@@ -77,5 +123,15 @@ describe("NavegacaoPrincipal — gates soberanos", () => {
     expect(menuFonte).not.toContain("perfilPossuiFluxosPropriosAtuais");
     expect(menuFonte).not.toContain("report.view");
     expect(menuFonte).not.toContain("can(");
+  });
+
+  it("projeta a view de autorização e nunca lê as views de dados", () => {
+    expect(menuFonte).toContain("lerAutorizacaoEstrutural");
+    expect(menuFonte).toContain("estrutura_autorizacao");
+    // O menu não é autoridade: nenhuma view de DADOS é consultada aqui e a
+    // URL direta continua dependendo da view que entrega a estrutura.
+    expect(menuFonte).not.toContain("estrutura_administrativa");
+    expect(menuFonte).not.toContain("estrutura_pessoal");
+    expect(menuFonte).not.toContain("criarLeituraEstrutura");
   });
 });

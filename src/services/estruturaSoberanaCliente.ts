@@ -4,7 +4,7 @@
  * ## Papel deste módulo (fronteira)
  *
  * 1. **PRODUTOR** da projeção estrutural pelo caminho NORMAL já existente:
- *    `lerEstrutura` (RLS/own-tenant, P4) + `listarColaboradores` (F5-07) →
+ *    `lerEstrutura` (view do #327, escopo PESSOAL) + `listarColaboradores` (F5-07) →
  *    `montarProjecaoEstrutural` (UUID). Nada é injetado manualmente em produção:
  *    o shell autenticado carrega a estrutura e os consumidores leem a projeção
  *    publicada.
@@ -464,7 +464,9 @@ export function carregarEstruturaSoberana(
   const promessa = (async (): Promise<EstadoEstruturaSoberana> => {
     try {
       const [leituraEstrutura, leituraColaboradores] = await Promise.all([
-        lerEstrutura({ organizationId }, deps),
+        // #327/P2B: a projeção das superfícies PESSOAIS usa o subgrafo vigente
+        // do próprio ator (sem exigir capability administrativa).
+        lerEstrutura({ organizationId, escopo: "pessoal" }, deps),
         listarColaboradores({ organizationId }, deps),
       ]);
 

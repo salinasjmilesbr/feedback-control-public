@@ -188,9 +188,12 @@ create view public._mut_view as select 1 as x;
 do $$
 declare v_t text;
 begin
+  -- F6-A21 P3 (#327): as 3 views aprovadas no P1/P2 sao permitidas pelo D19; a
+  -- mutacao injeta uma view NAO aprovada e o guard precisa detecta-la.
   select string_agg(c.relname, ', ') into v_t
   from pg_class c join pg_namespace n on n.oid=c.relnamespace
-  where n.nspname='public' and c.relkind='v';
+  where n.nspname='public' and c.relkind='v'
+    and c.relname not in ('estrutura_autorizacao','estrutura_administrativa','estrutura_pessoal');
   if v_t is null or v_t not like '%_mut_view%' then
     raise exception '[MUT FAIL] guard nao detectou view nao aprovada (v_t=%)', v_t;
   end if;
@@ -203,9 +206,10 @@ declare v_t text;
 begin
   select string_agg(c.relname, ', ') into v_t
   from pg_class c join pg_namespace n on n.oid=c.relnamespace
-  where n.nspname='public' and c.relkind='v';
-  if v_t is not null then raise exception '[MUT FAIL] view nao voltou ao estado limpo (%)', v_t; end if;
-  raise notice '[PASS] mutacao E: view nao aprovada detectada e revertida';
+  where n.nspname='public' and c.relkind='v'
+    and c.relname not in ('estrutura_autorizacao','estrutura_administrativa','estrutura_pessoal');
+  if v_t is not null then raise exception '[MUT FAIL] view nao aprovada nao foi revertida (%)', v_t; end if;
+  raise notice '[PASS] mutacao E: view nao aprovada detectada e revertida (as 3 views aprovadas do #327 permanecem)';
 end $$;
 
 -- ============================================================================

@@ -4,6 +4,17 @@
 -- ----------------------------------------------------------------------------
 -- Executar DEPOIS de 01-cenario-f4-08.sql, como superuser local, com
 -- ON_ERROR_STOP ativo. Um `[PASS]` por verificação; falha aborta (código ≠ 0).
+--
+-- F6-A21 P3 (Issue #327) — RECLASSIFICACAO: as 10 tabelas estruturais que o
+-- cliente lia por RLS antes do P2B (collaborators, job_roles, seniority_levels,
+-- organizational_units, organizational_unit_parent_periods,
+-- organizational_positions, position_reporting_lines, occupations,
+-- collegiate_configurations, collegiate_configuration_members) e a filha
+-- indireta collaborator_status_periods passaram a DENY-BY-DEFAULT INTEGRAL:
+-- ZERO policy e ZERO privilegio de cliente. A leitura estrutural do cliente
+-- passa a existir SOMENTE pelas 3 views aprovadas no P1/P2
+-- (estrutura_administrativa por capability efetiva, estrutura_pessoal pelo
+-- subgrafo vigente do proprio ator e estrutura_autorizacao como projecao).
 -- ============================================================================
 
 \set ON_ERROR_STOP on
@@ -110,12 +121,10 @@ end $$;
 
 do $$
 declare v_tab text;
+  -- F6-A21 P3 (#327): as 11 tabelas estruturais fechadas sairam desta lista.
   v_readable text[] := array[
-    'collaborators','collaborator_identifiers','job_roles','seniority_levels',
-    'organizational_units','organizational_unit_parent_periods','organizational_positions',
-    'position_reporting_lines','occupations','temporary_responsibilities',
-    'collegiate_configurations','collegiate_configuration_members',
-    'cycle_evaluation_responsibilities','collaborator_status_periods',
+    'collaborator_identifiers','temporary_responsibilities',
+    'cycle_evaluation_responsibilities',
     'collegiate_cycle_snapshots','collegiate_cycle_snapshot_positions',
     'collegiate_cycle_snapshot_members','capabilities',
     -- F5-09 P5: `evaluation_cycles` passa a ser LEGIVEL (policy own-tenant +
@@ -152,7 +161,7 @@ begin
       raise exception '[FAIL] authenticated com SELECT no log append-only public.%', v_tab;
     end if;
   end loop;
-  raise notice '[PASS] 19 tabelas legiveis com policy SELECT (18 F4-08 + evaluation_cycles do P5) e 1 log append-only com policy own-tenant sem grant';
+  raise notice '[PASS] 8 tabelas legiveis com policy SELECT (7 F4-08 remanescentes + evaluation_cycles do P5) e 1 log append-only com policy own-tenant sem grant';
 end $$;
 
 do $$
@@ -177,22 +186,30 @@ declare v_tab text;
     'evaluation_goal_events','evaluation_cycle_goal_limits',
     'evaluation_observations','evaluation_observation_events',
     -- F6-A03 (Issue #266): trilha do plano de plataforma — fechada.
-    'platform_provisioning_events'];
+    'platform_provisioning_events',
+    -- F6-A21 P3 (#327): fechamento da leitura estrutural antiga — as 10 tabelas
+    -- que lerEstrutura lia diretamente + collaborator_status_periods (filha
+    -- indireta cuja policy referenciava collaborators; fechada por consequencia
+    -- mecanica provada). Leitura do cliente: SOMENTE as 3 views.
+    'collaborators','job_roles','seniority_levels','organizational_units',
+    'organizational_unit_parent_periods','organizational_positions',
+    'position_reporting_lines','occupations','collegiate_configurations',
+    'collegiate_configuration_members','collaborator_status_periods'];
 begin
   foreach v_tab in array v_closed loop
     if exists (select 1 from pg_policies p where p.schemaname='public' and p.tablename=v_tab) then
       raise exception '[FAIL] tabela fechada com policy indevida: %', v_tab;
     end if;
   end loop;
-  raise notice '[PASS] 29 tabelas fechadas permanecem sem policy (22 historicas + as 4 tabelas de metas por D22-A + as 2 tabelas de observacoes por D9 + a trilha de plataforma da F6-A03)';
+  raise notice '[PASS] 40 tabelas fechadas permanecem sem policy (22 historicas + as 4 de metas por D22-A + as 2 de observacoes por D9 + a trilha de plataforma da F6-A03 + as 11 do fechamento F6-A21 P3)';
 end $$;
 
 do $$
 declare v_n int;
 begin
   select count(*) into v_n from pg_policies p where p.schemaname='public';
-  if v_n <> 23 then raise exception '[FAIL] policies esperadas=23, encontradas=%', v_n; end if;
-  raise notice '[PASS] 23 policies (3 identidade + 19 de leitura own-tenant [18 F4-08 + evaluation_cycles do P5] + 1 F5-07 append-only)';
+  if v_n <> 12 then raise exception '[FAIL] policies esperadas=12, encontradas=%', v_n; end if;
+  raise notice '[PASS] 12 policies (3 identidade + 8 de leitura own-tenant [7 F4-08 remanescentes + evaluation_cycles do P5] + 1 F5-07 append-only)';
 end $$;
 
 -- ----------------------------------------------------------------------------
@@ -331,11 +348,8 @@ end $$;
 do $$
 declare v_tab text;
   v_readable text[] := array[
-    'collaborators','collaborator_identifiers','job_roles','seniority_levels',
-    'organizational_units','organizational_unit_parent_periods','organizational_positions',
-    'position_reporting_lines','occupations','temporary_responsibilities',
-    'collegiate_configurations','collegiate_configuration_members',
-    'cycle_evaluation_responsibilities','collaborator_status_periods',
+    'collaborator_identifiers','temporary_responsibilities',
+    'cycle_evaluation_responsibilities',
     'organizations','user_profiles','user_organization_memberships',
     'collegiate_cycle_snapshots','collegiate_cycle_snapshot_positions',
     'collegiate_cycle_snapshot_members','capabilities','evaluation_cycles'];
@@ -356,7 +370,12 @@ declare v_tab text;
     'evaluation_goals','evaluation_goal_approvals',
     'evaluation_goal_events','evaluation_cycle_goal_limits',
     'evaluation_observations','evaluation_observation_events',
-    'platform_provisioning_events'];
+    'platform_provisioning_events',
+    -- F6-A21 P3 (#327): leitura estrutural antiga FECHADA (ver bloco anterior).
+    'collaborators','job_roles','seniority_levels','organizational_units',
+    'organizational_unit_parent_periods','organizational_positions',
+    'position_reporting_lines','occupations','collegiate_configurations',
+    'collegiate_configuration_members','collaborator_status_periods'];
   -- F5-07: log append-only — tem policy SELECT own-tenant mas NAO tem grant a
   -- `authenticated` (categoria propria; nao e "legivel" nem "fechada").
   v_policy_sem_grant text[] := array['collaborator_events'];
@@ -376,7 +395,7 @@ begin
       raise exception '[FAIL] authenticated com SELECT no log append-only public.%', v_tab;
     end if;
   end loop;
-  raise notice '[PASS] authenticated com SELECT somente nas tabelas legiveis (22 legiveis: 18 F4-08 + evaluation_cycles do P5 + organizations/user_profiles/user_organization_memberships; 29 fechadas + 1 log append-only sem SELECT)';
+  raise notice '[PASS] authenticated com SELECT somente nas tabelas legiveis (11 legiveis: 7 F4-08 remanescentes + evaluation_cycles do P5 + organizations/user_profiles/user_organization_memberships; 40 fechadas + 1 log append-only sem SELECT)';
 end $$;
 
 -- ----------------------------------------------------------------------------
@@ -426,13 +445,20 @@ end $$;
 do $$
 declare v_t text;
 begin
+  -- F6-A21 P1 (Issue #327): as TRES views soberanas de leitura estrutural sao
+  -- APROVADAS por contrato fechado — `estrutura_administrativa` (leitura
+  -- administrativa gated por org.structure.manage/org.catalog.manage),
+  -- `estrutura_pessoal` (subgrafo do proprio ator) e `estrutura_autorizacao`
+  -- (projecao minima para a UI). Qualquer OUTRA view continua REPROVADA (D19).
   select string_agg(c.relname, ', ' order by c.relname) into v_t
   from pg_class c join pg_namespace n on n.oid=c.relnamespace
-  where n.nspname='public' and c.relkind in ('v','m');
+  where n.nspname='public' and c.relkind in ('v','m')
+    and c.relname not in ('estrutura_autorizacao','estrutura_administrativa',
+                          'estrutura_pessoal');
   if v_t is not null then
     raise exception '[FAIL] view/materialized view public nao aprovada (D19 — contrato atual nao preve views): %', v_t;
   end if;
-  raise notice '[PASS] nenhuma view/materialized view public nao aprovada (D19)';
+  raise notice '[PASS] nenhuma view nao aprovada (D19): somente as 3 views do #327 P1 sao aceitas';
 end $$;
 
 do $$
@@ -661,38 +687,59 @@ end $$;
 
 do $$
 declare
-  v_tables text[] := array[
-    'collaborators','collaborator_identifiers','job_roles','seniority_levels',
-    'organizational_units','organizational_unit_parent_periods','organizational_positions',
-    'position_reporting_lines','occupations','temporary_responsibilities',
-    'collegiate_configurations','collegiate_configuration_members',
-    'cycle_evaluation_responsibilities','collaborator_status_periods',
-    'collegiate_cycle_snapshots','collegiate_cycle_snapshot_positions',
-    'collegiate_cycle_snapshot_members'];
-  v_counts int[] := array[3,3,1,1,2,1,2,1,2,1,1,1,2,3,1,1,1];
-  v_i int; v_n int;
+  v_legiveis text[] := array[
+    'collaborator_identifiers','temporary_responsibilities',
+    'cycle_evaluation_responsibilities','collegiate_cycle_snapshots',
+    'collegiate_cycle_snapshot_positions','collegiate_cycle_snapshot_members'];
+  v_counts int[] := array[3,1,2,1,1,1];
+  v_fechadas text[] := array[
+    'collaborators','job_roles','seniority_levels','organizational_units',
+    'organizational_unit_parent_periods','organizational_positions',
+    'position_reporting_lines','occupations','collegiate_configurations',
+    'collegiate_configuration_members','collaborator_status_periods'];
+  v_i int; v_n int; v_ok boolean;
 begin
-  for v_i in 1..array_length(v_tables,1) loop
-    execute format('select count(*) from public.%I', v_tables[v_i]) into v_n;
+  -- F6-A21 P3 (#327): USER_A (membro ativo de Alfa) segue lendo as tabelas
+  -- LEGIVEIS do proprio tenant...
+  for v_i in 1..array_length(v_legiveis,1) loop
+    execute format('select count(*) from public.%I', v_legiveis[v_i]) into v_n;
     if v_n <> v_counts[v_i] then
-      raise exception '[FAIL] USER_A viu % linhas em % (esperado %)', v_n, v_tables[v_i], v_counts[v_i];
+      raise exception '[FAIL] USER_A viu % linhas em % (esperado %)', v_n, v_legiveis[v_i], v_counts[v_i];
     end if;
   end loop;
-  raise notice '[PASS] USER_A le somente linhas do proprio tenant em TODAS as tabelas abertas';
+
+  -- ...e o acesso DIRETO as tabelas estruturais FECHADAS e NEGADO.
+  for v_i in 1..array_length(v_fechadas,1) loop
+    v_ok := false;
+    begin execute format('select count(*) from public.%I', v_fechadas[v_i]) into v_n;
+    exception when insufficient_privilege then v_ok := true; end;
+    if not v_ok then
+      raise exception '[FAIL] USER_A leu tabela estrutural FECHADA public.% (%)', v_fechadas[v_i], v_n;
+    end if;
+  end loop;
+
+  raise notice '[PASS] USER_A le o proprio tenant nas tabelas legiveis e NAO le NENHUMA das 11 tabelas estruturais fechadas (permission denied)';
 end $$;
 
 do $$
-declare v_n int;
+declare v_n int; v_ok boolean;
 begin
-  select count(*) into v_n from public.collaborators where id = 'd8c00000-0000-0000-0000-0000000000b1';
-  if v_n <> 0 then raise exception '[FAIL] USER_A leu colaborador de Beta'; end if;
-  select count(*) into v_n from public.collaborators where id = 'd8c00000-0000-0000-0000-0000000000c1';
-  if v_n <> 0 then raise exception '[FAIL] USER_A leu colaborador de Gama'; end if;
-  select count(*) into v_n from public.organizational_positions where organization_id = 'd8a00000-0000-0000-0000-0000000000b1';
-  if v_n <> 0 then raise exception '[FAIL] USER_A leu posicoes de Beta'; end if;
+  select count(*) into v_n from public.collaborator_identifiers where organization_id = 'd8a00000-0000-0000-0000-0000000000b1';
+  if v_n <> 0 then raise exception '[FAIL] USER_A leu identificadores de Beta'; end if;
+  select count(*) into v_n from public.collaborator_identifiers where organization_id = 'd8a00000-0000-0000-0000-0000000000c1';
+  if v_n <> 0 then raise exception '[FAIL] USER_A leu identificadores de Gama'; end if;
+  select count(*) into v_n from public.cycle_evaluation_responsibilities where organization_id = 'd8a00000-0000-0000-0000-0000000000b1';
+  if v_n <> 0 then raise exception '[FAIL] USER_A leu responsabilidades de Beta'; end if;
   select count(*) into v_n from public.collegiate_cycle_snapshots where organization_id = 'd8a00000-0000-0000-0000-0000000000b1';
   if v_n <> 0 then raise exception '[FAIL] USER_A leu snapshots de Beta'; end if;
-  raise notice '[PASS] cross-tenant por ID direto/filtro = DENY (Beta e Gama invisiveis)';
+
+  -- Nas tabelas FECHADAS o isolamento e mais forte que a RLS: nao ha grant.
+  v_ok := false;
+  begin perform count(*) from public.collaborators where id = 'd8c00000-0000-0000-0000-0000000000b1';
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception '[FAIL] USER_A leu tabela estrutural fechada collaborators'; end if;
+
+  raise notice '[PASS] cross-tenant por ID direto/filtro = DENY nas tabelas legiveis e acesso direto as fechadas = permission denied (Beta e Gama invisiveis)';
 end $$;
 
 do $$
@@ -815,25 +862,29 @@ end $$;
 do $$
 declare v_n int; v_ok boolean := false;
 begin
-  select count(*) into v_n from public.collaborators c join public.organizations o on o.id = c.organization_id;
-  if v_n <> 3 then raise exception '[FAIL] join collaborators x organizations vazou (% linhas)', v_n; end if;
+  select count(*) into v_n from public.collaborator_identifiers c join public.organizations o on o.id = c.organization_id;
+  if v_n <> 3 then raise exception '[FAIL] join collaborator_identifiers x organizations vazou (% linhas)', v_n; end if;
   begin
-    perform 1 from public.collaborators c join public.membership_collaborator_links l on l.collaborator_id = c.id;
+    perform 1 from public.collaborator_identifiers c join public.membership_collaborator_links l on l.collaborator_id = c.collaborator_id;
   exception when insufficient_privilege then v_ok := true; end;
   if not v_ok then raise exception '[FAIL] join com tabela fechada deveria ser negado (permission denied)'; end if;
-  raise notice '[PASS] joins sem vazamento (own-tenant 3; join com tabela fechada = permission denied)';
+  begin
+    perform 1 from public.collaborators c join public.organizations o on o.id = c.organization_id;
+    raise exception '[FAIL] join com tabela estrutural fechada deveria ser negado (permission denied)';
+  exception when insufficient_privilege then null; end;
+  raise notice '[PASS] joins sem vazamento (own-tenant 3 nas legiveis; join com tabela fechada = permission denied)';
 end $$;
 
 do $$
 declare v_t text; v_ok boolean;
-  v_closed text[] := array['access_roles','access_role_capabilities','membership_access_role_assignments','membership_collaborator_links','access_role_assignment_scopes','access_role_assignment_unit_targets','evaluation_succession_events','privilege_mutation_audit','evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria','evaluation_config_scale_bands','evaluation_config_participant_roles','evaluations','evaluation_participants','evaluation_scores','evaluation_comments','evaluation_events','evaluation_pendencies','evaluation_aggregates','collaborator_events','cycle_events','evaluation_goals','evaluation_goal_approvals','evaluation_goal_events','evaluation_cycle_goal_limits','evaluation_observations','evaluation_observation_events','platform_provisioning_events'];
+  v_closed text[] := array['access_roles','access_role_capabilities','membership_access_role_assignments','membership_collaborator_links','access_role_assignment_scopes','access_role_assignment_unit_targets','evaluation_succession_events','privilege_mutation_audit','evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria','evaluation_config_scale_bands','evaluation_config_participant_roles','evaluations','evaluation_participants','evaluation_scores','evaluation_comments','evaluation_events','evaluation_pendencies','evaluation_aggregates','collaborator_events','cycle_events','evaluation_goals','evaluation_goal_approvals','evaluation_goal_events','evaluation_cycle_goal_limits','evaluation_observations','evaluation_observation_events','platform_provisioning_events','collaborators','job_roles','seniority_levels','organizational_units','organizational_unit_parent_periods','organizational_positions','position_reporting_lines','occupations','collegiate_configurations','collegiate_configuration_members','collaborator_status_periods'];
 begin
   foreach v_t in array v_closed loop
     v_ok := false;
     begin execute format('select count(*) from public.%I', v_t); exception when insufficient_privilege then v_ok := true; end;
     if not v_ok then raise exception '[FAIL] authenticated leu tabela fechada %', v_t; end if;
   end loop;
-  raise notice '[PASS] 29 tabelas fechadas invisiveis (permission denied) apesar de dados de fixture (as 4 tabelas de metas voltaram a deny-by-default integral por D22-A, as 2 tabelas de observacoes nasceram deny-by-default integral por D9 e a trilha de plataforma da F6-A03 nasceu deny-by-default integral — a leitura funcional passa pela superficie soberana, nunca pela RLS)';
+  raise notice '[PASS] 40 tabelas fechadas invisiveis (permission denied) apesar de dados de fixture (as 4 de metas por D22-A, as 2 de observacoes por D9, a trilha de plataforma da F6-A03 e as 11 do fechamento F6-A21 P3 — a leitura passa pela superficie soberana/views, nunca pela RLS)';
 end $$;
 
 do $$
@@ -866,13 +917,17 @@ end $$;
 select set_config('request.jwt.claim.sub', 'd8b00000-0000-0000-0000-0000000000a3', false);
 set role authenticated;
 do $$
-declare v_n int;
+declare v_n int; v_ok boolean;
 begin
-  select count(*) into v_n from public.collaborators;
+  select count(*) into v_n from public.collaborator_identifiers;
   if v_n <> 6 then raise exception '[FAIL] USER_AB deveria ver 6 (Alfa+Beta), viu %', v_n; end if;
-  select count(*) into v_n from public.collaborators where id = 'd8c00000-0000-0000-0000-0000000000c1';
+  select count(*) into v_n from public.collaborator_identifiers where organization_id = 'd8a00000-0000-0000-0000-0000000000c1';
   if v_n <> 0 then raise exception '[FAIL] USER_AB leu Gama'; end if;
-  raise notice '[PASS] multi-tenant: USER_AB le Alfa+Beta, nao Gama';
+  v_ok := false;
+  begin perform count(*) from public.collaborators;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception '[FAIL] USER_AB leu a tabela estrutural fechada collaborators'; end if;
+  raise notice '[PASS] multi-tenant: USER_AB le Alfa+Beta nas tabelas legiveis, nao Gama, e nao le tabela estrutural fechada';
 end $$;
 reset role;
 
@@ -882,7 +937,7 @@ set role authenticated;
 do $$
 declare v_n int;
 begin
-  select count(*) into v_n from public.collaborators;
+  select count(*) into v_n from public.collaborator_identifiers;
   if v_n <> 3 then raise exception '[FAIL] apos revogacao Alfa, USER_AB deveria ver 3 (so Beta), viu %', v_n; end if;
   raise notice '[PASS] membership revogada durante a sessao: acesso a Alfa removido (so Beta)';
 end $$;
@@ -897,7 +952,7 @@ set role authenticated;
 do $$
 declare v_n int;
 begin
-  select count(*) into v_n from public.collaborators;
+  select count(*) into v_n from public.collaborator_identifiers;
   if v_n <> 0 then raise exception '[FAIL] membership disabled ainda le (% linhas)', v_n; end if;
   raise notice '[PASS] membership disabled remove acesso';
 end $$;
@@ -910,7 +965,7 @@ declare v_ok boolean; v_n int;
 begin
   select public.user_has_active_membership('d8a00000-0000-0000-0000-0000000000a1') into v_ok;
   if v_ok is not false then raise exception '[FAIL] helper deveria ser false para profile inativo'; end if;
-  select count(*) into v_n from public.collaborators;
+  select count(*) into v_n from public.collaborator_identifiers;
   if v_n <> 0 then raise exception '[FAIL] profile inativo leu estrutura (% linhas)', v_n; end if;
   select count(*) into v_n from public.organizations;
   if v_n <> 0 then raise exception '[FAIL] profile inativo leu organizations (% linhas)', v_n; end if;
@@ -927,7 +982,7 @@ set role authenticated;
 do $$
 declare v_n int;
 begin
-  select count(*) into v_n from public.collaborators;
+  select count(*) into v_n from public.collaborator_identifiers;
   if v_n <> 0 then raise exception '[FAIL] usuario sem membership leu estrutura'; end if;
   select count(*) into v_n from public.organizations;
   if v_n <> 0 then raise exception '[FAIL] usuario sem membership leu organizations'; end if;

@@ -10,7 +10,7 @@
  *   (a chave `service_role` NUNCA entra no bundle).
  * - **F5-08 P4 — cliente do caminho soberano com a SESSÃO do usuário.** O
  *   contrato do desenho técnico exige que o navegador chegue ao PostgREST com o
- *   JWT do usuário (RLS F4-08/D16) e à Edge `colaboradores` com o MESMO JWT
+ *   JWT do usuário (RLS F4-08 + views do #327) e à Edge `colaboradores` com o
  *   (§12.1); sem sessão o SDK cairia para a chave anônima e as leituras
  *   devolveriam conjuntos vazios (negação SILENCIOSA pela RLS). Por isso:
  *   `persistSession: true` faz este cliente LER a sessão já persistida pelo

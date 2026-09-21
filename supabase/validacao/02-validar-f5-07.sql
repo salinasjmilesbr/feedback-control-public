@@ -530,6 +530,15 @@ end $$;
 
 -- ============================================================================
 -- 4) T-19 + T-18: RLS em execucao (own-tenant) e nenhuma superficie direta
+-- ----------------------------------------------------------------------------
+-- D16 REVISADO (#327 P3): collaborators, occupations, position_reporting_lines,
+-- organizational_units, organizational_positions e collaborator_status_periods
+-- estao FECHADAS ao cliente (deny-by-default integral). A leitura de
+-- colaboradores passa a existir SOMENTE pelo mecanismo soberano (Edge/RPC com
+-- service_role); a prova de RLS own-tenant em execucao segue sendo feita nas
+-- tabelas do dominio que permanecem LEGIVEIS (collaborator_identifiers) e o
+-- fechamento e provado por NEGACAO explicita — estritamente mais forte que
+-- "RLS devolve zero", porque nao existe caminho direto para NENHUM tenant.
 -- ============================================================================
 select set_config('request.jwt.claim.sub', 'd7b00000-0000-0000-0000-0000000000a2', false);
 set role authenticated;
@@ -537,62 +546,55 @@ set role authenticated;
 do $$
 declare
   v_n int;
-  v_tabelas text[] := array[
-    'collaborator_identifiers','occupations','position_reporting_lines',
-    'organizational_units','organizational_positions'];
+  v_ok boolean;
+  v_fechadas text[] := array[
+    'collaborators','occupations','position_reporting_lines',
+    'organizational_units','organizational_positions',
+    'collaborator_status_periods'];
   v_tab text;
 begin
-  -- own-tenant visivel
-  select count(*) into v_n from public.collaborators
+  -- own-tenant visivel na superficie LEGIVEL do dominio (identificadores).
+  select count(*) into v_n from public.collaborator_identifiers
    where organization_id = 'd7a00000-0000-0000-0000-0000000000a1';
   if v_n < 1 then
-    raise exception '[FAIL] authenticated (Alfa) nao leu colaboradores do proprio tenant';
+    raise exception '[FAIL] authenticated (Alfa) nao leu os identificadores do proprio tenant';
   end if;
 
   -- outro tenant invisivel, inclusive por UUID direto (IDOR)
-  select count(*) into v_n from public.collaborators
+  select count(*) into v_n from public.collaborator_identifiers
    where organization_id = 'd7a00000-0000-0000-0000-0000000000b1';
   if v_n <> 0 then
-    raise exception '[FAIL] authenticated (Alfa) leu % colaboradores de Beta', v_n;
+    raise exception '[FAIL] authenticated (Alfa) leu % identificadores de Beta', v_n;
   end if;
-  select count(*) into v_n from public.collaborators
-   where id = 'd7c00000-0000-0000-0000-0000000000b1';
+  select count(*) into v_n from public.collaborator_identifiers
+   where collaborator_id = 'd7c00000-0000-0000-0000-0000000000b1';
   if v_n <> 0 then
-    raise exception '[FAIL] IDOR: colaborador de outro tenant visivel por UUID direto';
+    raise exception '[FAIL] IDOR: identificador de colaborador de outro tenant visivel por UUID direto';
   end if;
 
-  foreach v_tab in array v_tabelas loop
-    execute format(
-      'select count(*) from public.%I where organization_id = ''d7a00000-0000-0000-0000-0000000000b1''',
-      v_tab) into v_n;
-    if v_n <> 0 then
-      raise exception '[FAIL] authenticated (Alfa) leu % linhas de outro tenant em %', v_n, v_tab;
+  -- #327 P3: acesso DIRETO as tabelas estruturais do dominio e NEGADO (zero grant).
+  foreach v_tab in array v_fechadas loop
+    v_ok := false;
+    begin
+      execute format('select count(*) from public.%I', v_tab) into v_n;
+    exception when insufficient_privilege then v_ok := true;
+    end;
+    if not v_ok then
+      raise exception '[FAIL] authenticated leu public.% (tabela fechada pelo #327 P3; % linhas)', v_tab, v_n;
     end if;
   end loop;
 
-  -- collaborator_status_periods e filha indireta (sem organization_id)
-  select count(*) into v_n
-    from public.collaborator_status_periods p
-    join public.collaborators c on c.id = p.collaborator_id
-   where c.organization_id = 'd7a00000-0000-0000-0000-0000000000b1';
-  if v_n <> 0 then
-    raise exception '[FAIL] authenticated (Alfa) leu periodos de status de outro tenant';
-  end if;
-
-  -- collaborator_events: a leitura direta de authenticated pode estar revogada
-  -- (spine §1.2) ou concedida com policy own-tenant (desenho §10.3). Nos dois
-  -- casos NENHUM dado de outro tenant pode ser visivel.
-  v_n := -1;
+  -- collaborator_events: leitura direta de authenticated e DENY (espinha §1.2).
+  v_ok := false;
   begin
-    execute 'select count(*) from public.collaborator_events where organization_id = ''d7a00000-0000-0000-0000-0000000000b1'''
-      into v_n;
-  exception when insufficient_privilege then v_n := -1;
+    execute 'select count(*) from public.collaborator_events' into v_n;
+  exception when insufficient_privilege then v_ok := true;
   end;
-  if v_n > 0 then
-    raise exception '[FAIL] authenticated (Alfa) leu % eventos de outro tenant', v_n;
+  if not v_ok then
+    raise exception '[FAIL] authenticated leu a trilha append-only';
   end if;
 
-  raise notice '[PASS] T-19 RLS own-tenant em execucao: leitura restrita ao proprio tenant (inclusive por UUID direto e por heranca)';
+  raise notice '[PASS] T-19 RLS own-tenant em execucao: leitura do proprio tenant e bloqueio de IDOR nas tabelas legiveis, com acesso direto NEGADO nas tabelas estruturais fechadas pelo #327 P3';
 end $$;
 
 do $$

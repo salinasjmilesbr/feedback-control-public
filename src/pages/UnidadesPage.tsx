@@ -1,7 +1,7 @@
 /**
  * F5-08 P4 — Unidades: lista + hierarquia (parent) + criar/renomear/encerrar.
  *
- * - LEITURA: soberana own-tenant pela via RLS (D16) — sem capability.
+ * - LEITURA: view soberana do #327 (`org.structure.manage`); sem RLS direta.
  * - ESCRITA: `estrutura.unidade.criar|renomear|encerrar` e
  *   `estrutura.unidade.parent.definir|encerrar` (plano administrativo D19:
  *   `org.structure.manage` revalidada na Edge e no banco).

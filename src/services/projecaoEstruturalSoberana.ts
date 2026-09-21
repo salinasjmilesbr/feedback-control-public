@@ -4,7 +4,7 @@
  * ## O que este módulo é
  *
  * Um ADAPTADOR DE LEITURA: converte a fotografia SOBERANA já entregue pelo P4
- * (`lerEstrutura` → RLS own-tenant) em fatos estruturais prontos para as decisões
+ * (`lerEstrutura` → view soberana do #327) em fatos estruturais prontos para as decisões
  * de papel/elegibilidade do domínio de ciclo/metas.
  *
  * Fontes soberanas usadas (todas já existentes; nenhuma fonte nova):
