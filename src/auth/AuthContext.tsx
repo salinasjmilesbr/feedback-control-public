@@ -10,8 +10,16 @@ export type AuthContextValue = {
   solicitarRecuperacaoDeSenha: (email: string) => Promise<void>;
   /** F2-05: define a nova senha na sessão de recuperação corrente. */
   redefinirSenha: (novaSenha: string) => Promise<void>;
-  /** F2-06: convida um usuário por e-mail via Edge Function (server-side). */
-  convidarUsuario: (email: string, organizationId: string) => Promise<{ userId: string }>;
+  /**
+   * F2-06 + F6-A19: convida um usuário por e-mail via Edge Function
+   * (server-side) e VINCULA a conta criada à colaboradora já cadastrada
+   * (`collaboratorId`). Nenhuma role/capability é concedida pelo convite.
+   */
+  convidarUsuario: (
+    email: string,
+    organizationId: string,
+    collaboratorId: string
+  ) => Promise<{ userId: string }>;
   /** F2-08: reconhece o aviso de sessão expirada e volta à tela de login comum. */
   reconhecerExpiracao: () => void;
   /** F5-01 (Q1): reintenta a revalidação da sessão (ex.: tela de indisponibilidade). */

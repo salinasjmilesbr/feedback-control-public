@@ -215,7 +215,13 @@ function NovoColaboradorPage({
     if (!colaboradorCriado || !organizacaoAtivaId || estadoConvite.fase === "processando") return;
     setEstadoConvite({ fase: "processando" });
     try {
-      const resultado = await convidarUsuario(email.trim(), organizacaoAtivaId);
+      // F6-A19 (#319): o convite VINCULA a conta à colaboradora recém-criada
+      // (a conta nunca fica "solta"); nenhuma role é concedida por aqui.
+      const resultado = await convidarUsuario(
+        email.trim(),
+        organizacaoAtivaId,
+        colaboradorCriado
+      );
       setEstadoConvite({ fase: "enviado", userId: resultado.userId });
     } catch (erro) {
       setEstadoConvite({

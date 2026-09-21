@@ -181,11 +181,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const convidarUsuario = useCallback(
-    async (email: string, organizationId: string) => {
+    async (email: string, organizationId: string, collaboratorId: string) => {
       if (!cliente) throw new TechnicalError();
       try {
         const { data, error } = await cliente.functions.invoke("convidar-usuario", {
-          body: { email, organization_id: organizationId },
+          body: {
+            email,
+            organization_id: organizationId,
+            // F6-A19 (#319): a conta é vinculada à colaboradora JÁ CADASTRADA;
+            // o vínculo é decidido e validado server-side (nunca no cliente).
+            collaborator_id: collaboratorId,
+          },
         });
         if (error) throw error;
         if (!data || typeof data.userId !== "string") throw new TechnicalError();

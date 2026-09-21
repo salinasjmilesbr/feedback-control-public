@@ -1,24 +1,48 @@
-// F2-06 (Issue #73): convite administrativo de usuário.
+// F2-06 (Issue #73) + F6-A19 (Issue #319): convite administrativo de usuário.
 //
 // Fronteira server-side ÚNICA para operações privilegiadas de Auth: usa o
 // Supabase Auth Admin (`SUPABASE_SERVICE_ROLE_KEY`, injetada pelo runtime) e
 // nunca é importada pelo frontend. O frontend apenas invoca esta função com o
 // JWT do usuário logado; a autorização real acontece aqui.
 //
-// Autorização (mínima, até a Fase 4 definir capabilities):
-//   1. o chamador precisa de um JWT válido (resolvido via auth.getUser);
-//   2. o `auth.uid()` do chamador precisa estar no allowlist server-side
-//      capability efetiva `membership.manage` para o tenant-alvo (fail-closed);
-//   3. o chamador precisa ter `user_profiles.status = 'active'`.
+// Autorização (F6-A19, Issue #319 — diagnóstico aprovado):
+//   1. o chamador precisa de um JWT válido (resolvido via `auth.getUser`);
+//   2. o chamador precisa ter `user_profiles.status = 'active'`;
+//   3. o chamador precisa ser ADMINISTRADOR DO TENANT pelo predicado canônico
+//      `public.usuario_eh_administrador(ator, organização)` — membership ativa +
+//      atribuição ativa da role de sistema `admin` nominal (F5-04 D16/Q3,
+//      reafirmado pela F5-11 P5.2 e pela F6-306). Somente `true` autoriza.
 //
-// Consistência: a criação no Auth é externa ao Postgres, então não há
-// transação única. Estratégia: criar o usuário no Auth; criar perfil+membership
-// atomicamente via RPC (`criar_perfil_membership`, SECURITY DEFINER); em
-// qualquer falha do RPC, compensar removendo o usuário recém-criado no Auth
-// (não sobra estado parcial silencioso).
+//      NÃO se usa `membership.manage`: é capability do plano de CONTROLE,
+//      `grantable_via_role = false` (F5-04 D15) e impedida pelo trigger
+//      `trg_access_role_capabilities_grantable` — nenhuma role pode carregá-la,
+//      logo exigir essa capability negava TODO administrador legítimo.
+//      NÃO se usa allowlist de variável de ambiente (dívida G11).
+//
+// VÍNCULO SOBERANO (Issue #319): o convite recebe `collaborator_id` da pessoa
+// JÁ CADASTRADA e o provisionamento é UMA RPC atômica (`convidado_acesso_criar`)
+// que cria perfil + membership + o vínculo da membership ao colaborador pelo
+// primitivo canônico da F5-02. NENHUMA role é concedida ao convidado.
+//
+// CONSISTÊNCIA (correção da auditoria do SHA 62bcd54): a criação no Auth é
+// externa ao Postgres, então não há transação única entre Auth e banco. Depois
+// de criar o usuário no Auth, QUALQUER falha do provisionamento dispara a
+// compensação — a Edge SEMPRE tenta remover o usuário que ela criou, porque o
+// SQLSTATE NÃO prova existência prévia (um `23505` pode vir do perfil, da
+// membership ou do vínculo). A remoção só deixa de acontecer com PROVA explícita
+// de pré-provisionamento: perfil sobrevivente — a RPC é atômica, então um perfil
+// que sobrevive à falha não foi escrito por esta tentativa (conta real,
+// PRESERVADA). Se a própria remoção falhar sem essa prova, o órfão é reportado
+// como falha interna (nada é destruído) e registrado no log da função.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { podeConvidarPorMembershipManage } from "./core.ts";
+import {
+  codigoPublicoAposCompensacao,
+  codigoPublicoQuandoNaoCompensado,
+  decidirFalhaDoVinculo,
+  podeConvidarComoAdministradorDoTenant,
+  validarEntradaDoConvite,
+} from "./core.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -36,9 +60,6 @@ function json(body: unknown, status = 200): Response {
 function erro(codigo: string, mensagem: string, status: number): Response {
   return json({ error: { code: codigo, message: mensagem } }, status);
 }
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -85,38 +106,35 @@ Deno.serve(async (req) => {
     return erro("NOT_AUTHORIZED", "Não autorizado.", 403);
   }
 
-  // 3) entradas.
-  let body: { email?: unknown; organization_id?: unknown };
+  // 3) entradas (forma): e-mail + organização + COLABORADORA já cadastrada.
+  let body: unknown;
   try {
     body = await req.json();
   } catch {
     return erro("INVALID_INPUT", "Corpo da requisição inválido.", 400);
   }
-  const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
-  const organizationId = typeof body?.organization_id === "string" ? body.organization_id : "";
-  if (!EMAIL_RE.test(email)) {
-    return erro("INVALID_EMAIL", "E-mail inválido.", 400);
-  }
-  if (!UUID_RE.test(organizationId)) {
-    return erro("INVALID_ORGANIZATION", "Organização inválida.", 400);
+  const entrada = validarEntradaDoConvite(body);
+  if (!entrada.ok) {
+    return erro(entrada.codigo, entrada.mensagem, entrada.status);
   }
 
-  // 4) autoridade administrativa server-side no tenant-alvo. A primitive
-  // canônica resolve as capabilities efetivas do ator no tenant informado;
-  // qualquer falha ou resposta ambígua permanece DENY.
-  const { data: capabilities, error: autoridadeError } = await admin.rpc(
-    "resolver_capabilities_efetivas",
+  // 4) autoridade administrativa server-side no tenant-alvo: SOMENTE o
+  // predicado canônico, e SOMENTE com resposta booleana `true` (fail-closed).
+  const { data: autoridade, error: autoridadeError } = await admin.rpc(
+    "usuario_eh_administrador",
     {
       p_user_profile_id: callerId,
-      p_organization_id: organizationId,
+      p_organization_id: entrada.organizationId,
     }
   );
-  if (!podeConvidarPorMembershipManage(capabilities, autoridadeError)) {
+  if (!podeConvidarComoAdministradorDoTenant(autoridade, autoridadeError)) {
     return erro("NOT_AUTHORIZED", "Não autorizado.", 403);
   }
 
-  // 5) cria o usuário no Auth (convite por e-mail).
-  const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email);
+  // 5) cria o usuário no Auth (convite por e-mail). E-mail já existente é
+  // recusado AQUI, antes de qualquer escrita: retry continua não destrutivo.
+  const { data: invited, error: inviteError } =
+    await admin.auth.admin.inviteUserByEmail(entrada.email);
   if (inviteError) {
     const duplicado = inviteError.code === "email_exists" || inviteError.status === 422;
     return duplicado
@@ -128,27 +146,46 @@ Deno.serve(async (req) => {
     return erro("INTERNAL", "Não foi possível convidar o usuário.", 500);
   }
 
-  // 6) perfil + membership em uma única operação atômica (RPC SECURITY DEFINER).
-  const { error: rpcError } = await admin.rpc("criar_perfil_membership", {
+  // 6) perfil + membership + VÍNCULO com a colaboradora, em UMA transação
+  // (RPC SECURITY INVOKER, EXECUTE somente service_role). O tenant é revalidado
+  // NO BANCO (cross-tenant ⇒ P0002) e NENHUMA role é concedida.
+  const { error: vinculoError } = await admin.rpc("convidado_acesso_criar", {
     p_user_id: userId,
-    p_organization_id: organizationId,
+    p_organization_id: entrada.organizationId,
+    p_collaborator_id: entrada.collaboratorId,
   });
 
-  if (rpcError) {
-    // 23505 (unique_violation) => usuário já existia (convite duplicado) ou
-    // membership duplicada: NÃO compensa (não há usuário novo para remover).
-    if (rpcError.code === "23505") {
-      return erro("USER_EXISTS", "Já existe um usuário com este e-mail.", 409);
+  if (vinculoError) {
+    const decisao = decidirFalhaDoVinculo(vinculoError);
+
+    // Compensação INCONDICIONAL do usuário criado nesta tentativa: a RPC
+    // reverteu por completo, então nada dele sobrevive no banco, e o SQLSTATE
+    // não é usado como prova de pré-existência no Auth.
+    const { error: compensacaoError } = await admin.auth.admin.deleteUser(userId);
+
+    if (compensacaoError) {
+      // Sem remoção: buscar a PROVA explícita de pré-provisionamento.
+      const { data: perfilSobrevivente, error: consultaError } = await admin
+        .from("user_profiles")
+        .select("id")
+        .eq("id", userId)
+        .maybeSingle();
+
+      const contaReal = !consultaError && Boolean(perfilSobrevivente);
+      if (!contaReal) {
+        console.error(
+          "convidar-usuario: compensacao do usuario Auth falhou apos falha do vinculo soberano"
+        );
+      }
+
+      const publica = codigoPublicoQuandoNaoCompensado(contaReal);
+      return erro(publica.codigo, publica.mensagem, publica.status);
     }
-    // 23503 (foreign_key_violation) => organização inexistente.
-    if (rpcError.code === "23503") {
-      await admin.auth.admin.deleteUser(userId);
-      return erro("INVALID_ORGANIZATION", "Organização inválida.", 400);
-    }
-    // Demais falhas: compensação remove o usuário recém-criado no Auth.
-    await admin.auth.admin.deleteUser(userId);
-    return erro("INTERNAL", "Não foi possível concluir o convite.", 500);
+
+    // Compensado: nada permanece no Auth nem no banco (retry é seguro).
+    const publica = codigoPublicoAposCompensacao(decisao);
+    return erro(publica.codigo, publica.mensagem, publica.status);
   }
 
-  return json({ userId, email }, 200);
+  return json({ userId, email: entrada.email }, 200);
 });

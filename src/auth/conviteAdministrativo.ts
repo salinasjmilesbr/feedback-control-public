@@ -37,8 +37,11 @@ export async function mapearErroConvite(erro: unknown): Promise<ApplicationError
   switch (codigo) {
     case "NOT_AUTHORIZED":
       return new ForbiddenError({ cause: erro });
+    // F6-A19 (#319): `INVALID_COLLABORATOR` = colaboradora ausente,
+    // inexistente no tenant ou cross-tenant.
     case "INVALID_EMAIL":
     case "INVALID_ORGANIZATION":
+    case "INVALID_COLLABORATOR":
     case "INVALID_INPUT":
       return new ValidationError({ cause: erro });
     case "USER_EXISTS":
