@@ -23,19 +23,14 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { Capability } from "../authorization/Capability";
 import { useAuth } from "../auth/AuthContext";
-import { simulacaoDevPermitida } from "../config/ambiente";
-import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
 import type { CodigoPublico } from "../infrastructure/supabase/colaboradores/contrato";
-import { getCiclosAdministrativos } from "../services/cicloAvaliacaoStorage";
 import { listarCapabilitiesEfetivas } from "../services/capabilitiesSoberanas";
 import {
   listarColaboradores,
   type ColaboradorSoberano,
   type DependenciasAcessoColaboradores,
 } from "../services/colaboradoresSoberanos/acessoColaboradoresSoberanos";
-import { gerarDadosTesteDoCiclo } from "../services/geradorDadosTeste";
 import "../styles/collaborator-identity.css";
-import "../styles/dados-teste.css";
 import "../styles/equipe-colegiado.css";
 import { podeCriarColaboradorPorCapability } from "./colaboradoresCapabilityGate";
 
@@ -110,7 +105,6 @@ function ColaboradoresPage({
   estadoInicial,
 }: ColaboradoresPageProps = {}) {
   const navigate = useNavigate();
-  const { usuarioAtual, usuarioAtualLegado } = useUsuarioAtual();
   const { organizacaoAtivaId } = useAuth();
   const [capabilities, setCapabilities] = useState<{
     readonly organizationId: string | null;
@@ -126,7 +120,6 @@ function ColaboradoresPage({
   const [versao, setVersao] = useState(0);
   const [busca, setBusca] = useState("");
   const [statusFiltro, setStatusFiltro] = useState("TODOS");
-  const [cicloTesteId, setCicloTesteId] = useState("");
 
   useEffect(() => {
     let vigente = true;
@@ -192,12 +185,6 @@ function ColaboradoresPage({
           ? carregamento.estado
           : { fase: "carregando" }));
 
-  // Massa de teste: ferramenta de desenvolvimento, JAMAIS fallback do caminho
-  // soberano. Fora do modo DEV explícito ela não é exibida nem executada.
-  const painelDev = simulacaoDevPermitida && Boolean(usuarioAtual);
-  const ciclosDisponiveis = painelDev ? getCiclosAdministrativos() : [];
-  const cicloTesteSelecionado = cicloTesteId || ciclosDisponiveis[0]?.id || "";
-
   const colaboradores =
     estado.fase === "pronto" ? estado.colaboradores : [];
   // UX apenas: a capability efetiva vem da fronteira server-side e o servidor
@@ -232,46 +219,6 @@ function ColaboradoresPage({
     setVersao((valor) => valor + 1);
   }
 
-  function gerarMassaTeste() {
-    if (!painelDev || !usuarioAtual) return;
-
-    const ciclo = ciclosDisponiveis.find(
-      (item) => item.id === cicloTesteSelecionado
-    );
-
-    if (!ciclo) {
-      window.alert("Selecione um ciclo para gerar os dados de teste.");
-      return;
-    }
-
-    const confirmar = window.confirm(
-      `Gerar uma nova massa de dados para ${ciclo.ano} • Ciclo ${ciclo.ciclo}?\n\n` +
-        // F5-10 P6 / F5-11 P5: o gerador de fixtures DEV deixou de produzir metas
-        // (F5-10 P6) e observações (F5-11 P5, barreira D13) — o texto anuncia
-        // somente o que a ação ainda substitui.
-        "As avaliações já existentes nesse ciclo serão substituídas por dados aleatórios de teste."
-    );
-
-    if (!confirmar) return;
-
-    try {
-      if (!usuarioAtualLegado) return;
-      const resultado = gerarDadosTesteDoCiclo(ciclo, usuarioAtualLegado);
-      window.alert(
-        `Dados de teste gerados com sucesso.\n\n` +
-          `Colaboradores: ${resultado.colaboradores}\n` +
-          `Avaliações: ${resultado.avaliacoes}`
-      );
-      window.location.reload();
-    } catch (error) {
-      window.alert(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível gerar os dados de teste."
-      );
-    }
-  }
-
   return (
     <main className="virtus-page collaborators-v2">
       <section className="virtus-page-header">
@@ -298,51 +245,6 @@ function ColaboradoresPage({
           )}
         </div>
       </section>
-
-      {painelDev && ciclosDisponiveis.length > 0 && (
-        <section className="test-data-panel">
-          <div className="test-data-panel__copy">
-            <span className="test-data-panel__eyebrow">
-              Ferramenta temporária de desenvolvimento
-            </span>
-            <strong>Gerar dados de teste (DEV)</strong>
-            <p>
-              Preenche avaliações, comentários, feedbacks finais, metas e
-              observações com dados variados para o ciclo selecionado. Restrita
-              ao modo DEV: não é caminho soberano nem fallback.
-            </p>
-          </div>
-
-          <div className="test-data-panel__actions">
-            <label>
-              <span>Ciclo</span>
-              <select
-                value={cicloTesteSelecionado}
-                onChange={(event) => setCicloTesteId(event.target.value)}
-              >
-                {ciclosDisponiveis.map((ciclo) => (
-                  <option key={ciclo.id} value={ciclo.id}>
-                    {ciclo.ano} • Ciclo {ciclo.ciclo} —{" "}
-                    {ciclo.status === "ATIVO"
-                      ? "Ativo"
-                      : ciclo.status === "PLANEJADO"
-                        ? "Planejado"
-                        : "Encerrado"}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <button
-              type="button"
-              className="virtus-btn virtus-btn--outline test-data-panel__button"
-              onClick={gerarMassaTeste}
-            >
-              Gerar nova massa
-            </button>
-          </div>
-        </section>
-      )}
 
       <section className="virtus-filter-card">
         <div className="virtus-filter-grid">

@@ -242,7 +242,7 @@ describe("listagem soberana em ColaboradoresPage", () => {
     expect(html).not.toContain("Avaliações como colegiado");
   });
 
-  it("mantém a massa de teste explicitamente restrita e rotulada como DEV", () => {
+  it("não expõe ferramenta DEV nem gerador de massa na superfície soberana", () => {
     localStorage.setItem(
       "feedback-control-ciclos",
       JSON.stringify([
@@ -262,8 +262,8 @@ describe("listagem soberana em ColaboradoresPage", () => {
       colaboradores: [soberano()],
     });
 
-    expect(html).toContain("Ferramenta temporária de desenvolvimento");
-    expect(html).toContain("Gerar dados de teste (DEV)");
-    expect(html).toContain("Restrita ao modo DEV");
+    expect(html).not.toContain("Ferramenta temporária de desenvolvimento");
+    expect(html).not.toContain("Gerar dados de teste (DEV)");
+    expect(html).not.toContain("Gerar nova massa");
   });
 });
