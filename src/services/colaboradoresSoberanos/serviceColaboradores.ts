@@ -433,8 +433,14 @@ export function criarServiceColaboradores(
     // -----------------------------------------------------------------------
 
     lerEstrutura: (entrada) =>
+      // #333: o ESCOPO é intenção da leitura e PERTENCE ao repasse. Sem ele o
+      // repositório assume "administrativo" e um ator com vínculo mas sem
+      // capability recebe FORBIDDEN na leitura pessoal.
       comContextoLeitura(entrada.organizationId, (organização, leitor) =>
-        leitor.ler({ organizationId: organização })
+        leitor.ler({
+          organizationId: organização,
+          ...(entrada.escopo ? { escopo: entrada.escopo } : {}),
+        })
       ),
 
     criarUnidade: (entrada) =>
