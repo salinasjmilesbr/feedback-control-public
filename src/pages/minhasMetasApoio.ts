@@ -30,6 +30,7 @@ import type {
   TipoMetaSoberana,
 } from "../infrastructure/supabase/metas/contrato";
 import type { ColaboradorSoberano } from "../services/colaboradoresSoberanos/acessoColaboradoresSoberanos";
+import type { IdentidadeColaborador } from "../types/Colaborador";
 
 /**
  * Mensagem do 409: o conflito é de CONCORRÊNCIA (a linha mudou no servidor), não
@@ -43,6 +44,31 @@ export interface IdentidadeDasMinhasMetas {
   readonly colaboradorId: string;
   readonly matricula: string;
   readonly nome: string;
+}
+
+/**
+ * #333 — IDENTIDADE DA SESSÃO para os consumidores pessoais: o UUID do VÍNCULO
+ * soberano é a ÚNICA exigência. A matrícula é rótulo de APRESENTAÇÃO (pode
+ * faltar sem impedir o reconhecimento do usuário) e nunca é requisito de
+ * identidade ou de autoridade.
+ */
+export interface IdentidadeDaSessao {
+  /** UUID do vínculo soberano; `null` quando a sessão não tem vínculo. */
+  readonly collaboratorId: string | null;
+  /** Matrícula APENAS para apresentação (`null` quando não informada). */
+  readonly matriculaApresentacao: string | null;
+}
+
+/** Deriva a identidade da sessão a partir da identidade soberana do contexto. */
+export function identidadeDaSessao(
+  usuarioAtual?: IdentidadeColaborador
+): IdentidadeDaSessao {
+  const informado = usuarioAtual?.collaboratorId;
+  const collaboratorId =
+    typeof informado === "string" && informado.length > 0 ? informado : null;
+  const matriculaApresentacao =
+    usuarioAtual?.matricula === undefined ? null : String(usuarioAtual.matricula);
+  return { collaboratorId, matriculaApresentacao };
 }
 
 /**

@@ -8,8 +8,8 @@
  *
  * Invariantes desta migração (D1–D24 do desenho F5-10):
  * - **identidade UUID-first**: organização do contexto de auth, ciclo pelo
- *   `CycleRepository` (ciclo ATIVO), colaborador resolvido pela via soberana da
- *   F5-07 a partir da matrícula de APRESENTAÇÃO (o servidor resolve o UUID);
+ *   `CycleRepository` (ciclo ATIVO) e colaborador resolvido pelo UUID do VÍNCULO
+ *   soberano (`usuarioAtual.collaboratorId`); a matrícula é só APRESENTAÇÃO;
  * - **leitura própria**: `goal.listar_por_escopo` devolve o escopo autorizado
  *   (`SELF` + aprovadores CONGELADOS). Esta tela exibe e opera SOMENTE as metas
  *   com `relacao === "SELF"` e `!excluida` — a relação é FATO do servidor;
@@ -66,6 +66,7 @@ import type { StatusCicloAvaliacao } from "../types/CicloAvaliacao";
 import {
   chaveDaTentativa,
   criarRegistroDeTentativas,
+  identidadeDaSessao,
   identidadeDe,
   limiteDoTipo,
   mensagemDeFalhaDeMetas,
@@ -255,13 +256,12 @@ function MinhasMetasPage({
     };
   }, []);
 
-  const matriculaApresentacao =
-    usuarioAtual && usuarioAtual.matricula !== undefined
-      ? String(usuarioAtual.matricula)
-      : null;
-  /** Chave da leitura corrente: organização + ator + versão de recarga. */
+  // #333: a identidade da sessão é o VÍNCULO soberano (UUID). A matrícula é
+  // apenas rótulo de apresentação — nunca requisito de identidade/autoridade.
+  const { collaboratorId } = identidadeDaSessao(usuarioAtual);
+  /** Chave da leitura corrente: organização + ator (UUID) + versão de recarga. */
   const chaveLeitura = `${organizacaoAtivaId ?? "sem-organizacao"}|${
-    matriculaApresentacao ?? "sem-ator"
+    collaboratorId ?? "sem-ator"
   }|${versao}`;
 
   useEffect(() => {
@@ -277,7 +277,7 @@ function MinhasMetasPage({
         publicar({ fase: "erro", codigo: "FORBIDDEN", mensagem: SEM_ORGANIZACAO_ATIVA });
         return;
       }
-      if (!matriculaApresentacao) {
+      if (!collaboratorId) {
         publicar({ fase: "erro", codigo: "FORBIDDEN", mensagem: SEM_ATOR });
         return;
       }
@@ -307,10 +307,10 @@ function MinhasMetasPage({
         return;
       }
 
-      // Colaborador por via SOBERANA: a matrícula é apenas a INTENÇÃO; o UUID é
-      // resolvido no servidor (ausente/ambíguo ⇒ erro explícito, nunca chute).
+      // Colaborador por via SOBERANA: o UUID do VÍNCULO é a identidade — nenhuma
+      // matrícula é exigida (ausente ⇒ erro explícito, nunca chute).
       const colaborador = await obterColaborador(
-        { matricula: matriculaApresentacao, organizationId: organizacaoAtivaId },
+        { collaboratorId, organizationId: organizacaoAtivaId },
         depsColaboradoresInjetadas
       );
       if (!vigente) return;
@@ -346,7 +346,7 @@ function MinhasMetasPage({
   }, [
     chaveLeitura,
     organizacaoAtivaId,
-    matriculaApresentacao,
+    collaboratorId,
     estadoInicial,
     depsMetasInjetadas,
     depsCiclosInjetadas,
