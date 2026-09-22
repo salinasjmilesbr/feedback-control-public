@@ -66,7 +66,9 @@ function labelFuncao(colaborador: Colaborador | IdentidadeColaborador) {
   if (colaborador.funcao === "COORDENADOR") return "Coordenador";
   if (colaborador.funcao === "CONSULTOR") return "Consultor";
   if (colaborador.funcao === "ESTAGIARIO") return "Estagiário";
-  return "Analista";
+  if (colaborador.funcao === "ANALISTA") return "Analista";
+  // #333: sem FUNÇÃO cadastrada não há papel a exibir — jamais presumir "Analista".
+  return "";
 }
 
 function labelSenioridade(colaborador: Colaborador | IdentidadeColaborador) {
@@ -131,7 +133,7 @@ export default function CollaboratorIdentity({
           )}
         </div>
 
-        <div className="collaborator-identity__role">{papel}</div>
+        {papel && <div className="collaborator-identity__role">{papel}</div>}
 
         {mostrarDetalhes && (
           <div className="collaborator-identity__details">
