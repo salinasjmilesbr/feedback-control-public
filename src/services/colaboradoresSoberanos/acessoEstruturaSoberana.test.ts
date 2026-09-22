@@ -16,8 +16,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as porta from "./acessoColaboradoresSoberanos";
 import { redefinirAcessoColaboradoresSoberanos } from "./acessoColaboradoresSoberanos";
-import type { ServiceColaboradores } from "./serviceColaboradores";
-import type { EstruturaSoberana } from "../../infrastructure/supabase/estrutura/repositorioEstruturaSoberana";
+import {
+  criarServiceColaboradores,
+  type ServiceColaboradores,
+} from "./serviceColaboradores";
+import type {
+  EntradaLerEstrutura,
+  EstruturaSoberana,
+  LeituraEstrutura,
+} from "../../infrastructure/supabase/estrutura/repositorioEstruturaSoberana";
 import { instalarLocalStorageEmMemoria } from "../../test/localStorageMock";
 
 const ORG = "11111111-1111-4111-8111-111111111111";
@@ -612,6 +619,23 @@ describe("F5-08 P4 — porta da estrutura: propagação fiel e sem autoridade lo
   });
 });
 
+/** Leitor FALSO no nível do repositório: registra a entrada que a porta entregou. */
+function leitorEspiao(): {
+  readonly leitura: LeituraEstrutura;
+  readonly entradas: EntradaLerEstrutura[];
+} {
+  const entradas: EntradaLerEstrutura[] = [];
+  return {
+    entradas,
+    leitura: {
+      ler: async (entrada: EntradaLerEstrutura) => {
+        entradas.push(entrada);
+        return { ok: true as const, data: estruturaSoberana() };
+      },
+    },
+  };
+}
+
 describe("F5-08 P4 — porta da estrutura: leitura soberana (RLS/D16)", () => {
   it("lerEstrutura propaga a organização como INTENÇÃO e devolve a fotografia", async () => {
     const servico = servicoFalso();
@@ -624,6 +648,31 @@ describe("F5-08 P4 — porta da estrutura: leitura soberana (RLS/D16)", () => {
     expect(servico.chamadas).toEqual([
       { metodo: "lerEstrutura", argumentos: { organizationId: ORG } },
     ]);
+  });
+
+  it('#333: lerEstrutura({ escopo: "pessoal" }) chega ao LEITOR como pessoal', async () => {
+    const espiao = leitorEspiao();
+    const servico = criarServiceColaboradores({ leitura: espiao.leitura });
+
+    const resultado = await porta.lerEstrutura(
+      { organizationId: ORG, escopo: "pessoal" },
+      { operacoes: servico }
+    );
+
+    expect(resultado.ok).toBe(true);
+    // A fiação REAL (porta -> serviceColaboradores -> leitor) não pode descartar
+    // o escopo: sem ele a view consultada seria a administrativa.
+    expect(espiao.entradas).toEqual([{ organizationId: ORG, escopo: "pessoal" }]);
+  });
+
+  it("#333: sem escopo informado o leitor recebe a intenção SEM escopo (default do repositório)", async () => {
+    const espiao = leitorEspiao();
+    const servico = criarServiceColaboradores({ leitura: espiao.leitura });
+
+    await porta.lerEstrutura({ organizationId: ORG }, { operacoes: servico });
+
+    expect(espiao.entradas).toEqual([{ organizationId: ORG }]);
+    expect(espiao.entradas[0]?.escopo).toBeUndefined();
   });
 
   it("falha da leitura (sem sessão/organização) é resultado explícito, nunca vazio silencioso", async () => {
