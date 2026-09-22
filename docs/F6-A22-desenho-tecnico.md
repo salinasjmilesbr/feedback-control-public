@@ -62,8 +62,7 @@ rastreabilidade.
 `PEOPLE_MANAGEMENT` concede exatamente:
 
 1. `collaborator.read`;
-2. `collaborator.create`;
-3. `collaborator.edit`.
+2. `collaborator.create`.
 
 O bundle não concede `org.structure.manage`, `org.catalog.manage`,
 `membership.*`, `access_role.manage`, `report.read`, `evaluation.*`, `goal.*`,
@@ -163,8 +162,8 @@ sem escrever na tabela de roles para simular o efeito.
 
 ## 8. Posição sem gestão e administração de colaboradores
 
-`collaborator.create` e `collaborator.edit` pertencem ao bundle
-`PEOPLE_MANAGEMENT`, mas continuam sujeitos a:
+`collaborator.create` pertence ao bundle `PEOPLE_MANAGEMENT`, mas continua
+sujeito a:
 
 - target de colaborador validado server-side;
 - `DIRECT_REPORTS`/`DESCENDANTS` apropriado;
@@ -195,7 +194,9 @@ específico existente.
 - extensão do resolvedor `resolver_capabilities_escopos_efetivas` para compor
   grants de posição;
 - operações de cadastro continuam revalidando a capability efetiva no momento
-  da mutação.
+  da mutação;
+- `collaborator.edit` permanece fora deste P0 e exige auditoria específica antes
+  de qualquer inclusão futura.
 
 ### 9.3 Policy Engine
 
@@ -222,43 +223,44 @@ específico existente.
 
 ## 10. Fases P1–P5
 
-### P1 — Schema e trilha
+### P1 — Migration/schema, auditoria e RLS
 
 Entregar tabela, constraints, índices, allowlist de `PEOPLE_MANAGEMENT`,
 auditoria e RLS deny-by-default. Provar tenant isolation, vigência,
 unicidade temporal e ausência de DELETE físico.
 
-### P2 — Resolução soberana
+### P2 — Resolver, Policy Engine e provas server-side
 
 Integrar responsabilidades temporais ao
 `resolver_capabilities_escopos_efetivas`, com origem do grant, ocupação vigente
 e composição dos scopes existentes. Provar vaga, troca, encerramento,
 ambiguidade e cross-tenant.
 
-### P3 — Administração estrutural
+### P3 — Configuração administrativa da responsabilidade na posição
 
 Adicionar RPC/Edge para criar, encerrar e consultar responsabilidades, gated por
 `org.structure.manage`, com autoria, `expected_version`, idempotência e
 auditoria. Provar que `PEOPLE_MANAGEMENT` não administra a própria responsabilidade.
 
-### P4 — Enforcement funcional
+### P4 — Superfície “Minha equipe” e cadastro limitado ao scope
 
-Atualizar operações de colaboradores para consumir o resolver efetivo e
-revalidar `collaborator.read/create/edit` + scope no servidor. Provar ALLOW em
+Atualizar a superfície e o cadastro para consumir o resolver efetivo e
+revalidar `collaborator.read/create` + scope no servidor. Provar ALLOW em
 direto/descendente e DENY sem responsabilidade, fora da árvore, vaga,
-ocupação encerrada e cross-tenant.
+ocupação encerrada e cross-tenant. `collaborator.edit` não entra nesta fase.
 
-### P5 — Superfície “Minha equipe”
+### P5 — Runtime R3 completo
 
-Criar o consumer de equipe para gerente/coordenador sem derivar autorização por
-nome de cargo. A superfície usa a projeção soberana, diferencia
-`DIRECT_REPORTS`/`DESCENDANTS` e mantém fail-closed em ausência de capability.
-Validar navegação direta, troca de tenant, stale state e regressão do #327.
+Validar o cenário Ricardo → Mariana → Felipe → Analista sem gestão, sem derivar
+autorização por nome de cargo. A superfície usa a projeção soberana, diferencia
+`DIRECT_REPORTS`/`DESCENDANTS`, limita o cadastro ao scope e mantém fail-closed
+em ausência de capability. Validar navegação direta, troca de tenant, stale
+state e regressão do #327.
 
 ## 11. Critérios de aceite do desenho
 
 - O mesmo cargo pode ter posições com e sem `PEOPLE_MANAGEMENT`.
-- Uma posição sem responsabilidade não autoriza cadastro/edição de pessoas.
+- Uma posição sem responsabilidade não autoriza cadastro de pessoas.
 - Posição vaga não produz grant de usuário.
 - Troca/encerramento de ocupação altera o efeito sem copiar/revogar role.
 - `DIRECT_REPORTS` e `DESCENDANTS` permanecem os únicos alcances estruturais
@@ -274,7 +276,7 @@ Validar navegação direta, troca de tenant, stale state e regressão do #327.
 | --- | --- |
 | D1 | A responsabilidade pertence à **posição**, não ao cargo, colaborador ou usuário. |
 | D2 | O catálogo inicial contém somente `PEOPLE_MANAGEMENT`. |
-| D3 | O bundle exato é `collaborator.read`, `collaborator.create`, `collaborator.edit`. |
+| D3 | O bundle exato é `collaborator.read` e `collaborator.create`; `collaborator.edit` fica fora do P0. |
 | D4 | A responsabilidade é uma origem adicional de grant dentro do resolver existente; não cria role nova. |
 | D5 | A ocupação vigente é a ponte entre posição e identidade do usuário. |
 | D6 | `DIRECT_REPORTS` e `DESCENDANTS` continuam sendo resolvidos pelos dados estruturais existentes. |
