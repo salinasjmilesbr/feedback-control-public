@@ -36,6 +36,9 @@ export type OperacaoColaborador =
   | "estrutura.reporting.encerrar"
   | "estrutura.responsabilidade.definir"
   | "estrutura.responsabilidade.encerrar"
+  | "estrutura.people_management.criar"
+  | "estrutura.people_management.encerrar"
+  | "estrutura.people_management.consultar"
   | "estrutura.sucessao.registrar"
   | "colaborador.historico.listar"
   | "colaborador.catalogo.bootstrap"
@@ -121,6 +124,18 @@ export const DEFINICAO_POR_OPERACAO: Readonly<Record<OperacaoColaborador, Defini
       capability: "org.structure.manage",
     },
     "estrutura.responsabilidade.encerrar": {
+      gate: "administrativo",
+      capability: "org.structure.manage",
+    },
+    "estrutura.people_management.criar": {
+      gate: "administrativo",
+      capability: "org.structure.manage",
+    },
+    "estrutura.people_management.encerrar": {
+      gate: "administrativo",
+      capability: "org.structure.manage",
+    },
+    "estrutura.people_management.consultar": {
       gate: "administrativo",
       capability: "org.structure.manage",
     },
@@ -337,6 +352,27 @@ export interface EntradaEncerrarResponsabilidade {
   readonly motivo: string;
 }
 
+export interface EntradaPeopleManagementCriar {
+  readonly organization_id: string;
+  readonly operation_id: string;
+  readonly position_id: string;
+  readonly responsibility_code: "PEOPLE_MANAGEMENT";
+  readonly valid_from: string;
+  readonly valid_to: string | null;
+}
+
+export interface EntradaPeopleManagementEncerrar {
+  readonly organization_id: string;
+  readonly operation_id: string;
+  readonly responsibility_id: string;
+  readonly valid_to: string;
+  readonly expected_version: number;
+}
+
+export interface EntradaPeopleManagementConsultar {
+  readonly organization_id: string;
+}
+
 export interface EntradaRegistrarSucessao {
   readonly organization_id: string;
   readonly operation_id: string;
@@ -517,6 +553,9 @@ export type EntradaColaborador =
   | EntradaEncerrarReporting
   | EntradaDefinirResponsabilidade
   | EntradaEncerrarResponsabilidade
+  | EntradaPeopleManagementCriar
+  | EntradaPeopleManagementEncerrar
+  | EntradaPeopleManagementConsultar
   | EntradaRegistrarSucessao
   | EntradaHistorico
   | EntradaBootstrapCatalogo
@@ -1300,6 +1339,65 @@ export function validarEntradaColaborador(corpo: unknown): ResultadoValidacaoCol
         },
       };
     }
+
+    case "estrutura.people_management.criar": {
+      const falta = exigirOperacao();
+      if (falta) return falta;
+      if (!ehUuid(cru.position_id)) {
+        return { ok: false, code: "INVALID_INPUT", message: "position_id inválido." };
+      }
+      if (cru.responsibility_code !== "PEOPLE_MANAGEMENT") {
+        return { ok: false, code: "INVALID_INPUT", message: "responsibility_code inválido." };
+      }
+      const validFrom = dataOuInstante(cru.valid_from);
+      if (!validFrom) {
+        return { ok: false, code: "INVALID_INPUT", message: "valid_from inválido." };
+      }
+      const validTo =
+        cru.valid_to === undefined || cru.valid_to === null ? null : dataOuInstante(cru.valid_to);
+      if (cru.valid_to !== undefined && cru.valid_to !== null && !validTo) {
+        return { ok: false, code: "INVALID_INPUT", message: "valid_to inválido." };
+      }
+      return {
+        ok: true,
+        entrada: {
+          organization_id,
+          operation_id: operation_id!,
+          position_id: cru.position_id,
+          responsibility_code: "PEOPLE_MANAGEMENT",
+          valid_from: validFrom,
+          valid_to: validTo,
+        },
+      };
+    }
+
+    case "estrutura.people_management.encerrar": {
+      const falta = exigirOperacao() ?? exigirVersao();
+      if (falta) return falta;
+      if (!ehUuid(cru.responsibility_id)) {
+        return { ok: false, code: "INVALID_INPUT", message: "responsibility_id inválido." };
+      }
+      const validTo = dataOuInstante(cru.valid_to);
+      if (!validTo) {
+        return { ok: false, code: "INVALID_INPUT", message: "valid_to inválido." };
+      }
+      return {
+        ok: true,
+        entrada: {
+          organization_id,
+          operation_id: operation_id!,
+          responsibility_id: cru.responsibility_id,
+          valid_to: validTo,
+          expected_version: expected_version!,
+        },
+      };
+    }
+
+    case "estrutura.people_management.consultar":
+      return {
+        ok: true,
+        entrada: { organization_id },
+      };
 
     case "estrutura.sucessao.registrar": {
       const falta = exigirOperacao();

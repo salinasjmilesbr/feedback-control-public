@@ -4,6 +4,7 @@ import coreFonte from "../../supabase/functions/colaboradores/core.ts?raw";
 import leituraF507 from "../../supabase/migrations/20260913000000_f5_07_collaborators_sovereign.sql?raw";
 import rpcF507 from "../../supabase/migrations/20260913010000_f5_07_collaborators_rpc.sql?raw";
 import rpcF508 from "../../supabase/migrations/20260914010000_f5_08_structure_rpc.sql?raw";
+import rpcF6A22P3 from "../../supabase/migrations/20261008000000_f6_a22_p3_responsibility_admin.sql?raw";
 import f502 from "../../supabase/migrations/20260909000000_f5_02_hardening_resolver_collaborador.sql?raw";
 import f402 from "../../supabase/migrations/20260908010000_authorization_scopes_membership_collaborator.sql?raw";
 import f408 from "../../supabase/migrations/20260908130000_f4_08_hardening.sql?raw";
@@ -195,6 +196,18 @@ const CONTRATO_EDGE_RPC: Readonly<Record<OperacaoColaborador, ContratoDaOperacao
       "p_vigencia",
       "p_motivo",
     ],
+  },
+  "estrutura.people_management.criar": {
+    rpc: "estrutura_responsabilidade_criar",
+    argumentos: ["p_organization_id", "p_position_id", "p_responsibility_code", "p_valid_from", "p_valid_to", "p_operation_id", "p_actor_user_profile_id"],
+  },
+  "estrutura.people_management.encerrar": {
+    rpc: "estrutura_responsabilidade_revogar",
+    argumentos: ["p_responsibility_id", "p_valid_to", "p_expected_version", "p_operation_id", "p_actor_user_profile_id"],
+  },
+  "estrutura.people_management.consultar": {
+    rpc: "estrutura_responsabilidades_consultar",
+    argumentos: ["p_organization_id", "p_actor_user_profile_id"],
   },
   "estrutura.sucessao.registrar": {
     // RPC JÁ EXISTENTE (F3-09/F4-08) — nenhuma função nova de sucessão.
@@ -599,7 +612,15 @@ function funcoesCriadasPelasF507(fontes: readonly string[]): readonly string[] {
 }
 
 const chamadas = extrairChamadasRpc(edgeFonte as string);
-const assinaturas = assinaturasDasMigrations([f402, f502, f408, leituraF507, rpcF507, rpcF508]);
+const assinaturas = assinaturasDasMigrations([
+  f402,
+  f502,
+  f408,
+  leituraF507,
+  rpcF507,
+  rpcF508,
+  rpcF6A22P3,
+]);
 const rpcsDeclaradas: readonly string[] = [
   ...Object.values(CONTRATO_EDGE_RPC).map((contrato) => contrato.rpc),
   ...Object.keys(CONTRATO_RPCS_DE_CONTEXTO),
@@ -624,8 +645,8 @@ describe("F5-07 — contrato Edge → RPC (nome + argumentos nomeados)", () => {
   });
 
   it("as 30 operações do contrato estão declaradas e TODAS são chamadas pela Edge", () => {
-    expect(OPERACOES_COLABORADOR).toHaveLength(30);
-    expect(Object.keys(CONTRATO_EDGE_RPC)).toHaveLength(30);
+    expect(OPERACOES_COLABORADOR).toHaveLength(33);
+    expect(Object.keys(CONTRATO_EDGE_RPC)).toHaveLength(33);
 
     const semChamada = Object.entries(CONTRATO_EDGE_RPC)
       .filter(([, contrato]) => !chamadaDe(contrato.rpc))
@@ -799,6 +820,9 @@ describe("F5-07 — plano administrativo (D19) não usa a allowlist funcional", 
       "estrutura.reporting.encerrar": "org.structure.manage",
       "estrutura.responsabilidade.definir": "org.structure.manage",
       "estrutura.responsabilidade.encerrar": "org.structure.manage",
+      "estrutura.people_management.criar": "org.structure.manage",
+      "estrutura.people_management.encerrar": "org.structure.manage",
+      "estrutura.people_management.consultar": "org.structure.manage",
       "estrutura.sucessao.registrar": "org.structure.manage",
       "colaborador.catalogo.bootstrap": "org.catalog.manage",
       // F5-08 P3 — estrutura/colegiado.
@@ -896,6 +920,9 @@ describe("F5-07 — a Edge importa apenas módulos REAIS do repositório", () =>
 
 describe("F5-08 P3 — plano administrativo, dispatch e fail-closed do mapa", () => {
   const OPERACOES_P3: readonly OperacaoColaborador[] = [
+    "estrutura.people_management.criar",
+    "estrutura.people_management.encerrar",
+    "estrutura.people_management.consultar",
     "estrutura.unidade.criar",
     "estrutura.unidade.renomear",
     "estrutura.unidade.encerrar",
@@ -914,7 +941,7 @@ describe("F5-08 P3 — plano administrativo, dispatch e fail-closed do mapa", ()
   ];
 
   it("as 15 operações do P3 usam SOMENTE org.structure.manage ou org.catalog.manage", () => {
-    expect(OPERACOES_P3).toHaveLength(15);
+    expect(OPERACOES_P3).toHaveLength(18);
     const estruturais = OPERACOES_P3.filter(
       (operacao) => DEFINICAO_POR_OPERACAO[operacao].capability === "org.structure.manage"
     );
@@ -922,7 +949,7 @@ describe("F5-08 P3 — plano administrativo, dispatch e fail-closed do mapa", ()
       (operacao) => DEFINICAO_POR_OPERACAO[operacao].capability === "org.catalog.manage"
     );
 
-    expect(estruturais).toHaveLength(9);
+    expect(estruturais).toHaveLength(12);
     expect(catalogos).toHaveLength(6);
     for (const operacao of OPERACOES_P3) {
       expect(DEFINICAO_POR_OPERACAO[operacao].gate, operacao).toBe("administrativo");
@@ -978,6 +1005,16 @@ describe("F5-08 P3 — plano administrativo, dispatch e fail-closed do mapa", ()
   it("o dispatch envia o operationId soberano e o motivo em todas as 15 operações", () => {
     for (const operacao of OPERACOES_P3) {
       const chamada = chamadaDe(CONTRATO_EDGE_RPC[operacao].rpc);
+      if (operacao === "estrutura.people_management.consultar") continue;
+      if (
+        operacao === "estrutura.people_management.criar" ||
+        operacao === "estrutura.people_management.encerrar"
+      ) {
+        expect(chamada?.corpo, operacao).toContain(
+          "p_operation_id: execucao.entrada.operation_id"
+        );
+        continue;
+      }
       expect(chamada?.corpo, operacao).toContain("p_operation_id: execucao.entrada.operationId");
       expect(chamada?.corpo, operacao).toContain("p_motivo: execucao.entrada.motivo");
     }
@@ -999,7 +1036,7 @@ describe("F5-08 P3 — plano administrativo, dispatch e fail-closed do mapa", ()
 
   it("nenhuma operação do P3 usa a RPC de outra operação (dispatch 1:1)", () => {
     const rpcs = OPERACOES_P3.map((operacao) => CONTRATO_EDGE_RPC[operacao].rpc);
-    expect(new Set(rpcs).size).toBe(15);
+    expect(new Set(rpcs).size).toBe(18);
     expect(rpcs.some((rpc) => rpc.includes("f5_07"))).toBe(false);
   });
 });
