@@ -83,7 +83,12 @@ begin
       -- F6-A03 (Issue #266): a trilha do plano de plataforma tambem entra no
       -- inventario D16 (deny-by-default integral).
       'evaluation_observations','evaluation_observation_events',
-      'platform_provisioning_events');
+      'platform_provisioning_events',
+      -- F6-A22 P1 (#338): quatro tabelas autorizativas deny-by-default.
+      'organizational_position_responsibilities',
+      'organizational_position_responsibilities_catalog',
+      'organizational_position_responsibility_bundle',
+      'organizational_position_responsibility_events');
   if v_t is null or v_t not like '%_mut_nao_class%' then
     raise exception '[MUT FAIL] guard nao detectou tabela nao classificada (v_t=%)', v_t;
   end if;
@@ -123,7 +128,12 @@ begin
       -- F6-A03 (Issue #266): a trilha do plano de plataforma tambem entra no
       -- inventario D16 (deny-by-default integral).
       'evaluation_observations','evaluation_observation_events',
-      'platform_provisioning_events');
+      'platform_provisioning_events',
+      -- F6-A22 P1 (#338): quatro tabelas autorizativas deny-by-default.
+      'organizational_position_responsibilities',
+      'organizational_position_responsibilities_catalog',
+      'organizational_position_responsibility_bundle',
+      'organizational_position_responsibility_events');
   if v_t is not null then raise exception '[MUT FAIL] catalogo nao voltou ao estado limpo (%)', v_t; end if;
   raise notice '[PASS] mutacao B: tabela nao classificada detectada e revertida';
 end $$;
