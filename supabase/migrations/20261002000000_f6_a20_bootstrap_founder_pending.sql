@@ -1,73 +1,43 @@
 -- F6-A20 / Issue #310: primeiro acesso do founder provisionado.
 --
--- A definição anterior do bootstrap cria o perfil do founder com o default
--- `first_access_pending = false`. O convite autentica o founder por um link
--- temporário, mas ele sai sem senha permanente e não passa pelo onboarding.
---
--- A função-base é renomeada apenas para preservar integralmente a transação
--- F6-A03/F6-A11. Esta nova fronteira marca somente perfil NOVO como pendente;
--- perfil preexistente (inclusive o operador em auto-bootstrap) não é alterado.
+-- Migration aditiva: reaproveita a definição canônica existente e altera
+-- somente a criação de founder novo. Perfil preexistente permanece intocado.
 
-do $guard$
-begin
-  if to_regprocedure('public.organizacao_provisionar_inicial(uuid, text, uuid, uuid, text, text, text)') is not null
-     and to_regprocedure('public.organizacao_provisionar_inicial_f6_a20_base(uuid, text, uuid, uuid, text, text, text)') is null then
-    alter function public.organizacao_provisionar_inicial(
-      uuid, text, uuid, uuid, text, text, text
-    ) rename to organizacao_provisionar_inicial_f6_a20_base;
-  end if;
-end;
-$guard$;
-
-create or replace function public.organizacao_provisionar_inicial(
-  p_operation_id            uuid,
-  p_organization_name       text,
-  p_founder_user_profile_id uuid,
-  p_actor_user_profile_id   uuid,
-  p_founder_full_name       text,
-  p_founder_matricula       text,
-  p_founder_email           text
-)
-returns uuid
-language plpgsql
-security invoker
-set search_path = public
-as $fn$
+do $migration$
 declare
-  v_founder_preexisting boolean;
-  v_org uuid;
+  v_def text;
 begin
-  select exists(
-    select 1
-      from public.user_profiles
-     where id = p_founder_user_profile_id
-  ) into v_founder_preexisting;
+  -- Transformação temporária: a função auxiliar não sobrevive à migration.
+  alter function public.organizacao_provisionar_inicial(
+    uuid, text, uuid, uuid, text, text, text
+  ) rename to organizacao_provisionar_inicial_f6_a20_transform;
 
-  v_org := public.organizacao_provisionar_inicial_f6_a20_base(
-    p_operation_id,
-    p_organization_name,
-    p_founder_user_profile_id,
-    p_actor_user_profile_id,
-    p_founder_full_name,
-    p_founder_matricula,
-    p_founder_email
+  select pg_get_functiondef(
+    'public.organizacao_provisionar_inicial_f6_a20_transform(uuid, text, uuid, uuid, text, text, text)'::regprocedure
+  ) into v_def;
+
+  v_def := replace(
+    v_def,
+    'organizacao_provisionar_inicial_f6_a20_transform',
+    'organizacao_provisionar_inicial'
+  );
+  v_def := replace(
+    v_def,
+    'insert into public.user_profiles (id) values (p_founder_user_profile_id)',
+    'insert into public.user_profiles (id, first_access_pending) values (p_founder_user_profile_id, true)'
   );
 
-  if not v_founder_preexisting then
-    update public.user_profiles
-       set first_access_pending = true
-     where id = p_founder_user_profile_id
-       and first_access_pending is distinct from true;
-  end if;
-
-  return v_org;
+  execute v_def;
+  drop function public.organizacao_provisionar_inicial_f6_a20_transform(
+    uuid, text, uuid, uuid, text, text, text
+  );
 end;
-$fn$;
+$migration$;
 
 comment on function public.organizacao_provisionar_inicial(
   uuid, text, uuid, uuid, text, text, text
 ) is
-  'F6-A20/#310: delega o bootstrap F6-A03/F6-A11 e marca somente founder novo como primeiro acesso pendente.';
+  'F6-A20/#310: bootstrap canônico marca founder novo como primeiro acesso pendente; perfil preexistente permanece inalterado.';
 
 revoke all on function public.organizacao_provisionar_inicial(
   uuid, text, uuid, uuid, text, text, text
