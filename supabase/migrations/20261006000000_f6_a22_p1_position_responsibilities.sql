@@ -126,6 +126,18 @@ create trigger trg_opr_audit_change
   after insert or update on public.organizational_position_responsibilities
   for each row execute function public.audit_opr_change();
 
+-- Fato histórico: encerramento/revogação é temporal; DELETE físico é sempre
+-- recusado, inclusive por service_role. Correções futuras devem abrir novo fato.
+create or replace function public.enforce_opr_append_only()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  raise exception 'F6-A22: organizational_position_responsibilities e append-only (DELETE negado)';
+end;
+$$;
+create trigger trg_opr_append_only
+  before delete on public.organizational_position_responsibilities
+  for each row execute function public.enforce_opr_append_only();
+
 alter table public.organizational_position_responsibilities enable row level security;
 alter table public.organizational_position_responsibility_bundle enable row level security;
 alter table public.organizational_position_responsibilities_catalog enable row level security;
