@@ -172,5 +172,13 @@ do $$ begin
   end if;
   raise notice '[PASS] dois links ativos para colaboradores distintos resultam em DENY da responsabilidade';
 end $$;
+do $$ begin
+  if exists (select 1 from public.resolver_capabilities_efetivas(
+      'f6a22000-0000-4000-8000-000000000002','f6a22000-0000-4000-8000-0000000000a1')
+      where capability_code in ('collaborator.read', 'collaborator.create')) then
+    raise exception '[FAIL] dois links ativos concederam collaborator.read/create';
+  end if;
+  raise notice '[PASS] dois links ativos nao concedem read/create no resolver sem escopo';
+end $$;
 rollback;
 reset role;

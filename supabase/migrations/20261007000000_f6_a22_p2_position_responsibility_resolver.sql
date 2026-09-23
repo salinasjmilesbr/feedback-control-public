@@ -36,6 +36,8 @@ as $$
        and o.valid_from <= now() and (o.valid_to is null or o.valid_to > now())
      where m.user_profile_id = p_user_profile_id
        and m.organization_id = p_organization_id and m.status = 'active'
+       and (select count(*) from public.membership_collaborator_links lx
+             where lx.membership_id = m.id and lx.status = 'active') = 1
      group by m.user_profile_id, m.organization_id, l.collaborator_id
   ), responsibility_grants as (
     select b.capability_code as code
