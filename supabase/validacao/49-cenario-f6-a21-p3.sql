@@ -205,20 +205,20 @@ insert into public.organizational_unit_parent_periods
    'f6a2c000-0000-4000-8000-000000000002', 'f6a2c000-0000-4000-8000-000000000001',
    '2025-01-01T00:00:00Z');
 
-insert into public.organizational_positions
-  (id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from, valid_to) values
-  ('f6a2d100-0000-4000-8000-000000000001', 'f6a23000-0000-4000-8000-0000000000a1',
+insert into public.organizational_positions (
+  id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from, valid_to, name
+) values ('f6a2d100-0000-4000-8000-000000000001', 'f6a23000-0000-4000-8000-0000000000a1',
    'f6a2c000-0000-4000-8000-000000000001', 'f6a2b000-0000-4000-8000-000000000001',
-   'f6a2b100-0000-4000-8000-000000000001', '2025-01-01T00:00:00Z', null),
+   'f6a2b100-0000-4000-8000-000000000001', '2025-01-01T00:00:00Z', null, 'F6 P4.5 49-cenario-f6-a21-p3 posição funcional'),
   ('f6a2d100-0000-4000-8000-000000000002', 'f6a23000-0000-4000-8000-0000000000a1',
    'f6a2c000-0000-4000-8000-000000000001', 'f6a2b000-0000-4000-8000-000000000001',
-   'f6a2b100-0000-4000-8000-000000000001', '2025-01-01T00:00:00Z', null),
+   'f6a2b100-0000-4000-8000-000000000001', '2025-01-01T00:00:00Z', null, 'F6 P4.5 49-cenario-f6-a21-p3 posição funcional'),
   ('f6a2d100-0000-4000-8000-000000000003', 'f6a23000-0000-4000-8000-0000000000a1',
    'f6a2c000-0000-4000-8000-000000000002', 'f6a2b000-0000-4000-8000-000000000002',
-   'f6a2b100-0000-4000-8000-000000000002', '2025-01-01T00:00:00Z', null),
+   'f6a2b100-0000-4000-8000-000000000002', '2025-01-01T00:00:00Z', null, 'F6 P4.5 49-cenario-f6-a21-p3 posição funcional'),
   ('f6a2d100-0000-4000-8000-000000000004', 'f6a23000-0000-4000-8000-0000000000a1',
    'f6a2c000-0000-4000-8000-000000000002', 'f6a2b000-0000-4000-8000-000000000002',
-   'f6a2b100-0000-4000-8000-000000000002', '2025-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+   'f6a2b100-0000-4000-8000-000000000002', '2025-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'F6 P4.5 49-cenario-f6-a21-p3 posição funcional');
 
 insert into public.position_reporting_lines
   (id, organization_id, subordinate_position_id, manager_position_id, reason, valid_from, valid_to) values
@@ -284,11 +284,11 @@ insert into public.organizational_units (id, organization_id, name, valid_from) 
   ('f6a24000-0000-4000-8000-000000000001', 'f6a23000-0000-4000-8000-0000000000a2',
    'P3 Unidade Delta', '2025-01-01T00:00:00Z');
 
-insert into public.organizational_positions
-  (id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from) values
-  ('f6a24000-0000-4000-8000-000000000004', 'f6a23000-0000-4000-8000-0000000000a2',
+insert into public.organizational_positions (
+  id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from, name
+) values ('f6a24000-0000-4000-8000-000000000004', 'f6a23000-0000-4000-8000-0000000000a2',
    'f6a24000-0000-4000-8000-000000000001', 'f6a24000-0000-4000-8000-000000000002',
-   'f6a24000-0000-4000-8000-000000000003', '2025-01-01T00:00:00Z');
+   'f6a24000-0000-4000-8000-000000000003', '2025-01-01T00:00:00Z', 'F6 P4.5 49-cenario-f6-a21-p3 posição funcional');
 
 insert into public.occupations
   (id, organization_id, collaborator_id, organizational_position_id, reason, valid_from) values

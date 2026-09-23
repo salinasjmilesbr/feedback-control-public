@@ -410,7 +410,19 @@ Deno.serve(async (req) => {
           p_unidade_id: execucao.entrada.unidadeId,
           p_job_role_id: execucao.entrada.jobRoleId,
           p_seniority_level_id: execucao.entrada.seniorityLevelId,
+          p_name: execucao.entrada.nome,
           p_valid_from: execucao.entrada.validFrom,
+          p_motivo: execucao.entrada.motivo,
+        });
+
+      case "estrutura.posicao.renomear":
+        return admin.rpc("estrutura_posicao_renomear", {
+          p_organization_id: org,
+          p_actor_user_profile_id: ator,
+          p_operation_id: execucao.entrada.operationId,
+          p_posicao_id: execucao.entrada.posicaoId,
+          p_name: execucao.entrada.nome,
+          p_expected_version: execucao.entrada.expectedVersion,
           p_motivo: execucao.entrada.motivo,
         });
 
@@ -595,6 +607,7 @@ Deno.serve(async (req) => {
         p_user_profile_id: authUserId,
         p_organization_id: organizationId,
       });
+
       if (error) return [];
 
       const porCapability = new Map<string, { scopes: Set<ScopeType>; units: Set<string> }>();

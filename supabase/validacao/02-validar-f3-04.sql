@@ -715,14 +715,15 @@ begin
     -- Motivo vazio deve ser rejeitado (check). Usa posição temporária sem
     -- linhas para isolar a checagem de reason.
     insert into public.organizational_positions (
-      id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from, valid_to
-    ) values (
+
+      id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from, valid_to, name
+) values (
       'f6c00000-0000-0000-0000-0000000000cc',
       'f6a00000-0000-0000-0000-0000000000a1',
       'f6b00000-0000-0000-0000-0000000000a1',
       'f6d00000-0000-0000-0000-000000000004', null,
       '2025-01-01T00:00:00Z', null
-    );
+    , 'F6 P4.5 02-validar-f3-04 posição funcional');
     insert into public.position_reporting_lines (
       organization_id, subordinate_position_id, manager_position_id, reason, valid_from, valid_to
     ) values (

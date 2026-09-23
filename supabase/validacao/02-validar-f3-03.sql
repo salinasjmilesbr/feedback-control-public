@@ -118,9 +118,9 @@ begin
            'seniority_level_id', 'unit_id', 'updated_at', 'valid_from',
            'valid_to', 'version']::text[]
   then
-    raise exception '[FAIL] organizational_positions possui colunas fora do escopo (ex.: collaborator_id/name/code)';
+    raise exception '[FAIL] organizational_positions possui colunas fora do escopo (ex.: collaborator_id/code)';
   end if;
-  raise notice '[PASS] organizational_positions: colunas exatas (sem name/code/collaborator_id/occupation)';
+  raise notice '[PASS] organizational_positions: UUID + name, sem code/collaborator_id/occupation';
 end $$;
 
 do $$
@@ -666,13 +666,14 @@ begin
   begin
     -- Posicao na org Beta referenciando unidade da org Alfa (tenant violation).
     insert into public.organizational_positions (
-      organization_id, unit_id, job_role_id, seniority_level_id, valid_from, valid_to
-    ) values (
+
+      organization_id, unit_id, job_role_id, seniority_level_id, valid_from, valid_to, name
+) values (
       'f5a00000-0000-0000-0000-0000000000b1',
       'f5b00000-0000-0000-0000-0000000000a1',
       'f5d00000-0000-0000-0000-000000000021',
       null, '2026-01-01T00:00:00Z', null
-    );
+    , 'F6 P4.5 02-validar-f3-03 posição funcional');
   exception when foreign_key_violation then
     v_ok := true;
   end;
@@ -689,13 +690,14 @@ begin
   begin
     -- Posicao na org Beta referenciando job_role da org Alfa.
     insert into public.organizational_positions (
-      organization_id, unit_id, job_role_id, seniority_level_id, valid_from, valid_to
-    ) values (
+
+      organization_id, unit_id, job_role_id, seniority_level_id, valid_from, valid_to, name
+) values (
       'f5a00000-0000-0000-0000-0000000000b1',
       'f5b00000-0000-0000-0000-0000000000b1',
       'f5d00000-0000-0000-0000-000000000002',
       null, '2026-01-01T00:00:00Z', null
-    );
+    , 'F6 P4.5 02-validar-f3-03 posição funcional');
   exception when foreign_key_violation then
     v_ok := true;
   end;
@@ -712,14 +714,15 @@ begin
   begin
     -- Posicao na org Alfa referenciando seniority da org Beta.
     insert into public.organizational_positions (
-      organization_id, unit_id, job_role_id, seniority_level_id, valid_from, valid_to
-    ) values (
+
+      organization_id, unit_id, job_role_id, seniority_level_id, valid_from, valid_to, name
+) values (
       'f5a00000-0000-0000-0000-0000000000a1',
       'f5b00000-0000-0000-0000-0000000000a2',
       'f5d00000-0000-0000-0000-000000000006',
       'f5d00000-0000-0000-0000-000000000031',
       '2026-01-01T00:00:00Z', null
-    );
+    , 'F6 P4.5 02-validar-f3-03 posição funcional');
   exception when foreign_key_violation then
     v_ok := true;
   end;
@@ -910,13 +913,14 @@ do $$
 begin
   begin
     insert into public.organizational_positions (
-      organization_id, unit_id, job_role_id, seniority_level_id, valid_from, valid_to
-    ) values (
+
+      organization_id, unit_id, job_role_id, seniority_level_id, valid_from, valid_to, name
+) values (
       'f5a00000-0000-0000-0000-0000000000a1',
       'f5b00000-0000-0000-0000-0000000000a2',
       'f5d00000-0000-0000-0000-000000000006',
       null, '2026-01-01T00:00:00Z', '2025-12-31T00:00:00Z'
-    );
+    , 'F6 P4.5 02-validar-f3-03 posição funcional');
     raise exception '[FAIL] posicao com periodo invalido NAO foi rejeitada';
   exception when check_violation then
     null;
@@ -1026,13 +1030,14 @@ do $$
 begin
   begin
     insert into public.organizational_positions (
-      organization_id, unit_id, job_role_id, seniority_level_id, valid_from, valid_to
-    ) values (
+
+      organization_id, unit_id, job_role_id, seniority_level_id, valid_from, valid_to, name
+) values (
       'f5a00000-0000-0000-0000-0000000000a1',
       'f5b00000-0000-0000-0000-0000000000a2',
       'f5d00000-0000-0000-0000-000000000002',
       null, '2026-01-01T00:00:00Z', null
-    );
+    , 'F6 P4.5 02-validar-f3-03 posição funcional');
     raise exception '[FAIL] RLS permitiu INSERT de authenticated em organizational_positions';
   exception when insufficient_privilege then
     null;

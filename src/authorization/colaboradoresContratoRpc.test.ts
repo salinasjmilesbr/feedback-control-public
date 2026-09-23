@@ -4,6 +4,7 @@ import coreFonte from "../../supabase/functions/colaboradores/core.ts?raw";
 import leituraF507 from "../../supabase/migrations/20260913000000_f5_07_collaborators_sovereign.sql?raw";
 import rpcF507 from "../../supabase/migrations/20260913010000_f5_07_collaborators_rpc.sql?raw";
 import rpcF508 from "../../supabase/migrations/20260914010000_f5_08_structure_rpc.sql?raw";
+import rpcP45 from "../../supabase/migrations/20261010000000_f6_a22_p4_5_position_identity.sql?raw";
 import rpcF6A22P3 from "../../supabase/migrations/20261008000000_f6_a22_p3_responsibility_admin.sql?raw";
 import f502 from "../../supabase/migrations/20260909000000_f5_02_hardening_resolver_collaborador.sql?raw";
 import f402 from "../../supabase/migrations/20260908010000_authorization_scopes_membership_collaborator.sql?raw";
@@ -301,9 +302,14 @@ const CONTRATO_EDGE_RPC: Readonly<Record<OperacaoColaborador, ContratoDaOperacao
       "p_unidade_id",
       "p_job_role_id",
       "p_seniority_level_id",
+      "p_name",
       "p_valid_from",
       "p_motivo",
     ],
+  },
+  "estrutura.posicao.renomear": {
+    rpc: "estrutura_posicao_renomear",
+    argumentos: ["p_organization_id", "p_actor_user_profile_id", "p_operation_id", "p_posicao_id", "p_name", "p_expected_version", "p_motivo"],
   },
   "estrutura.posicao.encerrar": {
     rpc: "estrutura_posicao_encerrar",
@@ -619,6 +625,7 @@ const assinaturas = assinaturasDasMigrations([
   leituraF507,
   rpcF507,
   rpcF508,
+  rpcP45,
   rpcF6A22P3,
 ]);
 const rpcsDeclaradas: readonly string[] = [
@@ -646,8 +653,8 @@ describe("F5-07 — contrato Edge → RPC (nome + argumentos nomeados)", () => {
   });
 
   it("as 30 operações do contrato estão declaradas e TODAS são chamadas pela Edge", () => {
-    expect(OPERACOES_COLABORADOR).toHaveLength(33);
-    expect(Object.keys(CONTRATO_EDGE_RPC)).toHaveLength(33);
+    expect(OPERACOES_COLABORADOR).toHaveLength(34);
+    expect(Object.keys(CONTRATO_EDGE_RPC)).toHaveLength(34);
 
     const semChamada = Object.entries(CONTRATO_EDGE_RPC)
       .filter(([, contrato]) => !chamadaDe(contrato.rpc))
@@ -837,6 +844,7 @@ describe("F5-07 — plano administrativo (D19) não usa a allowlist funcional", 
       "estrutura.unidade.parent.definir": "org.structure.manage",
       "estrutura.unidade.parent.encerrar": "org.structure.manage",
       "estrutura.posicao.criar": "org.structure.manage",
+      "estrutura.posicao.renomear": "org.structure.manage",
       "estrutura.posicao.encerrar": "org.structure.manage",
       "estrutura.colegiado.definir": "org.structure.manage",
       "estrutura.colegiado.encerrar": "org.structure.manage",
@@ -934,6 +942,7 @@ describe("F5-08 P3 — plano administrativo, dispatch e fail-closed do mapa", ()
     "estrutura.unidade.parent.definir",
     "estrutura.unidade.parent.encerrar",
     "estrutura.posicao.criar",
+    "estrutura.posicao.renomear",
     "estrutura.posicao.encerrar",
     "estrutura.colegiado.definir",
     "estrutura.colegiado.encerrar",
@@ -946,7 +955,7 @@ describe("F5-08 P3 — plano administrativo, dispatch e fail-closed do mapa", ()
   ];
 
   it("as 15 operações do P3 usam SOMENTE org.structure.manage ou org.catalog.manage", () => {
-    expect(OPERACOES_P3).toHaveLength(18);
+    expect(OPERACOES_P3).toHaveLength(19);
     const estruturais = OPERACOES_P3.filter(
       (operacao) => DEFINICAO_POR_OPERACAO[operacao].capability === "org.structure.manage"
     );
@@ -954,7 +963,7 @@ describe("F5-08 P3 — plano administrativo, dispatch e fail-closed do mapa", ()
       (operacao) => DEFINICAO_POR_OPERACAO[operacao].capability === "org.catalog.manage"
     );
 
-    expect(estruturais).toHaveLength(12);
+    expect(estruturais).toHaveLength(13);
     expect(catalogos).toHaveLength(6);
     for (const operacao of OPERACOES_P3) {
       expect(DEFINICAO_POR_OPERACAO[operacao].gate, operacao).toBe("administrativo");
@@ -1041,7 +1050,7 @@ describe("F5-08 P3 — plano administrativo, dispatch e fail-closed do mapa", ()
 
   it("nenhuma operação do P3 usa a RPC de outra operação (dispatch 1:1)", () => {
     const rpcs = OPERACOES_P3.map((operacao) => CONTRATO_EDGE_RPC[operacao].rpc);
-    expect(new Set(rpcs).size).toBe(18);
+    expect(new Set(rpcs).size).toBe(19);
     expect(rpcs.some((rpc) => rpc.includes("f5_07"))).toBe(false);
   });
 });

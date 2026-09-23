@@ -217,29 +217,29 @@ insert into public.organizational_units (id, organization_id, name, valid_from) 
   ('edf00000-0000-0000-0000-0000000000b1', 'eda00000-0000-0000-0000-0000000000b1',
    'F5-09 P9 Unidade Beta', '2024-01-01T00:00:00Z');
 
-insert into public.organizational_positions
-  (id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from) values
-  ('ede10000-0000-0000-0000-000000000001', 'eda00000-0000-0000-0000-0000000000a1',
+insert into public.organizational_positions (
+  id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from, name
+) values ('ede10000-0000-0000-0000-000000000001', 'eda00000-0000-0000-0000-0000000000a1',
    'edf00000-0000-0000-0000-0000000000a1', 'ede00000-0000-0000-0000-0000000000a1',
-   'ede70000-0000-0000-0000-0000000000a1', '2024-01-01T00:00:00Z'),
+   'ede70000-0000-0000-0000-0000000000a1', '2024-01-01T00:00:00Z', 'F6 P4.5 14-cenario-f5-09-p9 posição funcional'),
   ('ede10000-0000-0000-0000-000000000002', 'eda00000-0000-0000-0000-0000000000a1',
    'edf00000-0000-0000-0000-0000000000a1', 'ede00000-0000-0000-0000-0000000000a1',
-   'ede70000-0000-0000-0000-0000000000a1', '2024-01-01T00:00:00Z'),
+   'ede70000-0000-0000-0000-0000000000a1', '2024-01-01T00:00:00Z', 'F6 P4.5 14-cenario-f5-09-p9 posição funcional'),
   ('ede10000-0000-0000-0000-000000000003', 'eda00000-0000-0000-0000-0000000000a1',
    'edf00000-0000-0000-0000-0000000000a1', 'ede00000-0000-0000-0000-0000000000a1',
-   'ede70000-0000-0000-0000-0000000000a1', '2024-01-01T00:00:00Z'),
+   'ede70000-0000-0000-0000-0000000000a1', '2024-01-01T00:00:00Z', 'F6 P4.5 14-cenario-f5-09-p9 posição funcional'),
   ('ede10000-0000-0000-0000-000000000004', 'eda00000-0000-0000-0000-0000000000a1',
    'edf00000-0000-0000-0000-0000000000a1', 'ede00000-0000-0000-0000-0000000000a1',
-   'ede70000-0000-0000-0000-0000000000a1', '2024-01-01T00:00:00Z'),
+   'ede70000-0000-0000-0000-0000000000a1', '2024-01-01T00:00:00Z', 'F6 P4.5 14-cenario-f5-09-p9 posição funcional'),
   -- P5 (Alfa): posicao do colaborador ADMITIDO pela prova de admissao da P9. Ela
-  -- existe para que P4 permaneca LIVRE para a prova A3 (movimentacao de B2 P2->P4)
+  -- existe para que P4 permaneca LIVRE para a prova A3 (movimentacao de B2 P2->P4, 'F6 P4.5 14-cenario-f5-09-p9 posição funcional')
   -- sem conflito de ocupante vigente da F5-07.
   ('ede10000-0000-0000-0000-000000000005', 'eda00000-0000-0000-0000-0000000000a1',
    'edf00000-0000-0000-0000-0000000000a1', 'ede00000-0000-0000-0000-0000000000a1',
-   'ede70000-0000-0000-0000-0000000000a1', '2024-01-01T00:00:00Z'),
+   'ede70000-0000-0000-0000-0000000000a1', '2024-01-01T00:00:00Z', 'F6 P4.5 14-cenario-f5-09-p9 posição funcional'),
   ('ede10000-0000-0000-0000-0000000000b1', 'eda00000-0000-0000-0000-0000000000b1',
    'edf00000-0000-0000-0000-0000000000b1', 'ede00000-0000-0000-0000-0000000000b1',
-   'ede70000-0000-0000-0000-0000000000b1', '2024-01-01T00:00:00Z');
+   'ede70000-0000-0000-0000-0000000000b1', '2024-01-01T00:00:00Z', 'F6 P4.5 14-cenario-f5-09-p9 posição funcional');
 
 insert into public.position_reporting_lines
   (id, organization_id, subordinate_position_id, manager_position_id, reason, valid_from) values

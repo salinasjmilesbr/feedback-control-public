@@ -263,14 +263,14 @@ insert into public.organizational_units (id, organization_id, name, valid_from) 
   ('f2f00000-0000-0000-0000-000000000002', 'f2a00000-0000-0000-0000-0000000000a1',
    'Unidade Sintetica F5-10 P4 Time', '2025-01-01T00:00:00Z');
 
-insert into public.organizational_positions
-  (id, organization_id, unit_id, job_role_id, valid_from) values
-  ('f2f10000-0000-0000-0000-000000000001', 'f2a00000-0000-0000-0000-0000000000a1',
+insert into public.organizational_positions (
+  id, organization_id, unit_id, job_role_id, valid_from, name
+) values ('f2f10000-0000-0000-0000-000000000001', 'f2a00000-0000-0000-0000-0000000000a1',
    'f2f00000-0000-0000-0000-000000000001', 'f2e70000-0000-0000-0000-000000000001',
-   '2025-01-01T00:00:00Z'),
+   '2025-01-01T00:00:00Z', 'F6 P4.5 25-cenario-f5-10-p4 posição funcional'),
   ('f2f10000-0000-0000-0000-000000000002', 'f2a00000-0000-0000-0000-0000000000a1',
    'f2f00000-0000-0000-0000-000000000002', 'f2e70000-0000-0000-0000-000000000001',
-   '2025-01-01T00:00:00Z');
+   '2025-01-01T00:00:00Z', 'F6 P4.5 25-cenario-f5-10-p4 posição funcional');
 
 -- c1 (dono de M1) responde a posicao de `c7` (aa) na estrutura VIVA.
 insert into public.occupations

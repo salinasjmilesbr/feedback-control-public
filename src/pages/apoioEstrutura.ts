@@ -260,6 +260,7 @@ export function superiorDaPosicao(
 export function rotuloDaPosicao(estrutura: EstruturaSoberana, posicaoId: string): string {
   const posicao = estrutura.posicoes.find((item) => item.posicaoId === posicaoId);
   if (!posicao) return "—";
+  if (posicao.nome) return posicao.nome;
   const unidade = nomeDaUnidade(estrutura, posicao.unitId);
   const cargo = rotuloDoCargo(estrutura, posicao.jobRoleId);
   const senioridade = posicao.seniorityLevelId

@@ -37,6 +37,7 @@ import {
   type EntradaCriarCargo,
   type EntradaCriarColaborador,
   type EntradaCriarPosicao,
+  type EntradaRenomearPosicao,
   type EntradaCriarSenioridade,
   type EntradaCriarUnidade,
   type EntradaDefinirColegiado,
@@ -166,6 +167,7 @@ export interface ServiceColaboradores {
     entrada: EntradaEncerrarParentUnidade
   ): Promise<ResultadoColaboradores<string>>;
   criarPosicao(entrada: EntradaCriarPosicao): Promise<ResultadoColaboradores<string>>;
+  renomearPosicao?(entrada: EntradaRenomearPosicao): Promise<ResultadoColaboradores<number>>;
   encerrarPosicao(entrada: EntradaEncerrarPosicao): Promise<ResultadoColaboradores<number>>;
   definirColegiado(entrada: EntradaDefinirColegiado): Promise<ResultadoColaboradores<string>>;
   encerrarColegiado(entrada: EntradaEncerrarColegiado): Promise<ResultadoColaboradores<string>>;
@@ -471,6 +473,11 @@ export function criarServiceColaboradores(
     criarPosicao: (entrada) =>
       comContexto(entrada.organizationId, ({ organização, repo }) =>
         propagarEstrutura(repo.criarPosicao({ ...entrada, organizationId: organização }))
+      ),
+
+    renomearPosicao: (entrada) =>
+      comContexto(entrada.organizationId, ({ organização, repo }) =>
+        propagarEstrutura(repo.renomearPosicao!({ ...entrada, organizationId: organização }))
       ),
 
     encerrarPosicao: (entrada) =>

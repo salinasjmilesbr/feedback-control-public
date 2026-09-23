@@ -139,20 +139,20 @@ insert into public.organizational_units (id, organization_id, name, valid_from) 
   ('ebf00000-0000-0000-0000-0000000000b1', 'eba00000-0000-0000-0000-0000000000b1',
    'F5-09 P4 Unidade Beta', '2024-01-01T00:00:00Z');
 
-insert into public.organizational_positions
-  (id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from) values
-  ('ebe10000-0000-0000-0000-000000000001', 'eba00000-0000-0000-0000-0000000000a1',
+insert into public.organizational_positions (
+  id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from, name
+) values ('ebe10000-0000-0000-0000-000000000001', 'eba00000-0000-0000-0000-0000000000a1',
    'ebf00000-0000-0000-0000-0000000000a1', 'ebe00000-0000-0000-0000-0000000000a1',
-   'ebe70000-0000-0000-0000-0000000000a1', '2024-01-01T00:00:00Z'),
+   'ebe70000-0000-0000-0000-0000000000a1', '2024-01-01T00:00:00Z', 'F6 P4.5 07-cenario-f5-09-p4 posição funcional'),
   ('ebe10000-0000-0000-0000-000000000002', 'eba00000-0000-0000-0000-0000000000a1',
    'ebf00000-0000-0000-0000-0000000000a1', 'ebe00000-0000-0000-0000-0000000000a1',
-   'ebe70000-0000-0000-0000-0000000000a1', '2024-01-01T00:00:00Z'),
+   'ebe70000-0000-0000-0000-0000000000a1', '2024-01-01T00:00:00Z', 'F6 P4.5 07-cenario-f5-09-p4 posição funcional'),
   ('ebe10000-0000-0000-0000-000000000003', 'eba00000-0000-0000-0000-0000000000a1',
    'ebf00000-0000-0000-0000-0000000000a1', 'ebe00000-0000-0000-0000-0000000000a1',
-   'ebe70000-0000-0000-0000-0000000000a1', '2024-01-01T00:00:00Z'),
+   'ebe70000-0000-0000-0000-0000000000a1', '2024-01-01T00:00:00Z', 'F6 P4.5 07-cenario-f5-09-p4 posição funcional'),
   ('ebe10000-0000-0000-0000-0000000000b1', 'eba00000-0000-0000-0000-0000000000b1',
    'ebf00000-0000-0000-0000-0000000000b1', 'ebe00000-0000-0000-0000-0000000000b1',
-   'ebe70000-0000-0000-0000-0000000000b1', '2024-01-01T00:00:00Z');
+   'ebe70000-0000-0000-0000-0000000000b1', '2024-01-01T00:00:00Z', 'F6 P4.5 07-cenario-f5-09-p4 posição funcional');
 
 insert into public.position_reporting_lines
   (id, organization_id, subordinate_position_id, manager_position_id, reason, valid_from) values

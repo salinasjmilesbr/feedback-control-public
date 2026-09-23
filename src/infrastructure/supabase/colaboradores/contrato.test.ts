@@ -227,12 +227,13 @@ const CASOS_VALIDOS: ReadonlyArray<readonly [string, Corpo]> = [
   ],
   [
     "estrutura.posicao.criar",
-    { organization_id: ORG, operationId: OPERACAO_ID, unidadeId: UNIDADE, jobRoleId: CARGO, seniorityLevelId: SENIORIDADE, validFrom: VALID_FROM, motivo: MOTIVO },
+    { organization_id: ORG, operationId: OPERACAO_ID, unidadeId: UNIDADE, jobRoleId: CARGO, seniorityLevelId: SENIORIDADE, nome: "Posição Fictícia", validFrom: VALID_FROM, motivo: MOTIVO },
   ],
   [
     "estrutura.posicao.criar (sem senioridade)",
-    { organization_id: ORG, operationId: OPERACAO_ID, unidadeId: UNIDADE, jobRoleId: CARGO, seniorityLevelId: null, validFrom: VALID_FROM, motivo: MOTIVO },
+    { organization_id: ORG, operationId: OPERACAO_ID, unidadeId: UNIDADE, jobRoleId: CARGO, seniorityLevelId: null, nome: "Posição Fictícia sem senioridade", validFrom: VALID_FROM, motivo: MOTIVO },
   ],
+  ["estrutura.posicao.renomear", { organization_id: ORG, operationId: OPERACAO_ID, posicaoId: POSICAO, nome: "Posição Renomeada", expectedVersion: 2, motivo: MOTIVO }],
   [
     "estrutura.posicao.encerrar",
     { organization_id: ORG, operationId: OPERACAO_ID, posicaoId: POSICAO, validTo: VALID_TO, expectedVersion: 2, motivo: MOTIVO },
@@ -360,7 +361,7 @@ describe("F5-07 contrato.ts — payloads válidos das 15 operações", () => {
     const cobertas = new Set(
       CASOS_VALIDOS.map(([nome]) => nome.split(" ")[0] as OperacaoColaborador)
     );
-    expect(cobertas.size).toBe(33);
+    expect(cobertas.size).toBe(34);
     expect([...cobertas].sort()).toEqual([...OPERACOES_COLABORADOR].sort());
   });
 

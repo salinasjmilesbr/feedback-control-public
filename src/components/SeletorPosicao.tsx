@@ -72,7 +72,7 @@ function SeletorPosicao({
             : "";
           return (
             <option key={posicao.posicaoId} value={posicao.posicaoId}>
-              {`${rotuloDaPosicao(estrutura, posicao.posicaoId)}${complemento}`}
+              {`${rotuloDaPosicao(estrutura, posicao.posicaoId)} — ${posicao.posicaoId.slice(0, 8)}${complemento}`}
             </option>
           );
         })}

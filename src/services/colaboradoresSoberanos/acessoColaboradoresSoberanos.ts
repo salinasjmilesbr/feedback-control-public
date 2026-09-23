@@ -438,6 +438,7 @@ export function criarPosicao(
     readonly unidadeId: string;
     readonly jobRoleId: string;
     readonly seniorityLevelId: string | null;
+    readonly nome: string;
     readonly validFrom: string;
     readonly motivo: string;
     readonly organizationId?: string | null;
@@ -446,6 +447,17 @@ export function criarPosicao(
 ): Promise<ResultadoColaboradores<string>> {
   return executar(deps, (servico) => servico.criarPosicao(entrada));
 }
+
+export function renomearPosicao(
+  entrada: { readonly operationId: string; readonly posicaoId: string; readonly nome: string; readonly expectedVersion: number; readonly motivo: string; readonly organizationId?: string | null },
+  deps: DependenciasAcessoColaboradores = {}
+): Promise<ResultadoColaboradores<number>> {
+  return executar(deps, (servico) => {
+    if (!servico.renomearPosicao) return Promise.resolve({ ok: false, codigo: "INTERNAL", mensagem: "Operação indisponível." });
+    return servico.renomearPosicao(entrada);
+  });
+}
+
 
 export function encerrarPosicao(
   entrada: {

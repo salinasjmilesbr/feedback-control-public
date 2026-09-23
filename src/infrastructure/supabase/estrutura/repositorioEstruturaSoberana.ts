@@ -57,9 +57,11 @@ export interface PeriodoParentSoberano {
   readonly version: number;
 }
 
-/** Posição formal (unidade + cargo + senioridade opcional). */
+/** Posição formal: UUID soberano + rótulo funcional e contexto estrutural. */
 export interface PosicaoSoberana {
   readonly posicaoId: string;
+  /** Sempre presente na projeção P4.5; opcional apenas para fixtures legadas. */
+  readonly nome?: string;
   readonly unitId: string;
   readonly jobRoleId: string;
   readonly seniorityLevelId: string | null;
@@ -181,6 +183,7 @@ interface LinhaParent {
 
 interface LinhaPosicao {
   id: string;
+  name: string | null;
   unit_id: string;
   job_role_id: string;
   seniority_level_id: string | null;
@@ -357,6 +360,7 @@ export function criarLeituraEstrutura(cliente: SupabaseClient): LeituraEstrutura
           })),
           posicoes: posicoes.map((item) => ({
             posicaoId: texto(item.id),
+            nome: texto(item.name),
             unitId: texto(item.unit_id),
             jobRoleId: texto(item.job_role_id),
             seniorityLevelId: textoOuNulo(item.seniority_level_id),

@@ -18,6 +18,7 @@ import type { CodigoPublico } from "../infrastructure/supabase/colaboradores/con
 import {
   criarPosicao,
   encerrarPosicao,
+  renomearPosicao,
   lerEstrutura,
   type DependenciasAcessoColaboradores,
   type ResultadoColaboradores,
@@ -67,8 +68,11 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
   const [novaUnidade, setNovaUnidade] = useState("");
   const [novoCargo, setNovoCargo] = useState("");
   const [novaSenioridade, setNovaSenioridade] = useState("");
+  const [novoNome, setNovoNome] = useState("");
   const [novoInicio, setNovoInicio] = useState(hojeLocal);
   const [novoMotivo, setNovoMotivo] = useState("");
+  const [renomeando, setRenomeando] = useState<{ readonly posicaoId: string; readonly nome: string } | null>(null);
+  const [nomeRenomeado, setNomeRenomeado] = useState("");
 
   const [encerrando, setEncerrando] = useState<{
     readonly posicaoId: string;
@@ -293,7 +297,7 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
       <div className="virtus-page-header__copy">
         <h1>Posições</h1>
         <p>
-          Posição formal = unidade + cargo (+ senioridade). Cargo, unidade e
+          Posição tem nome próprio; unidade, cargo e senioridade são seu contexto. Cargo, unidade e
           senioridade são IMUTÁVEIS na posição (D5): mover significa encerrar a
           posição antiga e criar uma nova, realocando as relações vigentes.
         </p>
@@ -380,6 +384,7 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
                     unidadeId: novaUnidade,
                     jobRoleId: novoCargo,
                     seniorityLevelId: novaSenioridade ? novaSenioridade : null,
+                    nome: novoNome.trim(),
                     validFrom: novoInicio,
                     motivo: novoMotivo.trim(),
                     ...(organizacaoAtivaId ? { organizationId: organizacaoAtivaId } : {}),
@@ -387,10 +392,14 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
                   depsInjetadas
                 ),
               novoMotivo,
-              () => setNovoMotivo("")
+              () => { setNovoMotivo(""); setNovoNome(""); }
             );
           }}
         >
+          <label className="virtus-field">
+            <span>Nome da posição *</span>
+            <input value={novoNome} onChange={(evento) => setNovoNome(evento.target.value)} required maxLength={160} />
+          </label>
           <label className="virtus-field">
             <span>Unidade *</span>
             <select
@@ -532,6 +541,11 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
                 </div>
                 <div className="estrutura-item__actions">
                   {vigente && (
+                    <button type="button" className="virtus-btn virtus-btn--outline" onClick={() => { setRenomeando({ posicaoId: posicao.posicaoId, nome: posicao.nome ?? "" }); setNomeRenomeado(posicao.nome ?? ""); setMotivo(""); }}>
+                      Renomear
+                    </button>
+                  )}
+                  {vigente && (
                     <button
                       type="button"
                       className="virtus-btn virtus-btn--outline"
@@ -652,6 +666,18 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
             >
               Cancelar
             </button>
+          </form>
+        </section>
+      )}
+
+      {renomeando && (
+        <section className="estrutura-card" data-testid="posicao-renomear">
+          <header className="estrutura-card__header"><h2>Renomear posição: {renomeando.nome}</h2><span>identidade {renomeando.posicaoId}</span></header>
+          <form className="estrutura-form" onSubmit={(evento) => { evento.preventDefault(); const decisao = versaoDaFotografia(renomeando.posicaoId); if (decisao.tipo === "fotografia-desatualizada") { invalidarPorFotografia(decisao.mensagem, decisao.codigo); return; } void executar(() => renomearPosicao({ operationId: novoOperationId(), posicaoId: renomeando.posicaoId, nome: nomeRenomeado.trim(), expectedVersion: decisao.expectedVersion, motivo: motivo.trim(), ...(organizacaoAtivaId ? { organizationId: organizacaoAtivaId } : {}) }, depsInjetadas), motivo, () => setRenomeando(null)); }}>
+            <label className="virtus-field"><span>Nome da posição *</span><input value={nomeRenomeado} onChange={(evento) => setNomeRenomeado(evento.target.value)} required maxLength={160} /></label>
+            <label className="virtus-field"><span>Motivo *</span><input value={motivo} onChange={(evento) => setMotivo(evento.target.value)} required /></label>
+            <button type="submit" className="virtus-btn virtus-btn--primary" disabled={processando}>Confirmar</button>
+            <button type="button" className="virtus-btn virtus-btn--outline" onClick={() => setRenomeando(null)}>Cancelar</button>
           </form>
         </section>
       )}

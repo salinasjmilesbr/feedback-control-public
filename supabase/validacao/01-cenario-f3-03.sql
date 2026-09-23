@@ -174,37 +174,37 @@ insert into public.organizational_unit_parent_periods (
 -- P_ESP     : Especialista (Senior) na unidade de Especialistas — sem equipe.
 -- P_CONS_F  : Consultor encerrado em 2025-06-30 (histórico preservado).
 insert into public.organizational_positions (
-  id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from, valid_to
-) values
-  ('f5c00000-0000-0000-0000-0000000000a1', 'f5a00000-0000-0000-0000-0000000000a1',
+
+  id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from, valid_to, name
+) values ('f5c00000-0000-0000-0000-0000000000a1', 'f5a00000-0000-0000-0000-0000000000a1',
    'f5b00000-0000-0000-0000-0000000000a2', 'f5d00000-0000-0000-0000-000000000002', null,
-   '2025-01-01T00:00:00Z', null),
+   '2025-01-01T00:00:00Z', null, 'F6 P4.5 01-cenario-f3-03 posição funcional'),
   ('f5c00000-0000-0000-0000-0000000000a2', 'f5a00000-0000-0000-0000-0000000000a1',
    'f5b00000-0000-0000-0000-0000000000a2', 'f5d00000-0000-0000-0000-000000000004', null,
-   '2025-01-01T00:00:00Z', null),
+   '2025-01-01T00:00:00Z', null, 'F6 P4.5 01-cenario-f3-03 posição funcional'),
   ('f5c00000-0000-0000-0000-0000000000a6', 'f5a00000-0000-0000-0000-0000000000a1',
    'f5b00000-0000-0000-0000-0000000000a2', 'f5d00000-0000-0000-0000-000000000004', null,
-   '2025-01-01T00:00:00Z', null),
+   '2025-01-01T00:00:00Z', null, 'F6 P4.5 01-cenario-f3-03 posição funcional'),
   ('f5c00000-0000-0000-0000-0000000000a3', 'f5a00000-0000-0000-0000-0000000000a1',
    'f5b00000-0000-0000-0000-0000000000a3', 'f5d00000-0000-0000-0000-000000000004',
    'f5d00000-0000-0000-0000-000000000012',
-   '2025-07-01T00:00:00Z', null),
+   '2025-07-01T00:00:00Z', null, 'F6 P4.5 01-cenario-f3-03 posição funcional'),
   ('f5c00000-0000-0000-0000-0000000000a4', 'f5a00000-0000-0000-0000-0000000000a1',
    'f5b00000-0000-0000-0000-0000000000a4', 'f5d00000-0000-0000-0000-000000000005',
    'f5d00000-0000-0000-0000-000000000013',
-   '2025-01-01T00:00:00Z', null),
+   '2025-01-01T00:00:00Z', null, 'F6 P4.5 01-cenario-f3-03 posição funcional'),
   ('f5c00000-0000-0000-0000-0000000000a5', 'f5a00000-0000-0000-0000-0000000000a1',
    'f5b00000-0000-0000-0000-0000000000a2', 'f5d00000-0000-0000-0000-000000000006', null,
-   '2025-01-01T00:00:00Z', '2025-06-30T00:00:00Z');
+   '2025-01-01T00:00:00Z', '2025-06-30T00:00:00Z', 'F6 P4.5 01-cenario-f3-03 posição funcional');
 
 -- Posições — Beta (configuração mínima independente).
 insert into public.organizational_positions (
-  id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from, valid_to
-) values
-  ('f5c00000-0000-0000-0000-0000000000b1', 'f5a00000-0000-0000-0000-0000000000b1',
+
+  id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from, valid_to, name
+) values ('f5c00000-0000-0000-0000-0000000000b1', 'f5a00000-0000-0000-0000-0000000000b1',
    'f5b00000-0000-0000-0000-0000000000b1', 'f5d00000-0000-0000-0000-000000000021', null,
-   '2025-01-01T00:00:00Z', null),
+   '2025-01-01T00:00:00Z', null, 'F6 P4.5 01-cenario-f3-03 posição funcional'),
   ('f5c00000-0000-0000-0000-0000000000b2', 'f5a00000-0000-0000-0000-0000000000b1',
    'f5b00000-0000-0000-0000-0000000000b1', 'f5d00000-0000-0000-0000-000000000022',
    'f5d00000-0000-0000-0000-000000000031',
-   '2025-01-01T00:00:00Z', null);
+   '2025-01-01T00:00:00Z', null, 'F6 P4.5 01-cenario-f3-03 posição funcional');

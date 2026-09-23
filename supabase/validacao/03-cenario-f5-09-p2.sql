@@ -123,17 +123,17 @@ insert into public.organizational_units (id, organization_id, name, valid_from) 
   ('e9f00000-0000-0000-0000-000000000001', 'e9a00000-0000-0000-0000-0000000000a1',
    'F5-09 P2 Unidade', '2024-01-01T00:00:00Z');
 
-insert into public.organizational_positions
-  (id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from) values
-  ('e9e10000-0000-0000-0000-000000000001', 'e9a00000-0000-0000-0000-0000000000a1',
+insert into public.organizational_positions (
+  id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from, name
+) values ('e9e10000-0000-0000-0000-000000000001', 'e9a00000-0000-0000-0000-0000000000a1',
    'e9f00000-0000-0000-0000-000000000001', 'e9e00000-0000-0000-0000-000000000001',
-   'e9e70000-0000-0000-0000-000000000001', '2024-01-01T00:00:00Z'),
+   'e9e70000-0000-0000-0000-000000000001', '2024-01-01T00:00:00Z', 'F6 P4.5 03-cenario-f5-09-p2 posição funcional'),
   ('e9e10000-0000-0000-0000-000000000002', 'e9a00000-0000-0000-0000-0000000000a1',
    'e9f00000-0000-0000-0000-000000000001', 'e9e00000-0000-0000-0000-000000000001',
-   'e9e70000-0000-0000-0000-000000000001', '2024-01-01T00:00:00Z'),
+   'e9e70000-0000-0000-0000-000000000001', '2024-01-01T00:00:00Z', 'F6 P4.5 03-cenario-f5-09-p2 posição funcional'),
   ('e9e10000-0000-0000-0000-000000000003', 'e9a00000-0000-0000-0000-0000000000a1',
    'e9f00000-0000-0000-0000-000000000001', 'e9e00000-0000-0000-0000-000000000001',
-   'e9e70000-0000-0000-0000-000000000001', '2024-01-01T00:00:00Z');
+   'e9e70000-0000-0000-0000-000000000001', '2024-01-01T00:00:00Z', 'F6 P4.5 03-cenario-f5-09-p2 posição funcional');
 
 -- P1 (subordinada) -> P2 (gestor). P3 fica SEM superior (prova que a hierarquia
 -- nao e inventada por cargo/texto).
