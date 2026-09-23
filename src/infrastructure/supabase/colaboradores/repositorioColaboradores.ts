@@ -102,6 +102,7 @@ export interface EntradaCriarColaborador {
   readonly matricula: string;
   readonly admissionDate?: string;
   readonly statusInicial?: "active" | "leave";
+  readonly positionId?: string;
 }
 
 export interface EntradaEditarColaborador {
@@ -659,6 +660,7 @@ export function criarRepositorioColaboradoresSupabase(
           full_name: entrada.fullName,
           email: entrada.email,
           matricula: entrada.matricula,
+          ...(entrada.positionId ? { position_id: entrada.positionId } : {}),
           ...(entrada.admissionDate ? { admission_date: entrada.admissionDate } : {}),
           ...(entrada.statusInicial ? { status_inicial: entrada.statusInicial } : {}),
         }),
