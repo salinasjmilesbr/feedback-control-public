@@ -25,6 +25,18 @@ as $$
      where m.user_profile_id = p_user_profile_id
        and m.organization_id = p_organization_id
        and m.status = 'active'
+  ), actor_occupations as (
+    select m.user_profile_id, m.organization_id, l.collaborator_id, count(*) as occupation_count
+      from public.user_organization_memberships m
+      join public.user_profiles up on up.id = m.user_profile_id and up.status = 'active'
+      join public.membership_collaborator_links l
+        on l.membership_id = m.id and l.organization_id = m.organization_id and l.status = 'active'
+      join public.occupations o
+        on o.organization_id = m.organization_id and o.collaborator_id = l.collaborator_id
+       and o.valid_from <= now() and (o.valid_to is null or o.valid_to > now())
+     where m.user_profile_id = p_user_profile_id
+       and m.organization_id = p_organization_id and m.status = 'active'
+     group by m.user_profile_id, m.organization_id, l.collaborator_id
   ), responsibility_grants as (
     select b.capability_code as code
       from public.user_organization_memberships m
@@ -34,6 +46,11 @@ as $$
       join public.occupations o
         on o.organization_id = m.organization_id and o.collaborator_id = l.collaborator_id
        and o.valid_from <= now() and (o.valid_to is null or o.valid_to > now())
+      join actor_occupations ao
+        on ao.user_profile_id = m.user_profile_id
+       and ao.organization_id = m.organization_id
+       and ao.collaborator_id = l.collaborator_id
+       and ao.occupation_count = 1
       join public.organizational_positions p
         on p.organization_id = m.organization_id and p.id = o.organizational_position_id
        and p.valid_from <= now() and (p.valid_to is null or p.valid_to > now())
@@ -80,6 +97,19 @@ as $$
      where m.user_profile_id = p_user_profile_id
        and m.organization_id = p_organization_id and m.status = 'active'
   ),
+  actor_occupations as (
+    select m.user_profile_id, m.organization_id, l.collaborator_id, count(*) as occupation_count
+      from public.user_organization_memberships m
+      join public.user_profiles up on up.id = m.user_profile_id and up.status = 'active'
+      join public.membership_collaborator_links l
+        on l.membership_id = m.id and l.organization_id = m.organization_id and l.status = 'active'
+      join public.occupations o
+        on o.organization_id = m.organization_id and o.collaborator_id = l.collaborator_id
+       and o.valid_from <= now() and (o.valid_to is null or o.valid_to > now())
+     where m.user_profile_id = p_user_profile_id
+       and m.organization_id = p_organization_id and m.status = 'active'
+     group by m.user_profile_id, m.organization_id, l.collaborator_id
+  ),
   responsibility_positions as (
     select pr.id as responsibility_id, p.id as position_id
       from public.user_organization_memberships m
@@ -89,6 +119,11 @@ as $$
       join public.occupations o
         on o.organization_id = m.organization_id and o.collaborator_id = l.collaborator_id
        and o.valid_from <= now() and (o.valid_to is null or o.valid_to > now())
+      join actor_occupations ao
+        on ao.user_profile_id = m.user_profile_id
+       and ao.organization_id = m.organization_id
+       and ao.collaborator_id = l.collaborator_id
+       and ao.occupation_count = 1
       join public.organizational_positions p
         on p.organization_id = m.organization_id and p.id = o.organizational_position_id
        and p.valid_from <= now() and (p.valid_to is null or p.valid_to > now())

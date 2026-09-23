@@ -87,4 +87,71 @@ do $$ begin
   end if;
   raise notice '[PASS] cross-tenant DENY';
 end $$;
+
+begin;
+insert into public.organizational_position_responsibilities
+  (id, organization_id, position_id, responsibility_code, valid_from, created_by)
+values ('f6a22000-0000-4000-8000-000000000902',
+        'f6a22000-0000-4000-8000-0000000000a1',
+        'f6a22000-0000-4000-8000-000000000d03', 'PEOPLE_MANAGEMENT',
+        '2026-01-01T00:00:00Z', 'f6a22000-0000-4000-8000-000000000001');
+do $$ begin
+  if exists (select 1 from public.resolver_capabilities_escopos_efetivas(
+      'f6a22000-0000-4000-8000-000000000002','f6a22000-0000-4000-8000-0000000000a1')
+      where grant_origin = 'position_responsibility:f6a22000-0000-4000-8000-000000000902') then
+    raise exception '[FAIL] posição vaga produziu grant';
+  end if;
+  raise notice '[PASS] responsabilidade em posição vaga não produz grant';
+end $$;
+rollback;
+
+begin;
+update public.occupations set valid_to = now()
+ where id = 'f6a22000-0000-4000-8000-000000000f01';
+insert into public.collaborators (id, organization_id)
+values ('f6a22000-0000-4000-8000-000000000e07', 'f6a22000-0000-4000-8000-0000000000a1');
+insert into public.occupations
+  (id, organization_id, collaborator_id, organizational_position_id, reason, valid_from)
+values ('f6a22000-0000-4000-8000-000000000f07',
+        'f6a22000-0000-4000-8000-0000000000a1',
+        'f6a22000-0000-4000-8000-000000000e07',
+        'f6a22000-0000-4000-8000-000000000d01',
+        'troca de ocupante P2', now());
+insert into public.membership_collaborator_links
+  (membership_id, organization_id, collaborator_id, status)
+select id, organization_id, 'f6a22000-0000-4000-8000-000000000e07', 'active'
+  from public.user_organization_memberships
+ where user_profile_id = 'f6a22000-0000-4000-8000-000000000003';
+do $$ begin
+  if exists (select 1 from public.resolver_capabilities_escopos_efetivas(
+      'f6a22000-0000-4000-8000-000000000002','f6a22000-0000-4000-8000-0000000000a1')
+      where grant_origin = 'position_responsibility:f6a22000-0000-4000-8000-000000000901') then
+    raise exception '[FAIL] ocupante anterior reteve grant após troca';
+  end if;
+  if not exists (select 1 from public.resolver_capabilities_escopos_efetivas(
+      'f6a22000-0000-4000-8000-000000000003','f6a22000-0000-4000-8000-0000000000a1')
+      where grant_origin = 'position_responsibility:f6a22000-0000-4000-8000-000000000901') then
+    raise exception '[FAIL] novo ocupante não recebeu grant no intervalo vigente';
+  end if;
+  raise notice '[PASS] troca de ocupante remove o grant anterior e concede ao novo';
+end $$;
+rollback;
+
+begin;
+insert into public.occupations
+  (id, organization_id, collaborator_id, organizational_position_id, reason, valid_from)
+values ('f6a22000-0000-4000-8000-000000000f08',
+        'f6a22000-0000-4000-8000-0000000000a1',
+        'f6a22000-0000-4000-8000-000000000e01',
+        'f6a22000-0000-4000-8000-000000000d03',
+        'ambiguidade ocupacional P2', '2026-01-01T00:00:00Z');
+do $$ begin
+  if exists (select 1 from public.resolver_capabilities_escopos_efetivas(
+      'f6a22000-0000-4000-8000-000000000002','f6a22000-0000-4000-8000-0000000000a1')
+      where grant_origin like 'position_responsibility:%') then
+    raise exception '[FAIL] ambiguidade ocupacional foi deduplicada em vez de DENY';
+  end if;
+  raise notice '[PASS] ambiguidade ocupacional resulta em fail-closed';
+end $$;
+rollback;
 reset role;
