@@ -6,6 +6,7 @@ import {
   type DependenciasAcessoPlataforma,
 } from "../../services/plataforma/controladorProvisionamento";
 import type { ProvisionamentoPlataforma } from "../../application/ports/ProvisionamentoPlataforma";
+import { ROTA_PLATAFORMA_NOVA_ORGANIZACAO } from "../../routes/plataformaRotas";
 import {
   montarEntradaProvisao,
   type FormaPrimeiroAdmin,
@@ -96,7 +97,7 @@ export function ConfirmacaoOrganizacao({ nome }: { readonly nome: string }) {
           Peça ao primeiro Admin para acessar a tela de login e concluir a entrada
           na nova organização.
         </p>
-        <Link to="/" className="auth-status__entrar">
+        <Link to={ROTA_PLATAFORMA_NOVA_ORGANIZACAO} className="auth-status__entrar">
           Voltar ao início
         </Link>
       </section>

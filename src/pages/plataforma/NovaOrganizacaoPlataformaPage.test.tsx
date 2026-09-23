@@ -13,6 +13,7 @@ import {
   type FormaPrimeiroAdmin,
 } from "../../services/plataforma/formularioPlataforma";
 import type { ProvisionamentoPlataforma } from "../../application/ports/ProvisionamentoPlataforma";
+import { ROTA_PLATAFORMA_NOVA_ORGANIZACAO } from "../../routes/plataformaRotas";
 
 /**
  * F6-A03 (Issue #266) — UI mínima de plataforma (§6.5).
@@ -201,6 +202,8 @@ describe("F6-A03 — UI: confirmação sem identificador interno (critério 24)"
     );
 
     expect(html).toContain("Org Sintetica F6-A03");
+    expect(html).toContain(`href="${ROTA_PLATAFORMA_NOVA_ORGANIZACAO}"`);
+    expect(html).not.toContain('href="/"');
     // Nenhum UUID, hash ou código interno de erro é exibido.
     expect(html).not.toMatch(
       /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
