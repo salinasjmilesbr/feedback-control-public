@@ -1141,8 +1141,15 @@ Para manter o Supabase runtime persistente, os gates destrutivos devem usar a
 cópia temporária criada por `Invoke-DisposableValidation.ps1`. O runner usa
 `project_id = feedback-control-validation`, portas 55420–55423 e o container
 `supabase_db_feedback-control-validation`; portanto, `db reset`, cenários e
-probes não alcançam o runtime (`supabase_db_feedback-control`). A cópia é
-encerrada e removida ao final, inclusive em caso de falha.
+probes não alcançam o runtime (`supabase_db_feedback-control`). Antes do start,
+o runner valida fail-closed o `project_id` e todas as portas; também compara um
+fingerprint de organizações e `auth.users` antes/depois. A cópia é encerrada e
+removida ao final, inclusive em caso de falha.
+
+Os exemplos históricos deste README que executam `db reset` ou cenários
+diretamente em `supabase_db_feedback-control` são documentação legada e não
+devem mais ser usados para gates locais. O runner descartável acima é o caminho
+oficial para toda validação destrutiva.
 
 ```powershell
 powershell.exe -NoProfile -File supabase/validacao/Invoke-DisposableValidation.ps1
