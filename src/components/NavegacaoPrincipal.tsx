@@ -208,8 +208,14 @@ function NavegacaoPrincipal({
     <nav className="app-nav" aria-label="Navegação principal">
       <div className="app-nav__inner">
         <NavItem to="/" end icon={<IconHome />}>
-          {podeMinhaEquipe ? "Minha equipe" : "Início"}
+          Início
         </NavItem>
+
+        {podeMinhaEquipe && (
+          <NavItem to="/colaboradores" icon={<IconHome />}>
+            Minha equipe
+          </NavItem>
+        )}
 
         {podeAcessarCiclos && (
           <NavItem to="/ciclos" icon={<IconCalendar />}>
