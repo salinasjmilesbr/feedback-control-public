@@ -250,12 +250,9 @@ export function criarControladorSessao(
       // caminho alternativo é a sonda server-side de plataforma, que falha
       // fechado e não cria identidade tenant.
       if (deps.verificarOperadorPlataforma) {
-        let operador = false;
-        try {
-          operador = await deps.verificarOperadorPlataforma();
-        } catch {
-          operador = false;
-        }
+        const operador = await Promise.resolve()
+          .then(() => deps.verificarOperadorPlataforma!())
+          .catch(() => false);
         if (gen !== geracao) return;
         if (operador) {
           sessaoOperante = true;
