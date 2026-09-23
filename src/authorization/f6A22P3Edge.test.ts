@@ -20,7 +20,7 @@ function deps(opcoes: {
   readonly rpcData?: unknown;
   readonly rpcError?: { code?: string; message?: string };
 } = {}) {
-  const executarRpc = vi.fn(async () => ({
+  const executarRpc = vi.fn<DepsColaboradores["executarRpc"]>(async () => ({
     data: opcoes.rpcData ?? RESPONSIBILITY,
     error: opcoes.rpcError ?? null,
   }));
