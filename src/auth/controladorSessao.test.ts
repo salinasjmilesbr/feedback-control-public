@@ -103,6 +103,48 @@ async function microtarefas() {
 }
 
 describe("controlador de sessão (F2-03)", () => {
+  it("preserva sessão Auth e entra em plataforma sem perfil tenant", async () => {
+    const fake = criarAutenticadorFalso({
+      sessaoInicial: { id: "uuid-operador", email: "operador@example.invalid" },
+    });
+    const estados: EstadoSessao[] = [];
+    const verificarOperadorPlataforma = vi.fn(async () => true);
+    const controlador = criarControladorSessao({
+      autenticador: fake.autenticador,
+      repositorio: repositorioFalso({
+        buscarPerfil: vi.fn(async () => {
+          throw new Error("perfil ausente");
+        }),
+      }),
+      verificarOperadorPlataforma,
+      notificar: (estado) => estados.push(estado),
+    });
+
+    await controlador.inicializar();
+
+    expect(verificarOperadorPlataforma).toHaveBeenCalledTimes(1);
+    expect(ultimo(estados)).toEqual({
+      status: "plataforma",
+      sessao: { usuario: { id: "uuid-operador", email: "operador@example.invalid" } },
+    });
+    expect(fake.autenticador.sair).not.toHaveBeenCalled();
+  });
+
+  it("mantém fail-closed quando a sonda de plataforma recusa", async () => {
+    const fake = criarAutenticadorFalso({ sessaoInicial: { id: "uuid-1" } });
+    const estados: EstadoSessao[] = [];
+    const controlador = criarControladorSessao({
+      autenticador: fake.autenticador,
+      repositorio: repositorioFalso({ buscarPerfil: vi.fn(async () => { throw new Error("perfil ausente"); }) }),
+      verificarOperadorPlataforma: async () => false,
+      notificar: (estado) => estados.push(estado),
+    });
+
+    await controlador.inicializar();
+
+    expect(ultimo(estados).status).toBe("acessoNegado");
+  });
+
   it("restaura sessão existente no bootstrap e resolve identidade", async () => {
     const fake = criarAutenticadorFalso({
       sessaoInicial: { id: "uuid-1", email: "pessoa@example.invalid" },

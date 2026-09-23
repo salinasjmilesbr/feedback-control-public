@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { toPublicError } from "../errors/applicationErrors";
 import { useAuth } from "./AuthContext";
 import { mensagemDeExpiracao } from "./politicaSessao";
@@ -41,6 +41,10 @@ function LoginPage() {
         </section>
       </div>
     );
+  }
+
+  if (estado.status === "plataforma") {
+    return <Navigate to="/plataforma/nova-organizacao" replace />;
   }
 
   if (estado.status === "indisponivel") {

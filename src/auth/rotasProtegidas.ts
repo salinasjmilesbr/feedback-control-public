@@ -65,6 +65,7 @@ export function decidirAcessoARotasFuncionais(
 
     case "naoAutenticado":
     case "acessoNegado":
+    case "plataforma":
     case "sessaoExpirada":
       return { tipo: "redirecionarLogin" };
   }

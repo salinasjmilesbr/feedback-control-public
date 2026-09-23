@@ -18,6 +18,7 @@ import { criarClienteAuthSupabase } from "./cliente";
 import { mapearErroConvite } from "./conviteAdministrativo";
 import { criarControladorSessao, type EstadoSessao } from "./controladorSessao";
 import { INTERVALO_VERIFICACAO_SESSAO_MS } from "./politicaSessao";
+import { criarEdgePlataforma } from "../infrastructure/supabase/plataforma/edgePlataforma";
 import {
   redefinirSenha as redefinirSenhaServico,
   solicitarRecuperacaoDeSenha as solicitarRecuperacaoDeSenhaServico,
@@ -38,6 +39,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
   const repositorio = useMemo(
     () => (cliente ? criarRepositorioIdentidade(cliente) : null),
+    [cliente]
+  );
+  const verificarOperadorPlataforma = useMemo(
+    () => cliente
+      ? () => criarEdgePlataforma(cliente).operadorAtual().then((resposta) =>
+          resposta.ok && resposta.data !== null &&
+          typeof resposta.data === "object" &&
+          (resposta.data as { operador?: unknown }).operador === true
+        )
+      : undefined,
     [cliente]
   );
   const armazenamentoInicioSessao = useMemo(
@@ -88,8 +99,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         repositorio,
         notificar: setEstado,
         inicioSessao: armazenamentoInicioSessao,
+        verificarOperadorPlataforma,
       }),
-    [autenticador, repositorio, armazenamentoInicioSessao]
+    [autenticador, repositorio, armazenamentoInicioSessao, verificarOperadorPlataforma]
   );
 
   useEffect(() => {
