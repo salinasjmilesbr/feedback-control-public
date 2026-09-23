@@ -356,6 +356,14 @@ begin
                   where up.id = v_founder and up.status = 'active') then
     raise exception '[FAIL] D3: perfil do founder (D16) nao foi criado';
   end if;
+  if not exists (select 1 from public.user_profiles up
+                  where up.id = v_founder and up.first_access_pending is true) then
+    raise exception '[FAIL] D3.1: founder novo deveria nascer com first_access_pending=true';
+  end if;
+  if exists (select 1 from public.user_profiles up
+              where up.id = v_operador and up.first_access_pending is true) then
+    raise exception '[FAIL] D3.2: perfil preexistente do operador foi marcado como pendente';
+  end if;
 
   -- (D4) Membership ativa do founder NA organizacao NOVA.
   select m.id into v_memb from public.user_organization_memberships m
@@ -460,6 +468,34 @@ begin
   end if;
 
   raise notice '[PASS] D: caminho feliz OK — organizacao criada, perfis globais do founder (D16) e do ator (D17), membership ativa, role admin pelo primitivo F4-01, trilha D18 com ator humano e SEPARACAO DE PLANOS (operador sem autoridade no tenant)';
+end $$;
+reset role;
+
+-- ============================================================================
+-- D3.3) F6-A20 — perfil preexistente permanece inalterado.
+set role service_role;
+do $$
+declare
+  v_operador uuid := 'f6a30000-0000-4000-8000-000000000003';
+  v_pendente boolean;
+begin
+  select up.first_access_pending into v_pendente
+    from public.user_profiles up where up.id = v_operador;
+  if v_pendente is distinct from false then
+    raise exception '[FAIL] D3.3: precondicao do perfil preexistente invalida (%)', v_pendente;
+  end if;
+
+  perform public.organizacao_provisionar_inicial(
+    'f6a3b000-0000-4000-8000-0000000000d3', 'F6-A03 Founder Preexistente',
+    v_operador, v_operador, 'Operador Preexistente', 'A1100003',
+    'operador.novo.f6-a03@example.invalid'
+  );
+
+  select up.first_access_pending into v_pendente
+    from public.user_profiles up where up.id = v_operador;
+  if v_pendente is distinct from false then
+    raise exception '[FAIL] D3.3: perfil preexistente foi alterado para pendente';
+  end if;
 end $$;
 reset role;
 
