@@ -1064,19 +1064,17 @@ Observações:
 
 ### Execução registrada (Supabase local, testada de ponta a ponta)
 
-Executada com a stack local do Supabase nesta rodada:
+Registro histórico da execução nesta rodada (não reproduzir no runtime local):
 
 ```powershell
-npx --yes supabase@2.116.0 db reset
-docker cp supabase/validacao/01-cenario-f5-06.sql supabase_db_feedback-control:/tmp/cenario.sql
-docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/cenario.sql
-docker cp supabase/validacao/02-validar-f5-06.sql supabase_db_feedback-control:/tmp/valida.sql
-docker exec -i supabase_db_feedback-control psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/valida.sql
+powershell.exe -NoProfile -File supabase/validacao/Invoke-DisposableValidation.ps1 `
+  -Scenario 01-cenario-f5-06.sql `
+  -Validator 02-validar-f5-06.sql
 ```
 
 | Etapa | Resultado |
 | --- | --- |
-| `npx --yes supabase@2.116.0 db reset` (migrations em ordem + seed) | exit 0 |
+| runner descartável (migrations em ordem + seed) | exit 0 |
 | `01-cenario-f5-06.sql` | exit 0 |
 | `02-validar-f5-06.sql` | **todas as verificações [PASS] — exit 0** |
 | `02-validar-f4-08.sql` | **todas as verificações [PASS] — exit 0** (42 tabelas / 21 fechadas) |
@@ -1163,3 +1161,8 @@ powershell.exe -NoProfile -File supabase/validacao/Invoke-DisposableValidation.p
   -Scenario 01-cenario-f4-08.sql `
   -Validator 02-validar-f4-08.sql,03-validar-f4-08-mutacoes.sql
 ```
+
+`Test-DisposableValidationGuard.ps1` é o enforcement versionado: ele reprova
+todo `db reset --local` em arquivos executáveis, exceto o runner descartável e
+o job CI explicitamente marcado como isolado. O CI executa esse guard antes de
+iniciar a stack Supabase.

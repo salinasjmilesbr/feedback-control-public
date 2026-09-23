@@ -119,6 +119,7 @@ jobs:
 
   supabase-local:
     name: Supabase local — RLS/policy validation
+    # disposable-validation-guard: isolated-github-runner
     needs: scope
     if: always() && (needs.scope.result != 'success' || needs.scope.outputs.docs_only != 'true')
     runs-on: ubuntu-latest
@@ -140,6 +141,9 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: package-lock.json
+
+      - name: Guard destructive local reset targets
+        run: pwsh -NoProfile -File supabase/validacao/Test-DisposableValidationGuard.ps1
 
       # Apenas o banco local (roles.sql + auth.uid() + migrations). Sem rede
       # remota: tudo em containers efêmeros do runner (docker).

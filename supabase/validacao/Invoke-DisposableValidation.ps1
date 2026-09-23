@@ -17,6 +17,8 @@ $projectId = 'feedback-control-validation'
 $containerName = "supabase_db_$projectId"
 $runtimeContainerName = 'supabase_db_feedback-control'
 
+. (Join-Path $PSScriptRoot 'DisposableValidationSafety.ps1')
+
 if ($validationRoot -eq $repoRoot -or $validationRoot -eq $sourceRoot) {
     throw 'Alvo de validacao inseguro: a copia temporaria coincide com o projeto/runtime.'
 }
@@ -28,33 +30,6 @@ function Invoke-Checked {
     if ($LASTEXITCODE -ne 0) {
         throw "Comando falhou ($LASTEXITCODE): $FilePath $($ArgumentList -join ' ')"
     }
-}
-
-function Get-ConfigValue {
-    param([string]$Text, [string]$Key)
-
-    $pattern = '(?m)^' + [regex]::Escape($Key) + '\s*=\s*"([^"]+)"\s*$'
-    $matches = [regex]::Matches($Text, $pattern)
-    if ($matches.Count -ne 1) {
-        throw "Config temporario invalido: esperado exatamente um valor quoted para $Key."
-    }
-    return $matches[0].Groups[1].Value
-}
-
-function Get-ConfigPort {
-    param([string]$Text, [string]$Section, [string]$Key)
-
-    $sectionPattern = '(?ms)^\[' + [regex]::Escape($Section) + '\]\r?\n(.*?)(?=^\[|\z)'
-    $sectionMatch = [regex]::Match($Text, $sectionPattern)
-    if (-not $sectionMatch.Success) {
-        throw "Config temporario invalido: secao [$Section] ausente."
-    }
-    $portPattern = '(?m)^' + [regex]::Escape($Key) + '\s*=\s*(\d+)\s*$'
-    $portMatches = [regex]::Matches($sectionMatch.Groups[1].Value, $portPattern)
-    if ($portMatches.Count -ne 1) {
-        throw "Config temporario invalido: esperado exatamente um $Section.$Key."
-    }
-    return [int]$portMatches[0].Groups[1].Value
 }
 
 function Get-RuntimeFingerprint {
@@ -92,15 +67,9 @@ try {
     $config = $config -replace '(?ms)(\[local_smtp\]\r?\n)enabled\s*=\s*true', '$1enabled = false'
     Set-Content -LiteralPath $configPath -Value $config -Encoding UTF8 -NoNewline
 
-    if ((Get-ConfigValue $config 'project_id') -ne $projectId) {
-        throw "Config temporario inseguro: project_id nao e $projectId."
-    }
-    if ((Get-ConfigPort $config 'api' 'port') -ne 55421 -or
-        (Get-ConfigPort $config 'db' 'port') -ne 55422 -or
-        (Get-ConfigPort $config 'db' 'shadow_port') -ne 55420 -or
-        (Get-ConfigPort $config 'studio' 'port') -ne 55423) {
-        throw 'Config temporario inseguro: portas nao correspondem ao ambiente descartavel.'
-    }
+    Assert-DisposableValidationTarget -Workdir $validationRoot -TempRoot $env:TEMP `
+        -ProjectId $projectId -ContainerName $containerName `
+        -RuntimeContainerName $runtimeContainerName -Config $config
     Write-Host 'Config descartavel validado: project_id e portas conferem.'
 
     $runtimeFingerprintBefore = Get-RuntimeFingerprint

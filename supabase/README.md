@@ -238,30 +238,19 @@ Estado esperado ao final da F3-09 (após rebuild limpo):
 O nome do container deriva do `project_id` (`supabase_db_<project_id>`); para
 descobri-lo, use `docker ps --format '{{.Names}}'`.
 
-## Rebuild completo e reprodutibilidade (F1-06)
+## Rebuild descartável e reprodutibilidade (F1-06)
 
-Fluxo oficial validado para destruir e recriar o ambiente local do zero usando
-somente o conteúdo versionado:
+O runtime local `feedback-control` é persistente e não é alvo de gates
+destrutivos. Para validar migrations e cenários em estado limpo, use a cópia
+descartável oficial:
 
 ```sh
-# 1) destruir o ambiente local (containers + volumes de dados)
-npx --yes supabase@2.116.0 stop --no-backup
-
-# 2) recriar do zero: o start inicializa o banco e aplica migrations em ordem
-#    e o seed automaticamente
-npx --yes supabase@2.116.0 start
-
-# 3) rebuild determinístico do banco (migrations + seed); pode ser repetido
-npx --yes supabase@2.116.0 db reset
-
-# 4) verificar o estado final (comando da seção anterior)
+powershell.exe -NoProfile -File supabase/validacao/Invoke-DisposableValidation.ps1
 ```
 
-`stop --no-backup` remove containers e volumes de dados do projeto (a forma
-oficial de apagar o estado local). `db reset` recria o banco do zero aplicando as
-migrations em ordem e depois o seed, sem intervenção manual. Nenhum passo
-depende de configuração manual no Supabase Dashboard, de dados reais ou de
-segredos.
+O runner cria `feedback-control-validation` em diretório temporário, com portas
+descartáveis, e recusa o runtime `supabase_db_feedback-control` antes de qualquer
+reset. Não execute reset ou `stop --no-backup` diretamente neste checkout.
 
 ## Seed de desenvolvimento (F1-05)
 
