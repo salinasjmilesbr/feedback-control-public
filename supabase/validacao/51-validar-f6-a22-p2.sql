@@ -154,4 +154,23 @@ do $$ begin
   raise notice '[PASS] ambiguidade ocupacional resulta em fail-closed';
 end $$;
 rollback;
+
+begin;
+-- Simula exclusivamente um estado legado/inconsistente: remove, dentro da
+-- transação, as barreiras de unicidade do link e abre um segundo link ativo.
+drop index public.uq_membership_collaborator_links_active_membership;
+insert into public.membership_collaborator_links
+  (membership_id, organization_id, collaborator_id, status)
+select id, organization_id, 'f6a22000-0000-4000-8000-000000000e02', 'active'
+  from public.user_organization_memberships
+ where user_profile_id = 'f6a22000-0000-4000-8000-000000000002';
+do $$ begin
+  if exists (select 1 from public.resolver_capabilities_escopos_efetivas(
+      'f6a22000-0000-4000-8000-000000000002','f6a22000-0000-4000-8000-0000000000a1')
+      where grant_origin like 'position_responsibility:%') then
+    raise exception '[FAIL] dois links ativos foram aceitos pela responsabilidade';
+  end if;
+  raise notice '[PASS] dois links ativos para colaboradores distintos resultam em DENY da responsabilidade';
+end $$;
+rollback;
 reset role;
