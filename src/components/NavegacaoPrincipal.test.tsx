@@ -120,6 +120,8 @@ describe("NavegacaoPrincipal — gates soberanos", () => {
       "settings.manage",
     ]) expect(menuFonte).toContain(`possui("${capability}")`);
     expect(menuFonte).toContain("listarCapabilitiesEfetivas");
+    expect(menuFonte).toContain("listarEscoposMinhaEquipe");
+    expect(menuFonte).toContain('snapshot.escoposMinhaEquipe.size > 0');
     expect(menuFonte).not.toContain("perfilPossuiFluxosPropriosAtuais");
     expect(menuFonte).not.toContain("report.view");
     expect(menuFonte).not.toContain("can(");

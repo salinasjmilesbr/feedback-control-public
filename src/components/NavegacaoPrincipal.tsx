@@ -3,7 +3,10 @@ import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import type { Capability } from "../authorization/Capability";
 import { useAuth } from "../auth/AuthContext";
-import { listarCapabilitiesEfetivas } from "../services/capabilitiesSoberanas";
+import {
+  listarCapabilitiesEfetivas,
+  listarEscoposMinhaEquipe,
+} from "../services/capabilitiesSoberanas";
 import {
   lerAutorizacaoEstrutural,
   SEM_AUTORIZACAO_ESTRUTURAL,
@@ -117,15 +120,20 @@ function NavegacaoPrincipal({
   const [snapshot, setSnapshot] = useState<{
     organizationId: string | null;
     capabilities: ReadonlySet<Capability>;
-  }>({ organizationId: null, capabilities: new Set() });
+    escoposMinhaEquipe: ReadonlySet<string>;
+  }>({ organizationId: null, capabilities: new Set(), escoposMinhaEquipe: new Set() });
   useEffect(() => {
     let vigente = true;
     if (organizacaoAtivaId) {
-      void listarCapabilitiesEfetivas(organizacaoAtivaId).then((items) => {
+      void Promise.all([
+        listarCapabilitiesEfetivas(organizacaoAtivaId),
+        listarEscoposMinhaEquipe(organizacaoAtivaId),
+      ]).then(([items, escopos]) => {
         if (vigente) {
           setSnapshot({
             organizationId: organizacaoAtivaId,
             capabilities: new Set(items),
+            escoposMinhaEquipe: new Set(escopos),
           });
         }
       });
@@ -191,12 +199,16 @@ function NavegacaoPrincipal({
     autorizacao.organizationId === organizacaoAtivaId ? autorizacao.valor : null;
   const podeAdministrarEstrutura = autorizacaoVigente?.podeEstrutura === true;
   const podeAdministrarCatalogos = autorizacaoVigente?.podeCatalogo === true;
+  const podeMinhaEquipe =
+    snapshot.organizationId === organizacaoAtivaId &&
+    snapshot.capabilities.has("collaborator.read") &&
+    snapshot.escoposMinhaEquipe.size > 0;
 
   return (
     <nav className="app-nav" aria-label="Navegação principal">
       <div className="app-nav__inner">
         <NavItem to="/" end icon={<IconHome />}>
-          Início
+          {podeMinhaEquipe ? "Minha equipe" : "Início"}
         </NavItem>
 
         {podeAcessarCiclos && (

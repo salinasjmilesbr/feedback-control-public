@@ -24,7 +24,10 @@ import { Link, useNavigate } from "react-router-dom";
 import type { Capability } from "../authorization/Capability";
 import { useAuth } from "../auth/AuthContext";
 import type { CodigoPublico } from "../infrastructure/supabase/colaboradores/contrato";
-import { listarCapabilitiesEfetivas } from "../services/capabilitiesSoberanas";
+import {
+  listarCapabilitiesEfetivas,
+  listarEscoposMinhaEquipe,
+} from "../services/capabilitiesSoberanas";
 import {
   listarColaboradores,
   type ColaboradorSoberano,
@@ -109,7 +112,8 @@ function ColaboradoresPage({
   const [capabilities, setCapabilities] = useState<{
     readonly organizationId: string | null;
     readonly values: ReadonlySet<Capability>;
-  }>({ organizationId: null, values: new Set() });
+    readonly escoposMinhaEquipe: ReadonlySet<string>;
+  }>({ organizationId: null, values: new Set(), escoposMinhaEquipe: new Set() });
   const [depsInjetadas] = useState<DependenciasAcessoColaboradores>(
     () => deps ?? SEM_DEPENDENCIAS
   );
@@ -129,11 +133,15 @@ function ColaboradoresPage({
       };
     }
 
-    void listarCapabilitiesEfetivas(organizacaoAtivaId).then((items) => {
+    void Promise.all([
+      listarCapabilitiesEfetivas(organizacaoAtivaId),
+      listarEscoposMinhaEquipe(organizacaoAtivaId),
+    ]).then(([items, escopos]) => {
       if (!vigente) return;
       setCapabilities({
         organizationId: organizacaoAtivaId,
         values: new Set(items),
+        escoposMinhaEquipe: new Set(escopos),
       });
     });
 
@@ -194,7 +202,9 @@ function ColaboradoresPage({
     organizacaoAtivaId,
     capabilities.organizationId,
     capabilities.values
-  );
+  ) &&
+    (capabilities.escoposMinhaEquipe.size > 0 ||
+      capabilities.values.has("org.structure.manage"));
 
   const termo = busca.trim().toLowerCase();
   const colaboradoresFiltrados = colaboradores.filter((colaborador) => {

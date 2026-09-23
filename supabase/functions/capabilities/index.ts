@@ -52,10 +52,17 @@ Deno.serve(async (req) => {
   });
   if (error) return json({ error: { code: "FORBIDDEN" } }, 403);
 
+  const linhas = (data ?? []) as { capability_code?: unknown; scope_type?: unknown }[];
   const capabilities = [...new Set(
-    ((data ?? []) as { capability_code?: unknown }[])
+    linhas
       .map((row) => typeof row.capability_code === "string" ? capabilityCanonica(row.capability_code) : undefined)
       .filter((code): code is NonNullable<typeof code> => code !== undefined)
   )];
-  return json({ capabilities });
+  const scope_types = [...new Set(
+    linhas
+      .filter((row) => row.capability_code === "collaborator.read" || row.capability_code === "collaborator.create")
+      .map((row) => row.scope_type)
+      .filter((scope): scope is string => scope === "DIRECT_REPORTS" || scope === "DESCENDANTS")
+  )];
+  return json({ capabilities, scope_types });
 });
