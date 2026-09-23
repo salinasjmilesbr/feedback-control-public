@@ -23,6 +23,7 @@ import { instalarLocalStorageEmMemoria } from "../test/localStorageMock";
 import { ORGANIZACAO_TESTE, ProvedorAuthTeste } from "../test/authTeste";
 import type { Colaborador } from "../types/Colaborador";
 import ColaboradoresPage, { type EstadoColaboradores } from "./ColaboradoresPage";
+import paginaFonte from "./ColaboradoresPage.tsx?raw";
 import { podeCriarColaboradorPorCapability } from "./colaboradoresCapabilityGate";
 
 vi.mock("../services/capabilitiesSoberanas", () => ({
@@ -125,6 +126,12 @@ describe("listagem soberana em ColaboradoresPage", () => {
         new Set<Capability>()
       )
     ).toBe(false);
+  });
+
+  it("fecha Novo colaborador sem scope mesmo quando a capability existe", () => {
+    expect(paginaFonte).toContain("listarEscoposMinhaEquipe");
+    expect(paginaFonte).toContain("escoposMinhaEquipe.size > 0");
+    expect(paginaFonte).not.toContain("collaborator.edit");
   });
 
   it("renderiza a projeção devolvida pelo serviço da porta, com UUID no link", async () => {

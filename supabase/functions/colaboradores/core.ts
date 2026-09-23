@@ -646,6 +646,18 @@ export async function colaboradores(
   const alvoId = alvoDaDecisao(entrada, contexto);
   let decisao: { readonly permitido: boolean; readonly code?: CodigoPublico };
   if (ehOperacaoFuncional(operacao)) {
+    // P4: a criacao enderecada a uma posicao ainda vaga nao possui colaborador
+    // alvo. A prova de scope e de vacancia ocorre na RPC soberana; aqui apenas
+    // exigimos a capability efetiva antes de tocar a fronteira privilegiada.
+    if (operacao === "collaborator.criar" && "position_id" in entrada && entrada.position_id) {
+      const linhas = await deps.resolverCapabilitiesEfetivas({
+        actorUserProfileId: callerId,
+        organizationId: contexto.organizationId,
+      });
+      decisao = linhas.some((linha) => linha.capability_code === "collaborator.create")
+        ? { permitido: true }
+        : { permitido: false, code: "FORBIDDEN" };
+    } else {
     // Operação FUNCIONAL sem âncora soberana (ator sem vínculo F5-02): não há
     // recurso autorizável ⇒ fail-closed, sem recurso fictício e sem tocar a RPC.
     decisao = alvoId
@@ -658,6 +670,7 @@ export async function colaboradores(
           deps
         )
       : { permitido: false, code: "FORBIDDEN" };
+    }
   } else {
     // D19: a capability exigida vem do MAPA EXPLÍCITO do contrato. Operação
     // fora do plano administrativo (ou desconhecida) ⇒ fail-closed: nenhuma

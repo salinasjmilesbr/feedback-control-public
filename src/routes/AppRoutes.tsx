@@ -22,6 +22,7 @@ import RedefinirSenhaPage from "../auth/RedefinirSenhaPage";
 import ConvidarUsuarioPage from "../auth/ConvidarUsuarioPage";
 
 import InicioPage from "../pages/InicioPage";
+import ColaboradoresPage from "../pages/ColaboradoresPage";
 import MinhaAvaliacaoPage from "../pages/MinhaAvaliacaoPage";
 import MinhaAvaliacaoDetalhePage from "../pages/MinhaAvaliacaoDetalhePage";
 import CiclosAvaliacaoPage from "../pages/CiclosAvaliacaoPage";
@@ -120,6 +121,8 @@ function AppRoutes() {
         <Route element={<LayoutAutenticado />}>
           <Route element={<LayoutFuncional />}>
             <Route index element={<InicioPage />} />
+
+            <Route path="/colaboradores" element={<ColaboradoresPage />} />
 
             <Route
               path="/convidar-usuario"

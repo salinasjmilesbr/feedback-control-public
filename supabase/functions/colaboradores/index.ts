@@ -152,7 +152,19 @@ Deno.serve(async (req) => {
         }
 
       case "collaborator.criar":
-        return admin.rpc("colaborador_criar", {
+        return execucao.entrada.position_id
+          ? admin.rpc("colaborador_criar_no_escopo", {
+          p_organization_id: org,
+          p_actor_user_profile_id: ator,
+          p_operation_id: execucao.entrada.operation_id,
+          p_position_id: execucao.entrada.position_id,
+          p_full_name: execucao.entrada.full_name,
+          p_email: execucao.entrada.email,
+          p_matricula: execucao.entrada.matricula,
+          p_admission_date: execucao.entrada.admission_date ?? null,
+          p_status_inicial: execucao.entrada.status_inicial ?? "active",
+        })
+        : admin.rpc("colaborador_criar", {
           p_organization_id: org,
           p_actor_user_profile_id: ator,
           p_operation_id: execucao.entrada.operation_id,

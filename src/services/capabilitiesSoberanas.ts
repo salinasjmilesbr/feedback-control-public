@@ -15,3 +15,19 @@ export async function listarCapabilitiesEfetivas(
     (value): value is Capability => typeof value === "string"
   );
 }
+
+export async function listarEscoposMinhaEquipe(
+  organizationId: string
+): Promise<readonly ("DIRECT_REPORTS" | "DESCENDANTS")[]> {
+  const cliente = criarClienteSupabase();
+  if (!cliente || !organizationId) return [];
+  const { data, error } = await cliente.functions.invoke<{ scope_types?: unknown }>(
+    "capabilities",
+    { body: { organization_id: organizationId } }
+  );
+  if (error || !data || !Array.isArray(data.scope_types)) return [];
+  return data.scope_types.filter(
+    (value): value is "DIRECT_REPORTS" | "DESCENDANTS" =>
+      value === "DIRECT_REPORTS" || value === "DESCENDANTS"
+  );
+}

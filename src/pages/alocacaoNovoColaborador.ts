@@ -345,6 +345,7 @@ export async function criarColaboradorComAlocacao(
       statusInicial: entrada.dados.statusInicial,
       operationId: entrada.operationIdCadastro,
       ...(entrada.organizationId ? { organizationId: entrada.organizationId } : {}),
+      ...(entrada.alocacao ? { positionId: entrada.alocacao.posicaoId } : {}),
     },
     deps
   );

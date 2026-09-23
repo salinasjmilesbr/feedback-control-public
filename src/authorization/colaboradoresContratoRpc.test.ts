@@ -624,6 +624,7 @@ const assinaturas = assinaturasDasMigrations([
 const rpcsDeclaradas: readonly string[] = [
   ...Object.values(CONTRATO_EDGE_RPC).map((contrato) => contrato.rpc),
   ...Object.keys(CONTRATO_RPCS_DE_CONTEXTO),
+  "colaborador_criar_no_escopo",
 ];
 
 function chamadaDe(rpc: string): ChamadaRpc | undefined {
@@ -734,7 +735,11 @@ describe("F5-07 — argumentos conferem com a ASSINATURA REAL das migrations", (
 
 describe("F5-07 — matrícula NUNCA é identidade de escrita", () => {
   it("somente `colaborador_criar` (dado) e `colaborador_resolver_matricula` (ponte) enviam matrícula", () => {
-    const permitidas = ["colaborador_criar", "colaborador_resolver_matricula"];
+    const permitidas = [
+      "colaborador_criar",
+      "colaborador_criar_no_escopo",
+      "colaborador_resolver_matricula",
+    ];
     const infratoras = chamadas
       .filter(
         (chamada) =>

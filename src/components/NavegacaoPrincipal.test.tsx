@@ -69,6 +69,7 @@ describe("NavegacaoPrincipal — gates soberanos", () => {
     const html = renderizar();
 
     expect(html).toContain("Início");
+    expect(html).not.toContain("Minha equipe");
     expect(html).not.toContain("Unidades");
     expect(html).not.toContain("Posições");
     expect(html).not.toContain("Colegiado");
@@ -120,6 +121,10 @@ describe("NavegacaoPrincipal — gates soberanos", () => {
       "settings.manage",
     ]) expect(menuFonte).toContain(`possui("${capability}")`);
     expect(menuFonte).toContain("listarCapabilitiesEfetivas");
+    expect(menuFonte).toContain("listarEscoposMinhaEquipe");
+    expect(menuFonte).toContain('snapshot.escoposMinhaEquipe.size > 0');
+    expect(menuFonte).toContain('to="/colaboradores"');
+    expect(menuFonte).toContain('to="/" end');
     expect(menuFonte).not.toContain("perfilPossuiFluxosPropriosAtuais");
     expect(menuFonte).not.toContain("report.view");
     expect(menuFonte).not.toContain("can(");

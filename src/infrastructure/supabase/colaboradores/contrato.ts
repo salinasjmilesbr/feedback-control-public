@@ -260,6 +260,8 @@ export interface EntradaCriar {
   readonly matricula: string;
   readonly admission_date?: string;
   readonly status_inicial?: "active" | "leave";
+  /** P4: posição vaga pretendida para criação limitada ao escopo. */
+  readonly position_id?: string;
   readonly alvo: AlvoColaborador;
 }
 
@@ -1034,6 +1036,14 @@ export function validarEntradaColaborador(corpo: unknown): ResultadoValidacaoCol
         status_inicial = cru.status_inicial as StatusInicial;
       }
 
+      let position_id: string | undefined;
+      if (cru.position_id !== undefined && cru.position_id !== null) {
+        if (!ehUuid(cru.position_id)) {
+          return { ok: false, code: "INVALID_INPUT", message: "position_id inválido." };
+        }
+        position_id = cru.position_id;
+      }
+
       return {
         ok: true,
         entrada: {
@@ -1044,6 +1054,7 @@ export function validarEntradaColaborador(corpo: unknown): ResultadoValidacaoCol
           matricula: matriculaNormalizada,
           ...(admission_date ? { admission_date } : {}),
           ...(status_inicial ? { status_inicial } : {}),
+          ...(position_id ? { position_id } : {}),
           alvo: { type: "collaborator", id: ID_NEUTRO },
         },
       };
