@@ -267,6 +267,32 @@ Deno.serve(async (req) => {
           p_motivo: execucao.entrada.motivo,
         });
 
+      case "estrutura.people_management.criar":
+        return admin.rpc("estrutura_responsabilidade_criar", {
+          p_organization_id: org,
+          p_position_id: execucao.entrada.position_id,
+          p_responsibility_code: execucao.entrada.responsibility_code,
+          p_valid_from: execucao.entrada.valid_from,
+          p_valid_to: execucao.entrada.valid_to,
+          p_operation_id: execucao.entrada.operation_id,
+          p_actor_user_profile_id: ator,
+        });
+
+      case "estrutura.people_management.encerrar":
+        return admin.rpc("estrutura_responsabilidade_revogar", {
+          p_responsibility_id: execucao.entrada.responsibility_id,
+          p_valid_to: execucao.entrada.valid_to,
+          p_expected_version: execucao.entrada.expected_version,
+          p_operation_id: execucao.entrada.operation_id,
+          p_actor_user_profile_id: ator,
+        });
+
+      case "estrutura.people_management.consultar":
+        return admin.rpc("estrutura_responsabilidades_consultar", {
+          p_organization_id: org,
+          p_actor_user_profile_id: ator,
+        });
+
       case "estrutura.sucessao.registrar":
         // RPC JÁ EXISTENTE (F3-09/F4-08) — nenhuma função nova de sucessão.
         // `p_author_user_profile_id` = ator VERIFICADO (autoria soberana).

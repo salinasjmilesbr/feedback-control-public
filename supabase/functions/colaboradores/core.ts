@@ -62,6 +62,9 @@ import {
   type EntradaEncerrarOcupacao,
   type EntradaEncerrarReporting,
   type EntradaEncerrarResponsabilidade,
+  type EntradaPeopleManagementCriar,
+  type EntradaPeopleManagementEncerrar,
+  type EntradaPeopleManagementConsultar,
   type EntradaHistorico,
   type EntradaListar,
   type EntradaObter,
@@ -195,6 +198,18 @@ export type OperacaoExecutavel =
       readonly operacao: "estrutura.responsabilidade.encerrar";
       readonly entrada: EntradaEncerrarResponsabilidade;
     }
+  | {
+      readonly operacao: "estrutura.people_management.criar";
+      readonly entrada: EntradaPeopleManagementCriar;
+    }
+  | {
+      readonly operacao: "estrutura.people_management.encerrar";
+      readonly entrada: EntradaPeopleManagementEncerrar;
+    }
+  | {
+      readonly operacao: "estrutura.people_management.consultar";
+      readonly entrada: EntradaPeopleManagementConsultar;
+    }
   | { readonly operacao: "estrutura.sucessao.registrar"; readonly entrada: EntradaRegistrarSucessao }
   | { readonly operacao: "colaborador.historico.listar"; readonly entrada: EntradaHistorico }
   | {
@@ -313,6 +328,11 @@ export function codigoDeErroRpc(erro: ErroRpcColaborador | null | undefined): Co
   if (assinatura.includes("F5_08_NOT_FOUND")) return "NOT_FOUND";
   if (assinatura.includes("F5_08_CONFLICT")) return "CONFLICT";
   if (assinatura.includes("F5_08_INVALID_INPUT")) return "INVALID_INPUT";
+
+  if (assinatura.includes("F6_A22_FORBIDDEN")) return "FORBIDDEN";
+  if (assinatura.includes("F6_A22_NOT_FOUND")) return "NOT_FOUND";
+  if (assinatura.includes("F6_A22_CONFLICT")) return "CONFLICT";
+  if (assinatura.includes("F6_A22_INVALID_INPUT")) return "INVALID_INPUT";
 
   // Integridade do banco (23503 FK, 23514 check, 23505 unique, 23P01 exclusion)
   // é conflito de DOMÍNIO — a operação foi autorizada e o estado recusou.
@@ -559,7 +579,11 @@ function projetarResultado(
   if (operacao === "collaborator.obter" && (valor === null || valor === undefined)) {
     return { ok: false, code: "NOT_FOUND" };
   }
-  if (operacao === "collaborator.listar" || operacao === "colaborador.historico.listar") {
+  if (
+    operacao === "collaborator.listar" ||
+    operacao === "colaborador.historico.listar" ||
+    operacao === "estrutura.people_management.consultar"
+  ) {
     return { ok: true, resultado: Array.isArray(valor) ? valor : [] };
   }
   if (valor === null || valor === undefined) {
