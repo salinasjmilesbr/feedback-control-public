@@ -41,7 +41,7 @@ const ESTADOS: readonly (readonly [EstadoSessao, DecisaoRotaPlataforma["tipo"]])
   ],
   [
     { status: "acessoNegado", erro: { code: "ACCESS_NOT_PROVISIONED", category: "authentication", message: "x" } },
-    "permitir",
+    "bloquear",
   ],
   [{ status: "plataforma", sessao }, "permitir"],
   [{ status: "naoAutenticado" }, "redirecionarLogin"],
@@ -68,7 +68,14 @@ describe("F6-A03 — guard de plataforma: decisão por estado", () => {
     // Os quatro estados de sessão VIVA são exatamente os admitidos.
     expect(
       ESTADOS.filter(([, esperado]) => esperado === "permitir").map(([estado]) => estado.status)
-    ).toEqual(["autenticado", "semOrganizacao", "aguardandoSelecao", "acessoNegado", "plataforma"]);
+    ).toEqual(["autenticado", "semOrganizacao", "aguardandoSelecao", "plataforma"]);
+  });
+
+  it("bloqueia acessoNegado mesmo com sessao Auth existente", () => {
+    expect(decidirAcessoARotaDePlataforma({
+      status: "acessoNegado",
+      erro: { code: "ACCESS_NOT_PROVISIONED", category: "authentication", message: "x" },
+    })).toEqual({ tipo: "bloquear" });
   });
 
   it("bloqueia fail-closed quando a sessão não é confirmável", () => {
