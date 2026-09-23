@@ -71,6 +71,7 @@ export type EstadoSessao =
   | { status: "primeiroAcessoPendente"; sessao: SessaoAuth; identidade: IdentidadeResolvida }
   | { status: "sessaoIndisponivel" }
   | { status: "acessoNegado"; erro: PublicApplicationError }
+  | { status: "plataforma"; sessao: SessaoAuth }
   | { status: "indisponivel" }
   | { status: "sessaoExpirada"; motivo: MotivoExpiracaoSessao };
 
@@ -95,6 +96,8 @@ export interface DependenciasControladorSessao {
   relogio?: () => number;
   /** F2-08: marcador persistente do início da sessão por usuário (opcional). */
   inicioSessao?: ArmazenamentoInicioSessao;
+  /** Sonda server-side; nunca recebe autoridade do cliente ou do corpo. */
+  verificarOperadorPlataforma?: () => Promise<boolean>;
 }
 
 export function criarControladorSessao(
@@ -243,6 +246,21 @@ export function criarControladorSessao(
       }
     } catch (erro) {
       if (gen !== geracao) return;
+      // A ausência de user_profiles não invalida a sessão Auth. O único
+      // caminho alternativo é a sonda server-side de plataforma, que falha
+      // fechado e não cria identidade tenant.
+      if (deps.verificarOperadorPlataforma) {
+        const operador = await Promise.resolve()
+          .then(() => deps.verificarOperadorPlataforma!())
+          .catch(() => false);
+        if (gen !== geracao) return;
+        if (operador) {
+          sessaoOperante = true;
+          ultimaAtividadeMs = agoraMs();
+          notificar({ status: "plataforma", sessao });
+          return;
+        }
+      }
       sessaoOperante = false;
       notificar({ status: "acessoNegado", erro: toPublicError(erro) });
     }
