@@ -290,7 +290,12 @@ declare
     'evaluation_cycle_goal_limits',
     'evaluation_observations','evaluation_observation_events',
     -- F6-A03 (Issue #266): trilha do plano de plataforma (deny-by-default integral).
-    'platform_provisioning_events'];
+    'platform_provisioning_events',
+    -- F6-A22 P1 (#338): tabelas autorizativas deny-by-default.
+    'organizational_position_responsibilities',
+    'organizational_position_responsibilities_catalog',
+    'organizational_position_responsibility_bundle',
+    'organizational_position_responsibility_events'];
   v_privs text[] := array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'];
 begin
   foreach v_tab in array v_todos loop
@@ -333,7 +338,11 @@ declare
     'evaluation_goals','evaluation_goal_approvals','evaluation_goal_events',
     'evaluation_cycle_goal_limits',
     'evaluation_observations','evaluation_observation_events',
-    'platform_provisioning_events'];
+    'platform_provisioning_events',
+    'organizational_position_responsibilities',
+    'organizational_position_responsibilities_catalog',
+    'organizational_position_responsibility_bundle',
+    'organizational_position_responsibility_events'];
 begin
   foreach v_tab in array v_todos loop
     foreach v_priv in array v_dml loop
@@ -371,6 +380,11 @@ declare v_tab text;
     'evaluation_goal_events','evaluation_cycle_goal_limits',
     'evaluation_observations','evaluation_observation_events',
     'platform_provisioning_events',
+    -- F6-A22 P1 (#338): leitura estrutural/autorizativa permanece fechada.
+    'organizational_position_responsibilities',
+    'organizational_position_responsibilities_catalog',
+    'organizational_position_responsibility_bundle',
+    'organizational_position_responsibility_events',
     -- F6-A21 P3 (#327): leitura estrutural antiga FECHADA (ver bloco anterior).
     'collaborators','job_roles','seniority_levels','organizational_units',
     'organizational_unit_parent_periods','organizational_positions',
@@ -435,11 +449,15 @@ begin
       -- F6-A03 (Issue #266): trilha do plano de plataforma entra no inventario
       -- D16 (catalogacao explicita obrigatoria) e na categoria deny-by-default
       -- integral.
-      'platform_provisioning_events');
+      'platform_provisioning_events',
+      'organizational_position_responsibilities',
+      'organizational_position_responsibilities_catalog',
+      'organizational_position_responsibility_bundle',
+      'organizational_position_responsibility_events');
   if v_t is not null then
     raise exception '[FAIL] tabela public nao classificada (D16 — catalogacao explicita obrigatoria): %', v_t;
   end if;
-  raise notice '[PASS] todas as 52 tabelas public estao explicitamente classificadas (D16)';
+  raise notice '[PASS] todas as tabelas public estao explicitamente classificadas (D16)';
 end $$;
 
 do $$
@@ -877,7 +895,7 @@ end $$;
 
 do $$
 declare v_t text; v_ok boolean;
-  v_closed text[] := array['access_roles','access_role_capabilities','membership_access_role_assignments','membership_collaborator_links','access_role_assignment_scopes','access_role_assignment_unit_targets','evaluation_succession_events','privilege_mutation_audit','evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria','evaluation_config_scale_bands','evaluation_config_participant_roles','evaluations','evaluation_participants','evaluation_scores','evaluation_comments','evaluation_events','evaluation_pendencies','evaluation_aggregates','collaborator_events','cycle_events','evaluation_goals','evaluation_goal_approvals','evaluation_goal_events','evaluation_cycle_goal_limits','evaluation_observations','evaluation_observation_events','platform_provisioning_events','collaborators','job_roles','seniority_levels','organizational_units','organizational_unit_parent_periods','organizational_positions','position_reporting_lines','occupations','collegiate_configurations','collegiate_configuration_members','collaborator_status_periods'];
+  v_closed text[] := array['access_roles','access_role_capabilities','membership_access_role_assignments','membership_collaborator_links','access_role_assignment_scopes','access_role_assignment_unit_targets','evaluation_succession_events','privilege_mutation_audit','evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria','evaluation_config_scale_bands','evaluation_config_participant_roles','evaluations','evaluation_participants','evaluation_scores','evaluation_comments','evaluation_events','evaluation_pendencies','evaluation_aggregates','collaborator_events','cycle_events','evaluation_goals','evaluation_goal_approvals','evaluation_goal_events','evaluation_cycle_goal_limits','evaluation_observations','evaluation_observation_events','platform_provisioning_events','organizational_position_responsibilities','organizational_position_responsibilities_catalog','organizational_position_responsibility_bundle','organizational_position_responsibility_events','collaborators','job_roles','seniority_levels','organizational_units','organizational_unit_parent_periods','organizational_positions','position_reporting_lines','occupations','collegiate_configurations','collegiate_configuration_members','collaborator_status_periods'];
 begin
   foreach v_t in array v_closed loop
     v_ok := false;
