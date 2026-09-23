@@ -79,6 +79,24 @@ configuração manual de tabelas no dashboard, projeto remoto, credenciais ou
 dados reais. Tudo que o rebuild precisa está versionado neste diretório
 (`config.toml`, `migrations/` e `seed.sql`).
 
+### Bootstrap local do Admin Virtus
+
+O `seed.sql` permanece técnico e não cria identidade de plataforma. Depois de
+um banco local limpo, crie somente o operador local com o script idempotente:
+
+```powershell
+$env:VIRTUS_LOCAL_ADMIN_EMAIL = 'admin.virtus@example.invalid'
+$env:VIRTUS_LOCAL_ADMIN_PASSWORD = 'uma-senha-local-com-12-ou-mais-caracteres'
+powershell.exe -NoProfile -File supabase/local/bootstrap-platform-admin.ps1
+```
+
+O script exige o projeto `feedback-control`, confirma que o UUID do operador
+está na allowlist local e escreve exclusivamente em `auth.users` e
+`auth.identities`. E-mail e senha são fornecidos somente em runtime; não os
+versione nem use dados reais. O fingerprint funcional é comparado antes/depois
+para comprovar que nenhuma organização, membership, colaborador ou posição foi
+criada. Reexecute o mesmo comando após qualquer recriação do banco.
+
 A CLI é fixada em **2.116.0** em todos os comandos. O npx usa seu cache de
 ferramentas; não adiciona a CLI ou o cliente Supabase ao package.json/lockfile
 da aplicação.
