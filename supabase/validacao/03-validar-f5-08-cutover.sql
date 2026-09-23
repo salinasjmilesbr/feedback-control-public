@@ -65,6 +65,10 @@ declare
     'collaborators','job_roles','seniority_levels','organizational_units',
     'organizational_unit_parent_periods','organizational_positions',
     'position_reporting_lines','occupations','collegiate_configurations',
+    'organizational_position_responsibilities',
+    'organizational_position_responsibilities_catalog',
+    'organizational_position_responsibility_bundle',
+    'organizational_position_responsibility_events',
     'collegiate_configuration_members','collaborator_status_periods'];
   v_tab text;
   v_ok boolean;
@@ -102,7 +106,7 @@ begin
     raise exception '[FAIL] P6-1: leitura own-tenant vazia ou parcial (unidades=%) — prova vacuamente verde', v_unidades;
   end if;
 
-  raise notice '[PASS] P6-1: leitura direta FECHADA nas 11 tabelas estruturais e leitura soberana pela view administrativa do PROPRIO tenant (% unidades, zero de Beta)', v_unidades;
+  raise notice '[PASS] P6-1: leitura direta FECHADA nas 15 tabelas estruturais e leitura soberana pela view administrativa do PROPRIO tenant (% unidades, zero de Beta)', v_unidades;
 end $$;
 
 reset role;
@@ -235,6 +239,10 @@ declare
     'collaborators','job_roles','seniority_levels','organizational_units',
     'organizational_unit_parent_periods','organizational_positions',
     'position_reporting_lines','occupations','collegiate_configurations',
+    'organizational_position_responsibilities',
+    'organizational_position_responsibilities_catalog',
+    'organizational_position_responsibility_bundle',
+    'organizational_position_responsibility_events',
     'collegiate_configuration_members','collaborator_status_periods'];
   v_legiveis text[] := array[
     'collaborator_identifiers','temporary_responsibilities',
@@ -355,7 +363,7 @@ begin
     raise exception '[FAIL] P6-3: structure_events sem trigger append-only BEFORE UPDATE';
   end if;
 
-  raise notice '[PASS] P6-3: 11 tabelas estruturais FECHADAS (zero policy, zero privilegio), 6 legiveis remanescentes com policy own-tenant, 3 views como superficie de leitura, zero DML para anon/authenticated e trilha structure_events fechada/append-only';
+  raise notice '[PASS] P6-3: 15 tabelas estruturais FECHADAS (zero policy, zero privilegio), 6 legiveis remanescentes com policy own-tenant, 3 views como superficie de leitura, zero DML para anon/authenticated e trilha structure_events fechada/append-only';
 end $$;
 
 -- ============================================================================
@@ -577,6 +585,9 @@ declare
   -- qualquer função com advisory lock fora dos dois catálogos.
   v_outras_fn  text[] := array['ciclo_lock_organizacao'];
   v_outras_key text[] := array['evaluation_cycles:'];
+  v_responsabilidade_fn text[] := array[
+    'estrutura_responsabilidade_criar','estrutura_responsabilidade_revogar'];
+  v_responsabilidade_key text[] := array['position_responsibilities:','position_responsibilities:'];
   v_i int;
   v_n int;
   v_lista text;
@@ -607,7 +618,35 @@ begin
     end if;
   end loop;
 
-  -- (2) FAMÍLIAS NÃO ESTRUTURAIS catalogadas: usam a PRÓPRIA chave normativa e
+  -- (2b) Família P3 de responsabilidades: chave própria, distinta da família
+  --      estrutural de reporting e das demais famílias catalogadas.
+  for v_i in 1..array_length(v_responsabilidade_fn, 1) loop
+    select count(*) into v_n
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public' and p.proname = v_responsabilidade_fn[v_i]
+       and p.prosrc like '%pg_advisory_xact_lock%'
+       and position(v_responsabilidade_key[v_i] in p.prosrc) > 0;
+    if v_n <> 1 then
+      raise exception
+        '[FAIL] P6-6: funcao P3 % nao usa a chave normativa declarada (%)',
+        v_responsabilidade_fn[v_i], v_responsabilidade_key[v_i];
+    end if;
+
+    if exists (
+      select 1
+        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = v_responsabilidade_fn[v_i]
+         and (position('position_reporting_lines:' in p.prosrc) > 0
+              or position('evaluation_cycles:' in p.prosrc) > 0
+              or position('f5_07_estrutura:' in p.prosrc) > 0)
+    ) then
+      raise exception
+        '[FAIL] P6-6: funcao P3 % reutiliza chave de outra familia',
+        v_responsabilidade_fn[v_i];
+    end if;
+  end loop;
+
+  -- (3) FAMÍLIAS NÃO ESTRUTURAIS catalogadas: usam a PRÓPRIA chave normativa e
   --     NUNCA a chave estrutural (reuso cruzado quebraria a serializacao).
   for v_i in 1..array_length(v_outras_fn, 1) loop
     select count(*) into v_n
@@ -633,7 +672,7 @@ begin
     end if;
   end loop;
 
-  -- (3) FECHAMENTO: nenhuma função com advisory lock pode ficar fora dos dois
+  -- (4) FECHAMENTO: nenhuma função com advisory lock pode ficar fora dos
   --     catálogos. Uma função nova (de qualquer família) só passa se a sua
   --     família e a sua chave normativa forem catalogadas EXPLICITAMENTE aqui.
   select count(*), string_agg(p.proname, ', ' order by p.proname)
@@ -641,14 +680,16 @@ begin
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public'
      and p.prosrc like '%pg_advisory_xact_lock%'
-     and not (p.proname = any(v_estruturais) or p.proname = any(v_outras_fn));
+      and not (p.proname = any(v_estruturais)
+               or p.proname = any(v_responsabilidade_fn)
+               or p.proname = any(v_outras_fn));
   if v_n <> 0 then
     raise exception
       '[FAIL] P6-6: funcao com advisory lock sem familia/chave catalogada: % (catalogue a familia e a chave normativa)',
       v_lista;
   end if;
 
-  -- (4) Serialização não pode viver em função SECURITY DEFINER (bypass de RLS)
+  -- (5) Serialização não pode viver em função SECURITY DEFINER (bypass de RLS)
   --     — vale para TODAS as funções com lock, de qualquer família.
   select count(*), string_agg(p.proname, ', ' order by p.proname)
     into v_n, v_lista
@@ -660,7 +701,7 @@ begin
     raise exception '[FAIL] P6-6: serializacao em funcao SECURITY DEFINER: %', v_lista;
   end if;
 
-  -- (5) Não vacuidade: a família estrutural realmente serializa com a chave
+  -- (6) Não vacuidade: a família estrutural realmente serializa com a chave
   --     normativa (RPCs + triggers) — a prova não pode passar vazia.
   select count(*) into v_n
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -672,8 +713,8 @@ begin
       '[FAIL] P6-6: apenas % funcoes ESTRUTURAIS serializam com a chave D24 (esperado >= 15)', v_n;
   end if;
 
-  raise notice '[PASS] P6-6: % funcoes ESTRUTURAIS com a chave unica D24 (position_reporting_lines:<org>) e % funcao(oes) de outra familia com chave normativa propria catalogada, todas SECURITY INVOKER',
-    v_n, array_length(v_outras_fn, 1);
+  raise notice '[PASS] P6-6: % funcoes ESTRUTURAIS com a chave unica D24 (position_reporting_lines:<org>), % funcoes P3 e % funcao(oes) de outra familia com chave normativa propria catalogada, todas SECURITY INVOKER',
+    v_n, array_length(v_responsabilidade_fn, 1), array_length(v_outras_fn, 1);
 end $$;
 
 -- ============================================================================

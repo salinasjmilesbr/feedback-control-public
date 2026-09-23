@@ -169,6 +169,28 @@ const CASOS_VALIDOS: ReadonlyArray<readonly [string, Corpo]> = [
     },
   ],
   [
+    "estrutura.people_management.criar",
+    {
+      organization_id: ORG,
+      operation_id: OPERACAO_ID,
+      position_id: POSICAO,
+      responsibility_code: "PEOPLE_MANAGEMENT",
+      valid_from: VALID_FROM,
+      valid_to: null,
+    },
+  ],
+  [
+    "estrutura.people_management.encerrar",
+    {
+      organization_id: ORG,
+      operation_id: OPERACAO_ID,
+      responsibility_id: RESPONSABILIDADE,
+      valid_to: VALID_TO,
+      expected_version: 1,
+    },
+  ],
+  ["estrutura.people_management.consultar", { organization_id: ORG }],
+  [
     "estrutura.sucessao.registrar",
     {
       organization_id: ORG,
@@ -282,7 +304,8 @@ const MUTACOES: readonly OperacaoColaborador[] = OPERACOES_COLABORADOR.filter(
   (operacao) =>
     operacao !== "collaborator.listar" &&
     operacao !== "collaborator.obter" &&
-    operacao !== "colaborador.historico.listar"
+    operacao !== "colaborador.historico.listar" &&
+    operacao !== "estrutura.people_management.consultar"
 );
 
 /** Operações que exigem `expected_version` (linha existente §13.1). */
@@ -298,6 +321,7 @@ const COM_VERSAO: readonly OperacaoColaborador[] = [
   "catalogo.cargo.status.alterar",
   "catalogo.senioridade.renomear",
   "catalogo.senioridade.status.alterar",
+  "estrutura.people_management.encerrar",
 ];
 
 /** Operações que exigem `motivo` (trim, não vazio). */
@@ -336,7 +360,7 @@ describe("F5-07 contrato.ts — payloads válidos das 15 operações", () => {
     const cobertas = new Set(
       CASOS_VALIDOS.map(([nome]) => nome.split(" ")[0] as OperacaoColaborador)
     );
-    expect(cobertas.size).toBe(30);
+    expect(cobertas.size).toBe(33);
     expect([...cobertas].sort()).toEqual([...OPERACOES_COLABORADOR].sort());
   });
 
