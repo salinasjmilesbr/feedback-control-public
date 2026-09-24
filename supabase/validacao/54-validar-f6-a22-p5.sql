@@ -24,13 +24,9 @@ end $$;
 do $$
 declare v_def text;
 begin
-  select pg_get_functiondef('public.colaborador_criar_no_escopo(uuid,uuid,uuid,uuid,text,text,text,date,text)'::regprocedure)
-    into v_def;
-  if position('g.scope_type = ''DIRECT_REPORTS'' and a.depth = 1' in v_def) = 0
-     or position('g.scope_type = ''DESCENDANTS'' and a.depth > 0' in v_def) = 0 then
-    raise exception '[FAIL] DIRECT_REPORTS/DESCENDANTS foram alterados';
+  if to_regprocedure('public.colaborador_criar_no_escopo(uuid,uuid,uuid,uuid,text,text,text,date,text)') is null then
+    raise exception '[FAIL] RPC de criacao nao encontrada';
   end if;
-  raise notice '[PASS] DIRECT_REPORTS/DESCENDANTS existentes permanecem efetivos';
 end $$;
 
 do $$
@@ -99,6 +95,14 @@ end $$;
 rollback;
 
 begin;
+insert into public.organizational_positions
+  (id, organization_id, unit_id, job_role_id, seniority_level_id, name, valid_from)
+values ('f6a21000-0000-4000-8000-000000000d08',
+  'f6a21000-0000-4000-8000-0000000000a1',
+  'f6a21000-0000-4000-8000-000000000c01',
+  'f6a21000-0000-4000-8000-000000000b01',
+  'f6a21000-0000-4000-8000-000000000b11',
+  'P5 Sem Capability Vaga', '2026-01-01');
 do $$
 begin
   begin
@@ -106,7 +110,7 @@ begin
       'f6a21000-0000-4000-8000-0000000000a1',
       'f6a21000-0000-4000-8000-000000000002',
       'f3550000-0000-4000-8000-000000000003',
-      'f6a21000-0000-4000-8000-000000000d04',
+      'f6a21000-0000-4000-8000-000000000d08',
       'Sem Cap P5','semcap@example.invalid','P5NOCAP001','2026-01-01','active');
     raise exception '[FAIL] ator sem collaborator.create foi aceito';
   exception when others then
@@ -119,9 +123,70 @@ rollback;
 do $$
 declare v_left integer;
 begin
-  select count(*) into v_left from public.collaborators where matricula is null and full_name like 'P5 %';
+  select count(*) into v_left from public.collaborators where full_name like 'P5 %';
   if v_left <> 0 then raise exception '[FAIL] teste deixou persistencia parcial (%)', v_left; end if;
   raise notice '[PASS] falhas nao deixaram persistencia parcial';
 end $$;
+
+begin;
+insert into public.access_roles (id, name, organization_id, is_system)
+values ('f3550000-0000-4000-8000-000000000020', 'P5 Escopo Sintetico',
+        'f6a21000-0000-4000-8000-0000000000a1', false);
+insert into public.access_role_capabilities (id, access_role_id, capability_id)
+select 'f3550000-0000-4000-8000-000000000021',
+       'f3550000-0000-4000-8000-000000000020', id
+  from public.capabilities where code = 'collaborator.create';
+insert into public.membership_access_role_assignments
+  (id, membership_id, organization_id, access_role_id, status, created_by)
+select 'f3550000-0000-4000-8000-000000000022', id, organization_id,
+       'f3550000-0000-4000-8000-000000000020', 'active',
+       'f6a21000-0000-4000-8000-000000000003'
+  from public.user_organization_memberships
+ where user_profile_id = 'f6a21000-0000-4000-8000-000000000003'
+   and organization_id = 'f6a21000-0000-4000-8000-0000000000a1';
+insert into public.access_role_assignment_scopes
+  (id, assignment_id, organization_id, scope_type, status, created_by)
+values
+ ('f3550000-0000-4000-8000-000000000023','f3550000-0000-4000-8000-000000000022',
+  'f6a21000-0000-4000-8000-0000000000a1','DIRECT_REPORTS','active',
+  'f6a21000-0000-4000-8000-000000000003'),
+ ('f3550000-0000-4000-8000-000000000024','f3550000-0000-4000-8000-000000000022',
+  'f6a21000-0000-4000-8000-0000000000a1','DESCENDANTS','active',
+  'f6a21000-0000-4000-8000-000000000003');
+insert into public.organizational_positions
+  (id, organization_id, unit_id, job_role_id, seniority_level_id, name, valid_from)
+select x.id, 'f6a21000-0000-4000-8000-0000000000a1',
+       'f6a21000-0000-4000-8000-000000000c01',
+       'f6a21000-0000-4000-8000-000000000b01',
+       'f6a21000-0000-4000-8000-000000000b11', x.name, '2026-01-01'
+  from (values
+    ('f6a21000-0000-4000-8000-000000000d91'::uuid, 'P5 Direto Sintetico'),
+    ('f6a21000-0000-4000-8000-000000000d92'::uuid, 'P5 Descendente Sintetico')) x(id, name);
+insert into public.position_reporting_lines
+  (id, organization_id, subordinate_position_id, manager_position_id, reason, valid_from)
+values
+ ('f3550000-0000-4000-8000-000000000025','f6a21000-0000-4000-8000-0000000000a1',
+  'f6a21000-0000-4000-8000-000000000d91','f6a21000-0000-4000-8000-000000000d01',
+  'P5 teste direto','2026-01-01'),
+ ('f3550000-0000-4000-8000-000000000026','f6a21000-0000-4000-8000-0000000000a1',
+  'f6a21000-0000-4000-8000-000000000d92','f6a21000-0000-4000-8000-000000000d91',
+  'P5 teste descendente','2026-01-01');
+do $$
+begin
+  perform public.colaborador_criar_no_escopo(
+    'f6a21000-0000-4000-8000-0000000000a1','f6a21000-0000-4000-8000-000000000003',
+    'f3550000-0000-4000-8000-000000000027','f6a21000-0000-4000-8000-000000000d91',
+    'P5 Direct Reports','direct@example.invalid','P5DIRECT001','2026-01-01','active');
+  raise notice '[PASS] DIRECT_REPORTS dentro do alcance = ALLOW';
+end $$;
+do $$
+begin
+  perform public.colaborador_criar_no_escopo(
+    'f6a21000-0000-4000-8000-0000000000a1','f6a21000-0000-4000-8000-000000000003',
+    'f3550000-0000-4000-8000-000000000028','f6a21000-0000-4000-8000-000000000d92',
+    'P5 Descendants','desc@example.invalid','P5DESC001','2026-01-01','active');
+  raise notice '[PASS] DESCENDANTS dentro do alcance = ALLOW';
+end $$;
+rollback;
 
 reset role;
