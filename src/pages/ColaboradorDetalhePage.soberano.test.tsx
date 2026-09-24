@@ -216,8 +216,8 @@ function estruturaComAlocacao(): EstruturaSoberana {
     ],
     periodosParent: [],
     posicoes: [
-      { posicaoId: POSICAO, unitId: UNIDADE, jobRoleId: CARGO, seniorityLevelId: null, validFrom: "2026-01-01T00:00:00.000Z", validTo: null, version: 1 },
-      { posicaoId: POSICAO_GESTOR, unitId: UNIDADE, jobRoleId: CARGO, seniorityLevelId: null, validFrom: "2026-01-01T00:00:00.000Z", validTo: null, version: 1 },
+      { posicaoId: POSICAO, nome: "Posicao Ficticia", unitId: UNIDADE, jobRoleId: CARGO, seniorityLevelId: null, validFrom: "2026-01-01T00:00:00.000Z", validTo: null, version: 1 },
+      { posicaoId: POSICAO_GESTOR, nome: "Posicao Gestor Ficticia", unitId: UNIDADE, jobRoleId: CARGO, seniorityLevelId: null, validFrom: "2026-01-01T00:00:00.000Z", validTo: null, version: 1 },
     ],
     reportingLines: [
       {
@@ -352,7 +352,7 @@ describe("detalhe soberano em ColaboradorDetalhePage", () => {
       { fase: "pronto", estrutura: estruturaComAlocacao() }
     );
 
-    expect(html).toContain("Posição vigente: Unidade Fictícia • FICT — Cargo Fictício");
+    expect(html).toContain("Posição vigente: Posicao Ficticia");
     expect(html).toContain("Gestor direto (reporting line): Gestor Fictício");
     expect(html).toContain("Colegiado vigente: Membro Fictício");
     // Somente leitura: a tela não administra estrutura, apenas encaminha.

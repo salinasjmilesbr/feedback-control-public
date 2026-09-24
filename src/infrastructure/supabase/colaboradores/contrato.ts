@@ -49,6 +49,7 @@ export type OperacaoColaborador =
   | "estrutura.unidade.parent.definir"
   | "estrutura.unidade.parent.encerrar"
   | "estrutura.posicao.criar"
+  | "estrutura.posicao.renomear"
   | "estrutura.posicao.encerrar"
   | "estrutura.colegiado.definir"
   | "estrutura.colegiado.encerrar"
@@ -161,6 +162,7 @@ export const DEFINICAO_POR_OPERACAO: Readonly<Record<OperacaoColaborador, Defini
       capability: "org.structure.manage",
     },
     "estrutura.posicao.criar": { gate: "administrativo", capability: "org.structure.manage" },
+    "estrutura.posicao.renomear": { gate: "administrativo", capability: "org.structure.manage" },
     "estrutura.posicao.encerrar": {
       gate: "administrativo",
       capability: "org.structure.manage",
@@ -1608,6 +1610,10 @@ export function validarEntradaColaborador(corpo: unknown): ResultadoValidacaoCol
       if (!senioridade.ok) {
         return { ok: false, code: "INVALID_INPUT", message: "seniorityLevelId inválido." };
       }
+      const nome = typeof cru.nome === "string" ? cru.nome.trim() : "";
+      if (!nome || nome.length > 160) {
+        return { ok: false, code: "INVALID_INPUT", message: "nome da posição inválido." };
+      }
       const validFrom = cru.validFrom === undefined ? null : dataOuInstante(cru.validFrom);
       if (!validFrom) {
         return { ok: false, code: "INVALID_INPUT", message: "validFrom inválido." };
@@ -1622,10 +1628,22 @@ export function validarEntradaColaborador(corpo: unknown): ResultadoValidacaoCol
           unidadeId: cru.unidadeId,
           jobRoleId: cru.jobRoleId,
           seniorityLevelId: senioridade.valor,
+          nome,
           validFrom,
           motivo,
         },
       };
+    }
+
+    case "estrutura.posicao.renomear": {
+      const falta = exigirOperacaoNova() ?? exigirVersaoNova();
+      if (falta) return falta;
+      if (!ehUuid(cru.posicaoId)) return { ok: false, code: "INVALID_INPUT", message: "posicaoId inválido." };
+      const nome = typeof cru.nome === "string" ? cru.nome.trim() : "";
+      if (!nome || nome.length > 160) return { ok: false, code: "INVALID_INPUT", message: "nome da posição inválido." };
+      const motivo = exigirMotivo();
+      if (typeof motivo !== "string") return motivo;
+      return { ok: true, entrada: { organization_id, operationId: operationIdCamel!, posicaoId: cru.posicaoId, nome, expectedVersion: expectedVersionCamel!, motivo } };
     }
 
     case "estrutura.posicao.encerrar": {

@@ -15,7 +15,10 @@
 import type { EstruturaSoberana } from "../infrastructure/supabase/estrutura/repositorioEstruturaSoberana";
 import {
   nomeDoColaborador,
+  nomeDaUnidade,
   ocupanteDaPosicao,
+  rotuloDoCargo,
+  rotuloDaSenioridade,
   rotuloDaPosicao,
 } from "../pages/apoioEstrutura";
 import { posicoesVigentes } from "../pages/alocacaoSoberana";
@@ -53,6 +56,20 @@ function SeletorPosicao({
       (unidadeId === undefined || posicao.unitId === unidadeId)
   );
 
+  const contexto = (posicaoId: string): string => {
+    const posicao = estrutura.posicoes.find((item) => item.posicaoId === posicaoId);
+    if (!posicao) return "—";
+    const senioridade = posicao.seniorityLevelId
+      ? ` (${rotuloDaSenioridade(estrutura, posicao.seniorityLevelId)})`
+      : "";
+    return `${nomeDaUnidade(estrutura, posicao.unitId)} • ${rotuloDoCargo(estrutura, posicao.jobRoleId)}${senioridade}`;
+  };
+  const chaves = new Map<string, number>();
+  for (const posicao of posicoes) {
+    const chave = `${rotuloDaPosicao(estrutura, posicao.posicaoId)}|${contexto(posicao.posicaoId)}`;
+    chaves.set(chave, (chaves.get(chave) ?? 0) + 1);
+  }
+
   return (
     <label className="collaborator-field collaborator-field--wide">
       <span>{rotulo}</span>
@@ -64,6 +81,12 @@ function SeletorPosicao({
       >
         <option value="">{vazio}</option>
         {posicoes.map((posicao) => {
+          const nome = rotuloDaPosicao(estrutura, posicao.posicaoId);
+          const contextoPosicao = contexto(posicao.posicaoId);
+          const chave = `${nome}|${contextoPosicao}`;
+          const sufixoUuid = (chaves.get(chave) ?? 0) > 1
+            ? ` — ${posicao.posicaoId.slice(0, 8)}`
+            : "";
           const ocupanteId = mostrarOcupante
             ? ocupanteDaPosicao(estrutura, posicao.posicaoId)
             : null;
@@ -72,7 +95,7 @@ function SeletorPosicao({
             : "";
           return (
             <option key={posicao.posicaoId} value={posicao.posicaoId}>
-              {`${rotuloDaPosicao(estrutura, posicao.posicaoId)}${complemento}`}
+              {`${nome} — ${contextoPosicao}${sufixoUuid}${complemento}`}
             </option>
           );
         })}

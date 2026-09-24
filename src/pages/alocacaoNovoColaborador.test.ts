@@ -74,6 +74,7 @@ function servicoFalso(
 function posicao(posicaoId: string, validFrom = "2026-01-01T00:00:00.000Z") {
   return {
     posicaoId,
+    nome: "Posicao Ficticia",
     unitId: UNIDADE,
     jobRoleId: CARGO,
     seniorityLevelId: null,

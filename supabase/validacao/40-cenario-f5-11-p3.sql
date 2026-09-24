@@ -90,11 +90,11 @@ insert into public.collaborators (id, organization_id) values
 insert into public.collaborator_status_periods (collaborator_id, status, valid_from) values
   ('f5b3e000-0000-0000-0000-0000000000c1', 'active', '2024-01-01T00:00:00Z');
 
-insert into public.organizational_positions
-  (id, organization_id, unit_id, job_role_id, valid_from) values
-  ('f5b3f000-0000-0000-0000-0000000000e1', 'f5b2a000-0000-0000-0000-0000000000a1',
+insert into public.organizational_positions (
+  id, organization_id, unit_id, job_role_id, valid_from, name
+) values ('f5b3f000-0000-0000-0000-0000000000e1', 'f5b2a000-0000-0000-0000-0000000000a1',
    'f5b2f000-0000-0000-0000-0000000000a1', 'f5b2f000-0000-0000-0000-0000000000b1',
-   '2018-01-01T00:00:00Z');
+   '2018-01-01T00:00:00Z', 'F6 P4.5 40-cenario-f5-11-p3 posição funcional');
 
 insert into public.position_reporting_lines
   (organization_id, subordinate_position_id, manager_position_id, reason, valid_from) values

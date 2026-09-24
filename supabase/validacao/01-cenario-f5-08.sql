@@ -307,20 +307,20 @@ insert into public.organizational_unit_parent_periods
 --  P-OCUP na "Com Posicao" (com ocupacao vigente)
 --  P-MGR / P-SUB na "Livre" (com reporting line vigente)
 --  P-FREE na "Livre" (ocupacao encerravel no instante TC)
-insert into public.organizational_positions
-  (id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from) values
-  ('f8310000-0000-0000-0000-000000000001', 'f8a00000-0000-0000-0000-0000000000a1',
+insert into public.organizational_positions (
+  id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from, name
+) values ('f8310000-0000-0000-0000-000000000001', 'f8a00000-0000-0000-0000-0000000000a1',
    'f8110000-0000-0000-0000-000000000004', 'f8e00000-0000-0000-0000-0000000000a1',
-   'f8f00000-0000-0000-0000-0000000000a1', '2026-01-01T00:00:00Z'),
+   'f8f00000-0000-0000-0000-0000000000a1', '2026-01-01T00:00:00Z', 'F6 P4.5 01-cenario-f5-08 posição funcional'),
   ('f8310000-0000-0000-0000-000000000002', 'f8a00000-0000-0000-0000-0000000000a1',
    'f8110000-0000-0000-0000-000000000005', 'f8e00000-0000-0000-0000-0000000000a1',
-   'f8f00000-0000-0000-0000-0000000000a1', '2026-01-01T00:00:00Z'),
+   'f8f00000-0000-0000-0000-0000000000a1', '2026-01-01T00:00:00Z', 'F6 P4.5 01-cenario-f5-08 posição funcional'),
   ('f8310000-0000-0000-0000-000000000003', 'f8a00000-0000-0000-0000-0000000000a1',
    'f8110000-0000-0000-0000-000000000005', 'f8e00000-0000-0000-0000-0000000000a1',
-   'f8f00000-0000-0000-0000-0000000000a1', '2026-01-01T00:00:00Z'),
+   'f8f00000-0000-0000-0000-0000000000a1', '2026-01-01T00:00:00Z', 'F6 P4.5 01-cenario-f5-08 posição funcional'),
   ('f8310000-0000-0000-0000-000000000004', 'f8a00000-0000-0000-0000-0000000000a1',
    'f8110000-0000-0000-0000-000000000005', 'f8e00000-0000-0000-0000-0000000000a1',
-   'f8f00000-0000-0000-0000-0000000000a1', '2026-01-01T00:00:00Z');
+   'f8f00000-0000-0000-0000-0000000000a1', '2026-01-01T00:00:00Z', 'F6 P4.5 01-cenario-f5-08 posição funcional');
 
 -- ----------------------------------------------------------------------------
 -- 7) Ocupacoes e reporting line (Alfa)
@@ -407,20 +407,20 @@ insert into public.organizational_unit_parent_periods
 --   06 P2-P-REP-SUB — com reporting line vigente (guarda F3-04)
 --   07 P2-P-REP-MGR — superior da reporting line acima
 --   08 P2-P-LIVRE   — sem ocupacao/reporting line (encerramento permitido)
-insert into public.organizational_positions
-  (id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from) values
-  ('f8310000-0000-0000-0000-000000000005', 'f8a00000-0000-0000-0000-0000000000a1',
+insert into public.organizational_positions (
+  id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from, name
+) values ('f8310000-0000-0000-0000-000000000005', 'f8a00000-0000-0000-0000-0000000000a1',
    'f8110000-0000-0000-0000-000000000017', 'f8e00000-0000-0000-0000-0000000000a1',
-   'f8f00000-0000-0000-0000-0000000000a1', '2026-01-01T00:00:00Z'),
+   'f8f00000-0000-0000-0000-0000000000a1', '2026-01-01T00:00:00Z', 'F6 P4.5 01-cenario-f5-08 posição funcional'),
   ('f8310000-0000-0000-0000-000000000006', 'f8a00000-0000-0000-0000-0000000000a1',
    'f8110000-0000-0000-0000-00000000001b', 'f8e00000-0000-0000-0000-0000000000a1',
-   'f8f00000-0000-0000-0000-0000000000a1', '2026-01-01T00:00:00Z'),
+   'f8f00000-0000-0000-0000-0000000000a1', '2026-01-01T00:00:00Z', 'F6 P4.5 01-cenario-f5-08 posição funcional'),
   ('f8310000-0000-0000-0000-000000000007', 'f8a00000-0000-0000-0000-0000000000a1',
    'f8110000-0000-0000-0000-00000000001b', 'f8e00000-0000-0000-0000-0000000000a1',
-   'f8f00000-0000-0000-0000-0000000000a1', '2026-01-01T00:00:00Z'),
+   'f8f00000-0000-0000-0000-0000000000a1', '2026-01-01T00:00:00Z', 'F6 P4.5 01-cenario-f5-08 posição funcional'),
   ('f8310000-0000-0000-0000-000000000008', 'f8a00000-0000-0000-0000-0000000000a1',
    'f8110000-0000-0000-0000-00000000001b', 'f8e00000-0000-0000-0000-0000000000a1',
-   'f8f00000-0000-0000-0000-0000000000a1', '2026-01-01T00:00:00Z');
+   'f8f00000-0000-0000-0000-0000000000a1', '2026-01-01T00:00:00Z', 'F6 P4.5 01-cenario-f5-08 posição funcional');
 
 insert into public.occupations
   (id, organization_id, collaborator_id, organizational_position_id, reason, valid_from) values

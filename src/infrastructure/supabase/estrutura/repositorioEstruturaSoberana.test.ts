@@ -86,6 +86,7 @@ const PAYLOAD = {
   posicoes: [
     {
       id: POSICAO,
+      name: "Posicao Ficticia",
       unit_id: UNIDADE,
       job_role_id: CARGO,
       seniority_level_id: SENIORIDADE,
@@ -221,6 +222,25 @@ describe("#327/P2B — repositório por view", () => {
         version: 1,
       },
     ]);
+  });
+
+  it("falha explicitamente quando a projeção traz posição sem nome", async () => {
+    const leitura = criarLeituraEstrutura(
+      clienteFalso(
+        { data: { ...PAYLOAD, posicoes: [{ ...PAYLOAD.posicoes[0], name: "  " }] }, error: null },
+        {}
+      )
+    );
+
+    const resultado = await leitura.ler({ organizationId: ORG });
+
+    expect(resultado).toEqual({
+      ok: false,
+      error: {
+        code: "INTERNAL",
+        message: "Não foi possível carregar a estrutura organizacional: posição sem nome soberano.",
+      },
+    });
   });
 
   it("seções ausentes viram listas vazias (defensivo, sem inventar dado)", async () => {

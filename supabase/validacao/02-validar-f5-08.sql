@@ -995,7 +995,7 @@ declare
     'public.estrutura_unidade_encerrar(uuid, uuid, uuid, uuid, timestamp with time zone, integer, text)',
     'public.estrutura_unidade_parent_definir(uuid, uuid, uuid, uuid, uuid, timestamp with time zone, text)',
     'public.estrutura_unidade_parent_encerrar(uuid, uuid, uuid, uuid, timestamp with time zone, text)',
-    'public.estrutura_posicao_criar(uuid, uuid, uuid, uuid, uuid, uuid, timestamp with time zone, text)',
+    'public.estrutura_posicao_criar(uuid, uuid, uuid, uuid, uuid, uuid, text, timestamp with time zone, text)',
     'public.estrutura_posicao_encerrar(uuid, uuid, uuid, uuid, timestamp with time zone, integer, text)',
     'public.estrutura_colegiado_definir(uuid, uuid, uuid, uuid, uuid[], timestamp with time zone, text)',
     'public.estrutura_colegiado_encerrar(uuid, uuid, uuid, uuid, timestamp with time zone, text)',
@@ -1629,7 +1629,7 @@ begin
     'f8a00000-0000-0000-0000-0000000000a1', 'f8c00000-0000-0000-0000-0000000000a1',
     'f8920000-0000-0000-0000-000000000091',
     'f8110000-0000-0000-0000-00000000001b', 'f8e00000-0000-0000-0000-0000000000a1',
-    'f8f00000-0000-0000-0000-0000000000a1', '2026-06-01T00:00:00Z', 'teste G1');
+    'f8f00000-0000-0000-0000-0000000000a1', 'Posição fictícia G1', '2026-06-01T00:00:00Z', 'teste G1');
   if v_pos is null then
     raise exception '[FAIL] G1: posicao nao criada';
   end if;
@@ -1641,7 +1641,7 @@ begin
       'f8a00000-0000-0000-0000-0000000000a1', 'f8c00000-0000-0000-0000-0000000000a1',
       'f8920000-0000-0000-0000-000000000092',
       'f8110000-0000-0000-0000-00000000001b', 'f8e00000-0000-0000-0000-0000000000a2',
-      'f8f00000-0000-0000-0000-0000000000a1', '2026-06-01T00:00:00Z', 'teste G2');
+      'f8f00000-0000-0000-0000-0000000000a1', 'Posição fictícia G2', '2026-06-01T00:00:00Z', 'teste G2');
   exception when others then v_msg := sqlerrm;
   end;
   if v_msg is null or v_msg not like 'F5_08_CONFLICT%cargo inativo%' then
@@ -1655,7 +1655,7 @@ begin
       'f8a00000-0000-0000-0000-0000000000a1', 'f8c00000-0000-0000-0000-0000000000a1',
       'f8920000-0000-0000-0000-000000000093',
       'f8110000-0000-0000-0000-00000000001b', 'f8e00000-0000-0000-0000-0000000000a1',
-      'f8f00000-0000-0000-0000-0000000000a2', '2026-06-01T00:00:00Z', 'teste G3');
+      'f8f00000-0000-0000-0000-0000000000a2', 'Posição fictícia G3', '2026-06-01T00:00:00Z', 'teste G3');
   exception when others then v_msg := sqlerrm;
   end;
   if v_msg is null or v_msg not like 'F5_08_CONFLICT%senioridade inativa%' then
@@ -1717,7 +1717,7 @@ begin
       'f8a00000-0000-0000-0000-0000000000a1', 'f8c00000-0000-0000-0000-0000000000a1',
       'f8920000-0000-0000-0000-000000000098',
       'f8110000-0000-0000-0000-00000000001b', 'f8e00000-0000-0000-0000-0000000000b1',
-      null, '2026-06-01T00:00:00Z', 'teste G8');
+      null, 'Posição fictícia G8', '2026-06-01T00:00:00Z', 'teste G8');
   exception when others then v_msg := sqlerrm;
   end;
   if v_msg is null or v_msg not like 'F5_08_NOT_FOUND%' then

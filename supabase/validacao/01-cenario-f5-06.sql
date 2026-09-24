@@ -137,14 +137,14 @@ insert into public.organizational_units (id, organization_id, name, valid_from) 
   ('d6e00000-0000-0000-0000-0000000000f1','d6a00000-0000-0000-0000-0000000000a1',
    'Unidade Sintetica F5-06', '2025-01-01T00:00:00Z');
 
-insert into public.organizational_positions
-  (id, organization_id, unit_id, job_role_id, valid_from) values
-  ('d6e00000-0000-0000-0000-0000000000f1','d6a00000-0000-0000-0000-0000000000a1',
-   'd6e00000-0000-0000-0000-0000000000f1','d6c00000-0000-0000-0000-0000000000e1','2025-01-01T00:00:00Z'),
+insert into public.organizational_positions (
+  id, organization_id, unit_id, job_role_id, valid_from, name
+) values ('d6e00000-0000-0000-0000-0000000000f1','d6a00000-0000-0000-0000-0000000000a1',
+   'd6e00000-0000-0000-0000-0000000000f1','d6c00000-0000-0000-0000-0000000000e1','2025-01-01T00:00:00Z', 'F6 P4.5 01-cenario-f5-06 posição funcional'),
   ('d6e00000-0000-0000-0000-0000000000f2','d6a00000-0000-0000-0000-0000000000a1',
-   'd6e00000-0000-0000-0000-0000000000f1','d6c00000-0000-0000-0000-0000000000e1','2025-01-01T00:00:00Z'),
+   'd6e00000-0000-0000-0000-0000000000f1','d6c00000-0000-0000-0000-0000000000e1','2025-01-01T00:00:00Z', 'F6 P4.5 01-cenario-f5-06 posição funcional'),
   ('d6e00000-0000-0000-0000-0000000000f3','d6a00000-0000-0000-0000-0000000000a1',
-   'd6e00000-0000-0000-0000-0000000000f1','d6c00000-0000-0000-0000-0000000000e1','2025-01-01T00:00:00Z');
+   'd6e00000-0000-0000-0000-0000000000f1','d6c00000-0000-0000-0000-0000000000e1','2025-01-01T00:00:00Z', 'F6 P4.5 01-cenario-f5-06 posição funcional');
 
 insert into public.position_reporting_lines
   (organization_id, subordinate_position_id, manager_position_id, reason, valid_from) values

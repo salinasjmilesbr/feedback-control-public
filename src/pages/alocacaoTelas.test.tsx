@@ -29,6 +29,7 @@ const REPORTING = "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd";
 function posicaoVigente(posicaoId: string) {
   return {
     posicaoId,
+    nome: "Posicao Ficticia",
     unitId: UNIDADE,
     jobRoleId: CARGO,
     seniorityLevelId: null,
@@ -182,7 +183,7 @@ describe("F5-08 P5 — Posições: reporting line (posição → posição)", ()
 
     const html = renderizar(<PosicoesPage estadoInicial={comLinha} />);
 
-    expect(html).toContain("superior Unidade Fictícia • FICT — Cargo Fictício");
+    expect(html).toContain("superior Posicao Ficticia");
     expect(html).toContain("Alterar gestor");
   });
 

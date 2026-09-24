@@ -57,9 +57,11 @@ export interface PeriodoParentSoberano {
   readonly version: number;
 }
 
-/** Posição formal (unidade + cargo + senioridade opcional). */
+/** Posição formal: UUID soberano + rótulo funcional e contexto estrutural. */
 export interface PosicaoSoberana {
   readonly posicaoId: string;
+  /** Obrigatório na projeção soberana P4.5; nunca é identidade autorizativa. */
+  readonly nome: string;
   readonly unitId: string;
   readonly jobRoleId: string;
   readonly seniorityLevelId: string | null;
@@ -160,6 +162,8 @@ export interface LeituraEstrutura {
 const ERRO_SEM_SESSAO = "Sessão inválida. Entre novamente.";
 const ERRO_SEM_ORGANIZACAO = "Selecione uma organização ativa para consultar a estrutura.";
 const ERRO_LEITURA = "Não foi possível carregar a estrutura organizacional.";
+const ERRO_CONTRATO_POSICAO =
+  "Não foi possível carregar a estrutura organizacional: posição sem nome soberano.";
 const ERRO_NEGADO = "Você não tem permissão para consultar a estrutura organizacional.";
 
 interface LinhaUnidade {
@@ -181,6 +185,7 @@ interface LinhaParent {
 
 interface LinhaPosicao {
   id: string;
+  name: string | null;
   unit_id: string;
   job_role_id: string;
   seniority_level_id: string | null;
@@ -247,6 +252,13 @@ function textoOuNulo(valor: unknown): string | null {
 
 function texto(valor: unknown): string {
   return typeof valor === "string" ? valor : "";
+}
+
+function nomePosicaoObrigatorio(valor: unknown): string | null {
+  if (typeof valor !== "string" || valor.trim().length === 0 || valor !== valor.trim()) {
+    return null;
+  }
+  return valor;
 }
 
 function versao(valor: unknown): number {
@@ -337,6 +349,22 @@ export function criarLeituraEstrutura(cliente: SupabaseClient): LeituraEstrutura
         membrosPorColegiado.set(membro.configuration_id, atuais);
       }
 
+      const posicoesMapeadas: PosicaoSoberana[] = [];
+      for (const item of posicoes) {
+        const nome = nomePosicaoObrigatorio(item.name);
+        if (!nome) return falha("INTERNAL", ERRO_CONTRATO_POSICAO);
+        posicoesMapeadas.push({
+          posicaoId: texto(item.id),
+          nome,
+          unitId: texto(item.unit_id),
+          jobRoleId: texto(item.job_role_id),
+          seniorityLevelId: textoOuNulo(item.seniority_level_id),
+          validFrom: texto(item.valid_from),
+          validTo: textoOuNulo(item.valid_to),
+          version: versao(item.version),
+        });
+      }
+
       return {
         ok: true,
         data: {
@@ -355,15 +383,7 @@ export function criarLeituraEstrutura(cliente: SupabaseClient): LeituraEstrutura
             validTo: textoOuNulo(item.valid_to),
             version: versao(item.version),
           })),
-          posicoes: posicoes.map((item) => ({
-            posicaoId: texto(item.id),
-            unitId: texto(item.unit_id),
-            jobRoleId: texto(item.job_role_id),
-            seniorityLevelId: textoOuNulo(item.seniority_level_id),
-            validFrom: texto(item.valid_from),
-            validTo: textoOuNulo(item.valid_to),
-            version: versao(item.version),
-          })),
+          posicoes: posicoesMapeadas,
           reportingLines: reportings.map((item) => ({
             reportingLineId: texto(item.id),
             subordinatePositionId: texto(item.subordinate_position_id),

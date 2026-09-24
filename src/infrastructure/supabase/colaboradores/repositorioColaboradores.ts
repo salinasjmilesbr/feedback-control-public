@@ -272,7 +272,17 @@ export interface EntradaCriarPosicao {
   readonly unidadeId: string;
   readonly jobRoleId: string;
   readonly seniorityLevelId: string | null;
+  readonly nome?: string;
   readonly validFrom: string;
+  readonly motivo: string;
+}
+
+export interface EntradaRenomearPosicao {
+  readonly organizationId?: string | null;
+  readonly operationId: string;
+  readonly posicaoId: string;
+  readonly nome: string;
+  readonly expectedVersion: number;
   readonly motivo: string;
 }
 
@@ -440,6 +450,7 @@ export interface RepositorioColaboradores {
   criarPosicao(
     entrada: EntradaCriarPosicao
   ): Promise<ResultadoRepositorioColaboradores<string>>;
+  renomearPosicao?(entrada: EntradaRenomearPosicao): Promise<ResultadoRepositorioColaboradores<number>>;
   encerrarPosicao(
     entrada: EntradaEncerrarPosicao
   ): Promise<ResultadoRepositorioColaboradores<number>>;
@@ -900,10 +911,20 @@ export function criarRepositorioColaboradoresSupabase(
           unidadeId: entrada.unidadeId,
           jobRoleId: entrada.jobRoleId,
           seniorityLevelId: entrada.seniorityLevelId,
+          nome: entrada.nome,
           validFrom: entrada.validFrom,
           motivo: entrada.motivo,
         }),
         (resultado) => texto(resultado)
+      ),
+
+    renomearPosicao: (entrada) =>
+      invocar(
+        montarCorpo("estrutura.posicao.renomear", entrada.organizationId, {
+          operationId: entrada.operationId, posicaoId: entrada.posicaoId, nome: entrada.nome,
+          expectedVersion: entrada.expectedVersion, motivo: entrada.motivo,
+        }),
+        (resultado) => numero(resultado)
       ),
 
     encerrarPosicao: (entrada) =>

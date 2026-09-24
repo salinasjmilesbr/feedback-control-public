@@ -54,6 +54,7 @@ const COL_COLEGA = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 function posicao(posicaoId: string): PosicaoSoberana {
   return {
     posicaoId,
+    nome: "Posicao Ficticia",
     unitId: "99999999-9999-4999-8999-999999999999",
     jobRoleId: "88888888-8888-4888-8888-888888888888",
     seniorityLevelId: null,
