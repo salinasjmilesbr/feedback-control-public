@@ -43,3 +43,85 @@ begin
 end $$;
 
 reset role;
+
+set local role service_role;
+
+-- Provas comportamentais: todas as mutações ficam dentro de transações revertidas.
+begin;
+do $$
+declare v_id uuid; v_pos uuid := 'f6a21000-0000-4000-8000-000000000d09';
+begin
+  insert into public.access_role_assignment_scopes
+    (id, assignment_id, organization_id, scope_type, status, created_by)
+  select 'f3550000-0000-4000-8000-000000000010', a.id, m.organization_id,
+    'ORGANIZATION', 'active', m.user_profile_id
+    from public.membership_access_role_assignments a
+    join public.user_organization_memberships m on m.id = a.membership_id
+    join public.access_roles r on r.id = a.access_role_id
+   where m.user_profile_id = 'f6a21000-0000-4000-8000-000000000001'
+     and m.organization_id = 'f6a21000-0000-4000-8000-0000000000a1'
+     and r.name = 'admin';
+
+  insert into public.organizational_positions
+    (id,organization_id,unit_id,job_role_id,seniority_level_id,name,valid_from)
+  values (v_pos,'f6a21000-0000-4000-8000-0000000000a1',
+    'f6a21000-0000-4000-8000-000000000c01',
+    'f6a21000-0000-4000-8000-000000000b01',
+    'f6a21000-0000-4000-8000-000000000b11','P5 ORGANIZATION vaga','2026-01-01');
+  v_id := public.colaborador_criar_no_escopo(
+    'f6a21000-0000-4000-8000-0000000000a1',
+    'f6a21000-0000-4000-8000-000000000001',
+    'f3550000-0000-4000-8000-000000000001',v_pos,
+    'Colaborador P5 Organization','p5-org@example.invalid','P5ORG001','2026-01-01','active');
+  if not exists (select 1 from public.collaborators where id=v_id and organization_id='f6a21000-0000-4000-8000-0000000000a1') then
+    raise exception '[FAIL] ORGANIZATION same-tenant nao persistiu o colaborador';
+  end if;
+  raise notice '[PASS] ORGANIZATION + posição vaga same-tenant = ALLOW';
+end $$;
+rollback;
+
+begin;
+do $$
+begin
+  begin
+    perform public.colaborador_criar_no_escopo(
+      'f6a21000-0000-4000-8000-0000000000a1',
+      'f6a21000-0000-4000-8000-000000000001',
+      'f3550000-0000-4000-8000-000000000002',
+      'f6a21000-0000-4000-8000-000000000d05',
+      'Cross Tenant P5','cross@example.invalid','P5CROSS001','2026-01-01','active');
+    raise exception '[FAIL] ORGANIZATION cross-tenant foi aceito';
+  exception when others then
+    if sqlerrm not like 'F6_A22_NOT_FOUND%' then raise; end if;
+    raise notice '[PASS] ORGANIZATION cross-tenant = DENY';
+  end;
+end $$;
+rollback;
+
+begin;
+do $$
+begin
+  begin
+    perform public.colaborador_criar_no_escopo(
+      'f6a21000-0000-4000-8000-0000000000a1',
+      'f6a21000-0000-4000-8000-000000000002',
+      'f3550000-0000-4000-8000-000000000003',
+      'f6a21000-0000-4000-8000-000000000d04',
+      'Sem Cap P5','semcap@example.invalid','P5NOCAP001','2026-01-01','active');
+    raise exception '[FAIL] ator sem collaborator.create foi aceito';
+  exception when others then
+    if sqlerrm not like 'F6_A22_FORBIDDEN%' then raise; end if;
+    raise notice '[PASS] sem collaborator.create = DENY';
+  end;
+end $$;
+rollback;
+
+do $$
+declare v_left integer;
+begin
+  select count(*) into v_left from public.collaborators where matricula is null and full_name like 'P5 %';
+  if v_left <> 0 then raise exception '[FAIL] teste deixou persistencia parcial (%)', v_left; end if;
+  raise notice '[PASS] falhas nao deixaram persistencia parcial';
+end $$;
+
+reset role;
