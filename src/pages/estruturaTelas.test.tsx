@@ -69,6 +69,7 @@ function estrutura(): EstruturaSoberana {
     posicoes: [
       {
         posicaoId: POSICAO,
+        nome: "Posicao Ficticia",
         unitId: UNIDADE,
         jobRoleId: CARGO,
         seniorityLevelId: SENIORIDADE,
@@ -78,6 +79,7 @@ function estrutura(): EstruturaSoberana {
       },
       {
         posicaoId: POSICAO_SUPERIOR,
+        nome: "Posicao Superior Ficticia",
         unitId: UNIDADE_PAI,
         jobRoleId: CARGO,
         seniorityLevelId: null,
@@ -297,7 +299,7 @@ describe("F5-08 P4 — telas: carregamento, vazio, erro e identidade por UUID", 
     expect(html).toContain("Cargo: FICT — Cargo Fictício");
     expect(html).toContain("Senioridade: Pleno");
     expect(html).toContain("Ocupante: Pessoa Membro Fictícia");
-    expect(html).toContain("superior Unidade Superior Fictícia");
+    expect(html).toContain("superior Posicao Superior Ficticia");
     expect(html).toContain("identidade " + POSICAO);
   });
 

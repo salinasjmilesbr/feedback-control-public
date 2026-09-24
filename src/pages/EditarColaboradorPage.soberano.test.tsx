@@ -74,6 +74,7 @@ function estruturaSemOcupacao(): EstruturaSoberana {
     posicoes: [
       {
         posicaoId: POSICAO,
+        nome: "Posicao Ficticia",
         unitId: UNIDADE,
         jobRoleId: CARGO,
         seniorityLevelId: null,
@@ -83,6 +84,7 @@ function estruturaSemOcupacao(): EstruturaSoberana {
       },
       {
         posicaoId: POSICAO_GESTOR,
+        nome: "Posicao Gestor Ficticia",
         unitId: UNIDADE,
         jobRoleId: CARGO,
         seniorityLevelId: null,

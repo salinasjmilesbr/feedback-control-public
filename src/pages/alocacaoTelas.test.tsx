@@ -29,6 +29,7 @@ const REPORTING = "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd";
 function posicaoVigente(posicaoId: string) {
   return {
     posicaoId,
+    nome: "Posicao Ficticia",
     unitId: UNIDADE,
     jobRoleId: CARGO,
     seniorityLevelId: null,

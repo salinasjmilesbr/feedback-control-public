@@ -45,6 +45,7 @@ function estruturaComPosicao(): EstruturaSoberana {
     posicoes: [
       {
         posicaoId: POSICAO,
+        nome: "Posicao Ficticia",
         unitId: UNIDADE,
         jobRoleId: CARGO,
         seniorityLevelId: null,

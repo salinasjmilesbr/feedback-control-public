@@ -117,6 +117,7 @@ function estruturaSoberanaCoerente(): EstruturaSoberana {
     unidades: [],
     periodosParent: [],
     posicoes: [POS_GERENTE, POS_COORD, POS_ANALISTA, POS_COLEGA].map((posicaoId) => ({
+      nome: "Posicao Ficticia",
       posicaoId,
       unitId: "99999999-9999-4999-8999-999999999999",
       jobRoleId: "88888888-8888-4888-8888-888888888888",
@@ -248,6 +249,7 @@ function estruturaDaOrgB(): EstruturaSoberana {
     periodosParent: [],
     posicoes: [
       {
+        nome: "Posicao Ficticia",
         posicaoId: POS_B_SOLO,
         unitId: "99999999-9999-4999-8999-999999999999",
         jobRoleId: "88888888-8888-4888-8888-888888888888",

@@ -216,8 +216,8 @@ function estruturaComAlocacao(): EstruturaSoberana {
     ],
     periodosParent: [],
     posicoes: [
-      { posicaoId: POSICAO, unitId: UNIDADE, jobRoleId: CARGO, seniorityLevelId: null, validFrom: "2026-01-01T00:00:00.000Z", validTo: null, version: 1 },
-      { posicaoId: POSICAO_GESTOR, unitId: UNIDADE, jobRoleId: CARGO, seniorityLevelId: null, validFrom: "2026-01-01T00:00:00.000Z", validTo: null, version: 1 },
+      { posicaoId: POSICAO, nome: "Posicao Ficticia", unitId: UNIDADE, jobRoleId: CARGO, seniorityLevelId: null, validFrom: "2026-01-01T00:00:00.000Z", validTo: null, version: 1 },
+      { posicaoId: POSICAO_GESTOR, nome: "Posicao Gestor Ficticia", unitId: UNIDADE, jobRoleId: CARGO, seniorityLevelId: null, validFrom: "2026-01-01T00:00:00.000Z", validTo: null, version: 1 },
     ],
     reportingLines: [
       {

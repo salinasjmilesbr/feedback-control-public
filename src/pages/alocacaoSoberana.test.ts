@@ -92,6 +92,7 @@ function posicao(parcial: Partial<EstruturaSoberana["posicoes"][number]> & {
   posicaoId: string;
 }) {
   return {
+    nome: "Posicao Ficticia",
     unitId: UNIDADE,
     jobRoleId: CARGO,
     seniorityLevelId: null,

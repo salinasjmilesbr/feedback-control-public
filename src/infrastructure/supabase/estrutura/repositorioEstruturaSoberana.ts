@@ -60,8 +60,8 @@ export interface PeriodoParentSoberano {
 /** Posição formal: UUID soberano + rótulo funcional e contexto estrutural. */
 export interface PosicaoSoberana {
   readonly posicaoId: string;
-  /** Sempre presente na projeção P4.5; opcional apenas para fixtures legadas. */
-  readonly nome?: string;
+  /** Obrigatório na projeção soberana P4.5; nunca é identidade autorizativa. */
+  readonly nome: string;
   readonly unitId: string;
   readonly jobRoleId: string;
   readonly seniorityLevelId: string | null;
@@ -162,6 +162,8 @@ export interface LeituraEstrutura {
 const ERRO_SEM_SESSAO = "Sessão inválida. Entre novamente.";
 const ERRO_SEM_ORGANIZACAO = "Selecione uma organização ativa para consultar a estrutura.";
 const ERRO_LEITURA = "Não foi possível carregar a estrutura organizacional.";
+const ERRO_CONTRATO_POSICAO =
+  "Não foi possível carregar a estrutura organizacional: posição sem nome soberano.";
 const ERRO_NEGADO = "Você não tem permissão para consultar a estrutura organizacional.";
 
 interface LinhaUnidade {
@@ -252,6 +254,13 @@ function texto(valor: unknown): string {
   return typeof valor === "string" ? valor : "";
 }
 
+function nomePosicaoObrigatorio(valor: unknown): string | null {
+  if (typeof valor !== "string" || valor.trim().length === 0 || valor !== valor.trim()) {
+    return null;
+  }
+  return valor;
+}
+
 function versao(valor: unknown): number {
   return typeof valor === "number" && Number.isFinite(valor) ? valor : 0;
 }
@@ -340,6 +349,22 @@ export function criarLeituraEstrutura(cliente: SupabaseClient): LeituraEstrutura
         membrosPorColegiado.set(membro.configuration_id, atuais);
       }
 
+      const posicoesMapeadas: PosicaoSoberana[] = [];
+      for (const item of posicoes) {
+        const nome = nomePosicaoObrigatorio(item.name);
+        if (!nome) return falha("INTERNAL", ERRO_CONTRATO_POSICAO);
+        posicoesMapeadas.push({
+          posicaoId: texto(item.id),
+          nome,
+          unitId: texto(item.unit_id),
+          jobRoleId: texto(item.job_role_id),
+          seniorityLevelId: textoOuNulo(item.seniority_level_id),
+          validFrom: texto(item.valid_from),
+          validTo: textoOuNulo(item.valid_to),
+          version: versao(item.version),
+        });
+      }
+
       return {
         ok: true,
         data: {
@@ -358,16 +383,7 @@ export function criarLeituraEstrutura(cliente: SupabaseClient): LeituraEstrutura
             validTo: textoOuNulo(item.valid_to),
             version: versao(item.version),
           })),
-          posicoes: posicoes.map((item) => ({
-            posicaoId: texto(item.id),
-            nome: texto(item.name),
-            unitId: texto(item.unit_id),
-            jobRoleId: texto(item.job_role_id),
-            seniorityLevelId: textoOuNulo(item.seniority_level_id),
-            validFrom: texto(item.valid_from),
-            validTo: textoOuNulo(item.valid_to),
-            version: versao(item.version),
-          })),
+          posicoes: posicoesMapeadas,
           reportingLines: reportings.map((item) => ({
             reportingLineId: texto(item.id),
             subordinatePositionId: texto(item.subordinate_position_id),

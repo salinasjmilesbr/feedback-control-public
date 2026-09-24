@@ -541,7 +541,7 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
                 </div>
                 <div className="estrutura-item__actions">
                   {vigente && (
-                    <button type="button" className="virtus-btn virtus-btn--outline" onClick={() => { setRenomeando({ posicaoId: posicao.posicaoId, nome: posicao.nome ?? "" }); setNomeRenomeado(posicao.nome ?? ""); setMotivo(""); }}>
+                    <button type="button" className="virtus-btn virtus-btn--outline" onClick={() => { setRenomeando({ posicaoId: posicao.posicaoId, nome: posicao.nome }); setNomeRenomeado(posicao.nome); setMotivo(""); }}>
                       Renomear
                     </button>
                   )}
