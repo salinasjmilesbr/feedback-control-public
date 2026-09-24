@@ -352,7 +352,7 @@ describe("detalhe soberano em ColaboradorDetalhePage", () => {
       { fase: "pronto", estrutura: estruturaComAlocacao() }
     );
 
-    expect(html).toContain("Posição vigente: Unidade Fictícia • FICT — Cargo Fictício");
+    expect(html).toContain("Posição vigente: Posicao Ficticia");
     expect(html).toContain("Gestor direto (reporting line): Gestor Fictício");
     expect(html).toContain("Colegiado vigente: Membro Fictício");
     // Somente leitura: a tela não administra estrutura, apenas encaminha.

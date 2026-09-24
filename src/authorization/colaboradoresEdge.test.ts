@@ -394,6 +394,7 @@ describe("F5-08 P3 — plano administrativo (D19) das operações de estrutura/c
     unidadeId: UNIDADE,
     jobRoleId: CARGO,
     seniorityLevelId: null,
+    nome: "Posicao Ficticia",
     validFrom: VALID_FROM,
     motivo: "criacao de posicao",
   };

@@ -206,7 +206,7 @@ describe("edição soberana em EditarColaboradorPage", () => {
     expect(html).toContain("Sem alocação");
     expect(html).toContain("Definir ocupação");
     // Seletor soberano por POSIÇÃO (UUID) com rótulo unidade • cargo.
-    expect(html).toContain("Unidade Fictícia • FICT — Cargo Fictício");
+    expect(html).toContain("Posicao Ficticia");
   });
 
   it("com ocupação vigente exibe posição, gestor derivado e as ações soberanas", () => {
@@ -217,7 +217,7 @@ describe("edição soberana em EditarColaboradorPage", () => {
     );
 
     expect(html).toContain("Posição vigente");
-    expect(html).toContain("Unidade Fictícia • FICT — Cargo Fictício");
+    expect(html).toContain("Posicao Ficticia");
     expect(html).toContain("Gestor direto (reporting line)");
     expect(html).toContain("Trocar posição");
     expect(html).toContain("Encerrar ocupação");

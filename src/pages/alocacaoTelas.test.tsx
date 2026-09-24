@@ -183,7 +183,7 @@ describe("F5-08 P5 — Posições: reporting line (posição → posição)", ()
 
     const html = renderizar(<PosicoesPage estadoInicial={comLinha} />);
 
-    expect(html).toContain("superior Unidade Fictícia • FICT — Cargo Fictício");
+    expect(html).toContain("superior Posicao Ficticia");
     expect(html).toContain("Alterar gestor");
   });
 
