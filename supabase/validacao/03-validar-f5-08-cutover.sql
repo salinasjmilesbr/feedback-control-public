@@ -568,7 +568,7 @@ declare
     'estrutura_unidade_criar','estrutura_unidade_renomear',
     'estrutura_unidade_encerrar','estrutura_unidade_parent_definir',
     'estrutura_unidade_parent_encerrar','estrutura_posicao_criar',
-    'estrutura_posicao_encerrar','estrutura_colegiado_definir',
+    'estrutura_posicao_renomear','estrutura_posicao_encerrar','estrutura_colegiado_definir',
     'estrutura_colegiado_encerrar','catalogo_cargo_criar',
     'catalogo_cargo_renomear','catalogo_cargo_status_alterar',
     'catalogo_senioridade_criar','catalogo_senioridade_renomear',
