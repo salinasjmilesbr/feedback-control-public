@@ -19,6 +19,9 @@ import {
   criarPosicao,
   encerrarPosicao,
   renomearPosicao,
+  consultarPeopleManagement,
+  criarPeopleManagement,
+  encerrarPeopleManagement,
   lerEstrutura,
   type DependenciasAcessoColaboradores,
   type ResultadoColaboradores,
@@ -73,6 +76,11 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
   const [novoMotivo, setNovoMotivo] = useState("");
   const [renomeando, setRenomeando] = useState<{ readonly posicaoId: string; readonly nome: string } | null>(null);
   const [nomeRenomeado, setNomeRenomeado] = useState("");
+  const [peopleManagement, setPeopleManagement] = useState<readonly {
+    readonly id: string; readonly positionId: string; readonly validFrom: string;
+    readonly validTo: string | null; readonly status: string; readonly version: number;
+  }[]>([]);
+  const [configurandoPeople, setConfigurandoPeople] = useState<string | null>(null);
 
   const [encerrando, setEncerrando] = useState<{
     readonly posicaoId: string;
@@ -122,6 +130,14 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
       vigente = false;
     };
   }, [chaveCarregamento, organizacaoAtivaId, estadoInicial, depsInjetadas]);
+
+  useEffect(() => {
+    if (estadoInicial || !organizacaoAtivaId) return;
+    void consultarPeopleManagement({ organizationId: organizacaoAtivaId }, depsInjetadas).then((resultado) => {
+      if (resultado.ok) setPeopleManagement(resultado.dados);
+      else setErro({ codigo: resultado.codigo, mensagem: resultado.mensagem });
+    });
+  }, [organizacaoAtivaId, estadoInicial, versao, depsInjetadas]);
 
   const estado: EstadoEstrutura =
     !organizacaoAtivaId && !estadoInicial
@@ -290,6 +306,24 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
     );
     setProcessando(false);
     await tratarReportingLine(desfecho, () => setGestorDe(null));
+  }
+
+  async function salvarPeopleManagement(posicaoId: string) {
+    if (!organizacaoAtivaId || processando || estado.fase !== "pronto") return;
+    const atual = peopleManagement.find((item) => item.positionId === posicaoId && item.status === "active" && estaVigente(item.validFrom, item.validTo));
+    setProcessando(true);
+    const resultado = atual
+      ? await encerrarPeopleManagement({ organizationId: organizacaoAtivaId, operationId: novoOperationId(), responsibilityId: atual.id, validTo: vigencia, expectedVersion: atual.version }, depsInjetadas)
+      : await criarPeopleManagement({ organizationId: organizacaoAtivaId, operationId: novoOperationId(), positionId: posicaoId, validFrom: vigencia, validTo: null }, depsInjetadas);
+    setProcessando(false);
+    if (!resultado.ok) {
+      setErro({ codigo: resultado.codigo, mensagem: resultado.mensagem });
+      if (resultado.codigo === "CONFLICT" || resultado.codigo === "NOT_FOUND") setVersao((valor) => valor + 1);
+      return;
+    }
+    setConfigurandoPeople(null);
+    setSucesso("Gestão de pessoas atualizada na posição.");
+    setVersao((valor) => valor + 1);
   }
 
   const cabecalho = (
@@ -541,6 +575,11 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
                 </div>
                 <div className="estrutura-item__actions">
                   {vigente && (
+                    <button type="button" className="virtus-btn virtus-btn--outline" onClick={() => { setConfigurandoPeople(posicao.posicaoId); setVigencia(hojeLocal()); }}>
+                      Configurar gestão de pessoas
+                    </button>
+                  )}
+                  {vigente && (
                     <button type="button" className="virtus-btn virtus-btn--outline" onClick={() => { setRenomeando({ posicaoId: posicao.posicaoId, nome: posicao.nome }); setNomeRenomeado(posicao.nome); setMotivo(""); }}>
                       Renomear
                     </button>
@@ -581,6 +620,14 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
                     </button>
                   )}
                 </div>
+                {configurandoPeople === posicao.posicaoId && (
+                  <form className="estrutura-form" onSubmit={(evento) => { evento.preventDefault(); void salvarPeopleManagement(posicao.posicaoId); }}>
+                    <strong>Gestão de pessoas: {peopleManagement.some((item) => item.positionId === posicao.posicaoId && item.status === "active" && estaVigente(item.validFrom, item.validTo)) ? "vigente" : "inexistente"}</strong>
+                    <label className="virtus-field"><span>Vigência *</span><input type="date" value={vigencia} onChange={(evento) => setVigencia(evento.target.value)} required /></label>
+                    <button type="submit" className="virtus-btn virtus-btn--primary" disabled={processando}>{peopleManagement.some((item) => item.positionId === posicao.posicaoId && item.status === "active" && estaVigente(item.validFrom, item.validTo)) ? "Encerrar gestão de pessoas" : "Ativar gestão de pessoas"}</button>
+                    <button type="button" className="virtus-btn virtus-btn--outline" onClick={() => setConfigurandoPeople(null)}>Cancelar</button>
+                  </form>
+                )}
               </li>
             );
           })}

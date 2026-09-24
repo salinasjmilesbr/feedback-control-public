@@ -191,6 +191,17 @@ export interface EntradaEncerrarResponsabilidade {
   readonly motivo: string;
 }
 
+export interface ResponsabilidadePeopleManagement {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly positionId: string;
+  readonly responsibilityCode: "PEOPLE_MANAGEMENT";
+  readonly validFrom: string;
+  readonly validTo: string | null;
+  readonly status: string;
+  readonly version: number;
+}
+
 export interface EntradaRegistrarSucessao {
   readonly organizationId?: string | null;
   readonly operationId: string;
@@ -413,6 +424,9 @@ export interface RepositorioColaboradores {
   encerrarResponsabilidade(
     entrada: EntradaEncerrarResponsabilidade
   ): Promise<ResultadoRepositorioColaboradores<null>>;
+  consultarPeopleManagement?(entrada: { organizationId?: string | null }): Promise<ResultadoRepositorioColaboradores<readonly ResponsabilidadePeopleManagement[]>>;
+  criarPeopleManagement?(entrada: { organizationId?: string | null; operationId: string; positionId: string; validFrom: string; validTo: string | null }): Promise<ResultadoRepositorioColaboradores<string>>;
+  encerrarPeopleManagement?(entrada: { organizationId?: string | null; operationId: string; responsibilityId: string; validTo: string; expectedVersion: number }): Promise<ResultadoRepositorioColaboradores<null>>;
   registrarSucessao(
     entrada: EntradaRegistrarSucessao
   ): Promise<ResultadoRepositorioColaboradores<null>>;
@@ -791,6 +805,48 @@ export function criarRepositorioColaboradoresSupabase(
           responsibility_id: entrada.responsibilityId,
           vigencia: entrada.vigencia,
           motivo: entrada.motivo,
+        }),
+        () => null
+      ),
+
+    consultarPeopleManagement: (entrada) =>
+      invocar(
+        montarCorpo("estrutura.people_management.consultar", entrada.organizationId),
+        (resultado) => (Array.isArray(resultado) ? resultado : []).map((item) => {
+          const linha = item as Record<string, unknown>;
+          if (typeof linha.id !== "string" || typeof linha.position_id !== "string" || typeof linha.organization_id !== "string") throw new Error("invalid responsibility");
+          return {
+            id: linha.id,
+            organizationId: linha.organization_id,
+            positionId: linha.position_id,
+            responsibilityCode: "PEOPLE_MANAGEMENT" as const,
+            validFrom: String(linha.valid_from ?? ""),
+            validTo: typeof linha.valid_to === "string" ? linha.valid_to : null,
+            status: String(linha.status ?? ""),
+            version: typeof linha.version === "number" ? linha.version : Number(linha.version),
+          };
+        })
+      ),
+
+    criarPeopleManagement: (entrada) =>
+      invocar(
+        montarCorpo("estrutura.people_management.criar", entrada.organizationId, {
+          operation_id: entrada.operationId,
+          position_id: entrada.positionId,
+          responsibility_code: "PEOPLE_MANAGEMENT",
+          valid_from: entrada.validFrom,
+          valid_to: entrada.validTo,
+        }),
+        (resultado) => texto(resultado)
+      ),
+
+    encerrarPeopleManagement: (entrada) =>
+      invocar(
+        montarCorpo("estrutura.people_management.encerrar", entrada.organizationId, {
+          operation_id: entrada.operationId,
+          responsibility_id: entrada.responsibilityId,
+          valid_to: entrada.validTo,
+          expected_version: entrada.expectedVersion,
         }),
         () => null
       ),
