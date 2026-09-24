@@ -46,6 +46,7 @@ import {
   type EntradaDefinirParentUnidade,
   type EntradaDefinirReportingLine,
   type EntradaDefinirResponsabilidade,
+  type ResponsabilidadePeopleManagement,
   type EntradaEditarColaborador,
   type EntradaEncerrarColegiado,
   type EntradaEncerrarOcupacao,
@@ -142,6 +143,9 @@ export interface ServiceColaboradores {
   encerrarResponsabilidade(
     entrada: EntradaEncerrarResponsabilidade
   ): Promise<ResultadoColaboradores<null>>;
+  consultarPeopleManagement(entrada: { organizationId?: string | null }): Promise<ResultadoColaboradores<readonly ResponsabilidadePeopleManagement[]>>;
+  criarPeopleManagement(entrada: { organizationId?: string | null; operationId: string; positionId: string; validFrom: string; validTo: string | null }): Promise<ResultadoColaboradores<string>>;
+  encerrarPeopleManagement(entrada: { organizationId?: string | null; operationId: string; responsibilityId: string; validTo: string; expectedVersion: number }): Promise<ResultadoColaboradores<null>>;
   registrarSucessao(entrada: EntradaRegistrarSucessao): Promise<ResultadoColaboradores<null>>;
   obterHistorico(entrada: {
     readonly organizationId?: string | null;
@@ -406,6 +410,27 @@ export function criarServiceColaboradores(
     encerrarResponsabilidade: (entrada) =>
       comContexto(entrada.organizationId, ({ organização, repo }) =>
         propagar(repo.encerrarResponsabilidade({ ...entrada, organizationId: organização }))
+      ),
+
+    consultarPeopleManagement: (entrada) =>
+      comContexto(entrada.organizationId, ({ organização, repo }) =>
+        repo.consultarPeopleManagement
+          ? propagar(repo.consultarPeopleManagement({ organizationId: organização }))
+          : Promise.resolve(falhaSimples("INTERNAL", ERRO_SEM_CAMINHO))
+      ),
+
+    criarPeopleManagement: (entrada) =>
+      comContexto(entrada.organizationId, ({ organização, repo }) =>
+        repo.criarPeopleManagement
+          ? propagar(repo.criarPeopleManagement({ ...entrada, organizationId: organização }))
+          : Promise.resolve(falhaSimples("INTERNAL", ERRO_SEM_CAMINHO))
+      ),
+
+    encerrarPeopleManagement: (entrada) =>
+      comContexto(entrada.organizationId, ({ organização, repo }) =>
+        repo.encerrarPeopleManagement
+          ? propagar(repo.encerrarPeopleManagement({ ...entrada, organizationId: organização }))
+          : Promise.resolve(falhaSimples("INTERNAL", ERRO_SEM_CAMINHO))
       ),
 
     registrarSucessao: (entrada) =>

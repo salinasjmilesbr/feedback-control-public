@@ -124,6 +124,9 @@ function servicoFalso(
     encerrarReportingLine: (entrada) => registrar("encerrarReportingLine", entrada, null),
     definirResponsabilidade: (entrada) => registrar("definirResponsabilidade", entrada, RESPONSABILIDADE),
     encerrarResponsabilidade: (entrada) => registrar("encerrarResponsabilidade", entrada, null),
+    consultarPeopleManagement: (entrada) => registrar("consultarPeopleManagement", entrada, []),
+    criarPeopleManagement: (entrada) => registrar("criarPeopleManagement", entrada, RESPONSABILIDADE),
+    encerrarPeopleManagement: (entrada) => registrar("encerrarPeopleManagement", entrada, null),
     registrarSucessao: (entrada) => registrar("registrarSucessao", entrada, null),
     obterHistorico: (entrada) => registrar("obterHistorico", entrada, [eventoColaborador()]),
     bootstrapCatalogo: (entrada) => registrar("bootstrapCatalogo", entrada, null),
@@ -387,6 +390,9 @@ const EXPORTS_P4 = [
   "criarSenioridade",
   "renomearSenioridade",
   "alterarStatusSenioridade",
+  "consultarPeopleManagement",
+  "criarPeopleManagement",
+  "encerrarPeopleManagement",
 ].sort();
 
 const AUXILIARES = ["obterOperacoesColaboradoresSoberanos", "redefinirAcessoColaboradoresSoberanos"];

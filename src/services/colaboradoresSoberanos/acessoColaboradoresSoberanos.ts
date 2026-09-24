@@ -293,6 +293,27 @@ export function encerrarResponsabilidadeTemporaria(
   return executar(deps, (servico) => servico.encerrarResponsabilidade(entrada));
 }
 
+export function consultarPeopleManagement(
+  entrada: { readonly organizationId?: string | null },
+  deps: DependenciasAcessoColaboradores = {}
+) {
+  return executar(deps, (servico) => servico.consultarPeopleManagement(entrada));
+}
+
+export function criarPeopleManagement(
+  entrada: { readonly operationId: string; readonly positionId: string; readonly validFrom: string; readonly validTo: string | null; readonly organizationId?: string | null },
+  deps: DependenciasAcessoColaboradores = {}
+) {
+  return executar(deps, (servico) => servico.criarPeopleManagement(entrada));
+}
+
+export function encerrarPeopleManagement(
+  entrada: { readonly operationId: string; readonly responsibilityId: string; readonly validTo: string; readonly expectedVersion: number; readonly organizationId?: string | null },
+  deps: DependenciasAcessoColaboradores = {}
+) {
+  return executar(deps, (servico) => servico.encerrarPeopleManagement(entrada));
+}
+
 /** Sucessão avaliativa: reuso da RPC já existente (F3-09/F4-08). */
 export function registrarSucessao(
   entrada: {
