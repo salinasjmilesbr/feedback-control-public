@@ -575,7 +575,7 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
                 </div>
                 <div className="estrutura-item__actions">
                   {vigente && (
-                    <button type="button" className="virtus-btn virtus-btn--outline" onClick={() => { setConfigurandoPeople(posicao.posicaoId); setVigencia(hojeLocal()); setMotivo(""); }}>
+                    <button type="button" className="virtus-btn virtus-btn--outline" onClick={() => { setConfigurandoPeople(posicao.posicaoId); setVigencia(hojeLocal()); }}>
                       Configurar gestão de pessoas
                     </button>
                   )}
@@ -624,7 +624,6 @@ function PosicoesPage({ deps, estadoInicial }: PosicoesPageProps = {}) {
                   <form className="estrutura-form" onSubmit={(evento) => { evento.preventDefault(); void salvarPeopleManagement(posicao.posicaoId); }}>
                     <strong>Gestão de pessoas: {peopleManagement.some((item) => item.positionId === posicao.posicaoId && item.status === "active" && estaVigente(item.validFrom, item.validTo)) ? "vigente" : "inexistente"}</strong>
                     <label className="virtus-field"><span>Vigência *</span><input type="date" value={vigencia} onChange={(evento) => setVigencia(evento.target.value)} required /></label>
-                    <label className="virtus-field"><span>Motivo *</span><input value={motivo} onChange={(evento) => setMotivo(evento.target.value)} required /></label>
                     <button type="submit" className="virtus-btn virtus-btn--primary" disabled={processando}>{peopleManagement.some((item) => item.positionId === posicao.posicaoId && item.status === "active" && estaVigente(item.validFrom, item.validTo)) ? "Encerrar gestão de pessoas" : "Ativar gestão de pessoas"}</button>
                     <button type="button" className="virtus-btn virtus-btn--outline" onClick={() => setConfigurandoPeople(null)}>Cancelar</button>
                   </form>

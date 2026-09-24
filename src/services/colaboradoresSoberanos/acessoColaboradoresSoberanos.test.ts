@@ -418,6 +418,9 @@ function servicoQueNega(): ServiceColaboradores {
     encerrarReportingLine: negar,
     definirResponsabilidade: negar,
     encerrarResponsabilidade: negar,
+    consultarPeopleManagement: negar,
+    criarPeopleManagement: negar,
+    encerrarPeopleManagement: negar,
     registrarSucessao: negar,
     obterHistorico: negar,
     bootstrapCatalogo: negar,
@@ -439,6 +442,9 @@ function servicoQueLanca(): ServiceColaboradores {
     encerrarReportingLine: lancar,
     definirResponsabilidade: lancar,
     encerrarResponsabilidade: lancar,
+    consultarPeopleManagement: lancar,
+    criarPeopleManagement: lancar,
+    encerrarPeopleManagement: lancar,
     registrarSucessao: lancar,
     obterHistorico: lancar,
     bootstrapCatalogo: lancar,
@@ -511,6 +517,37 @@ describe("F5-07 porta — propagação fiel dos argumentos ao service injetado",
 });
 
 describe("F5-07 porta — negação nunca é exceção", () => {
+  it("PEOPLE_MANAGEMENT usa o contrato soberano exato e o UUID da posição", async () => {
+    const servico = servicoFalso();
+    await porta.criarPeopleManagement({
+      organizationId: ORG, operationId: OPERACAO_ID, positionId: POSICAO,
+      validFrom: VIGENCIA, validTo: null,
+    }, { operacoes: servico });
+    await porta.encerrarPeopleManagement({
+      organizationId: ORG, operationId: OPERACAO_ID, responsibilityId: RESPONSABILIDADE,
+      validTo: VIGENCIA, expectedVersion: 2,
+    }, { operacoes: servico });
+    expect(servico.chamadas.map((item) => item.metodo)).toEqual([
+      "criarPeopleManagement", "encerrarPeopleManagement",
+    ]);
+    expect(servico.chamadas[0]?.argumentos).toEqual({
+      organizationId: ORG, operationId: OPERACAO_ID, positionId: POSICAO,
+      validFrom: VIGENCIA, validTo: null,
+    });
+    expect(servico.chamadas[1]?.argumentos).toEqual({
+      organizationId: ORG, operationId: OPERACAO_ID, responsibilityId: RESPONSABILIDADE,
+      validTo: VIGENCIA, expectedVersion: 2,
+    });
+  });
+
+  it("PEOPLE_MANAGEMENT preserva DENY server-side sem fallback", async () => {
+    const resultado = await porta.criarPeopleManagement({
+      organizationId: ORG, operationId: OPERACAO_ID, positionId: POSICAO,
+      validFrom: VIGENCIA, validTo: null,
+    }, { operacoes: servicoQueNega() });
+    expect(resultado).toEqual(NEGADO);
+  });
+
   it.each(CASOS_DA_PORTA)("$nome devolve o código público sem lançar", async (caso) => {
     const resultado = await caso.chamar({ operacoes: servicoQueNega() });
 
