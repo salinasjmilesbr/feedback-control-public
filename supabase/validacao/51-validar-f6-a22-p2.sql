@@ -33,6 +33,38 @@ begin
 end $$;
 
 do $$
+declare v_same_role boolean; v_with_people integer; v_without_people integer;
+begin
+  select p1.job_role_id = p2.job_role_id
+    into v_same_role
+    from public.organizational_positions p1
+    join public.organizational_positions p2
+      on p2.id = 'f6a22000-0000-4000-8000-000000000d02'
+   where p1.id = 'f6a22000-0000-4000-8000-000000000d01';
+  if v_same_role is distinct from true then
+    raise exception '[FAIL] posições comparadas não reutilizam o mesmo cargo';
+  end if;
+
+  select count(*) into v_with_people
+    from public.resolver_capabilities_escopos_efetivas(
+      'f6a22000-0000-4000-8000-000000000002',
+      'f6a22000-0000-4000-8000-0000000000a1')
+   where grant_origin = 'position_responsibility:f6a22000-0000-4000-8000-000000000901';
+  select count(*) into v_without_people
+    from public.organizational_position_responsibilities r
+   where r.organization_id = 'f6a22000-0000-4000-8000-0000000000a1'
+     and r.position_id = 'f6a22000-0000-4000-8000-000000000d02'
+     and r.responsibility_code = 'PEOPLE_MANAGEMENT'
+     and r.valid_from <= now()
+     and (r.valid_to is null or r.valid_to > now());
+  if v_with_people <> 4 or v_without_people <> 0 then
+    raise exception '[FAIL] mesmo cargo produziu efeito divergente inesperado: com=% sem=%',
+      v_with_people, v_without_people;
+  end if;
+  raise notice '[PASS] mesmo cargo: posição com PEOPLE_MANAGEMENT concede 4 grants; posição sem responsabilidade concede 0';
+end $$;
+
+do $$
 declare v_n integer;
 begin
   select count(*) into v_n from public.resolver_alvos_escopo(
