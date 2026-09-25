@@ -1,4 +1,4 @@
-# Plano Mestre — Virtus (v18)
+# Plano Mestre — Virtus (v19)
 
 > ## NOTA DE RASTREABILIDADE — LEIA ANTES DE USAR ESTE DOCUMENTO
 >
@@ -27,11 +27,11 @@
 
 | Campo | Valor |
 |---|---|
-| Versão | **v18** |
-| Data-ação | Consolidação das decisões de identidade visual, Gestão Virtus e fluxo de acesso da Issue **#312**, preservando o checkpoint técnico da Etapa 6 |
+| Versão | **v19** |
+| Data-ação | Checkpoint documental da Etapa 6 após #310, #327, #333, #337, #338, #344, #351/#353, #355, #357/#358 e #359 |
 | Escopo | Reorganizar e preservar TODO o conhecimento vigente de doutrina, processo, roadmap e estado |
 | Modelo | história + roadmap + manual operacional |
-| Fontes | `.ai/*`, `AGENTS.md`, `docs/etapa-5-certificacao.md`, `docs/F5-11-certificacao.md`, `docs/auditorias/*`, desenhos `docs/F3-*/F4-*/F5-*`; Issues **#275**, **#278**, **#293**, **#308**, **#310** e **#312**; commits F6 **#296**, **#298**, **#299**, **#301**, **#303** e **#306** |
+| Fontes | `.ai/*`, `AGENTS.md`, `docs/etapa-5-certificacao.md`, `docs/F5-11-certificacao.md`, `docs/auditorias/*`, desenhos `docs/F3-*/F4-*/F5-*`; Issues **#275**, **#278**, **#293**, **#308**, **#310**, **#327**, **#333**, **#337**, **#338**, **#344**, **#351/#353**, **#355**, **#357/#358**, **#359** e **#360**; commits F6 **#296**, **#298**, **#299**, **#301**, **#303** e **#306** |
 | Registro de dívidas | `docs/dividas-tecnicas.md` (canônico — **não enumerado nem duplicado aqui**) |
 | Handoff operacional | `.ai/handoff.md` |
 
@@ -122,6 +122,7 @@ registro de gate) — o que não tem evidência é **dívida** ou **lacuna**, nu
 | **Etapa 5 — certificação transversal** | Issue #256 = **F5-12**: validação integrada e fechamento da Etapa 5 (matriz B1–B3, T1–T11, R1–R10) | Concluída; ver Parte III |
 | **F6-01** | Primeiro checkpoint da Etapa 6 | Concluída |
 | **Checkpoint Etapa 6 (Issue #308)** | Histórico soberano de ciclos, preservação de data civil no histórico, correção de boot da Edge `avaliacoes`, papel avaliativo mínimo e alinhamentos de capability/infraestrutura | Consolidado nesta v17; ver Parte III |
+| **F6 — checkpoint pós-#359** | Plataforma soberana, leitura estrutural, identidade de posição, gestão de pessoas por posição, isolamento do runner descartável e provas P5 | Consolidado nesta v19; ver Parte III |
 
 Detalhamento por fase (critérios, decisões, evidências): `docs/F5-01-desenho-tecnico.md` …
 `docs/F5-11-desenho-tecnico.md`, `docs/F5-09-p9-matriz-integrada.md`,
@@ -162,6 +163,30 @@ fechado**; os itens F6 ainda pendentes permanecem no estado da Etapa 6 descrito 
 
 ### III.2 Checkpoint da Etapa 6
 - **F6-01** está concluída.
+- **Baseline documental:** `main` em `d64b4599f532335a90ef58ef58895d093bd63623`.
+- **#310 — entrada soberana da Gestão Virtus:** o Admin Virtus de plataforma é autorizado por
+  `auth.uid()` e sondagem server-side; pode entrar em `/plataforma` sem `user_profiles`, membership,
+  collaborator ou tenant artificial. O fluxo tenant permanece fail-closed. O provisionamento mantém
+  o gate server-side e o primeiro acesso do responsável nasce pendente sem alterar perfil preexistente.
+- **#327 / #333 / #337 — leitura e identidade soberanas:** as views de estrutura permanecem a fronteira
+  de leitura own-tenant; consumidores pessoais usam identidade soberana, sem cargo ou matrícula
+  inventados. Nenhuma autoridade é derivada de client, JWT ou `localStorage`.
+- **#338 — R3-10/P0–P5 concluído:** PEOPLE_MANAGEMENT pertence à posição, com vigência, ocupação e
+  reporting line preservados; Policy Engine, Edge, RPCs e UI usam `position_id` UUID. P4.5 tornou
+  `organizational_positions.name` obrigatório, permitiu posições com mesmo cargo/contexto e adicionou
+  rename auditado; #351/#353 projetaram `name` nas views. P5 confirmou posição vaga sem grants,
+  transferência/encerramento temporal e divergência entre duas posições do mesmo `job_role_id`.
+- **#355 — criação administrativa:** `collaborator.create + ORGANIZATION` autoriza posição vaga no
+  mesmo tenant, mantendo vacância, tenant isolation, DIRECT_REPORTS/DESCENDANTS e o gate separado de
+  `org.structure.manage` para ocupação.
+- **#357/#358 — superfície administrativa:** Posições permite configurar e revogar PEOPLE_MANAGEMENT
+  pelas operações soberanas existentes, com `position_id`, vigência, versão e `operationId`.
+- **#344 — segurança operacional:** validações destrutivas locais entram pelo runner descartável,
+  com `project_id`, portas, workdir e container de validação verificados; o runtime compartilhado não
+  é alvo legítimo de reset automatizado.
+- **#359 — regressão P5:** a prova de mesmo cargo reutilizado agora consulta o resolvedor pelo ocupante
+  vigente da posição sem responsabilidade e exige zero grants derivados; a validação foi executada no
+  ambiente descartável com fingerprint do runtime compartilhado idêntico antes/depois.
 - **Checkpoint documental da Issue #308:** a base real da Etapa 6 agora inclui:
   - **F6-CICLOS-02 (#301)**, com histórico soberano de ciclos disponibilizado pela fronteira
     `ciclos`/RPC e integrado à tela de ciclos;
@@ -190,11 +215,13 @@ fechado**; os itens F6 ainda pendentes permanecem no estado da Etapa 6 descrito 
   responsabilidade do **orquestrador** — as certificações registram isso explicitamente.
 - **PR e merge são do orquestrador** (`gh` ausente no ambiente do agente; DEV-04): o agente entrega
   branch + SHA + título/corpo quando não há mecanismo autorizado de abertura de PR.
-- **Estado da `main` de referência deste registro:** `9d41493` (`feat(#306): provisionar papel avaliativo mínimo`).
+- **Estado da `main` de referência deste registro:** `d64b4599f532335a90ef58ef58895d093bd63623` (`test(#338): provar mesmo cargo com responsabilidades distintas (#359)`).
 - O SHA anterior `c07d872` pertence ao checkpoint da v16.3 e é preservado apenas como histórico no Git,
   não como estado vigente.
-- A pendência funcional de runtime deste checkpoint é a validação da entrega **#306**; F6-A17 já tem
-  validação runtime concluída.
+- A validação runtime de #306 e F6-A17 permanece registrada como concluída; a frente imediata da Etapa 6
+  é **#293/F6-A15**, o backlog canônico de UX, sem reabrir contratos de auth/autorização. Em paralelo,
+  permanecem pendências reais já existentes: **F6-COLAB-03** e **F6-A18**. A próxima atividade deve
+  ser escolhida por Issue/desenho fechado; não há novo P ou fase criado por este checkpoint.
 
 ### III.4 Contrato visual e de acesso — Issue #312
 - A identidade pública/plataforma passa a ter contrato normativo em `docs/brand/virtus-brand-guide.md` e matriz de aceite em `docs/brand/virtus-visual-acceptance.md`.

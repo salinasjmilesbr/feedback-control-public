@@ -34,6 +34,23 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
+### 3.37 Issue #360 — checkpoint documental da Etapa 6 — CONCLUÍDO
+
+- **Baseline:** `main` em `d64b4599f532335a90ef58ef58895d093bd63623`; branch desta atividade:
+  `docs/issue-360-checkpoint-etapa-6`.
+- **Estado consolidado:** #310 (entrada soberana da Gestão Virtus e primeiro acesso), #327/#333/#337
+  (leitura e identidade soberanas), #338 (R3-10/P0–P5, incluindo P4.5 e P5), #344 (runner destrutivo
+  descartável), #351/#353 (projeções com nome), #355 (criação por escopo ORGANIZATION), #357/#358
+  (PEOPLE_MANAGEMENT navegável) e #359 (prova comportamental por ocupante) estão refletidos em
+  `docs/plano-mestre.md`.
+- **Prova recente:** o runner #344 passou em `feedback-control-validation`; a prova de d02 usou o
+  resolvedor e confirmou zero grants derivados de PEOPLE_MANAGEMENT para o ocupante vigente. O
+  fingerprint do runtime compartilhado permaneceu idêntico antes/depois.
+- **Próxima frente indicada:** #293/F6-A15 continua canônica para UX; F6-COLAB-03 e F6-A18 permanecem
+  pendências reais da Etapa 6. Não foi criado novo P/fase e não houve alteração de produto/runtime.
+- **Gates desta entrega:** validação documental de coerência e `git diff --check`; sem reset, sem
+  validação destrutiva e sem alteração de dados.
+
 ### 3.36 Issue #321 (F6-A20) — atomicidade da conclusão do primeiro acesso — IMPLEMENTADO · PR/MERGE PENDENTES
 
 - **Atividade/branch:** Issue **#321**, branch **`feat/issue-321-onboarding-senha`** (mesma branch da
