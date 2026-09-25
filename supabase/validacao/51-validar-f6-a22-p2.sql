@@ -32,6 +32,14 @@ begin
   raise notice '[PASS] ocupante vigente recebe read/create, scopes e origem; edit/structure.manage ausentes';
 end $$;
 
+begin;
+insert into public.membership_collaborator_links
+  (membership_id, organization_id, collaborator_id, status)
+select m.id, m.organization_id, 'f6a22000-0000-4000-8000-000000000e02', 'active'
+  from public.user_organization_memberships m
+ where m.user_profile_id = 'f6a22000-0000-4000-8000-000000000003'
+   and m.organization_id = 'f6a22000-0000-4000-8000-0000000000a1';
+
 do $$
 declare v_same_role boolean; v_with_people integer; v_without_people integer;
 begin
@@ -51,18 +59,17 @@ begin
       'f6a22000-0000-4000-8000-0000000000a1')
    where grant_origin = 'position_responsibility:f6a22000-0000-4000-8000-000000000901';
   select count(*) into v_without_people
-    from public.organizational_position_responsibilities r
-   where r.organization_id = 'f6a22000-0000-4000-8000-0000000000a1'
-     and r.position_id = 'f6a22000-0000-4000-8000-000000000d02'
-     and r.responsibility_code = 'PEOPLE_MANAGEMENT'
-     and r.valid_from <= now()
-     and (r.valid_to is null or r.valid_to > now());
+    from public.resolver_capabilities_escopos_efetivas(
+      'f6a22000-0000-4000-8000-000000000003',
+      'f6a22000-0000-4000-8000-0000000000a1')
+   where grant_origin like 'position_responsibility:%';
   if v_with_people <> 4 or v_without_people <> 0 then
     raise exception '[FAIL] mesmo cargo produziu efeito divergente inesperado: com=% sem=%',
       v_with_people, v_without_people;
   end if;
-  raise notice '[PASS] mesmo cargo: posição com PEOPLE_MANAGEMENT concede 4 grants; posição sem responsabilidade concede 0';
+  raise notice '[PASS] mesmo cargo: posição com PEOPLE_MANAGEMENT concede 4 grants; ocupante da posição sem responsabilidade recebe 0 grants';
 end $$;
+rollback;
 
 do $$
 declare v_n integer;
