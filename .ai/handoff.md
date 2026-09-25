@@ -34,6 +34,20 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
 
 > Atualizar ao final de cada atividade.
 
+### 3.38 Issue #362 — validação funcional integrada da Etapa 6 — DECIDIDA · EXECUÇÃO PENDENTE
+
+- **Baseline:** `main` em `b88b26bfd16d8a353fcc030d4baa3ce7ad869805`; branch desta atividade:
+  `docs/issue-362-validacao-integrada-etapa-6`.
+- **Decisão do orquestrador:** antes de #293/F6-A15, executar uma validação end-to-end no produto/runtime
+  usando o cenário Acme já reconstruído. A prova deve cobrir ciclos, avaliações, metas, observações,
+  históricos/relatórios, Ricardo → Mariana → Felipe → João, Admin da empresa e Gestão Virtus quando
+  aplicável, com ALLOW/DENY de PEOPLE_MANAGEMENT, DIRECT_REPORTS/DESCENDANTS e contratos F4/F5.
+- **Regra de evidência:** reutilizar validadores e provas técnicas existentes; não repetir a certificação
+  F5 nem criar novo P/fase. A execução deve ser funcional e integrada, registrando apenas lacunas reais.
+- **Ordem vigente:** (1) validação integrada; (2) #293/F6-A15; (3) F6-COLAB-03 e F6-A18 conforme
+  dependências; (4) fechamento da Etapa 6; (5) F7.
+- **Escopo desta atualização:** somente documentação; nenhum produto, runtime ou dado Acme alterado.
+
 ### 3.37 Issue #360 — checkpoint documental da Etapa 6 — CONCLUÍDO
 
 - **Baseline:** `main` em `d64b4599f532335a90ef58ef58895d093bd63623`; branch desta atividade:
