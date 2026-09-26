@@ -18,6 +18,9 @@ describe("Issue #365 — histórico de reporting", () => {
   it("resolve ocupante gestor pela vigência UTC do evento e preserva UUIDs", () => {
     expect(migration).toContain("o.valid_from <= e.effective_date");
     expect(migration).toContain("o.valid_to is null or o.valid_to > e.effective_date");
+    expect(migration).toContain("o.valid_from < e.effective_date");
+    expect(migration).toContain("o.valid_to is null or o.valid_to >= e.effective_date");
+    expect(migration).toContain("when e.event_type = 'REPORTING_LINE_ENCERRADA'");
     expect(migration).toContain("manager_position_id");
     expect(migration).toContain("historical_manager_occupants");
     expect(migration).toContain("order by o.valid_from desc, o.id");

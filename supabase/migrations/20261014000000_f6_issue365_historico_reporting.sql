@@ -84,8 +84,15 @@ begin
                and c.organization_id = p_organization_id
              where o.organization_id = p_organization_id
                and o.organizational_position_id = gestores.manager_position_id
-               and o.valid_from <= e.effective_date
-               and (o.valid_to is null or o.valid_to > e.effective_date)
+               and case
+                     when e.event_type = 'REPORTING_LINE_INICIADA'
+                       then o.valid_from <= e.effective_date
+                        and (o.valid_to is null or o.valid_to > e.effective_date)
+                     when e.event_type = 'REPORTING_LINE_ENCERRADA'
+                       then o.valid_from < e.effective_date
+                        and (o.valid_to is null or o.valid_to >= e.effective_date)
+                     else false
+                   end
              order by o.valid_from desc, o.id
              limit 1
           ) ocupante on true
