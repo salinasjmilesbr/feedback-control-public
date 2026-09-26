@@ -84,6 +84,24 @@ begin
         '  ) then' || chr(10) ||
         '    raise exception ''F5_07_CONFLICT: segunda transicao de ocupacao na mesma relacao e data civil'';' || chr(10) ||
         '  end if;';
+    elsif v_name = 'estrutura_ocupacao_encerrar' then
+      v_guard :=
+        '  if exists (' || chr(10) ||
+        '    select 1' || chr(10) ||
+        '      from public.collaborator_events e' || chr(10) ||
+        '      join public.occupations o' || chr(10) ||
+        '        on o.organization_id = e.organization_id' || chr(10) ||
+        '       and o.collaborator_id = e.collaborator_id' || chr(10) ||
+        '       and o.organizational_position_id = e.position_id' || chr(10) ||
+        '       and o.valid_from < p_vigencia' || chr(10) ||
+        '       and (o.valid_to is null or o.valid_to > p_vigencia)' || chr(10) ||
+        '     where e.organization_id = p_organization_id' || chr(10) ||
+        '       and e.collaborator_id = p_collaborator_id' || chr(10) ||
+        '       and e.event_type in (''OCUPACAO_INICIADA'', ''OCUPACAO_ENCERRADA'')' || chr(10) ||
+        '       and e.effective_date = p_vigencia' || chr(10) ||
+        '  ) then' || chr(10) ||
+        '    raise exception ''F5_07_CONFLICT: segunda transicao de ocupacao na mesma relacao e data civil'';' || chr(10) ||
+        '  end if;';
     elsif v_name like 'estrutura_reporting_%' then
       v_guard :=
         '  if exists (' || chr(10) ||
@@ -95,8 +113,6 @@ begin
         '  ) then' || chr(10) ||
         '    raise exception ''F5_07_CONFLICT: segunda transicao de reporting line na mesma relacao e data civil'';' || chr(10) ||
         '  end if;';
-    else
-      v_guard := null;
     end if;
 
     if v_guard is not null then
@@ -125,13 +141,6 @@ begin
                          nullif(position('  insert into public.' in v_source), 0));
       if v_dml_pos is null or not (v_lock_pos < v_guard_pos and v_guard_pos < v_dml_pos) then
         raise exception 'F6_366: ordem lock -> guarda -> DML invalida em %', v_name;
-      end if;
-    else
-      v_lock_marker := v_lock || 'v_org::text));';
-      v_lock_count := (length(v_source) - length(replace(v_source, v_lock_marker, ''))) /
-                      length(v_lock_marker);
-      if v_lock_count <> 1 then
-        raise exception 'F6_366: lock de occupation encerrar ausente ou ambiguo';
       end if;
     end if;
 
