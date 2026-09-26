@@ -14,7 +14,7 @@
  *   (`definirReportingLine`/`encerrarReportingLine`) — as operações de estrutura
  *   NÃO têm `expectedVersion` no contrato F5-07 (nenhuma versão é fabricada);
  * - "trocar de posição" NÃO é uma operação nova: é `encerrarOcupacao` seguido de
- *   `definirOcupacao`, sem atomicidade fingida e sem rollback local;
+ *   uma única operação soberana atômica de troca de posição;
  * - nenhuma escrita em `localStorage`, nenhum dual-write e nenhum histórico local.
  */
 
@@ -542,28 +542,14 @@ function FormularioEdicao({
         posicaoId: trocarPosicaoId,
         vigencia: vigenciaAlocacao,
         motivo: motivoAlocacao,
-        operationIdEncerramento: novoOperationId(),
-        operationIdDefinicao: novoOperationId(),
+        operationId: novoOperationId(),
         organizationId: organizacaoAtivaId,
       },
       deps
     );
     setAlocando(false);
 
-    if (desfecho.tipo === "parcial") {
-      aoDefinirMensagemAlocacao({
-        codigo: desfecho.codigo,
-        mensagem:
-          "A ocupação anterior foi ENCERRADA e a nova posição NÃO foi definida: " +
-          `o colaborador está SEM ALOCAÇÃO. ${desfecho.mensagem}`,
-        parcial: true,
-      });
-      aoRecarregarEstrutura();
-      aoAtualizar();
-      return;
-    }
-
-    if (desfecho.tipo === "falhou-encerrar") {
+    if (desfecho.tipo === "falhou") {
       aoDefinirMensagemAlocacao({
         codigo: desfecho.codigo,
         mensagem: `Nada foi alterado: ${desfecho.mensagem}`,
@@ -1190,10 +1176,9 @@ function FormularioEdicao({
             </div>
 
             <p className="collaborator-form-empty">
-              “Trocar posição” executa DUAS operações soberanas na ordem:
-              encerrar a ocupação atual e definir a nova. Não há transação única
-              no cliente: se a segunda etapa falhar, o estado real (sem alocação)
-              é exibido e a leitura é recarregada.
+              “Trocar posição” executa uma única operação soberana atômica:
+              encerrar a ocupação atual e definir a nova na mesma transação.
+              Em caso de falha, o PostgreSQL desfaz a operação inteira.
             </p>
           </>
         )}
@@ -1206,9 +1191,7 @@ function FormularioEdicao({
           data-testid="alocacao-mensagem"
         >
           <strong>
-            {mensagemAlocacao.parcial
-              ? "Estado parcial: colaborador SEM ALOCAÇÃO"
-              : mensagemAlocacao.codigo === "FORBIDDEN"
+            {mensagemAlocacao.codigo === "FORBIDDEN"
                 ? "Acesso restrito"
                 : mensagemAlocacao.codigo === "CONFLICT"
                   ? "Conflito na alocação"
@@ -1219,12 +1202,6 @@ function FormularioEdicao({
           <p>
             {mensagemAlocacao.mensagem} ({mensagemAlocacao.codigo})
           </p>
-          {mensagemAlocacao.parcial && (
-            <p>
-              Nada foi restaurado localmente: a ocupação anterior foi encerrada no
-              servidor e a nova não existe.
-            </p>
-          )}
           <div className="collaborator-form-actions">
             <button
               type="button"

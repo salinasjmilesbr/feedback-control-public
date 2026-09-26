@@ -574,6 +574,7 @@ declare
     'catalogo_senioridade_criar','catalogo_senioridade_renomear',
     'catalogo_senioridade_status_alterar',
     'estrutura_ocupacao_definir','estrutura_ocupacao_encerrar',
+    'estrutura_ocupacao_trocar',
     'estrutura_reporting_definir','estrutura_reporting_encerrar',
     'enforce_position_reporting_lines_no_cycle',
     'enforce_organizational_unit_parent_periods_no_cycle'];

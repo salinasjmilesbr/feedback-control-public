@@ -118,6 +118,7 @@ function repositorioFalso(
     alterarStatus: (entrada) => registrar("alterarStatus", entrada, { ok: true, data: 4 }),
     definirOcupacao: (entrada) => registrar("definirOcupacao", entrada, { ok: true, data: POSICAO }),
     encerrarOcupacao: (entrada) => registrar("encerrarOcupacao", entrada, { ok: true, data: null }),
+    trocarOcupacao: (entrada) => registrar("trocarOcupacao", entrada, { ok: true, data: POSICAO }),
     definirReportingLine: (entrada) =>
       registrar("definirReportingLine", entrada, { ok: true, data: POSICAO }),
     encerrarReportingLine: (entrada) =>

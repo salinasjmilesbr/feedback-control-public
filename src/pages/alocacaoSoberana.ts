@@ -17,9 +17,9 @@
  * - NÃO existe `expectedVersion` nestas operações (contrato F5-07): a proteção
  *   contra fotografia desatualizada é LOCAL e fail-closed — se a posição/ocupação
  *   não está mais vigente na leitura corrente, NADA é enviado e a tela recarrega;
- * - NÃO existe transação única entre operações distintas: "trocar de posição" é
- *   explicitamente `encerrarOcupacao` + `definirOcupacao`, com desfecho PARCIAL
- *   visível (o colaborador pode ficar sem alocação) — jamais rollback local;
+ * - "trocar de posição" é uma única operação soberana atômica via
+ *   `trocarOcupacao`; encerramento e nova ocupação persistem juntos ou sofrem
+ *   rollback integral no PostgreSQL;
  * - nenhum algoritmo de ciclo/self-relation é replicado aqui: ciclos, guardas
  *   I1–I5 e integridade continuam no banco/RPC (a tela apenas não oferece a
  *   posição selecionada como seu próprio gestor).
@@ -36,6 +36,7 @@ import {
   definirOcupacao,
   definirReportingLine,
   encerrarOcupacao,
+  trocarOcupacao,
   encerrarReportingLine,
   type DependenciasAcessoColaboradores,
   type ResultadoColaboradores,
@@ -80,7 +81,7 @@ export function posicaoVigente(
   return estaVigente(posicao.validFrom, posicao.validTo, referencia) ? posicao : null;
 }
 
-/** Ocupação VIGENTE do colaborador (a que a tela encerra/troca). */
+/** Ocupação VIGENTE do colaborador (referência da troca atômica). */
 export function ocupacaoVigenteDoColaborador(
   estrutura: EstruturaSoberana,
   collaboratorId: string,
@@ -140,25 +141,12 @@ export type DesfechoAlocacao =
   | RecusaAlocacao
   | { readonly tipo: "concluida"; readonly resultado: ResultadoColaboradores<unknown> };
 
-/**
- * Troca de posição: DUAS operações distintas e NÃO atômicas. O desfecho expõe
- * exatamente o que aconteceu no servidor:
- * - `falhou-encerrar`  ⇒ nada mudou (a ocupação anterior continua vigente);
- * - `parcial`          ⇒ a ocupação anterior foi ENCERRADA e a nova NÃO foi
- *                        definida: o colaborador está SEM ALOCAÇÃO (sem rollback
- *                        local, apenas o estado soberano real + recarga);
- * - `concluida`        ⇒ encerrou e definiu.
- */
+/** Troca de posição atômica: uma operação soberana ou nenhuma alteração. */
 export type DesfechoTrocaPosicao =
   | RecusaAlocacao
   | { readonly tipo: "concluida" }
   | {
-      readonly tipo: "falhou-encerrar";
-      readonly codigo: CodigoPublico;
-      readonly mensagem: string;
-    }
-  | {
-      readonly tipo: "parcial";
+      readonly tipo: "falhou";
       readonly codigo: CodigoPublico;
       readonly mensagem: string;
     };
@@ -265,16 +253,12 @@ export interface EntradaTrocarPosicaoSoberana {
   readonly vigencia: string;
   readonly motivo: string;
   /** Idempotência da operação de encerramento (F5-07). */
-  readonly operationIdEncerramento: string;
+  readonly operationId: string;
   /** Idempotência da operação de definição (F5-07) — id distinto por operação. */
-  readonly operationIdDefinicao: string;
   readonly organizationId?: string | null;
 }
 
-/**
- * Troca de posição = `encerrarOcupacao` + `definirOcupacao` (sem atomicidade
- * fingida e sem rollback local). Cada etapa usa o SEU `operationId`.
- */
+/** Executa a troca como uma única operação transacional no PostgreSQL. */
 export async function confirmarTrocaDePosicao(
   entrada: EntradaTrocarPosicaoSoberana,
   deps: DependenciasAcessoColaboradores = {}
@@ -289,10 +273,15 @@ export async function confirmarTrocaDePosicao(
     return recusaPosicao(MENSAGEM_OCUPACAO_DESATUALIZADA);
   }
 
-  const encerramento = await encerrarOcupacao(
+  const ocupacaoAtual = ocupacaoVigenteDoColaborador(entrada.estrutura, entrada.collaboratorId);
+  if (!ocupacaoAtual) return recusaPosicao(MENSAGEM_OCUPACAO_DESATUALIZADA);
+
+  const troca = await trocarOcupacao(
     {
       collaboratorId: entrada.collaboratorId,
-      operationId: entrada.operationIdEncerramento,
+      operationId: entrada.operationId,
+      currentPositionId: ocupacaoAtual.posicaoId,
+      newPositionId: entrada.posicaoId,
       vigencia: entrada.vigencia,
       motivo: entrada.motivo.trim(),
       ...(entrada.organizationId ? { organizationId: entrada.organizationId } : {}),
@@ -300,30 +289,12 @@ export async function confirmarTrocaDePosicao(
     deps
   );
 
-  if (!encerramento.ok) {
+  if (!troca.ok) {
     return {
-      tipo: "falhou-encerrar",
-      codigo: encerramento.codigo,
-      mensagem: encerramento.mensagem,
+      tipo: "falhou",
+      codigo: troca.codigo,
+      mensagem: troca.mensagem,
     };
-  }
-
-  const definicao = await definirOcupacao(
-    {
-      collaboratorId: entrada.collaboratorId,
-      operationId: entrada.operationIdDefinicao,
-      positionId: entrada.posicaoId,
-      vigencia: entrada.vigencia,
-      motivo: entrada.motivo.trim(),
-      ...(entrada.organizationId ? { organizationId: entrada.organizationId } : {}),
-    },
-    deps
-  );
-
-  if (!definicao.ok) {
-    // Estado soberano REAL: a ocupação anterior já foi encerrada e a nova não
-    // existe. O colaborador está sem alocação; nenhum rollback local é feito.
-    return { tipo: "parcial", codigo: definicao.codigo, mensagem: definicao.mensagem };
   }
 
   return { tipo: "concluida" };

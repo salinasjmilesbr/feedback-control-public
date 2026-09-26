@@ -238,6 +238,21 @@ export function encerrarOcupacao(
   return executar(deps, (servico) => servico.encerrarOcupacao(entrada));
 }
 
+export function trocarOcupacao(
+  entrada: {
+    readonly collaboratorId: string;
+    readonly operationId: string;
+    readonly currentPositionId: string;
+    readonly newPositionId: string;
+    readonly vigencia: string;
+    readonly motivo: string;
+    readonly organizationId?: string | null;
+  },
+  deps: DependenciasAcessoColaboradores = {}
+): Promise<ResultadoColaboradores<string>> {
+  return executar(deps, (servico) => servico.trocarOcupacao(entrada));
+}
+
 export function definirReportingLine(
   entrada: {
     readonly subordinatePositionId: string;

@@ -32,6 +32,7 @@ export type OperacaoColaborador =
   | "collaborator.status.alterar"
   | "colaborador.ocupacao.definir"
   | "colaborador.ocupacao.encerrar"
+  | "colaborador.ocupacao.trocar"
   | "estrutura.reporting.definir"
   | "estrutura.reporting.encerrar"
   | "estrutura.responsabilidade.definir"
@@ -109,6 +110,10 @@ export const DEFINICAO_POR_OPERACAO: Readonly<Record<OperacaoColaborador, Defini
       capability: "org.structure.manage",
     },
     "colaborador.ocupacao.encerrar": {
+      gate: "administrativo",
+      capability: "org.structure.manage",
+    },
+    "colaborador.ocupacao.trocar": {
       gate: "administrativo",
       capability: "org.structure.manage",
     },
@@ -317,6 +322,16 @@ export interface EntradaEncerrarOcupacao {
   readonly organization_id: string;
   readonly operation_id: string;
   readonly collaborator_id: string;
+  readonly vigencia: string;
+  readonly motivo: string;
+}
+
+export interface EntradaTrocarOcupacao {
+  readonly organization_id: string;
+  readonly operation_id: string;
+  readonly collaborator_id: string;
+  readonly current_position_id: string;
+  readonly new_position_id: string;
   readonly vigencia: string;
   readonly motivo: string;
 }
@@ -553,6 +568,7 @@ export type EntradaColaborador =
   | EntradaAlterarStatus
   | EntradaDefinirOcupacao
   | EntradaEncerrarOcupacao
+  | EntradaTrocarOcupacao
   | EntradaDefinirReporting
   | EntradaEncerrarReporting
   | EntradaDefinirResponsabilidade
@@ -1231,6 +1247,33 @@ export function validarEntradaColaborador(corpo: unknown): ResultadoValidacaoCol
           organization_id,
           operation_id: operation_id!,
           collaborator_id: cru.collaborator_id,
+          vigencia,
+          motivo,
+        },
+      };
+    }
+
+    case "colaborador.ocupacao.trocar": {
+      const falta = exigirOperacao();
+      if (falta) return falta;
+      if (!ehUuid(cru.collaborator_id) || !ehUuid(cru.current_position_id) || !ehUuid(cru.new_position_id)) {
+        return { ok: false, code: "INVALID_INPUT", message: "IDs de colaborador/posições inválidos." };
+      }
+      if (cru.current_position_id === cru.new_position_id) {
+        return { ok: false, code: "INVALID_INPUT", message: "A posição atual e a nova devem ser diferentes." };
+      }
+      const vigencia = exigirVigencia();
+      if (typeof vigencia !== "string") return vigencia;
+      const motivo = exigirMotivo();
+      if (typeof motivo !== "string") return motivo;
+      return {
+        ok: true,
+        entrada: {
+          organization_id,
+          operation_id: operation_id!,
+          collaborator_id: cru.collaborator_id,
+          current_position_id: cru.current_position_id,
+          new_position_id: cru.new_position_id,
           vigencia,
           motivo,
         },
