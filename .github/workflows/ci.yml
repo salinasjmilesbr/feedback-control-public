@@ -145,6 +145,9 @@ jobs:
       - name: Guard destructive local reset targets
         run: pwsh -NoProfile -File supabase/validacao/Test-DisposableValidationGuard.ps1
 
+      - name: Migration preflight (static)
+        run: node scripts/preflight-migrations.mjs
+
       # Apenas o banco local (roles.sql + auth.uid() + migrations). Sem rede
       # remota: tudo em containers efêmeros do runner (docker).
       - name: Start local Supabase database
