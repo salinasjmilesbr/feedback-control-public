@@ -773,7 +773,7 @@ begin
 end $$;
 
 -- ============================================================================
--- 5) D24 — as 4 RPCs estruturais da F5-07 com a chave normativa
+-- 5) D24 — as RPCs estruturais da F5-07/F5-08 com a chave normativa
 -- ============================================================================
 
 do $$
@@ -781,6 +781,7 @@ declare
   v_esperado text[] := array[
     'estrutura_ocupacao_definir',
     'estrutura_ocupacao_encerrar',
+    'estrutura_ocupacao_trocar',
     'estrutura_reporting_definir',
     'estrutura_reporting_encerrar'];
   v_nome text;
@@ -795,9 +796,10 @@ begin
   v_esperado_args := array[
     'p_organization_id uuid, p_actor_user_profile_id uuid, p_operation_id uuid, p_collaborator_id uuid, p_position_id uuid, p_vigencia timestamp with time zone, p_motivo text, p_cycle_scope text, p_reference_cycle_id uuid',
     'p_organization_id uuid, p_actor_user_profile_id uuid, p_operation_id uuid, p_collaborator_id uuid, p_vigencia timestamp with time zone, p_motivo text',
+    'p_organization_id uuid, p_actor_user_profile_id uuid, p_operation_id uuid, p_collaborator_id uuid, p_current_position_id uuid, p_new_position_id uuid, p_vigencia timestamp with time zone, p_motivo text',
     'p_organization_id uuid, p_actor_user_profile_id uuid, p_operation_id uuid, p_subordinate_position_id uuid, p_manager_position_id uuid, p_vigencia timestamp with time zone, p_motivo text',
     'p_organization_id uuid, p_actor_user_profile_id uuid, p_operation_id uuid, p_subordinate_position_id uuid, p_vigencia timestamp with time zone, p_motivo text'];
-  v_esperado_retorno := array['uuid', 'void', 'uuid', 'void'];
+  v_esperado_retorno := array['uuid', 'void', 'uuid', 'uuid', 'void'];
 
   foreach v_nome in array v_esperado loop
     v_i := v_i + 1;
@@ -859,6 +861,7 @@ declare
   v_assinaturas text[] := array[
     'public.estrutura_ocupacao_definir(uuid, uuid, uuid, uuid, uuid, timestamp with time zone, text, text, uuid)',
     'public.estrutura_ocupacao_encerrar(uuid, uuid, uuid, uuid, timestamp with time zone, text)',
+    'public.estrutura_ocupacao_trocar(uuid, uuid, uuid, uuid, uuid, uuid, timestamp with time zone, text)',
     'public.estrutura_reporting_definir(uuid, uuid, uuid, uuid, uuid, timestamp with time zone, text)',
     'public.estrutura_reporting_encerrar(uuid, uuid, uuid, uuid, timestamp with time zone, text)'];
   v_assinatura text;
