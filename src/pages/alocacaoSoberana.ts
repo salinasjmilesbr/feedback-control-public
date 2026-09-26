@@ -141,25 +141,12 @@ export type DesfechoAlocacao =
   | RecusaAlocacao
   | { readonly tipo: "concluida"; readonly resultado: ResultadoColaboradores<unknown> };
 
-/**
- * Troca de posição: DUAS operações distintas e NÃO atômicas. O desfecho expõe
- * exatamente o que aconteceu no servidor:
- * - `falhou-encerrar`  ⇒ nada mudou (a ocupação anterior continua vigente);
- * - `parcial`          ⇒ a ocupação anterior foi ENCERRADA e a nova NÃO foi
- *                        definida: o colaborador está SEM ALOCAÇÃO (sem rollback
- *                        local, apenas o estado soberano real + recarga);
- * - `concluida`        ⇒ encerrou e definiu.
- */
+/** Troca de posição atômica: uma operação soberana ou nenhuma alteração. */
 export type DesfechoTrocaPosicao =
   | RecusaAlocacao
   | { readonly tipo: "concluida" }
   | {
-      readonly tipo: "falhou-encerrar";
-      readonly codigo: CodigoPublico;
-      readonly mensagem: string;
-    }
-  | {
-      readonly tipo: "parcial";
+      readonly tipo: "falhou";
       readonly codigo: CodigoPublico;
       readonly mensagem: string;
     };
@@ -271,10 +258,7 @@ export interface EntradaTrocarPosicaoSoberana {
   readonly organizationId?: string | null;
 }
 
-/**
- * Troca de posição = `encerrarOcupacao` + `definirOcupacao` (sem atomicidade
- * fingida e sem rollback local). Cada etapa usa o SEU `operationId`.
- */
+/** Executa a troca como uma única operação transacional no PostgreSQL. */
 export async function confirmarTrocaDePosicao(
   entrada: EntradaTrocarPosicaoSoberana,
   deps: DependenciasAcessoColaboradores = {}
@@ -307,16 +291,10 @@ export async function confirmarTrocaDePosicao(
 
   if (!troca.ok) {
     return {
-      tipo: "falhou-encerrar",
+      tipo: "falhou",
       codigo: troca.codigo,
       mensagem: troca.mensagem,
     };
-  }
-
-  if (false) {
-    // Estado soberano REAL: a ocupação anterior já foi encerrada e a nova não
-    // existe. O colaborador está sem alocação; nenhum rollback local é feito.
-    return { tipo: "concluida" };
   }
 
   return { tipo: "concluida" };

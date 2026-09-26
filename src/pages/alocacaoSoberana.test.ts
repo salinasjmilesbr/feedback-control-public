@@ -336,7 +336,7 @@ describe("F5-08 P5 — encerrar ocupação", () => {
   });
 });
 
-describe.skip("F5-08 P5 — troca legada substituída pela RPC atômica", () => {
+describe("F5-08 P5 — troca de posição atômica", () => {
   const comOcupacao = () =>
     estrutura({
       ocupacoes: [
@@ -351,7 +351,7 @@ describe.skip("F5-08 P5 — troca legada substituída pela RPC atômica", () => 
       ],
     });
 
-  it("executa encerrar e depois definir com operationIds DISTINTOS", async () => {
+  it("envia uma única operação com a posição atual e a nova", async () => {
     const servico = servicoFalso();
 
     const desfecho = await confirmarTrocaDePosicao(
@@ -368,21 +368,18 @@ describe.skip("F5-08 P5 — troca legada substituída pela RPC atômica", () => 
     );
 
     expect(desfecho).toEqual({ tipo: "concluida" });
-    expect(servico.chamadas.map((chamada) => chamada.metodo)).toEqual([
-      "encerrarOcupacao",
-      "definirOcupacao",
-    ]);
-    expect(servico.chamadas[0]?.argumentos).toMatchObject({ operationId: OPERACAO_A });
-    expect(servico.chamadas[1]?.argumentos).toMatchObject({
-      operationId: OPERACAO_B,
-      positionId: POSICAO_GESTOR,
+    expect(servico.chamadas).toHaveLength(1);
+    expect(servico.chamadas[0]?.metodo).toBe("trocarOcupacao");
+    expect(servico.chamadas[0]?.argumentos).toMatchObject({
+      operationId: OPERACAO_A,
+      currentPositionId: POSICAO,
+      newPositionId: POSICAO_GESTOR,
     });
-    expect(OPERACAO_A).not.toBe(OPERACAO_B);
   });
 
-  it("falha no encerrar ⇒ nada mudou e a definição NÃO é enviada", async () => {
+  it("propaga falha atômica sem segunda chamada ou compensação", async () => {
     const servico = servicoFalso({
-      encerrarOcupacao: async () => ({
+      trocarOcupacao: async () => ({
         ok: false as const,
         codigo: "CONFLICT" as const,
         mensagem: "ocupação mudou",
@@ -403,46 +400,11 @@ describe.skip("F5-08 P5 — troca legada substituída pela RPC atômica", () => 
     );
 
     expect(desfecho).toEqual({
-      tipo: "falhou-encerrar",
+      tipo: "falhou",
       codigo: "CONFLICT",
       mensagem: "ocupação mudou",
     });
-    expect(servico.chamadas.map((chamada) => chamada.metodo)).toEqual(["encerrarOcupacao"]);
-  });
-
-  it("falha no definir ⇒ desfecho PARCIAL (sem alocação) e nenhum rollback local", async () => {
-    const servico = servicoFalso({
-      definirOcupacao: async () => ({
-        ok: false as const,
-        codigo: "NOT_FOUND" as const,
-        mensagem: "posição não encontrada",
-      }),
-    });
-
-    const desfecho = await confirmarTrocaDePosicao(
-      {
-        estrutura: comOcupacao(),
-        collaboratorId: COLABORADOR,
-        posicaoId: POSICAO_GESTOR,
-        vigencia: VIGENCIA,
-        motivo: MOTIVO,
-        operationId: OPERACAO_A,
-        organizationId: ORG,
-      },
-      { operacoes: servico }
-    );
-
-    expect(desfecho).toEqual({
-      tipo: "parcial",
-      codigo: "NOT_FOUND",
-      mensagem: "posição não encontrada",
-    });
-    // Exatamente as duas operações da troca: nenhuma tentativa de "restaurar" a
-    // ocupação anterior localmente (nenhuma terceira chamada).
-    expect(servico.chamadas.map((chamada) => chamada.metodo)).toEqual([
-      "encerrarOcupacao",
-      "definirOcupacao",
-    ]);
+    expect(servico.chamadas.map((chamada) => chamada.metodo)).toEqual(["trocarOcupacao"]);
   });
 
   it("sem ocupação vigente ou posição inválida, nada é enviado", async () => {
