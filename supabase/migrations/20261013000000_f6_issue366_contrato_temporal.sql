@@ -5,6 +5,11 @@
 -- continua sendo timestamptz, mas a vigência estrutural é normalizada para o
 -- início do dia civil UTC. A guarda de segunda transição ocorre depois do
 -- advisory lock e antes de qualquer mutação ou evento.
+--
+-- Exceção de manutenção: esta migration corrigiu o matching textual para
+-- permitir upgrade incremental de bancos que pararam imediatamente antes
+-- desta versão. Instalações que já registraram a versão não a reaplicam; o
+-- rebuild limpo usa o mesmo caminho. A transformação continua fail-closed.
 
 create or replace function public.f6_vigencia_civil_utc(p_vigencia timestamptz)
 returns timestamptz
@@ -22,6 +27,8 @@ declare
   v_signature text;
   v_source text;
   v_guard text;
+  v_norm_pattern text := '[[:space:]]*if[[:space:]]+p_vigencia[[:space:]]+is[[:space:]]+null[[:space:]]+then[[:space:]]+raise[[:space:]]+exception[[:space:]]+''F5_07_INVALID_INPUT:[[:space:]]+vigencia[[:space:]]+obrigatoria'';[[:space:]]+end[[:space:]]+if;';
+  v_lock_pattern text;
   v_norm_marker text := '  p_vigencia := public.f6_vigencia_civil_utc(p_vigencia);';
   v_lock_marker text;
   v_guard_count integer;
@@ -47,24 +54,15 @@ begin
       raise exception 'F6_366: RPC % ausente', v_name;
     end if;
 
-    if (length(v_source) - length(replace(v_source,
-        '  if p_vigencia is null then' || chr(10) ||
-        '    raise exception ''F5_07_INVALID_INPUT: vigencia obrigatoria'';' || chr(10) ||
-        '  end if;', ''))) /
-       length('  if p_vigencia is null then' || chr(10) ||
-              '    raise exception ''F5_07_INVALID_INPUT: vigencia obrigatoria'';' || chr(10) ||
-              '  end if;') <> 1 then
+    if regexp_count(v_source, v_norm_pattern, 1, 'n') <> 1 then
       raise exception 'F6_366: marcador de normalizacao ausente ou ambiguo em %', v_name;
     end if;
 
-    v_source := replace(v_source,
-      '  if p_vigencia is null then' || chr(10) ||
-      '    raise exception ''F5_07_INVALID_INPUT: vigencia obrigatoria'';' || chr(10) ||
-      '  end if;',
+    v_source := regexp_replace(v_source, v_norm_pattern,
       '  if p_vigencia is null then' || chr(10) ||
       '    raise exception ''F5_07_INVALID_INPUT: vigencia obrigatoria'';' || chr(10) ||
       '  end if;' || chr(10) ||
-      '  p_vigencia := public.f6_vigencia_civil_utc(p_vigencia);');
+      '  p_vigencia := public.f6_vigencia_civil_utc(p_vigencia);', 'n');
 
     v_norm_count := (length(v_source) - length(replace(v_source, v_norm_marker, ''))) /
                     length(v_norm_marker);
@@ -117,18 +115,20 @@ begin
 
     if v_guard is not null then
       if v_name = 'estrutura_ocupacao_definir' or v_name = 'estrutura_ocupacao_encerrar' then
-        v_lock_marker := v_lock || 'v_org::text));';
+      v_lock_marker := v_lock || 'v_org::text));';
+      v_lock_pattern := '[[:space:]]*perform[[:space:]]+pg_advisory_xact_lock[[:space:]]*\([[:space:]]*hashtext[[:space:]]*\([[:space:]]*''position_reporting_lines:''[[:space:]]*\|\|[[:space:]]*v_org::text[[:space:]]*\)[[:space:]]*\)[[:space:]]*;';
       else
         v_lock_marker := v_lock || 'p_organization_id::text));';
+        v_lock_pattern := '[[:space:]]*perform[[:space:]]+pg_advisory_xact_lock[[:space:]]*\([[:space:]]*hashtext[[:space:]]*\([[:space:]]*''position_reporting_lines:''[[:space:]]*\|\|[[:space:]]*p_organization_id::text[[:space:]]*\)[[:space:]]*\)[[:space:]]*;';
       end if;
 
-      v_lock_count := (length(v_source) - length(replace(v_source, v_lock_marker, ''))) /
-                      length(v_lock_marker);
+      v_lock_count := regexp_count(v_source, v_lock_pattern, 1, 'n');
       if v_lock_count <> 1 then
         raise exception 'F6_366: marcador de lock ausente ou ambiguo em %', v_name;
       end if;
 
-      v_source := replace(v_source, v_lock_marker, v_lock_marker || chr(10) || v_guard);
+      v_source := regexp_replace(v_source, v_lock_pattern,
+        v_lock_marker || chr(10) || v_guard, 'n');
       v_guard_count := (length(v_source) - length(replace(v_source, v_guard, ''))) /
                        length(v_guard);
       if v_guard_count <> 1 then
