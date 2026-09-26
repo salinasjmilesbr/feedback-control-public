@@ -71,8 +71,6 @@ begin
   if p_vigencia is null then
     raise exception 'F5_07_INVALID_INPUT: vigencia obrigatoria';
   end if;
-  -- Contrato estrutural: YYYY-MM-DD representa o inicio do dia civil UTC.
-  p_vigencia := date_trunc('day', p_vigencia at time zone 'UTC') at time zone 'UTC';
   if v_motivo = '' then
     raise exception 'F5_07_INVALID_INPUT: motivo obrigatorio';
   end if;
@@ -115,18 +113,6 @@ begin
       raise exception 'F5_07_CONFLICT: operation_id ja utilizado com intencao diferente';
     end if;
     return v_evento.result_entity_id;
-  end if;
-
-  if exists (
-    select 1
-      from public.collaborator_events e
-     where e.organization_id = p_organization_id
-       and e.collaborator_id = p_collaborator_id
-       and e.position_id = p_position_id
-       and e.event_type in ('OCUPACAO_INICIADA', 'OCUPACAO_ENCERRADA')
-       and e.effective_date = p_vigencia
-  ) then
-    raise exception 'F5_07_CONFLICT: segunda transicao de ocupacao na mesma relacao e data civil';
   end if;
 
   select c.organization_id into v_collab
@@ -282,7 +268,6 @@ begin
   if p_vigencia is null then
     raise exception 'F5_07_INVALID_INPUT: vigencia obrigatoria';
   end if;
-  p_vigencia := date_trunc('day', p_vigencia at time zone 'UTC') at time zone 'UTC';
   if v_motivo = '' then
     raise exception 'F5_07_INVALID_INPUT: motivo obrigatorio';
   end if;
@@ -308,16 +293,6 @@ begin
       raise exception 'F5_07_CONFLICT: operation_id ja utilizado com intencao diferente';
     end if;
     return;
-  end if;
-
-  if exists (
-    select 1 from public.collaborator_events e
-     where e.organization_id = p_organization_id
-       and e.collaborator_id = p_collaborator_id
-       and e.event_type in ('OCUPACAO_INICIADA', 'OCUPACAO_ENCERRADA')
-       and e.effective_date = p_vigencia
-  ) then
-    raise exception 'F5_07_CONFLICT: segunda transicao de ocupacao na mesma relacao e data civil';
   end if;
 
   select c.organization_id into v_collab
@@ -414,7 +389,6 @@ begin
   if p_vigencia is null then
     raise exception 'F5_07_INVALID_INPUT: vigencia obrigatoria';
   end if;
-  p_vigencia := date_trunc('day', p_vigencia at time zone 'UTC') at time zone 'UTC';
   if v_motivo = '' then
     raise exception 'F5_07_INVALID_INPUT: motivo obrigatorio';
   end if;
@@ -445,17 +419,6 @@ begin
       raise exception 'F5_07_CONFLICT: operation_id ja utilizado com intencao diferente';
     end if;
     return v_evento.result_entity_id;
-  end if;
-
-  if exists (
-    select 1
-      from public.collaborator_events e
-     where e.organization_id = p_organization_id
-       and e.position_id = p_subordinate_position_id
-       and e.event_type in ('REPORTING_LINE_INICIADA', 'REPORTING_LINE_ENCERRADA')
-       and e.effective_date = p_vigencia
-  ) then
-    raise exception 'F5_07_CONFLICT: segunda transicao de reporting line na mesma relacao e data civil';
   end if;
 
   select p.valid_from, p.valid_to
@@ -602,7 +565,6 @@ begin
   if p_vigencia is null then
     raise exception 'F5_07_INVALID_INPUT: vigencia obrigatoria';
   end if;
-  p_vigencia := date_trunc('day', p_vigencia at time zone 'UTC') at time zone 'UTC';
   if v_motivo = '' then
     raise exception 'F5_07_INVALID_INPUT: motivo obrigatorio';
   end if;
@@ -628,16 +590,6 @@ begin
       raise exception 'F5_07_CONFLICT: operation_id ja utilizado com intencao diferente';
     end if;
     return;
-  end if;
-
-  if exists (
-    select 1 from public.collaborator_events e
-     where e.organization_id = p_organization_id
-       and e.position_id = p_subordinate_position_id
-       and e.event_type in ('REPORTING_LINE_INICIADA', 'REPORTING_LINE_ENCERRADA')
-       and e.effective_date = p_vigencia
-  ) then
-    raise exception 'F5_07_CONFLICT: segunda transicao de reporting line na mesma relacao e data civil';
   end if;
 
   if not exists (
