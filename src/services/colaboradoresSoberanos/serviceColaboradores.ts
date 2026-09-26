@@ -50,6 +50,7 @@ import {
   type EntradaEditarColaborador,
   type EntradaEncerrarColegiado,
   type EntradaEncerrarOcupacao,
+  type EntradaTrocarOcupacao,
   type EntradaEncerrarParentUnidade,
   type EntradaEncerrarPosicao,
   type EntradaEncerrarReportingLine,
@@ -143,6 +144,7 @@ export interface ServiceColaboradores {
   encerrarResponsabilidade(
     entrada: EntradaEncerrarResponsabilidade
   ): Promise<ResultadoColaboradores<null>>;
+  trocarOcupacao(entrada: EntradaTrocarOcupacao): Promise<ResultadoColaboradores<string>>;
   consultarPeopleManagement(entrada: { organizationId?: string | null }): Promise<ResultadoColaboradores<readonly ResponsabilidadePeopleManagement[]>>;
   criarPeopleManagement(entrada: { organizationId?: string | null; operationId: string; positionId: string; validFrom: string; validTo: string | null }): Promise<ResultadoColaboradores<string>>;
   encerrarPeopleManagement(entrada: { organizationId?: string | null; operationId: string; responsibilityId: string; validTo: string; expectedVersion: number }): Promise<ResultadoColaboradores<null>>;
@@ -390,6 +392,11 @@ export function criarServiceColaboradores(
     encerrarOcupacao: (entrada) =>
       comContexto(entrada.organizationId, ({ organização, repo }) =>
         propagar(repo.encerrarOcupacao({ ...entrada, organizationId: organização }))
+      ),
+
+    trocarOcupacao: (entrada) =>
+      comContexto(entrada.organizationId, ({ organização, repo }) =>
+        propagar(repo.trocarOcupacao({ ...entrada, organizationId: organização }))
       ),
 
     definirReportingLine: (entrada) =>

@@ -542,8 +542,7 @@ function FormularioEdicao({
         posicaoId: trocarPosicaoId,
         vigencia: vigenciaAlocacao,
         motivo: motivoAlocacao,
-        operationIdEncerramento: novoOperationId(),
-        operationIdDefinicao: novoOperationId(),
+        operationId: novoOperationId(),
         organizationId: organizacaoAtivaId,
       },
       deps

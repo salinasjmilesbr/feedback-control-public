@@ -151,6 +151,10 @@ const CONTRATO_EDGE_RPC: Readonly<Record<OperacaoColaborador, ContratoDaOperacao
       "p_motivo",
     ],
   },
+  "colaborador.ocupacao.trocar": {
+    rpc: "estrutura_ocupacao_trocar",
+    argumentos: ["p_organization_id", "p_actor_user_profile_id", "p_operation_id", "p_collaborator_id", "p_current_position_id", "p_new_position_id", "p_vigencia", "p_motivo"],
+  },
   "estrutura.reporting.definir": {
     rpc: "estrutura_reporting_definir",
     argumentos: [
@@ -653,8 +657,8 @@ describe("F5-07 — contrato Edge → RPC (nome + argumentos nomeados)", () => {
   });
 
   it("as 30 operações do contrato estão declaradas e TODAS são chamadas pela Edge", () => {
-    expect(OPERACOES_COLABORADOR).toHaveLength(34);
-    expect(Object.keys(CONTRATO_EDGE_RPC)).toHaveLength(34);
+    expect(OPERACOES_COLABORADOR).toHaveLength(35);
+    expect(Object.keys(CONTRATO_EDGE_RPC)).toHaveLength(35);
 
     const semChamada = Object.entries(CONTRATO_EDGE_RPC)
       .filter(([, contrato]) => !chamadaDe(contrato.rpc))
@@ -828,6 +832,7 @@ describe("F5-07 — plano administrativo (D19) não usa a allowlist funcional", 
     const esperado: Readonly<Record<string, string>> = {
       "colaborador.ocupacao.definir": "org.structure.manage",
       "colaborador.ocupacao.encerrar": "org.structure.manage",
+      "colaborador.ocupacao.trocar": "org.structure.manage",
       "estrutura.reporting.definir": "org.structure.manage",
       "estrutura.reporting.encerrar": "org.structure.manage",
       "estrutura.responsabilidade.definir": "org.structure.manage",

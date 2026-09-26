@@ -120,6 +120,7 @@ function servicoFalso(
     alterarStatus: (entrada) => registrar("alterarStatus", entrada, 4),
     definirOcupacao: (entrada) => registrar("definirOcupacao", entrada, POSICAO),
     encerrarOcupacao: (entrada) => registrar("encerrarOcupacao", entrada, null),
+    trocarOcupacao: (entrada) => registrar("trocarOcupacao", entrada, POSICAO),
     definirReportingLine: (entrada) => registrar("definirReportingLine", entrada, POSICAO),
     encerrarReportingLine: (entrada) => registrar("encerrarReportingLine", entrada, null),
     definirResponsabilidade: (entrada) => registrar("definirResponsabilidade", entrada, RESPONSABILIDADE),

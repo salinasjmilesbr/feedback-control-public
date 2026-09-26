@@ -36,6 +36,7 @@ import {
   definirOcupacao,
   definirReportingLine,
   encerrarOcupacao,
+  trocarOcupacao,
   encerrarReportingLine,
   type DependenciasAcessoColaboradores,
   type ResultadoColaboradores,
@@ -265,9 +266,8 @@ export interface EntradaTrocarPosicaoSoberana {
   readonly vigencia: string;
   readonly motivo: string;
   /** Idempotência da operação de encerramento (F5-07). */
-  readonly operationIdEncerramento: string;
+  readonly operationId: string;
   /** Idempotência da operação de definição (F5-07) — id distinto por operação. */
-  readonly operationIdDefinicao: string;
   readonly organizationId?: string | null;
 }
 
@@ -289,10 +289,15 @@ export async function confirmarTrocaDePosicao(
     return recusaPosicao(MENSAGEM_OCUPACAO_DESATUALIZADA);
   }
 
-  const encerramento = await encerrarOcupacao(
+  const ocupacaoAtual = ocupacaoVigenteDoColaborador(entrada.estrutura, entrada.collaboratorId);
+  if (!ocupacaoAtual) return recusaPosicao(MENSAGEM_OCUPACAO_DESATUALIZADA);
+
+  const troca = await trocarOcupacao(
     {
       collaboratorId: entrada.collaboratorId,
-      operationId: entrada.operationIdEncerramento,
+      operationId: entrada.operationId,
+      currentPositionId: ocupacaoAtual.posicaoId,
+      newPositionId: entrada.posicaoId,
       vigencia: entrada.vigencia,
       motivo: entrada.motivo.trim(),
       ...(entrada.organizationId ? { organizationId: entrada.organizationId } : {}),
@@ -300,30 +305,18 @@ export async function confirmarTrocaDePosicao(
     deps
   );
 
-  if (!encerramento.ok) {
+  if (!troca.ok) {
     return {
       tipo: "falhou-encerrar",
-      codigo: encerramento.codigo,
-      mensagem: encerramento.mensagem,
+      codigo: troca.codigo,
+      mensagem: troca.mensagem,
     };
   }
 
-  const definicao = await definirOcupacao(
-    {
-      collaboratorId: entrada.collaboratorId,
-      operationId: entrada.operationIdDefinicao,
-      positionId: entrada.posicaoId,
-      vigencia: entrada.vigencia,
-      motivo: entrada.motivo.trim(),
-      ...(entrada.organizationId ? { organizationId: entrada.organizationId } : {}),
-    },
-    deps
-  );
-
-  if (!definicao.ok) {
+  if (false) {
     // Estado soberano REAL: a ocupação anterior já foi encerrada e a nova não
     // existe. O colaborador está sem alocação; nenhum rollback local é feito.
-    return { tipo: "parcial", codigo: definicao.codigo, mensagem: definicao.mensagem };
+    return { tipo: "concluida" };
   }
 
   return { tipo: "concluida" };

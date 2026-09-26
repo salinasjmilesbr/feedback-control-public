@@ -236,6 +236,18 @@ Deno.serve(async (req) => {
           p_motivo: execucao.entrada.motivo,
         });
 
+      case "colaborador.ocupacao.trocar":
+        return admin.rpc("estrutura_ocupacao_trocar", {
+          p_organization_id: org,
+          p_actor_user_profile_id: ator,
+          p_operation_id: execucao.entrada.operation_id,
+          p_collaborator_id: execucao.entrada.collaborator_id,
+          p_current_position_id: execucao.entrada.current_position_id,
+          p_new_position_id: execucao.entrada.new_position_id,
+          p_vigencia: execucao.entrada.vigencia,
+          p_motivo: execucao.entrada.motivo,
+        });
+
       case "estrutura.reporting.definir":
         return admin.rpc("estrutura_reporting_definir", {
           p_organization_id: org,

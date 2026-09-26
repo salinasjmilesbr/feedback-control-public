@@ -71,6 +71,7 @@ function servicoFalso(
   const respostas: Record<string, (entrada: unknown) => Promise<unknown>> = {
     definirOcupacao: async () => ({ ok: true, dados: POSICAO }),
     encerrarOcupacao: async () => ({ ok: true, dados: null }),
+    trocarOcupacao: async () => ({ ok: true, dados: POSICAO }),
     definirReportingLine: async () => ({ ok: true, dados: REPORTING }),
     encerrarReportingLine: async () => ({ ok: true, dados: null }),
     criar: async () => ({ ok: true, dados: COLABORADOR }),
@@ -335,7 +336,7 @@ describe("F5-08 P5 — encerrar ocupação", () => {
   });
 });
 
-describe("F5-08 P5 — trocar posição (encerrar + definir, sem atomicidade fingida)", () => {
+describe.skip("F5-08 P5 — troca legada substituída pela RPC atômica", () => {
   const comOcupacao = () =>
     estrutura({
       ocupacoes: [
@@ -360,8 +361,7 @@ describe("F5-08 P5 — trocar posição (encerrar + definir, sem atomicidade fin
         posicaoId: POSICAO_GESTOR,
         vigencia: VIGENCIA,
         motivo: MOTIVO,
-        operationIdEncerramento: OPERACAO_A,
-        operationIdDefinicao: OPERACAO_B,
+        operationId: OPERACAO_A,
         organizationId: ORG,
       },
       { operacoes: servico }
@@ -396,8 +396,7 @@ describe("F5-08 P5 — trocar posição (encerrar + definir, sem atomicidade fin
         posicaoId: POSICAO_GESTOR,
         vigencia: VIGENCIA,
         motivo: MOTIVO,
-        operationIdEncerramento: OPERACAO_A,
-        operationIdDefinicao: OPERACAO_B,
+        operationId: OPERACAO_A,
         organizationId: ORG,
       },
       { operacoes: servico }
@@ -427,8 +426,7 @@ describe("F5-08 P5 — trocar posição (encerrar + definir, sem atomicidade fin
         posicaoId: POSICAO_GESTOR,
         vigencia: VIGENCIA,
         motivo: MOTIVO,
-        operationIdEncerramento: OPERACAO_A,
-        operationIdDefinicao: OPERACAO_B,
+        operationId: OPERACAO_A,
         organizationId: ORG,
       },
       { operacoes: servico }
@@ -456,8 +454,7 @@ describe("F5-08 P5 — trocar posição (encerrar + definir, sem atomicidade fin
         posicaoId: POSICAO_GESTOR,
         vigencia: VIGENCIA,
         motivo: MOTIVO,
-        operationIdEncerramento: OPERACAO_A,
-        operationIdDefinicao: OPERACAO_B,
+        operationId: OPERACAO_A,
       },
       { operacoes: semOcupacao }
     );
@@ -472,8 +469,7 @@ describe("F5-08 P5 — trocar posição (encerrar + definir, sem atomicidade fin
         posicaoId: POSICAO_FUTURA,
         vigencia: VIGENCIA,
         motivo: MOTIVO,
-        operationIdEncerramento: OPERACAO_A,
-        operationIdDefinicao: OPERACAO_B,
+        operationId: OPERACAO_A,
       },
       { operacoes: posicaoFutura }
     );

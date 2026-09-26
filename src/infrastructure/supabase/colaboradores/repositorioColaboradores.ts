@@ -191,6 +191,16 @@ export interface EntradaEncerrarResponsabilidade {
   readonly motivo: string;
 }
 
+export interface EntradaTrocarOcupacao {
+  readonly organizationId?: string | null;
+  readonly operationId: string;
+  readonly collaboratorId: string;
+  readonly currentPositionId: string;
+  readonly newPositionId: string;
+  readonly vigencia: string;
+  readonly motivo: string;
+}
+
 export interface ResponsabilidadePeopleManagement {
   readonly id: string;
   readonly organizationId: string;
@@ -424,6 +434,9 @@ export interface RepositorioColaboradores {
   encerrarResponsabilidade(
     entrada: EntradaEncerrarResponsabilidade
   ): Promise<ResultadoRepositorioColaboradores<null>>;
+  trocarOcupacao(
+    entrada: EntradaTrocarOcupacao
+  ): Promise<ResultadoRepositorioColaboradores<string>>;
   consultarPeopleManagement?(entrada: { organizationId?: string | null }): Promise<ResultadoRepositorioColaboradores<readonly ResponsabilidadePeopleManagement[]>>;
   criarPeopleManagement?(entrada: { organizationId?: string | null; operationId: string; positionId: string; validFrom: string; validTo: string | null }): Promise<ResultadoRepositorioColaboradores<string>>;
   encerrarPeopleManagement?(entrada: { organizationId?: string | null; operationId: string; responsibilityId: string; validTo: string; expectedVersion: number }): Promise<ResultadoRepositorioColaboradores<null>>;
@@ -807,6 +820,19 @@ export function criarRepositorioColaboradoresSupabase(
           motivo: entrada.motivo,
         }),
         () => null
+      ),
+
+    trocarOcupacao: (entrada) =>
+      invocar(
+        montarCorpo("colaborador.ocupacao.trocar", entrada.organizationId, {
+          operation_id: entrada.operationId,
+          collaborator_id: entrada.collaboratorId,
+          current_position_id: entrada.currentPositionId,
+          new_position_id: entrada.newPositionId,
+          vigencia: entrada.vigencia,
+          motivo: entrada.motivo,
+        }),
+        (resultado) => texto(resultado)
       ),
 
     consultarPeopleManagement: (entrada) =>

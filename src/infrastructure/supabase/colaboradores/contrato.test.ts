@@ -280,6 +280,7 @@ const CASOS_VALIDOS: ReadonlyArray<readonly [string, Corpo]> = [
     { organization_id: ORG, operationId: OPERACAO_ID, seniorityLevelId: SENIORIDADE, status: "active", expectedVersion: 1, motivo: MOTIVO },
   ],
   ["colaborador.historico.listar", { organization_id: ORG, collaborator_id: COLABORADOR }],
+  ["colaborador.ocupacao.trocar", { organization_id: ORG, operation_id: OPERACAO_ID, collaborator_id: COLABORADOR, current_position_id: POSICAO, new_position_id: OUTRA_POSICAO, vigencia: VALID_FROM, motivo: MOTIVO }],
   [
     "colaborador.catalogo.bootstrap",
     {
@@ -361,7 +362,7 @@ describe("F5-07 contrato.ts — payloads válidos das 15 operações", () => {
     const cobertas = new Set(
       CASOS_VALIDOS.map(([nome]) => nome.split(" ")[0] as OperacaoColaborador)
     );
-    expect(cobertas.size).toBe(34);
+    expect(cobertas.size).toBe(35);
     expect([...cobertas].sort()).toEqual([...OPERACOES_COLABORADOR].sort());
   });
 

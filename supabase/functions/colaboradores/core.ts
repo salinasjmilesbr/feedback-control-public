@@ -60,6 +60,7 @@ import {
   type EntradaDefinirResponsabilidade,
   type EntradaEditar,
   type EntradaEncerrarOcupacao,
+  type EntradaTrocarOcupacao,
   type EntradaEncerrarReporting,
   type EntradaEncerrarResponsabilidade,
   type EntradaPeopleManagementCriar,
@@ -187,6 +188,10 @@ export type OperacaoExecutavel =
   | {
       readonly operacao: "colaborador.ocupacao.encerrar";
       readonly entrada: EntradaEncerrarOcupacao;
+    }
+  | {
+      readonly operacao: "colaborador.ocupacao.trocar";
+      readonly entrada: EntradaTrocarOcupacao;
     }
   | { readonly operacao: "estrutura.reporting.definir"; readonly entrada: EntradaDefinirReporting }
   | { readonly operacao: "estrutura.reporting.encerrar"; readonly entrada: EntradaEncerrarReporting }
