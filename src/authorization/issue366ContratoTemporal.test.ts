@@ -17,12 +17,19 @@ describe("Issue #366 — contrato temporal estrutural", () => {
     expect(migration.match(/segunda transicao de ocupacao na mesma relacao e data civil/g)).toHaveLength(1);
     expect(migration.match(/segunda transicao de reporting line na mesma relacao e data civil/g)).toHaveLength(1);
     expect(migration).toContain("e.effective_date = p_vigencia");
+    expect(migration).toContain("e.organization_id = p_organization_id");
+    expect(migration).toContain("e.collaborator_id = p_collaborator_id");
+    expect(migration).toContain("e.position_id = p_position_id");
+    expect(migration).toContain("v_guard_pos < v_dml_pos");
   });
 
   it("preserva os contratos temporais e a serialização existentes", () => {
     expect(migration).toContain("pg_advisory_xact_lock(hashtext(''position_reporting_lines:'' ||");
     expect(migration.indexOf("v_source := replace(v_source,")).toBeLessThan(migration.indexOf("execute v_source;"));
     expect(migration).toContain("execute v_source;");
+    expect(migration).toContain("marcador de normalizacao ausente ou ambiguo");
+    expect(migration).toContain("marcador de lock ausente ou ambiguo");
+    expect(migration).toContain("guarda temporal nao inserida exatamente uma vez");
     expect(migration).not.toContain("20260914020000_f5_08_lock_key_alignment.sql");
   });
 });
