@@ -62,7 +62,7 @@ begin
        and subordinada.organizational_position_id = e.position_id
        and subordinada.valid_from <= e.effective_date
        and (subordinada.valid_to is null or subordinada.valid_to > e.effective_date)
-      cross join lateral (
+      left join lateral (
         select coalesce(jsonb_agg(jsonb_build_object(
                  'manager_position_id', gestores.manager_position_id,
                  'occupant_collaborator_id', ocupante.collaborator_id,
