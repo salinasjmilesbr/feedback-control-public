@@ -2503,3 +2503,10 @@ credenciais, conteúdo real de pessoas/empresa ou trechos de documentos aqui.
   PR quando solicitado; a Issue #170 **não** deve ser fechada por este agente.
   Nenhum agente declara a própria entrega aprovada (`.ai/workflow.md` §6.3,
   item 8).
+## Protocolo permanente de validação SQL e gates
+
+- Migration, RPC, RLS e SQL exigem execução SQL real quando PostgreSQL/Supabase estiver disponível.
+- Teste textual ou contrato estático não prova SQL executável.
+- Se o runtime SQL estiver indisponível, declarar explicitamente `SQL execution: NOT AVAILABLE`.
+- Toda entrega Codex separa: `Static tests`, `SQL execution`, `Build` e `Diff-check`.
+- Esta regra permanece válida para as próximas etapas e conversas até substituição formal.

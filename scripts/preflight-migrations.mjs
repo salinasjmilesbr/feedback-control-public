@@ -1,7 +1,9 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
-const root = resolve(process.cwd(), "supabase", "migrations");
+const root = resolve(
+  process.env.MIGRATIONS_DIR ?? resolve(process.cwd(), "supabase", "migrations"),
+);
 const files = readdirSync(root)
   .filter((name) => name.endsWith(".sql"))
   .sort((a, b) => a.localeCompare(b));
