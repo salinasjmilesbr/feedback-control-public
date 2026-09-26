@@ -10,8 +10,8 @@
  * - ocupação usa `positionId` (UUID) e reporting line usa `positionId` de cada
  *   lado — NUNCA colaborador/cargo/nome/matrícula;
  * - não existe `expectedVersion` nestas operações (contrato F5-07);
- * - troca de posição = encerrar + definir, com desfecho PARCIAL explícito e
- *   nenhum rollback local.
+ * - troca de posição = uma única operação soberana atômica via `trocarOcupacao`;
+ *   falhas não produzem estado parcial nem compensação local.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";

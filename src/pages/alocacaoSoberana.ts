@@ -17,9 +17,9 @@
  * - NÃO existe `expectedVersion` nestas operações (contrato F5-07): a proteção
  *   contra fotografia desatualizada é LOCAL e fail-closed — se a posição/ocupação
  *   não está mais vigente na leitura corrente, NADA é enviado e a tela recarrega;
- * - NÃO existe transação única entre operações distintas: "trocar de posição" é
- *   explicitamente `encerrarOcupacao` + `definirOcupacao`, com desfecho PARCIAL
- *   visível (o colaborador pode ficar sem alocação) — jamais rollback local;
+ * - "trocar de posição" é uma única operação soberana atômica via
+ *   `trocarOcupacao`; encerramento e nova ocupação persistem juntos ou sofrem
+ *   rollback integral no PostgreSQL;
  * - nenhum algoritmo de ciclo/self-relation é replicado aqui: ciclos, guardas
  *   I1–I5 e integridade continuam no banco/RPC (a tela apenas não oferece a
  *   posição selecionada como seu próprio gestor).
@@ -81,7 +81,7 @@ export function posicaoVigente(
   return estaVigente(posicao.validFrom, posicao.validTo, referencia) ? posicao : null;
 }
 
-/** Ocupação VIGENTE do colaborador (a que a tela encerra/troca). */
+/** Ocupação VIGENTE do colaborador (referência da troca atômica). */
 export function ocupacaoVigenteDoColaborador(
   estrutura: EstruturaSoberana,
   collaboratorId: string,
