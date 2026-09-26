@@ -680,3 +680,6 @@ fontes. Itens conhecidos:
 *Fim da v18. Este documento é história + roadmap + manual operacional. Em caso de divergência com
 `.ai/*` ou com o desenho de uma atividade, prevalece a fonte normativa — e a divergência deve ser
 registrada aqui.*
+## Decisão normativa permanente — validação SQL
+
+Migrations, RPCs, RLS e demais contratos SQL exigem execução SQL real quando o PostgreSQL/Supabase estiver disponível; testes textuais ou estáticos não comprovam SQL executável. Quando o runtime SQL estiver indisponível, a entrega deve declarar `SQL execution: NOT AVAILABLE` e separar `Static tests`, `SQL execution`, `Build` e `Diff-check`. Esta decisão vale para as próximas etapas até substituição formal.
