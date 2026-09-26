@@ -28,16 +28,14 @@ em `.ai/*`, não são duplicadas aqui.
 
 - **Base vigente:** `main` em `b3399488e9413aa995055f91658509a6a1c94019` no início da
   Issue #371.
-- **Próxima atividade funcional:** Issue **#364**, validação funcional integrada
-  da Etapa 6 com a fotografia Acme; não repetir certificações F4/F5.
-- **#365:** histórico individual projeta eventos de reporting pela ocupação
-  subordinada e resolve o ocupante gestor pela fronteira temporal do evento;
-  PR/CI permanecem conforme estado do GitHub.
-- **#366:** contrato estrutural por data civil UTC, normalização server-side e
-  conflito para segunda transição da mesma relação/data; migration aditiva.
-- **#369:** preflight estático de migrations antes do `db reset` existente no
-  job `supabase-local`; fixtures comportamentais cobrem versão duplicada e nome
-  inválido. Não há job pesado novo.
+- **#365 e #366:** concluídas/integradas; permanecem vigentes o histórico de
+  reporting por posição/ocupação temporal e o contrato estrutural por data
+  civil UTC.
+- **#369:** concluída/integrada; o preflight de migrations permanece no job
+  `supabase-local`, antes do `db reset` existente.
+- **#371:** atividade documental atual.
+- **Após #371:** a próxima atividade funcional continua sendo a Issue **#364**,
+  validação integrada da Etapa 6 com a fotografia Acme; não repetir F4/F5.
 - **Ambiente conhecido:** Docker/Supabase local pode estar indisponível no host;
   isso não prova indisponibilidade do runtime compartilhado nem defeito do
   produto.
@@ -49,8 +47,21 @@ em `.ai/*`, não são duplicadas aqui.
 2. Confirmar Issue, PR, desenho fechado e dependências; registrar qualquer
    blocker antes de ampliar escopo.
 3. Implementar em branch própria, preservando mudanças do usuário e sem merge.
-4. Validar proporcionalmente ao risco e registrar os quatro estados padronizados:
-   Static tests, SQL execution, Build, Diff-check.
+4. Aplicar esta matriz de validação proporcional:
+   - documentação: coerência documental + Diff-check; Static tests, SQL
+     execution e Build NOT REQUIRED;
+   - desenho técnico sem runtime: revisão de contrato/arquitetura + Diff-check;
+   - frontend/TS localizado: testes dirigidos; Build/lint somente quando o
+     impacto justificar;
+   - migration/RPC/RLS/SQL: preflight + testes dirigidos + SQL execution real
+     quando disponível;
+   - segurança/autorização/tenant: provas dirigidas ALLOW/DENY/negativas +
+     banco quando aplicável;
+   - mudança transversal/crítica: ampliar gates conforme o risco.
+   Não executar `npm test` completo automaticamente; não repetir gate sem
+   mudança ou evidência nova; reutilizar evidência já certificada.
+   Registrar sempre, quando aplicável, `Static tests`, `SQL execution`, `Build`
+   e `Diff-check`.
 5. Atualizar este arquivo ao final, mantendo apenas estado operacional vigente;
    mover fatos encerrados para o histórico referenciado abaixo.
 6. Fazer commit/push conforme `.ai/workflow.md` e `.ai/git-rules.md`; não
