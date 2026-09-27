@@ -78,7 +78,7 @@ function formatarDataHora(data?: string | null) {
 function AcompanhamentoMetasPage() {
   const { cicloId, id } = useParams();
   const navigate = useNavigate();
-  const { usuarioAtual } = useUsuarioAtual();
+  const { usuarioAtual, estadoResolucaoIdentidade } = useUsuarioAtual();
   const { organizacaoAtivaId } = useAuth();
 
   // Contexto de autenticação: organização ativa (intenção de UX, revalidada
@@ -326,6 +326,10 @@ function AcompanhamentoMetasPage() {
     if (rotaDoCiclo) navigate(rotaDoCiclo);
     else navigate(-1);
   }, [navigate, rotaDoCiclo]);
+
+  if (estadoResolucaoIdentidade === "carregando") {
+    return <main className="virtus-page"><section className="cycle-empty"><h1>Carregando identidade…</h1></section></main>;
+  }
 
   if (!usuarioAtual) {
     return (

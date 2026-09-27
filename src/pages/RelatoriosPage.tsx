@@ -56,7 +56,7 @@ function labelFuncao(
 
 function RelatoriosPage() {
   const navigate = useNavigate();
-  const { usuarioAtual, usuarioAtualLegado } = useUsuarioAtual();
+  const { usuarioAtual, usuarioAtualLegado, estadoResolucaoIdentidade } = useUsuarioAtual();
 
   const ciclosDisponiveis = useMemo(
     () =>
@@ -91,6 +91,10 @@ function RelatoriosPage() {
         { kind: "global" }
       )
     : false;
+
+  if (estadoResolucaoIdentidade === "carregando") {
+    return <main className="virtus-page reports-page"><section className="reports-empty"><h1>Carregando identidade…</h1></section></main>;
+  }
 
   if (!usuarioAtual || !podeVerRelatorios) {
     return (

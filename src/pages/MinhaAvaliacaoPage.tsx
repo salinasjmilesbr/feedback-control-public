@@ -23,7 +23,11 @@ import "../styles/minhas-avaliacoes.css";
 
 function MinhaAvaliacaoPage() {
   const navigate = useNavigate();
-  const { usuarioAtual, usuarioAtualLegado } = useUsuarioAtual();
+  const { usuarioAtual, usuarioAtualLegado, estadoResolucaoIdentidade } = useUsuarioAtual();
+
+  if (estadoResolucaoIdentidade === "carregando") {
+    return <main className="virtus-page"><section className="evaluation-empty"><h1>Carregando identidade…</h1></section></main>;
+  }
 
   if (!usuarioAtual) {
     return (

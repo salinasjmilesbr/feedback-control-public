@@ -63,7 +63,7 @@ interface LeituraPublicadaDasMetas {
 function MinhaAvaliacaoDetalhePage() {
   const navigate = useNavigate();
   const { feedbackId } = useParams();
-  const { usuarioAtual, usuarioAtualLegado } = useUsuarioAtual();
+  const { usuarioAtual, usuarioAtualLegado, estadoResolucaoIdentidade } = useUsuarioAtual();
   const { organizacaoAtivaId } = useAuth();
   const [mostrarRegua, setMostrarRegua] = useState(false);
   /**
@@ -334,6 +334,10 @@ function MinhaAvaliacaoDetalhePage() {
       vigente = false;
     };
   }, [chaveDasObservacoes, organizacaoId, matriculaDoAtor]);
+
+  if (estadoResolucaoIdentidade === "carregando") {
+    return <main className="virtus-page"><section className="evaluation-empty"><h1>Carregando identidade…</h1></section></main>;
+  }
 
   if (!usuarioAtual) {
     return (
