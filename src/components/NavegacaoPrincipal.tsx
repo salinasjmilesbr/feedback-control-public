@@ -282,9 +282,14 @@ function NavegacaoPrincipal({
           </NavItem>
         )}
         {podeAdministrarAvaliadores && (
+          <>
           <NavItem to="/administracao/avaliadores" icon={<IconSettings />}>
             Acesso às avaliações
           </NavItem>
+          <NavItem to="/administracao/acessos-funcionais" icon={<IconSettings />}>
+            Acessos funcionais
+          </NavItem>
+          </>
         )}
       </div>
     </nav>

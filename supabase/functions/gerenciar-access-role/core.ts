@@ -24,7 +24,7 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-export type AcaoAcessoRole = "grant" | "revoke" | "grant-evaluator" | "revoke-evaluator";
+export type AcaoAcessoRole = "grant" | "revoke" | "grant-evaluator" | "revoke-evaluator" | "grant-functional" | "revoke-functional";
 
 export interface ErroRpc {
   code?: string;
@@ -45,7 +45,10 @@ export interface DepsGerenciarAcessoRole {
     accessRoleId: string,
     actorUserId: string,
     organizationId?: string,
-    targetEmail?: string
+    targetEmail?: string,
+    scopeType?: "DIRECT_REPORTS" | "DESCENDANTS",
+    operationId?: string,
+    reason?: string
   ): Promise<ErroRpc | null>;
 }
 
@@ -117,13 +120,18 @@ export async function gerenciarAcessoRole(
   const actionRaw = campos.action;
   const action: AcaoAcessoRole | "" =
     actionRaw === "grant" || actionRaw === "revoke" ||
-    actionRaw === "grant-evaluator" || actionRaw === "revoke-evaluator" ? actionRaw : "";
+    actionRaw === "grant-evaluator" || actionRaw === "revoke-evaluator" ||
+    actionRaw === "grant-functional" || actionRaw === "revoke-functional" ? actionRaw : "";
 
   const evaluatorAction = action === "grant-evaluator" || action === "revoke-evaluator";
+  const functionalAction = action === "grant-functional" || action === "revoke-functional";
   if (!action || (evaluatorAction
     ? !UUID_RE.test(typeof campos.organization_id === "string" ? campos.organization_id : "") ||
       typeof campos.target_email !== "string" || !/^\S+@\S+\.\S+$/.test(campos.target_email)
-    : !UUID_RE.test(membershipId) || !UUID_RE.test(accessRoleId))) {
+    : !UUID_RE.test(membershipId) || !UUID_RE.test(accessRoleId) ||
+      (functionalAction && (!UUID_RE.test(typeof campos.operation_id === "string" ? campos.operation_id : "") ||
+        (campos.scope_type !== "DIRECT_REPORTS" && campos.scope_type !== "DESCENDANTS") ||
+        typeof campos.reason !== "string" || campos.reason.trim().length < 3)))) {
     return erro("INVALID_INPUT", "Parâmetros inválidos.", 400);
   }
 
@@ -133,6 +141,13 @@ export async function gerenciarAcessoRole(
         action, "", "", callerId,
         typeof campos.organization_id === "string" ? campos.organization_id : undefined,
         typeof campos.target_email === "string" ? campos.target_email.trim().toLowerCase() : undefined
+      )
+    : functionalAction
+    ? await deps.executarRpc(
+        action, membershipId, accessRoleId, callerId, undefined, undefined,
+        campos.scope_type as "DIRECT_REPORTS" | "DESCENDANTS",
+        campos.operation_id as string,
+        campos.reason as string
       )
     : await deps.executarRpc(action, membershipId, accessRoleId, callerId);
   if (rpcError) {

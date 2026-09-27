@@ -17,6 +17,36 @@ const MEMBERSHIP = "11111111-1111-4111-8111-111111111111";
 const ROLE = "22222222-2222-4222-8222-222222222222";
 const ACTOR = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ORG = "33333333-3333-4333-8333-333333333333";
+const OPERATION = "44444444-4444-4444-8444-444444444444";
+
+describe("F6 provisionamento funcional", () => {
+  it("transporta role, alcance, motivo e operation_id com ator verificado", async () => {
+    const deps = makeDeps();
+    const res = await gerenciarAcessoRole(
+      makeRequest({
+        action: "grant-functional", membership_id: MEMBERSHIP, access_role_id: ROLE,
+        scope_type: "DIRECT_REPORTS", operation_id: OPERATION, reason: "Validação de equipe",
+      }, "Bearer jwt-do-usuario"), deps
+    );
+    expect(res.status).toBe(200);
+    expect(deps.executarRpc).toHaveBeenCalledWith(
+      "grant-functional", MEMBERSHIP, ROLE, ACTOR, undefined, undefined,
+      "DIRECT_REPORTS", OPERATION, "Validação de equipe"
+    );
+  });
+
+  it("scope fora da allowlist falha fechado antes do RPC", async () => {
+    const deps = makeDeps();
+    const res = await gerenciarAcessoRole(
+      makeRequest({
+        action: "grant-functional", membership_id: MEMBERSHIP, access_role_id: ROLE,
+        scope_type: "ORGANIZATION", operation_id: OPERATION, reason: "ok",
+      }, "Bearer jwt-do-usuario"), deps
+    );
+    expect(res.status).toBe(400);
+    expect(deps.executarRpc).not.toHaveBeenCalled();
+  });
+});
 
 function makeDeps(
   overrides?: Partial<DepsGerenciarAcessoRole>
