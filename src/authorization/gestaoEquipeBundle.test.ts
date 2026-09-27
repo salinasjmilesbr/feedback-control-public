@@ -17,11 +17,11 @@ const CAPABILITIES = [
 
 describe("Issue #379 — bundle Gestão de equipe", () => {
   it("declara exatamente as capabilities funcionais do contrato", () => {
-    for (const capability of CAPABILITIES) {
-      expect(migration).toContain(`'${capability}'`);
-    }
-    expect(migration).toContain("v_expected text[]");
-    expect(migration).toContain("v_actual text[]");
+    const expectedBlock = migration.match(/v_expected text\[\] := array\[(.*?)\];/s)?.[1];
+    expect(expectedBlock).toBeDefined();
+    const actual = [...(expectedBlock ?? "").matchAll(/'([^']+)'/g)].map((match) => match[1]);
+    expect(actual).toEqual([...CAPABILITIES]);
+    expect(new Set(actual).size).toBe(CAPABILITIES.length);
   });
 
   it("mantém o bundle global, sem autoridade administrativa, e preserva o escopo soberano", () => {
@@ -29,15 +29,16 @@ describe("Issue #379 — bundle Gestão de equipe", () => {
     expect(migration).toContain("is_system = true");
     expect(migration).toContain("organization_id is null");
     expect(migration).toContain("access_role_assignment_scopes");
-    for (const forbidden of [
+    const forbidden = [
       "access_role.manage",
       "membership.manage",
       "cycle.manage",
       "org.structure.manage",
       "org.catalog.manage",
       "settings.manage",
-    ]) {
-      expect(migration).toContain(`'${forbidden}'`);
-    }
+    ];
+    const guardBlock = migration.match(/if exists \(\s*select 1.*?c\.code in \((.*?)\)\s*\) then/s)?.[1];
+    expect(guardBlock).toBeDefined();
+    expect([...((guardBlock ?? "").matchAll(/'([^']+)'/g))].map((match) => match[1])).toEqual(forbidden);
   });
 });
