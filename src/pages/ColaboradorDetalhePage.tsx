@@ -1130,7 +1130,10 @@ function AcervoLegado({
    */
   const rotulosObservacoes: FonteDeRotulosDeColaborador = {
     doColaborador: (id) => {
-      const nome = nomesDeColaborador[id];
+      const nome =
+        id === colaborador.collaboratorId
+          ? colaborador.fullName
+          : nomesDeColaborador[id];
       return nome ? { nome } : null;
     },
     doAutor: (id) => {

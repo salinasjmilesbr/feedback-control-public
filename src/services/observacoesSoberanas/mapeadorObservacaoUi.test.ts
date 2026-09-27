@@ -88,6 +88,17 @@ describe("F5-11 P5 — mapeador soberano de observações", () => {
     expect(mapeada.timeline).toEqual([]);
   });
 
+  it("apresenta o alvo atual quando o rótulo vem somente do detalhe soberano", () => {
+    const mapeada = observacaoDeUi(soberana(), {
+      doColaborador: (collaboratorId) =>
+        collaboratorId === ALVO ? { nome: "Alvo do detalhe" } : null,
+      doAutor: () => null,
+    });
+
+    expect(mapeada?.colaboradorId).toBe(ALVO);
+    expect(mapeada?.colaboradorNome).toBe("Alvo do detalhe");
+  });
+
   it("DISCRIMINANTE: sem rótulo do ALVO a observação NÃO é exibida (null)", () => {
     const semAlvo = observacaoDeUi(soberana(), {
       doColaborador: () => null,
