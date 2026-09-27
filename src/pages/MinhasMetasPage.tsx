@@ -316,7 +316,7 @@ function MinhasMetasPage({
           status: cicloDoAtor.status,
         },
         identidade: {
-          collaboratorId,
+          colaboradorId: collaboratorId,
           matricula: usuarioAtual?.matricula === undefined ? "" : String(usuarioAtual.matricula),
           nome: usuarioAtual?.nome ?? "",
         },
