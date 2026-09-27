@@ -202,9 +202,7 @@ function ColaboradoresPage({
     organizacaoAtivaId,
     capabilities.organizationId,
     capabilities.values
-  ) &&
-    (capabilities.escoposMinhaEquipe.size > 0 ||
-      capabilities.values.has("org.structure.manage"));
+  ) && capabilities.values.has("org.structure.manage");
 
   const termo = busca.trim().toLowerCase();
   const colaboradoresFiltrados = colaboradores.filter((colaborador) => {

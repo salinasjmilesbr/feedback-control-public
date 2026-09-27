@@ -334,6 +334,7 @@ describe("F5-07 — regressões das demais operações", () => {
     expect(resolverMatricula).not.toHaveBeenCalled();
     const entrada = avaliarAutorizacao.mock.calls[0]![0];
     expect(entrada.alvo).toEqual({ type: "collaborator", id: ATOR_COLLAB });
+    expect(entrada.modoColecao).toBe("COLLABORATORS");
   });
 
   it("colaborador.ocupacao.definir continua no PLANO ADMINISTRATIVO", async () => {

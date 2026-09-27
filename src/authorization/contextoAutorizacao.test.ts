@@ -112,6 +112,36 @@ function entrada(overrides: Partial<Parameters<typeof avaliarOperacaoAutorizacao
 }
 
 describe("F5-05 — happy path por scope (SELF/DR/DESC/UNIT/ORG/ASSIGNED)", () => {
+  it("lista a coleção com DESCENDANTS sem adicionar SELF ao resolver", async () => {
+    const decisao = await avaliarOperacaoAutorizacao(
+      entrada({
+        modoColecao: "COLLABORATORS",
+      }),
+      deps({
+        capabilities: [capability("collaborator.read", ["DESCENDANTS"])],
+        alvos: {
+          DESCENDANTS: [{ collaboratorId: OUTRO, positionId: "pos-outro" }],
+        },
+      })
+    );
+
+    expect(decisao.allowed).toBe(true);
+    expect(decisao.diagnostics?.matchedScope).toBe("DESCENDANTS");
+  });
+
+  it("nega a coleção sem alvo estrutural resolvido", async () => {
+    const decisao = await avaliarOperacaoAutorizacao(
+      entrada({ modoColecao: "COLLABORATORS" }),
+      deps({
+        capabilities: [capability("collaborator.read", ["DESCENDANTS"])],
+        alvos: { DESCENDANTS: [] },
+      })
+    );
+
+    expect(decisao.allowed).toBe(false);
+    expect(decisao.denial?.reason).toBe("SCOPE_INSUFFICIENT");
+  });
+
   it("SELF permite o próprio colaborador vinculado", async () => {
     const decisao = await avaliarOperacaoAutorizacao(
       entrada(),

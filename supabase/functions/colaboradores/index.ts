@@ -757,6 +757,7 @@ Deno.serve(async (req) => {
           capability,
           alvo,
           dataNegocio: dataNegocio ?? undefined,
+          ...(entrada.modoColecao ? { modoColecao: entrada.modoColecao } : {}),
         },
         autorizacao
       );
