@@ -1143,31 +1143,16 @@ function AcervoLegado({
 
   const colaboradorLegado = paraColaboradorLegado(colaborador);
 
-  if (!colaboradorLegado) {
-    return (
-      <section className="collaborator-section">
-        <div className="collaborator-section-heading">
-          <div>
-            <h2>Acervo legado local</h2>
-          </div>
-        </div>
-        <div className="collaborator-history-empty">
-          Este colaborador não possui matrícula numérica vigente; o acervo legado
-          local (avaliações e observações) é indexado por matrícula e não pôde ser
-          exibido. O histórico soberano acima permanece íntegro.
-        </div>
-      </section>
-    );
-  }
-
-  const ciclos = getCiclosAvaliacao();
+  const ciclos = colaboradorLegado ? getCiclosAvaliacao() : [];
   const escala = getEscalaAvaliacao();
-  const todosLegado: Colaborador[] = [colaboradorLegado];
+  const todosLegado: Colaborador[] = colaboradorLegado ? [colaboradorLegado] : [];
 
-  const feedbacksBase = getFeedbacksAdministrativosByColaborador(
-    colaboradorLegado.matricula,
-    mostrarCanceladas
-  );
+  const feedbacksBase = colaboradorLegado
+    ? getFeedbacksAdministrativosByColaborador(
+        colaboradorLegado.matricula,
+        mostrarCanceladas
+      )
+    : [];
   const feedbacksOrdenados = ordenarHistoricoAdministrativo(
     feedbacksBase,
     ordenacao
@@ -1224,7 +1209,8 @@ function AcervoLegado({
 
   return (
     <>
-      <section className="collaborator-section">
+      {colaboradorLegado ? (
+        <section className="collaborator-section">
         <div className="collaborator-section-heading">
           <div>
             <h2>Acervo legado local (avaliações)</h2>
@@ -1442,7 +1428,21 @@ function AcervoLegado({
             })}
           </div>
         )}
-      </section>
+        </section>
+      ) : (
+        <section className="collaborator-section">
+          <div className="collaborator-section-heading">
+            <div>
+              <h2>Acervo legado local</h2>
+            </div>
+          </div>
+          <div className="collaborator-history-empty">
+            Este colaborador não possui matrícula numérica vigente; o acervo legado
+            local (avaliações e observações) é indexado por matrícula e não pôde ser
+            exibido.
+          </div>
+        </section>
+      )}
 
       <section className="collaborator-section">
         <div className="collaborator-section-heading">
@@ -1521,7 +1521,7 @@ function AcervoLegado({
               colaborador={{
                 id: alvoObservacoesId,
                 nome: colaborador.fullName,
-                matricula: Number(colaborador.matricula),
+                matricula: colaborador.matricula,
               }}
               organizationId={organizacaoId}
               escopo="DESCENDANTS"
