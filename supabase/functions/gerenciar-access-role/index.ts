@@ -109,22 +109,22 @@ Deno.serve(async (req) => {
       if (body?.action === "list-functional" && typeof body.organization_id === "string") {
         const authHeader = req.headers.get("Authorization");
         const callerId = authHeader ? await deps.resolveCaller(authHeader) : null;
-        if (!callerId) return json({ error: { code: "NOT_AUTHORIZED", message: "NÃ£o autorizado." } }, 401);
+        if (!callerId) return json({ error: { code: "NOT_AUTHORIZED", message: "Não autorizado." } }, 401);
         const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
         const authority = await admin.rpc("usuario_eh_administrador", {
           p_user_profile_id: callerId, p_organization_id: body.organization_id,
         });
-        if (authority.error || authority.data !== true) return json({ error: { code: "FORBIDDEN", message: "OperaÃ§Ã£o negada." } }, 403);
+        if (authority.error || authority.data !== true) return json({ error: { code: "FORBIDDEN", message: "Operação negada." } }, 403);
         const [roles, memberships] = await Promise.all([
           admin.from("access_roles").select("id,name,organization_id").eq("status", "active")
             .or(`organization_id.is.null,organization_id.eq.${body.organization_id}`),
           admin.from("user_organization_memberships").select("id,user_profile_id").eq("organization_id", body.organization_id).eq("status", "active"),
         ]);
-        if (roles.error || memberships.error) return json({ error: { code: "INTERNAL", message: "Dados administrativos indisponÃ­veis." } }, 500);
+        if (roles.error || memberships.error) return json({ error: { code: "INTERNAL", message: "Dados administrativos indisponíveis." } }, 500);
         const links = memberships.data?.length ? await admin.from("membership_collaborator_links").select("membership_id,collaborator_id").in("membership_id", (memberships.data ?? []).map((m) => m.id)).eq("status", "active") : { data: [], error: null };
         const collaboratorIds = (links.data ?? []).map((l) => l.collaborator_id);
         const collaborators = collaboratorIds.length ? await admin.from("collaborators").select("id,full_name").in("id", collaboratorIds) : { data: [], error: null };
-        if (links.error || collaborators.error) return json({ error: { code: "INTERNAL", message: "VÃ­nculos administrativos indisponÃ­veis." } }, 500);
+        if (links.error || collaborators.error) return json({ error: { code: "INTERNAL", message: "Vínculos administrativos indisponíveis." } }, 500);
         const names = new Map((collaborators.data ?? []).map((c) => [c.id, c.full_name]));
         return json({ ok: true, people: (links.data ?? []).map((l) => ({ membership_id: l.membership_id, collaborator_id: l.collaborator_id, name: names.get(l.collaborator_id) ?? "Pessoa sem nome" })), roles: (roles.data ?? []).filter((r) => r.name !== "admin") });
       }

@@ -43,6 +43,9 @@ as $$
 declare
   v_org uuid;
   v_target_user uuid;
+  v_target_profile_status text;
+  v_role_org uuid;
+  v_role_status text;
   v_assignment uuid;
   v_scope uuid;
   v_hash text;
@@ -56,23 +59,42 @@ begin
     raise exception 'F6_GESTORES_INVALID_INPUT: parametros obrigatorios invalidos';
   end if;
 
-  select m.organization_id, m.user_profile_id
-    into v_org, v_target_user
+  select m.organization_id, m.user_profile_id, up.status
+    into v_org, v_target_user, v_target_profile_status
     from public.user_organization_memberships m
+    join public.user_profiles up on up.id = m.user_profile_id
    where m.id = p_membership_id
      and m.status = 'active';
   if not found then
     raise exception 'F6_GESTORES_NOT_FOUND: membership alvo inexistente ou inativa';
+  end if;
+  if v_target_profile_status <> 'active' then
+    raise exception 'F6_GESTORES_FORBIDDEN: perfil da membership alvo nao esta ativo';
   end if;
 
   if v_target_user = p_actor_user_profile_id then
     raise exception 'F6_GESTORES_FORBIDDEN: self-escalation negada';
   end if;
 
+  select r.organization_id, r.status
+    into v_role_org, v_role_status
+    from public.access_roles r
+   where r.id = p_access_role_id;
+  if not found or v_role_status <> 'active' then
+    raise exception 'F6_GESTORES_FORBIDDEN: role inexistente, desabilitada ou inativa';
+  end if;
+  if v_role_org is not null and v_role_org <> v_org then
+    raise exception 'F6_GESTORES_FORBIDDEN: role de outro tenant';
+  end if;
   if exists (
     select 1 from public.access_roles r
-     where r.id = p_access_role_id
-       and r.is_system = true and r.name = 'admin'
+     where r.id = p_access_role_id and r.is_system = true and r.name = 'admin'
+  ) or exists (
+    select 1
+      from public.access_role_capabilities rc
+      join public.capabilities c on c.id = rc.capability_id
+     where rc.access_role_id = p_access_role_id
+       and c.code in ('access_role.manage', 'membership.manage')
   ) then
     raise exception 'F6_GESTORES_FORBIDDEN: role administrativa nao e acesso funcional';
   end if;
