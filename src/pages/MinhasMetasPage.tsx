@@ -60,14 +60,11 @@ import { obterRepositorioMetasSoberanas } from "../services/acessoMetasSoberanas
 import type { DependenciasAcessoMetas } from "../services/acessoMetasSoberanas";
 import { obterRepositorioCiclosSoberanos } from "../services/acessoCiclosSoberanos";
 import type { DependenciasAcessoCiclos } from "../services/acessoCiclosSoberanos";
-import { obterColaborador } from "../services/colaboradoresSoberanos/acessoColaboradoresSoberanos";
-import type { DependenciasAcessoColaboradores } from "../services/colaboradoresSoberanos/acessoColaboradoresSoberanos";
 import type { StatusCicloAvaliacao } from "../types/CicloAvaliacao";
 import {
   chaveDaTentativa,
   criarRegistroDeTentativas,
   identidadeDaSessao,
-  identidadeDe,
   limiteDoTipo,
   mensagemDeFalhaDeMetas,
   mensagemDeFalhaDeOperacao,
@@ -127,7 +124,6 @@ export type MinhasMetasPageProps = {
   /** Porta soberana de ciclos (injeção de teste). */
   readonly depsCiclos?: DependenciasAcessoCiclos;
   /** Porta soberana de colaboradores (injeção de teste). */
-  readonly depsColaboradores?: DependenciasAcessoColaboradores;
   /** Semente de estado (teste determinístico). */
   readonly estadoInicial?: EstadoMinhasMetas;
   /** Semente da operação em curso (teste de loading/clique duplo). */
@@ -136,7 +132,6 @@ export type MinhasMetasPageProps = {
 
 const SEM_DEPENDENCIAS_METAS: DependenciasAcessoMetas = {};
 const SEM_DEPENDENCIAS_CICLOS: DependenciasAcessoCiclos = {};
-const SEM_DEPENDENCIAS_COLABORADORES: DependenciasAcessoColaboradores = {};
 
 // ---------------------------------------------------------------------------
 // Apresentação LOCAL da página (auxiliares PUROS, não exportados)
@@ -198,7 +193,6 @@ async function executarMutacao(
 function MinhasMetasPage({
   depsMetas,
   depsCiclos,
-  depsColaboradores,
   estadoInicial,
   operacaoInicial,
 }: MinhasMetasPageProps = {}) {
@@ -211,9 +205,6 @@ function MinhasMetasPage({
   );
   const [depsCiclosInjetadas] = useState<DependenciasAcessoCiclos>(
     () => depsCiclos ?? SEM_DEPENDENCIAS_CICLOS
-  );
-  const [depsColaboradoresInjetadas] = useState<DependenciasAcessoColaboradores>(
-    () => depsColaboradores ?? SEM_DEPENDENCIAS_COLABORADORES
   );
   const [tentativas] = useState(criarRegistroDeTentativas);
 
@@ -309,16 +300,6 @@ function MinhasMetasPage({
 
       // Colaborador por via SOBERANA: o UUID do VÍNCULO é a identidade — nenhuma
       // matrícula é exigida (ausente ⇒ erro explícito, nunca chute).
-      const colaborador = await obterColaborador(
-        { collaboratorId, organizationId: organizacaoAtivaId },
-        depsColaboradoresInjetadas
-      );
-      if (!vigente) return;
-      if (!colaborador.ok) {
-        publicar({ fase: "erro", codigo: colaborador.codigo, mensagem: colaborador.mensagem });
-        return;
-      }
-
       const escopo = await lerEscopo(repositorioMetas, organizacaoAtivaId, cicloDoAtor.id);
       if (!vigente) return;
       if (!escopo.ok) {
@@ -334,7 +315,11 @@ function MinhasMetasPage({
           numero: cicloDoAtor.numero,
           status: cicloDoAtor.status,
         },
-        identidade: identidadeDe(colaborador.dados),
+        identidade: {
+          colaboradorId: collaboratorId,
+          matricula: usuarioAtual?.matricula === undefined ? "" : String(usuarioAtual.matricula),
+          nome: usuarioAtual?.nome ?? "",
+        },
         metas: escopo.data.metas,
         limites: escopo.data.limites,
       });
@@ -350,7 +335,7 @@ function MinhasMetasPage({
     estadoInicial,
     depsMetasInjetadas,
     depsCiclosInjetadas,
-    depsColaboradoresInjetadas,
+    usuarioAtual,
   ]);
 
   /**
