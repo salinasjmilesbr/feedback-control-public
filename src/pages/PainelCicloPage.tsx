@@ -154,7 +154,7 @@ function codigoPublicoDaLeitura(codigo: string): CodigoPublico {
 function PainelCicloPage() {
   const { cicloId } = useParams();
   const navigate = useNavigate();
-  const { usuarioAtual, usuarioAtualLegado } = useUsuarioAtual();
+  const { usuarioAtual, usuarioAtualLegado, estadoResolucaoIdentidade } = useUsuarioAtual();
   const { organizacaoAtivaId } = useAuth();
   const [mostrarCanceladas, setMostrarCanceladas] = useState(false);
   const [tentativa, setTentativa] = useState(0);
@@ -337,6 +337,10 @@ function PainelCicloPage() {
     : semCiclo
     ? { fase: "pronta", metas: [] }
     : leituraCorrente?.aprovacoes ?? { fase: "carregando" };
+
+  if (estadoResolucaoIdentidade === "carregando") {
+    return <main className="virtus-page"><section className="cycle-empty"><h1>Carregando identidade…</h1></section></main>;
+  }
 
   if (!usuarioAtual || !podeAcessarPainelCiclo) {
     return (

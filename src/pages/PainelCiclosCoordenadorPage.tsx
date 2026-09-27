@@ -7,7 +7,7 @@ import "../styles/painel-ciclos-coordenador.css";
 
 function PainelCiclosCoordenadorPage() {
   const navigate = useNavigate();
-  const { usuarioAtual, usuarioAtualLegado } = useUsuarioAtual();
+  const { usuarioAtual, usuarioAtualLegado, estadoResolucaoIdentidade } = useUsuarioAtual();
   const podeListarCiclos = usuarioAtualLegado
     ? can(
         {
@@ -21,6 +21,10 @@ function PainelCiclosCoordenadorPage() {
         { kind: "global" }
       )
     : false;
+
+  if (estadoResolucaoIdentidade === "carregando") {
+    return <main className="virtus-page"><section className="cycle-empty"><h1>Carregando identidade…</h1></section></main>;
+  }
 
   if (!usuarioAtual || !podeListarCiclos) {
     return <main className="virtus-page"><section className="cycle-empty">

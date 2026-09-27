@@ -2,6 +2,8 @@ import { createContext, useContext } from "react";
 import type { Colaborador, IdentidadeColaborador } from "../types/Colaborador";
 
 export type UsuarioAtualContextValue = {
+  /** Estado do bootstrap soberano da identidade; ausente apenas em fixtures legadas. */
+  estadoResolucaoIdentidade?: "carregando" | "resolvida-com-usuario" | "resolvida-sem-usuario";
   /** #333: identidade soberana (vínculo). Matrícula é rótulo opcional. */
   usuarioAtual?: IdentidadeColaborador;
   /**

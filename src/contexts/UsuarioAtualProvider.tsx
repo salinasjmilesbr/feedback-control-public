@@ -98,6 +98,15 @@ export function UsuarioAtualProvider({
   const usuarioAtualLegado = usuarioAtual
     ? colaboradorLegadoDaIdentidade(usuarioAtual)
     : undefined;
+  const estadoResolucaoIdentidade = simulacaoDevDaSessao
+    ? usuarioAtual
+      ? "resolvida-com-usuario"
+      : "resolvida-sem-usuario"
+    : leituraSoberana?.chave === chaveSoberana
+    ? leituraSoberana.usuario
+      ? "resolvida-com-usuario"
+      : "resolvida-sem-usuario"
+    : "carregando";
 
   function selecionarUsuario(matricula: number) {
     const proxima = selecionarMatriculaDev(simulacaoDevDaSessao, matricula);
@@ -111,6 +120,7 @@ export function UsuarioAtualProvider({
       value={{
         usuarioAtual,
         usuarioAtualLegado,
+        estadoResolucaoIdentidade,
         usuariosDisponiveis,
         selecionarUsuario,
         simulacaoDevAtiva: simulacaoDevDaSessao,

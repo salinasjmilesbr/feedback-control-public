@@ -19,7 +19,7 @@ import {
 } from "../services/expectativaCargoStorage";
 
 function ConfiguracoesAparenciaPage() {
-  const { usuarioAtual, usuarioAtualLegado } = useUsuarioAtual();
+  const { usuarioAtual, usuarioAtualLegado, estadoResolucaoIdentidade } = useUsuarioAtual();
   const { branding, atualizarBranding, restaurarPadrao } = useBranding();
   const [form, setForm] = useState<BrandingConfig>(branding);
   const [mensagem, setMensagem] = useState("");
@@ -151,6 +151,10 @@ function ConfiguracoesAparenciaPage() {
       )
     );
     setMensagemEscala("");
+  }
+
+  if (estadoResolucaoIdentidade === "carregando") {
+    return <div style={{ padding: "30px" }}><h1>Carregando identidade…</h1></div>;
   }
 
   if (!usuarioAtual || !podeGerenciarConfiguracoes) {
