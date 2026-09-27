@@ -72,8 +72,8 @@ begin
     from public.access_role_capabilities rc
     join public.capabilities c on c.id = rc.capability_id
    where c.code like 'observation.%';
-  if v_n <> 5 then
-    v_falhas := v_falhas || format('%s concessao(oes) de observation.* (esperado 5)', v_n);
+  if v_n <> 9 then
+    v_falhas := v_falhas || format('%s concessao(oes) de observation.* (esperado 9)', v_n);
   end if;
 
   -- (A1b) F5-11 P5.1 (Issue #252): perfil de sistema SELF `observacoes_avaliado`
@@ -221,7 +221,7 @@ begin
     raise exception '[FAIL] A/preflight F5-11 P3: %', array_to_string(v_falhas, '; ');
   end if;
 
-  raise notice '[PASS] A/inventario: perfil de sistema `observacoes_gestor` com EXATAMENTE as 4 capabilities canonicas (read/create/edit/delete) e UNICA role com observation.*; `admin` com 9 e ZERO observation.*; `metas_dono`/`metas_aprovador` com exatamente 2 capabilities de metas cada e sem observation.*; `observation.write` DEPRECADA e nao concedida; catalogo 31; fixture com 5 assignments e 4 scopes (DIRECT_REPORTS/DESCENDANTS/ORGANIZATION/SELF); 8 RPCs + helpers INVOKER com EXECUTE SO service_role; RLS ligada, ZERO policy e ZERO privilegio de cliente';
+  raise notice '[PASS] A/inventario: `observacoes_gestor` preserva as 4 capabilities canonicas; `gestao_equipe` adiciona legitimamente as mesmas 4; `observacoes_avaliado` preserva somente observation.read; `admin` com 9 e ZERO observation.*; `metas_dono`/`metas_aprovador` com exatamente 2 capabilities de metas cada e sem observation.*; `observation.write` DEPRECADA e nao concedida; catalogo 31; fixture com 5 assignments e 4 scopes (DIRECT_REPORTS/DESCENDANTS/ORGANIZATION/SELF); 8 RPCs + helpers INVOKER com EXECUTE SO service_role; RLS ligada, ZERO policy e ZERO privilegio de cliente';
 end $$;
 
 -- ============================================================================

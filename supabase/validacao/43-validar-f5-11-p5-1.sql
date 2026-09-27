@@ -83,8 +83,8 @@ begin
     join public.access_roles r on r.id = m.access_role_id
     join public.capabilities c on c.id = m.capability_id
    where r.is_system = true and c.code like 'observation.%';
-  if v_n <> 2 then
-    v_falhas := v_falhas || format('A6: deveria haver EXATAMENTE 2 perfis de sistema com observation.* (tem %s)', v_n);
+  if v_n <> 3 then
+    v_falhas := v_falhas || format('A6: deveria haver EXATAMENTE 3 perfis de sistema com observation.* (tem %s)', v_n);
   end if;
   if exists (
     select 1
@@ -92,7 +92,7 @@ begin
       join public.access_roles r on r.id = m.access_role_id
       join public.capabilities c on c.id = m.capability_id
      where r.is_system = true
-       and r.name not in ('observacoes_gestor', 'observacoes_avaliado')
+       and r.name not in ('gestao_equipe', 'observacoes_gestor', 'observacoes_avaliado')
        and c.code like 'observation.%'
   ) then
     v_falhas := v_falhas || text 'A7: observation.* em role de sistema FORA do conjunto aprovado';
