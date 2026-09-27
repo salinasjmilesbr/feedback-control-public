@@ -742,7 +742,14 @@ Deno.serve(async (req) => {
       return typeof data === "string" && data.length > 0 ? data : null;
     },
 
-    avaliarAutorizacao: async ({ actorUserProfileId, organizationId, operacao, alvo, dataNegocio }) => {
+    avaliarAutorizacao: async ({
+      actorUserProfileId,
+      organizationId,
+      operacao,
+      alvo,
+      dataNegocio,
+      modoColecao,
+    }) => {
       const capability = capabilityCanonica(DEFINICAO_POR_OPERACAO[operacao].capability) as
         | Capability
         | undefined;
@@ -757,7 +764,7 @@ Deno.serve(async (req) => {
           capability,
           alvo,
           dataNegocio: dataNegocio ?? undefined,
-          ...(entrada.modoColecao ? { modoColecao: entrada.modoColecao } : {}),
+          ...(modoColecao ? { modoColecao } : {}),
         },
         autorizacao
       );

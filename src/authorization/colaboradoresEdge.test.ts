@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   colaboradores,
+  avaliarGateFuncional,
   type DepsColaboradores,
 } from "../../supabase/functions/colaboradores/core.ts";
 import {
@@ -283,6 +284,30 @@ describe("F5-07 — collaborator.criar: negações e ordem do gate", () => {
 });
 
 describe("F5-07 — regressões das demais operações", () => {
+  it("o adapter do gate funcional propaga o modo de coleção ao Policy Engine", async () => {
+    const avaliarAutorizacao = vi.fn(async () => ({ permitido: true as const }));
+    const deps = { avaliarAutorizacao } as unknown as DepsColaboradores;
+
+    await avaliarGateFuncional(
+      CALLER,
+      "collaborator.listar",
+      ATOR_COLLAB,
+      ORG,
+      null,
+      deps,
+      "COLLABORATORS"
+    );
+
+    expect(avaliarAutorizacao).toHaveBeenCalledWith({
+      actorUserProfileId: CALLER,
+      organizationId: ORG,
+      operacao: "collaborator.listar",
+      alvo: { type: "collaborator", id: ATOR_COLLAB },
+      dataNegocio: null,
+      modoColecao: "COLLABORATORS",
+    });
+  });
+
   it("collaborator.obter por matrícula continua resolvendo a INTENÇÃO para UUID", async () => {
     const { d, resolverMatricula, avaliarAutorizacao, executarRpc } = montarDeps({
       rpcData: { id: ALVO_EXISTENTE, full_name: "Pessoa" },
