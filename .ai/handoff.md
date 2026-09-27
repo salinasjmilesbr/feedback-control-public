@@ -47,7 +47,12 @@ em `.ai/*`, não são duplicadas aqui.
 2. Confirmar Issue, PR, desenho fechado e dependências; registrar qualquer
    blocker antes de ampliar escopo.
 3. Implementar em branch própria, preservando mudanças do usuário e sem merge.
-4. Aplicar esta matriz de validação proporcional:
+4. Antes da entrega, mapear explicitamente `mudança técnica → mecanismos
+   afetados → gates normativos correspondentes` e executar somente os gates
+   impactados, reutilizando evidência já certificada. Inclui, obrigatoriamente,
+   nova função/RPC com `pg_advisory_xact_lock`: verificar seu catálogo de
+   família/chave e executar o gate P6-6.
+5. Aplicar esta matriz de validação proporcional:
    - documentação: coerência documental + Diff-check; Static tests, SQL
      execution e Build NOT REQUIRED;
    - desenho técnico sem runtime: revisão de contrato/arquitetura + Diff-check;
@@ -62,9 +67,9 @@ em `.ai/*`, não são duplicadas aqui.
    mudança ou evidência nova; reutilizar evidência já certificada.
    Registrar sempre, quando aplicável, `Static tests`, `SQL execution`, `Build`
    e `Diff-check`.
-5. Atualizar este arquivo ao final, mantendo apenas estado operacional vigente;
+6. Atualizar este arquivo ao final, mantendo apenas estado operacional vigente;
    mover fatos encerrados para o histórico referenciado abaixo.
-6. Fazer commit/push conforme `.ai/workflow.md` e `.ai/git-rules.md`; não
+7. Fazer commit/push conforme `.ai/workflow.md` e `.ai/git-rules.md`; não
    declarar aprovação própria nem abrir PR sem mecanismo autorizado.
 
 ## 4. Histórico e rastreabilidade
