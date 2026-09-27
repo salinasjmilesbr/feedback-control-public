@@ -86,6 +86,22 @@ export interface ExecucaoAvaliacao {
   readonly actorUserProfileId: string;
 }
 
+export interface ResultadoRelatorioSoberano {
+  readonly organizationId: string;
+  readonly cycleId: string;
+  readonly scope: "DESCENDANTS";
+  readonly colaboradores: readonly {
+    readonly collaboratorId: string;
+    readonly nome: string;
+    readonly positionId: string;
+    readonly status: string | null;
+    readonly evaluationId: string | null;
+    readonly evaluationStatus: string | null;
+    readonly notaMedia: number | null;
+    readonly dataConclusao: string | null;
+  }[];
+}
+
 export interface DepsAvaliacoes {
   /** Resolve a identidade soberana a partir do JWT via `auth.getUser`. */
   resolveCaller(authHeader: string): Promise<string | null>;
@@ -101,8 +117,18 @@ export interface DepsAvaliacoes {
     readonly alvo: { readonly type: "evaluation" | "collaborator"; readonly id: string };
     readonly dataNegocio?: unknown;
   }): Promise<{ readonly allowed: boolean; readonly code?: ApplicationErrorCode }>;
+  /** Autoriza a coleção por report.read + alvos estruturais resolvidos no servidor. */
+  avaliarRelatorio?(entrada: {
+    readonly authUserId: string;
+    readonly organizationId: string;
+  }): Promise<{ readonly allowed: boolean; readonly code?: ApplicationErrorCode }>;
   /** Executa a RPC `evaluation_*` com credencial privilegiada e ator verificado. */
   executarRpc(execucao: ExecucaoAvaliacao): Promise<ResultadoRpcAvaliacao>;
+  executarRelatorio?(entrada: {
+    readonly authUserId: string;
+    readonly organizationId: string;
+    readonly cycleId: string;
+  }): Promise<{ readonly data?: ResultadoRelatorioSoberano; readonly error?: ErroRpcAvaliacao | null }>;
   /**
    * Resolve a matrícula (INTENÇÃO da tela) para o UUID do colaborador avaliado,
    * na fronteira confiável (ponte F3-01). Necessária em `criar` e
@@ -164,11 +190,35 @@ export async function avaliacoes(
   }
   const entrada: EntradaAvaliacao = validacao.entrada;
 
+  if (entrada.operacao === "report.listar") {
+    if (!deps.avaliarRelatorio || !deps.executarRelatorio) {
+      return erro("INTERNAL", "Operação não disponível.", 500);
+    }
+    const autorizacao = await deps.avaliarRelatorio({
+      authUserId: callerId,
+      organizationId: entrada.organization_id,
+    });
+    if (!autorizacao.allowed) {
+      const code = codigoPublico(autorizacao.code);
+      return erro(code, "Operação negada.", code === "NOT_FOUND" ? 404 : 403);
+    }
+    const resultado = await deps.executarRelatorio({
+      authUserId: callerId,
+      organizationId: entrada.organization_id,
+      cycleId: entrada.cycle_id!,
+    });
+    if (resultado.error) {
+      const code = codigoPublico(resultado.error.code);
+      return erro(code, "Relatório indisponível.", code === "NOT_FOUND" ? 404 : 409);
+    }
+    return json({ ok: true, operacao: entrada.operacao, resultado: resultado.data ?? null }, 200);
+  }
+
   // 2.1) Alvo SOBERANO: quando a tela informa a MATRÍCULA do avaliado (criação e
   // resolução de ciclo), a fronteira confiável a resolve para o UUID (ponte
   // F3-01) ANTES do Policy Engine — o alvo autorizável é o colaborador
   // resolvido, nunca um valor enviado pelo cliente. Sem resolução ⇒ recusa.
-  let alvoDaOperacao = entrada.alvo;
+  let alvoDaOperacao = entrada.alvo!;
   const operacaoComMatricula =
     entrada.operacao === "evaluation.criar" ||
     entrada.operacao === "evaluation.resolver_ciclo";

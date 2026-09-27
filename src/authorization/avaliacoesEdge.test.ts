@@ -74,6 +74,7 @@ describe("contrato Ã— operaÃ§Ãµes (F5-06 Â§8.3)", () => {
         "evaluation.write",
         "evaluation.reopen",
         "evaluation.cancel",
+        "report.read",
       ])
     );
     // D18: conclusÃ£o NÃƒO cria capability nova.
@@ -83,6 +84,7 @@ describe("contrato Ã— operaÃ§Ãµes (F5-06 Â§8.3)", () => {
   it("reconhece somente operaÃ§Ãµes declaradas", () => {
     expect(ehOperacaoAvaliacao("evaluation.concluir")).toBe(true);
     expect(ehOperacaoAvaliacao("evaluation.importar")).toBe(false);
+    expect(ehOperacaoAvaliacao("report.listar")).toBe(true);
   });
 });
 

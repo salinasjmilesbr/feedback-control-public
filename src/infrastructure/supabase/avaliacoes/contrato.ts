@@ -27,7 +27,8 @@ export type OperacaoAvaliacao =
   | "evaluation.participantes_realinhar"
   | "evaluation.transparencia"
   | "evaluation.painel_participante"
-  | "evaluation.resolver_ciclo";
+  | "evaluation.resolver_ciclo"
+  | "report.listar";
 
 /** Alvo autorizável (mesmo `TargetRef` do Policy Engine). */
 export interface AlvoAvaliacao {
@@ -38,7 +39,8 @@ export interface AlvoAvaliacao {
 export interface EntradaAvaliacao {
   readonly organization_id: string;
   readonly operacao: OperacaoAvaliacao;
-  readonly alvo: AlvoAvaliacao;
+  /** Ausente somente em `report.listar`: o universo nunca vem do cliente. */
+  readonly alvo?: AlvoAvaliacao;
   /** Notas do lote: `{ subcriterion_id, nota }[]` (1..5). */
   readonly notas?: readonly { readonly subcriterion_id: string; readonly nota: number }[];
   /**
@@ -95,6 +97,7 @@ export const CAPABILITY_POR_OPERACAO: Readonly<Record<OperacaoAvaliacao, string>
   "evaluation.painel_participante": "evaluation.write",
   // Resolver ano+ciclo é pré-requisito de criação ⇒ mesma capability de criação.
   "evaluation.resolver_ciclo": "evaluation.create",
+  "report.listar": "report.read",
 };
 
 /** Alvo autorizável de cada operação (criação e resolução de ciclo usam o colaborador). */
@@ -159,6 +162,20 @@ export function validarEntradaAvaliacao(corpo: unknown): ResultadoValidacao {
   }
   if (!ehUuid(cru.organization_id)) {
     return { ok: false, code: "INVALID_INPUT", message: "organization_id inválido." };
+  }
+
+  if (cru.operacao === "report.listar") {
+    if (cru.alvo !== undefined) {
+      return {
+        ok: false,
+        code: "INVALID_INPUT",
+        message: "O universo do relatório é resolvido no servidor e não aceita alvo.",
+      };
+    }
+    if (!ehUuid(cru.cycle_id)) {
+      return { ok: false, code: "INVALID_INPUT", message: "cycle_id obrigatório e inválido." };
+    }
+    return { ok: true, entrada: cru as unknown as EntradaAvaliacao };
   }
 
   const alvoCru = cru.alvo;
