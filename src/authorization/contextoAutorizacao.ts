@@ -310,6 +310,8 @@ export interface EntradaOperacaoAutorizacao {
   readonly organizationId: string;
   readonly capability: Capability;
   readonly alvo: TargetRef;
+  /** Operação de coleção: autoriza a listagem pela existência de alvos estruturais. */
+  readonly modoColecao?: "COLLABORATORS";
   /** Data de negócio (intenção funcional validada — D21). */
   readonly dataNegocio?: unknown;
   /** Estado do domínio declarado pelo serviço (ausente ⇒ DENY). */
@@ -701,6 +703,7 @@ export async function avaliarOperacaoAutorizacao(
     membershipAtiva: atorComVinculo.actorContext.membership.status === "active",
     capabilities,
     escoposResolvidos,
+    ...(entrada.modoColecao ? { modoColecao: entrada.modoColecao } : {}),
     alvo: resourceContext.target,
     tenantDoAlvo: resourceContext.organizationId,
     // F5-06/F5-10 P4: DONO do recurso (colaborador avaliado na avaliação;

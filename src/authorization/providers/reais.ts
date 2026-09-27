@@ -94,6 +94,8 @@ export interface DadosProvidersReais {
   readonly capabilities: readonly CapabilityComEscopos[];
   /** Alvos por scope, resolvidos server-side (F4-02). */
   readonly escoposResolvidos: readonly EscopoResolvido[];
+  /** Coleção autorizada por alvos estruturais, sem incluir SELF em DESCENDANTS. */
+  readonly modoColecao?: "COLLABORATORS";
   /** Alvo da decisão corrente (o único cujo tenant é conhecido). */
   readonly alvo: TargetRef;
   /** Tenant do alvo, derivado do recurso carregado (D6). */
@@ -408,6 +410,13 @@ export function criarProvidersReais(dados: DadosProvidersReais): PolicyEnginePro
         // AVALIADO (dono do recurso) — o id da avaliação não define relação.
         const escopo = dados.escoposResolvidos.find((item) => item.scope === scope);
         if (!escopo) return false;
+        if (
+          dados.modoColecao === "COLLABORATORS" &&
+          target.type === "collaborator" &&
+          (scope === "DIRECT_REPORTS" || scope === "DESCENDANTS")
+        ) {
+          return escopo.alvos.some((alvo) => alvo.collaboratorId !== null);
+        }
         return escopo.alvos.some(
           (alvo) =>
             alvoEscopoCorresponde(alvo, target) ||

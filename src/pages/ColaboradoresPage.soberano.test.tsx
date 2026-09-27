@@ -128,9 +128,9 @@ describe("listagem soberana em ColaboradoresPage", () => {
     ).toBe(false);
   });
 
-  it("fecha Novo colaborador sem scope mesmo quando a capability existe", () => {
-    expect(paginaFonte).toContain("listarEscoposMinhaEquipe");
-    expect(paginaFonte).toContain("escoposMinhaEquipe.size > 0");
+  it("exige a capability administrativa efetiva para Novo colaborador", () => {
+    expect(paginaFonte).toContain('capabilities.values.has("org.structure.manage")');
+    expect(paginaFonte).not.toContain("escoposMinhaEquipe.size > 0");
     expect(paginaFonte).not.toContain("collaborator.edit");
   });
 

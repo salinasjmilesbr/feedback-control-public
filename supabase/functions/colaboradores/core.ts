@@ -299,6 +299,7 @@ export interface DepsColaboradores {
     readonly operacao: OperacaoColaborador;
     readonly alvo: { readonly type: "collaborator"; readonly id: string };
     readonly dataNegocio: string | null;
+    readonly modoColecao?: "COLLABORATORS";
   }): Promise<{ readonly permitido: boolean; readonly code?: CodigoPublico }>;
   /** Gate ADMINISTRATIVO (D19): capabilities efetivas do ator na organização. */
   resolverCapabilitiesEfetivas(entrada: {
@@ -539,7 +540,8 @@ export async function avaliarGateFuncional(
   alvoId: string,
   organizationId: string,
   dataNegocio: string | null,
-  deps: DepsColaboradores
+  deps: DepsColaboradores,
+  modoColecao?: "COLLABORATORS"
 ): Promise<{ readonly permitido: boolean; readonly code?: CodigoPublico }> {
   return deps.avaliarAutorizacao({
     actorUserProfileId: authUserId,
@@ -547,6 +549,7 @@ export async function avaliarGateFuncional(
     operacao,
     alvo: { type: "collaborator", id: alvoId },
     dataNegocio,
+    ...(modoColecao ? { modoColecao } : {}),
   });
 }
 
@@ -672,7 +675,8 @@ export async function colaboradores(
           alvoId,
           contexto.organizationId,
           contexto.dataReferencia,
-          deps
+          deps,
+          operacao === "collaborator.listar" ? "COLLABORATORS" : undefined
         )
       : { permitido: false, code: "FORBIDDEN" };
     }
