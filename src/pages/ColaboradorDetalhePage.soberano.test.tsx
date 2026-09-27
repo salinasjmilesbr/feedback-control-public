@@ -410,16 +410,20 @@ describe("detalhe soberano em ColaboradorDetalhePage", () => {
     expect(html).toContain("Carregando as observações do colaborador");
   });
 
-  it("explicita quando não há matrícula numérica para o acervo legado", () => {
+  it("mantém o soberano renderizável quando não há matrícula numérica", () => {
     const html = renderizar({
       fase: "pronto",
-      colaborador: soberano({ matricula: null }),
+      colaborador: soberano({ matricula: "ACME005" }),
       historico: [],
       erroHistorico: null,
     });
 
     expect(html).toContain("não possui matrícula numérica vigente");
-    expect(html).toContain("O histórico soberano acima permanece íntegro.");
+    expect(html).toContain("Observações soberanas do colaborador autorizadas");
+    expect(html).toContain("Carregando as observações do colaborador");
+    expect(fontePagina).toContain("collaboratorId");
+    expect(fontePagina).toContain("matricula: colaborador.matricula");
+    expect(fontePagina).not.toContain("matricula: Number(colaborador.matricula)");
   });
 
   it("apresenta KPIs e lista a partir da projeção SOBERANA do alvo", () => {

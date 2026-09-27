@@ -74,7 +74,7 @@ export interface ObservacoesColaboradorProps {
   readonly colaborador: {
     readonly id: string;
     readonly nome: string;
-    readonly matricula: number;
+    readonly matricula: number | string | null;
   };
   /** Organização ativa — INTENÇÃO de UX (a Edge/RPC revalida o tenant). */
   readonly organizationId: string;
