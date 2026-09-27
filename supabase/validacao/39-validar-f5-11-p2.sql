@@ -184,8 +184,8 @@ begin
     from public.access_role_capabilities rc
     join public.capabilities c on c.id = rc.capability_id
    where c.code like 'observation.%';
-  if v_n <> 5 then
-    v_falhas := v_falhas || format('%s concessao(oes) de observation.* (esperado 5: 4 em observacoes_gestor + 1 em observacoes_avaliado)', v_n);
+  if v_n <> 9 then
+    v_falhas := v_falhas || format('%s concessao(oes) de observation.* (esperado 9: 4 em observacoes_gestor + 1 em observacoes_avaliado + 4 em gestao_equipe)', v_n);
   end if;
   select count(*) into v_n
     from public.access_role_capabilities rc
@@ -198,7 +198,11 @@ begin
             ('observacoes_gestor', 'observation.create'),
             ('observacoes_gestor', 'observation.edit'),
             ('observacoes_gestor', 'observation.delete'),
-            ('observacoes_avaliado', 'observation.read')
+            ('observacoes_avaliado', 'observation.read'),
+            ('gestao_equipe', 'observation.read'),
+            ('gestao_equipe', 'observation.create'),
+            ('gestao_equipe', 'observation.edit'),
+            ('gestao_equipe', 'observation.delete')
           ));
   if v_n <> 0 then
     v_falhas := v_falhas || format('%s concessao(oes) de observation.* FORA da lista fechada (role, capability)', v_n);
@@ -217,7 +221,7 @@ begin
   end if;
   if (select array_agg(r.name order by r.name)
         from public.access_roles r where r.is_system = true)
-     is distinct from array['admin', 'evaluator', 'metas_aprovador', 'metas_dono', 'observacoes_avaliado', 'observacoes_gestor'] then
+     is distinct from array['admin', 'evaluator', 'gestao_equipe', 'metas_aprovador', 'metas_dono', 'observacoes_avaliado', 'observacoes_gestor'] then
     v_falhas := v_falhas || 'conjunto de roles de SISTEMA mudou';
   end if;
 
@@ -993,8 +997,8 @@ begin
     from public.access_role_capabilities rc
     join public.capabilities c on c.id = rc.capability_id
    where c.code like 'observation.%';
-  if v_n <> 5 then
-    raise exception '[FAIL] D1: observation.* no catalogo = % (esperado 5: 4 em observacoes_gestor + 1 em observacoes_avaliado)', v_n;
+  if v_n <> 9 then
+    raise exception '[FAIL] D1: observation.* no catalogo = % (esperado 9: 4 em observacoes_gestor + 1 em observacoes_avaliado + 4 em gestao_equipe)', v_n;
   end if;
   select count(*) into v_n from public.access_roles
    where id = 'f5b29000-0000-0000-0000-0000000000f1';

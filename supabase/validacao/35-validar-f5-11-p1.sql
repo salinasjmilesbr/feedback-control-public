@@ -79,9 +79,9 @@ begin
     from public.access_role_capabilities rc
     join public.capabilities c on c.id = rc.capability_id
    where c.code like 'observation.%';
-  if v_n <> 5 then
+  if v_n <> 9 then
     v_falhas := v_falhas || format(
-      'observation.* com %s concessao(oes) (esperado 5: 4 em observacoes_gestor + 1 em observacoes_avaliado)', v_n);
+      'observation.* com %s concessao(oes) (esperado 9: 4 em observacoes_gestor + 1 em observacoes_avaliado + 4 em gestao_equipe)', v_n);
   end if;
   select count(*) into v_n
     from public.access_role_capabilities rc
@@ -94,7 +94,11 @@ begin
             ('observacoes_gestor', 'observation.create'),
             ('observacoes_gestor', 'observation.edit'),
             ('observacoes_gestor', 'observation.delete'),
-            ('observacoes_avaliado', 'observation.read')
+            ('observacoes_avaliado', 'observation.read'),
+            ('gestao_equipe', 'observation.read'),
+            ('gestao_equipe', 'observation.create'),
+            ('gestao_equipe', 'observation.edit'),
+            ('gestao_equipe', 'observation.delete')
           ));
   if v_n <> 0 then
     v_falhas := v_falhas || format('%s concessao(oes) de observation.* FORA da lista fechada (role, capability)', v_n);
@@ -130,7 +134,7 @@ begin
   --       ser EXATAMENTE esse: role de sistema fora dele significa papel inventado.
   if (select array_agg(r.name order by r.name)
         from public.access_roles r where r.is_system = true)
-     is distinct from array['admin', 'evaluator', 'metas_aprovador', 'metas_dono', 'observacoes_avaliado', 'observacoes_gestor'] then
+     is distinct from array['admin', 'evaluator', 'gestao_equipe', 'metas_aprovador', 'metas_dono', 'observacoes_avaliado', 'observacoes_gestor'] then
     v_falhas := v_falhas || format(
       'conjunto de roles de SISTEMA mudou (%s) — a P1 nao cria role/bundle/perfil: D15 e decisao da P3',
       coalesce((select array_to_string(array_agg(r.name order by r.name), ',')
@@ -1183,8 +1187,8 @@ begin
     from public.access_role_capabilities rc
     join public.capabilities c on c.id = rc.capability_id
    where c.code like 'observation.%';
-  if v_n <> 5 then
-    v_falhas := v_falhas || format('D15: observation.* com %s concessao(oes) (esperado 5)', v_n);
+  if v_n <> 9 then
+    v_falhas := v_falhas || format('D15: observation.* com %s concessao(oes) (esperado 9)', v_n);
   end if;
   select count(*) into v_n
     from public.access_role_capabilities rc
@@ -1197,7 +1201,11 @@ begin
             ('observacoes_gestor', 'observation.create'),
             ('observacoes_gestor', 'observation.edit'),
             ('observacoes_gestor', 'observation.delete'),
-            ('observacoes_avaliado', 'observation.read')
+            ('observacoes_avaliado', 'observation.read'),
+            ('gestao_equipe', 'observation.read'),
+            ('gestao_equipe', 'observation.create'),
+            ('gestao_equipe', 'observation.edit'),
+            ('gestao_equipe', 'observation.delete')
           ));
   if v_n <> 0 then
     v_falhas := v_falhas || format('D15: %s concessao(oes) de observation.* FORA da lista fechada (role, capability)', v_n);
@@ -1223,7 +1231,7 @@ begin
   -- criado pela P5.1 (`observacoes_avaliado`, Issue #252).
   if (select array_agg(r.name order by r.name)
         from public.access_roles r where r.is_system = true)
-     is distinct from array['admin', 'evaluator', 'metas_aprovador', 'metas_dono', 'observacoes_avaliado', 'observacoes_gestor'] then
+     is distinct from array['admin', 'evaluator', 'gestao_equipe', 'metas_aprovador', 'metas_dono', 'observacoes_avaliado', 'observacoes_gestor'] then
     v_falhas := v_falhas || format(
       'D15: conjunto de roles de SISTEMA mudou (%s) — nenhuma role/bundle/perfil novo fora da emenda da P5.1',
       coalesce((select array_to_string(array_agg(r.name order by r.name), ',')

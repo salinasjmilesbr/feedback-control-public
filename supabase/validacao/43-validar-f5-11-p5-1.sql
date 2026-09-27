@@ -92,7 +92,7 @@ begin
       join public.access_roles r on r.id = m.access_role_id
       join public.capabilities c on c.id = m.capability_id
      where r.is_system = true
-       and r.name not in ('observacoes_gestor', 'observacoes_avaliado')
+       and r.name not in ('gestao_equipe', 'observacoes_gestor', 'observacoes_avaliado')
        and c.code like 'observation.%'
   ) then
     v_falhas := v_falhas || text 'A7: observation.* em role de sistema FORA do conjunto aprovado';

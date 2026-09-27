@@ -72,8 +72,8 @@ begin
     from public.access_role_capabilities rc
     join public.capabilities c on c.id = rc.capability_id
    where c.code like 'observation.%';
-  if v_n <> 5 then
-    v_falhas := v_falhas || format('%s concessao(oes) de observation.* (esperado 5)', v_n);
+  if v_n <> 9 then
+    v_falhas := v_falhas || format('%s concessao(oes) de observation.* (esperado 9)', v_n);
   end if;
 
   -- (A1b) F5-11 P5.1 (Issue #252): perfil de sistema SELF `observacoes_avaliado`
