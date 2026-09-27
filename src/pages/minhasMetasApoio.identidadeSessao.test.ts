@@ -49,9 +49,8 @@ describe("#333 — identidade da sessão em Minhas Metas", () => {
     expect(pageFonte).toContain("if (!collaboratorId) {");
     expect(pageFonte).toContain("mensagem: SEM_ATOR");
     expect(pageFonte).not.toContain("if (!matriculaApresentacao)");
-    expect(pageFonte).toMatch(
-      /obterColaborador\(\s*\{\s*collaboratorId,\s*organizationId: organizacaoAtivaId\s*\}/
-    );
-    expect(pageFonte).not.toMatch(/obterColaborador\(\s*\{\s*matricula:/);
+    expect(pageFonte).toContain("identidade: {");
+    expect(pageFonte).toContain("colaboradorId,");
+    expect(pageFonte).not.toContain("obterColaborador");
   });
 });

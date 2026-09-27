@@ -337,7 +337,7 @@ describe("MinhasMetasPage — FASE 4 (assíncrono)", () => {
     expect(fonte).toMatch(/if \(conflito\) tentativas\.encerrar\(chave\);/);
     expect(fonte).toMatch(/if \(conflito\) await atualizarLista\(\);/);
     // Sucesso também passa pelo refresh soberano — nada de estado otimista.
-    expect(fonte).toMatch(/await atualizarLista\(\);\n\s*return true;/);
+    expect(fonte).toMatch(/await atualizarLista\(\);\r?\n\s*return true;/);
   });
 
   it("operationId é estável na MESMA tentativa e novo na próxima ação", () => {
@@ -402,6 +402,8 @@ describe("MinhasMetasPage — guardas estáticas do cutover", () => {
     // A porta soberana é a única superfície de leitura e mutação.
     expect(fonte).toContain("obterRepositorioMetasSoberanas(");
     expect(fonte).toContain("listarMetasPorEscopo(organizationId, cycleId)");
+    expect(fonte).not.toContain("obterColaborador");
+    expect(fonte).toContain("colaboradorId");
     expect(apoio).toContain('relacao === "SELF"');
     expect(fonte).toContain("revisarFinalizacaoMeta");
     expect(fonte).toContain("expectedVersion: meta.version");
