@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { avaliacoes, type DepsAvaliacoes, type ExecucaoAvaliacao } from "./core.ts";
+import type { ResultadoRelatorioSoberano } from "./core.ts";
 import {
   avaliarOperacaoAutorizacao,
   type DepsContextoAutorizacao,
@@ -189,7 +190,7 @@ Deno.serve(async (req) => {
       if (target.type === "collaborator") {
         const { data, error } = await admin
           .from("collaborators")
-          .select("id, organization_id, status")
+          .select("id, organization_id")
           .eq("id", target.id)
           .eq("organization_id", organizationId)
           .maybeSingle();
@@ -199,7 +200,6 @@ Deno.serve(async (req) => {
           id: data.id,
           organizationId: data.organization_id,
           ownerCollaboratorId: data.id,
-          status: data.status,
         } as RecursoSoberanoCarregado;
       }
 
@@ -260,6 +260,24 @@ Deno.serve(async (req) => {
         avaliadoApto: String(colaborador.status ?? "").toLowerCase() === "active",
       };
     },
+  };
+
+  const resolverAlvosRelatorio = async (authUserId: string, organizationId: string) => {
+    const { data, error } = await admin.rpc("resolver_alvos_escopo", {
+      p_user_profile_id: authUserId,
+      p_organization_id: organizationId,
+      p_scope_type: "DESCENDANTS",
+      p_organizational_unit_id: null,
+      p_data: new Date().toISOString(),
+    });
+    if (error) {
+      return [] as { collaboratorId: string; positionId: string }[];
+    }
+    return ((data ?? []) as LinhaAlvoEscopo[])
+      .filter((linha): linha is { collaborator_id: string; position_id: string } =>
+        typeof linha.collaborator_id === "string" && typeof linha.position_id === "string"
+      )
+      .map((linha) => ({ collaboratorId: linha.collaborator_id, positionId: linha.position_id }));
   };
 
   // ---------------------------------------------------------------------------
@@ -416,6 +434,77 @@ Deno.serve(async (req) => {
     }
   };
 
+  const executarRelatorio: DepsAvaliacoes["executarRelatorio"] = async ({
+    authUserId,
+    organizationId,
+    cycleId,
+  }) => {
+    const { data: ciclo, error: erroCiclo } = await admin
+      .from("evaluation_cycles")
+      .select("id, organization_id")
+      .eq("id", cycleId)
+      .eq("organization_id", organizationId)
+      .maybeSingle();
+    if (erroCiclo || !ciclo) {
+      return { error: { code: "NOT_FOUND" } };
+    }
+
+    const alvos = await resolverAlvosRelatorio(authUserId, organizationId);
+    const ids = alvos.map((alvo) => alvo.collaboratorId);
+    if (ids.length === 0) {
+      const vazio: ResultadoRelatorioSoberano = {
+        organizationId,
+        cycleId,
+        scope: "DESCENDANTS",
+        colaboradores: [],
+      };
+      return { data: vazio };
+    }
+
+    const [colaboradores, status, avaliacoesDoCiclo] = await Promise.all([
+      admin.from("collaborators").select("id, organization_id, full_name").eq("organization_id", organizationId).in("id", ids),
+      admin.from("collaborator_status_periods").select("collaborator_id, status, valid_from, valid_to").in("collaborator_id", ids).lte("valid_from", new Date().toISOString()),
+      admin.from("evaluations").select("id, evaluated_collaborator_id, status, nota_media, data_conclusao").eq("organization_id", organizationId).eq("cycle_id", cycleId).in("evaluated_collaborator_id", ids),
+    ]);
+    if (colaboradores.error || status.error || avaliacoesDoCiclo.error) {
+      return { error: { code: "INTERNAL" } };
+    }
+
+    const agora = Date.now();
+    const statusPorColaborador = new Map<string, string>();
+    for (const linha of (status.data ?? []) as { collaborator_id: string; status: string; valid_from: string; valid_to: string | null }[]) {
+      const inicio = Date.parse(linha.valid_from);
+      const fim = linha.valid_to === null ? Number.POSITIVE_INFINITY : Date.parse(linha.valid_to);
+      if (inicio <= agora && agora < fim) statusPorColaborador.set(linha.collaborator_id, linha.status);
+    }
+    const avaliacaoPorColaborador = new Map<string, { id: string; status: string; nota_media: number | null; data_conclusao: string | null }>();
+    for (const linha of (avaliacoesDoCiclo.data ?? []) as { id: string; evaluated_collaborator_id: string; status: string; nota_media: number | null; data_conclusao: string | null }[]) {
+      avaliacaoPorColaborador.set(linha.evaluated_collaborator_id, linha);
+    }
+    const nomes = new Map((colaboradores.data ?? []).map((linha) => [linha.id, linha.full_name]));
+    const resultado: ResultadoRelatorioSoberano = {
+      organizationId,
+      cycleId,
+      scope: "DESCENDANTS",
+      colaboradores: alvos
+        .filter((alvo) => nomes.has(alvo.collaboratorId))
+        .map((alvo) => {
+          const avaliacao = avaliacaoPorColaborador.get(alvo.collaboratorId);
+          return {
+            collaboratorId: alvo.collaboratorId,
+            nome: nomes.get(alvo.collaboratorId)!,
+            positionId: alvo.positionId,
+            status: statusPorColaborador.get(alvo.collaboratorId) ?? null,
+            evaluationId: avaliacao?.id ?? null,
+            evaluationStatus: avaliacao?.status ?? null,
+            notaMedia: avaliacao?.nota_media ?? null,
+            dataConclusao: avaliacao?.data_conclusao ?? null,
+          };
+        }),
+    };
+    return { data: resultado };
+  };
+
   const deps: DepsAvaliacoes = {
     resolveCaller: async (authHeader) => {
       const caller = createClient(url, anonKey, {
@@ -441,7 +530,33 @@ Deno.serve(async (req) => {
         : { allowed: false, code: decisao.denial?.publicCode ?? "FORBIDDEN" };
     },
 
+    avaliarRelatorio: async ({ authUserId, organizationId }) => {
+      const capabilities = await autorizacao.resolverCapabilitiesEscopos(authUserId, organizationId);
+      const report = capabilities.find((item) => item.capability === "report.read");
+      if (!report?.scopes.includes("DESCENDANTS")) {
+        return { allowed: false, code: "FORBIDDEN" as const };
+      }
+      const alvos = await resolverAlvosRelatorio(authUserId, organizationId);
+      const primeiro = alvos[0];
+      if (!primeiro) {
+        return { allowed: false, code: "FORBIDDEN" as const };
+      }
+      const decisao = await avaliarOperacaoAutorizacao(
+        {
+          authUserId,
+          organizationId,
+          capability: "report.read",
+          alvo: { type: "collaborator", id: primeiro.collaboratorId },
+        },
+        autorizacao
+      );
+      return decisao.allowed
+        ? { allowed: true }
+        : { allowed: false, code: decisao.denial?.publicCode ?? "FORBIDDEN" };
+    },
+
     executarRpc,
+    executarRelatorio,
 
     // Ponte matrícula → UUID (F3-01) na fronteira confiável: o alvo autorizável
     // de criação/resolução de ciclo é sempre o UUID resolvido server-side.
