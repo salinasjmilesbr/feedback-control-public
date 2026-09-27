@@ -143,9 +143,10 @@ begin
     v_falhas := v_falhas || format('goal.%% + observation.%% = %s (esperado 8)', v_n);
   end if;
   -- F5-11 P3 (Issue #246) + P5.1 (Issue #252): D15 resolvida e EMENDADA —
-  -- `observation.*` existe em EXATAMENTE DUAS roles de sistema
+  -- `observation.*` existe em EXATAMENTE TRES roles de sistema
   -- (`observacoes_gestor`, 4 capabilities; `observacoes_avaliado`, EXATAMENTE
-  -- `observation.read`) e em ZERO no bundle `admin`. A proibicao da P1.1 virou
+  -- `observation.read`; `gestao_equipe`, 4 capabilities) e em ZERO no bundle
+  -- `admin`. A proibicao da P1.1 virou
   -- LISTA FECHADA de PARES (role, capability): nada foi relaxado.
   select count(*) into v_n
     from public.access_role_capabilities rc
@@ -215,7 +216,7 @@ begin
     raise exception '[FAIL] A/preflight F5-11 P1.1: %', array_to_string(v_falhas, '; ');
   end if;
 
-  raise notice '[PASS] A/preflight: fixture intra-tenant presente (5 identidades na MESMA organizacao: A/B/C com perfil e membership ATIVOS, D com membership DISABLED + vinculo ATIVO e E com perfil DISABLED - a matriz INTEGRAL de paridade; 4 memberships ativas), as 2 funcoes de coerencia instaladas (INVOKER, search_path fixo) com os 2 gatilhos BEFORE ROW corretos, catalogo 31, admin com 9 SEM observation.*, nenhuma concessao de observation.* (D15 intacto, e a concessao e artefato da P3) e a superficie observacao_* EXATAMENTE com as 8 RPCs da P2 (nem uma a mais)';
+  raise notice '[PASS] A/preflight: fixture intra-tenant presente (5 identidades na MESMA organizacao: A/B/C com perfil e membership ATIVOS, D com membership DISABLED + vinculo ATIVO e E com perfil DISABLED - a matriz INTEGRAL de paridade; 4 memberships ativas), as 2 funcoes de coerencia instaladas (INVOKER, search_path fixo) com os 2 gatilhos BEFORE ROW corretos, catalogo 31, admin com 9 SEM observation.*, lista fechada vigente com 9 concessoes de observation.* e a superficie observacao_* EXATAMENTE com as 8 RPCs da P2 (nem uma a mais)';
 end $$;
 
 -- ============================================================================
@@ -785,6 +786,6 @@ begin
   raise notice '  author_collaborator_id segue o resolvedor canonico F5-02 com paridade';
   raise notice '  INTEGRAL (perfil ativo + membership ativa + vinculo ativo); as';
   raise notice '  combinacoes legitimas continuam validas;';
-  raise notice '  D4/D6/D9 intactas; D15 continua bloqueando a P3; P2 nao iniciada.';
+  raise notice '  D4/D6/D9 intactas; grants posteriores P3/P5.1/#379 preservados.';
   raise notice '============================================================';
 end $$;
