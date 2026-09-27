@@ -9,6 +9,7 @@ import {
 } from "../../supabase/functions/observacoes/core.ts";
 import type { AuthIdentity } from "../auth/tipos.ts";
 import type { CodigoPublico } from "../infrastructure/supabase/observacoes/contrato.ts";
+import fonteEdgeObservacoes from "../../supabase/functions/observacoes/index.ts?raw";
 
 /**
  * F5-11 P4 (Issue #248) — fronteira soberana de OBSERVAÇÕES na Edge.
@@ -411,6 +412,19 @@ describe("F5-11 P4 — gate por operação (alvo REAL, mapa fechado)", () => {
     expect(execucao?.operacao).toBe("observacao.listar_por_escopo");
     expect(execucao?.escopo).toBe("SELF");
     expect(execucao?.observationId).toBeNull();
+  });
+});
+
+describe("F5-11 P4 — loader soberano do alvo colaborador", () => {
+  it("não consulta collaborators.status e preserva a identidade UUID do recurso", () => {
+    const bloco = fonteEdgeObservacoes.match(
+      /if \(target\.type === "collaborator"\) \{[\s\S]*?ownerCollaboratorId: data\.id,[\s\S]*?\} as RecursoSoberanoCarregado;/
+    )?.[0];
+    expect(bloco).toBeDefined();
+    expect(bloco).toMatch(/\.from\("collaborators"\)[\s\S]*\.select\("id, organization_id"\)/);
+    expect(bloco).not.toContain('.select("id, organization_id, status")');
+    expect(bloco).toContain("ownerCollaboratorId: data.id");
+    expect(bloco).not.toContain("status: data.status");
   });
 });
 

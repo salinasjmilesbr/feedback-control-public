@@ -364,7 +364,7 @@ Deno.serve(async (req) => {
       if (target.type === "collaborator") {
         const { data, error } = await admin
           .from("collaborators")
-          .select("id, organization_id, status")
+          .select("id, organization_id")
           .eq("id", target.id)
           .eq("organization_id", organizationId)
           .maybeSingle();
@@ -375,7 +375,6 @@ Deno.serve(async (req) => {
           id: data.id,
           organizationId: data.organization_id,
           ownerCollaboratorId: data.id,
-          status: data.status,
         } as RecursoSoberanoCarregado;
       }
 
