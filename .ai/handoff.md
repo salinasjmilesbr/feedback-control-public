@@ -46,30 +46,38 @@ em `.ai/*`, não são duplicadas aqui.
    sincronização com `origin`.
 2. Confirmar Issue, PR, desenho fechado e dependências; registrar qualquer
    blocker antes de ampliar escopo.
-3. Implementar em branch própria, preservando mudanças do usuário e sem merge.
-4. Antes da entrega, mapear explicitamente `mudança técnica → mecanismos
-   afetados → gates normativos correspondentes` e executar somente os gates
-   impactados, reutilizando evidência já certificada. Inclui, obrigatoriamente,
-   nova função/RPC com `pg_advisory_xact_lock`: verificar seu catálogo de
+3. Diagnosticar antes de implementar quando a causa não estiver provada. Para
+   falha observável em runtime, provar primeiro o comportamento real. Distinguir
+   defeito de produto, estado transitório de runtime e problema de ambiente;
+   após falha inesperada, diagnosticar antes de iniciar novo ciclo `fix → push →
+   CI`.
+4. Implementar em branch própria, preservando mudanças do usuário e sem merge.
+   Antes de editar, fazer reverse search obrigatório dos consumidores,
+   invariantes, catálogos e listas fechadas afetados. Antes dos gates, registrar
+   o mapa `mudança → mecanismos afetados → gates normativos correspondentes`.
+5. Executar somente validações proporcionais ao risco e impacto. O preflight
+   local deve espelhar os gates relevantes do CI, incluindo lint quando
+   aplicável; TypeScript de produção exige build antes do commit. Mudança de
+   runtime/Edge exige smoke real quando o defeito só puder aparecer em
+   execução. Mudança técnica/cutover não autoriza regressão da UX aprovada;
+   remoção ou degradação funcional/visual exige escopo ou decisão explícita.
+   Para novas funções/RPCs com `pg_advisory_xact_lock`, verificar o catálogo de
    família/chave e executar o gate P6-6.
-5. Aplicar esta matriz de validação proporcional:
-   - documentação: coerência documental + Diff-check; Static tests, SQL
-     execution e Build NOT REQUIRED;
-   - desenho técnico sem runtime: revisão de contrato/arquitetura + Diff-check;
-   - frontend/TS localizado: testes dirigidos; Build/lint somente quando o
-     impacto justificar;
-   - migration/RPC/RLS/SQL: preflight + testes dirigidos + SQL execution real
-     quando disponível;
-   - segurança/autorização/tenant: provas dirigidas ALLOW/DENY/negativas +
-     banco quando aplicável;
-   - mudança transversal/crítica: ampliar gates conforme o risco.
-   Não executar `npm test` completo automaticamente; não repetir gate sem
-   mudança ou evidência nova; reutilizar evidência já certificada.
-   Registrar sempre, quando aplicável, `Static tests`, `SQL execution`, `Build`
-   e `Diff-check`.
-6. Atualizar este arquivo ao final, mantendo apenas estado operacional vigente;
+6. Aplicar esta matriz: documentação = coerência + Diff-check; desenho sem
+   runtime = revisão de contrato/arquitetura + Diff-check; frontend/TS = testes
+   dirigidos e build/lint quando aplicável; migration/RPC/RLS/SQL = preflight,
+   testes dirigidos e SQL real quando disponível; segurança/autorização/tenant
+   = provas ALLOW/DENY/negativas e banco quando aplicável; mudança
+   transversal/crítica = gates ampliados conforme o risco. Reutilizar evidências
+   válidas quando nenhuma mudança relevante as invalidou. CI é confirmação final,
+   não mecanismo de descoberta.
+7. Para mudanças transversais, auditar antes do push. Em auditorias pre-commit
+   grandes, gerar pacote temporário `audit-<issue>.md` ou `.txt` fora do
+   repositório; mudanças pequenas podem entregar o diff diretamente. Registrar,
+   quando aplicável, `Static tests`, `SQL execution`, `Build` e `Diff-check`.
+8. Atualizar este arquivo ao final, mantendo apenas estado operacional vigente;
    mover fatos encerrados para o histórico referenciado abaixo.
-7. Fazer commit/push conforme `.ai/workflow.md` e `.ai/git-rules.md`; não
+9. Fazer commit/push conforme `.ai/workflow.md` e `.ai/git-rules.md`; não
    declarar aprovação própria nem abrir PR sem mecanismo autorizado.
 
 ## 4. Histórico e rastreabilidade
