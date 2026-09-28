@@ -124,6 +124,7 @@ registro de gate) — o que não tem evidência é **dívida** ou **lacuna**, nu
 | **Checkpoint Etapa 6 (Issue #308)** | Histórico soberano de ciclos, preservação de data civil no histórico, correção de boot da Edge `avaliacoes`, papel avaliativo mínimo e alinhamentos de capability/infraestrutura | Consolidado nesta v17; ver Parte III |
 | **F6 — checkpoint pós-#359** | Plataforma soberana, leitura estrutural, identidade de posição, gestão de pessoas por posição, isolamento do runner descartável e provas P5 | Consolidado nesta v19; ver Parte III |
 | **F6 — validação integrada (#362)** | Validação funcional end-to-end do cenário Acme reconstruído, antes de #293/F6-A15 | Decidida; execução pendente, sem novo P/fase |
+| **F6-AVALIACOES-05 (planejada; Issue a abrir)** | Provisionamento funcional legítimo do fluxo mutante de Avaliações, integrando à jornada real os contratos de `evaluation.create`/`evaluation.write` e os atores relacionais previstos em F5-06/F5-09 | Lacuna de roadmap revelada pela #364; pré-requisito para sua retomada final; não redefine F5-06/F5-09/#306 e não autoriza grants específicos para a Acme |
 
 Detalhamento por fase (critérios, decisões, evidências): `docs/F5-01-desenho-tecnico.md` …
 `docs/F5-11-desenho-tecnico.md`, `docs/F5-09-p9-matriz-integrada.md`,
@@ -208,6 +209,21 @@ fechado**; os itens F6 ainda pendentes permanecem no estado da Etapa 6 descrito 
 - **F6-A03, F6-A04, F6-A09, F6-A12, F6-A13 e F6-A14** estão resolvidas e validadas.
 - **F6-A11** está implementada, com o bootstrap validado.
 - **F6-A17** foi corrigida pelos PRs **#289/#290** e está **resolvida e validada em runtime** na ORG5.
+- **#364 — checkpoint consolidado (comentário #5862568699):** a validação integrada reutilizou as provas
+  válidas de Cycle 1 READ, Metas READ, Relatórios soberanos (#400-A/#400-B), Observações CREATE/READ/EDIT/HISTORY,
+  estrutura/hierarquia/provisionamento e ALLOW/DENY. Observações DELETE/REVOKE permanece
+  **BLOCKED-AMBIENTE**. Em Avaliações, F5-06/F5-09 já previam `evaluation.create`/`evaluation.write` e os atores
+  relacionais; a #364 revelou que faltava no roadmap uma atividade de provisionamento funcional para conectar esses
+  contratos à jornada real. A implementação e a validação técnica de **#306** permanecem concluídas; está **BLOCKED**
+  somente sua prova runtime integrada **evaluator + ASSIGNED** na fotografia Acme da #364, por ausência de identidade/
+  estado legitimamente atribuídos para a prova. Não há novo defeito de produto demonstrado, nenhuma preparação artificial
+  é permitida e não há teste executável restante sem mudança legítima de pré-condição.
+- **F6-AVALIACOES-05 (atividade planejada; Issue ainda não aberta):** deverá fechar o provisionamento funcional
+  legítimo ausente no roadmap, conectando os atores relacionais previstos por **GESTAO_CADEIA**, **GESTAO_DIRETA** e
+  **COLEGIADO** às capabilities já existentes `evaluation.create` e `evaluation.write`, sob o Policy Engine e os
+  scopes vigentes, com tenant, snapshot e auditoria preservados. A atividade não redefine F5-06/F5-09/#306; apenas
+  fecha essa integração/provisionamento funcional ausente. Não pode derivar autoridade de cargo/nome nem criar grants
+  artificiais específicos para a Acme; após ela, #364 retoma somente as provas runtime necessárias de Avaliações.
 - **F6-A01, F6-A02, F6-A06, F6-A10 e F6-A16** ficam registradas como melhorias pendentes;
   não são tratadas como defeitos resolvidos neste checkpoint.
 - **#293/F6-A15** permanece pendente e é o registro canônico dos findings UX; o estado dos itens deve ser consultado ali,
@@ -225,10 +241,12 @@ fechado**; os itens F6 ainda pendentes permanecem no estado da Etapa 6 descrito 
 - **Estado da `main` de referência deste registro:** `d64b4599f532335a90ef58ef58895d093bd63623` (`test(#338): provar mesmo cargo com responsabilidades distintas (#359)`).
 - O SHA anterior `c07d872` pertence ao checkpoint da v16.3 e é preservado apenas como histórico no Git,
   não como estado vigente.
-- A validação runtime de #306 e F6-A17 permanece registrada como concluída. A próxima atividade da Etapa 6
-  é a validação funcional integrada decidida em **#362**; depois seguem **#293/F6-A15**, **F6-COLAB-03**
-  e **F6-A18**, conforme dependências. Só após essa ordem ocorre o fechamento da Etapa 6 e, então, a
-  **Etapa 7 (F7)**. A validação integrada é uma atividade operacional, não um novo P ou fase, e não reabre
+- A #364 permanece aberta após seu checkpoint consolidado. A sequência mínima vigente é:
+  **F6-AVALIACOES-05 → retomada da #364 somente com as provas runtime necessárias de Avaliações**;
+  **Observações DELETE/REVOKE** continua sendo pendência runtime da própria #364, retomável quando o ambiente
+  permitir, sem mudança de produto; depois seguem **#293/F6-A15 → F6-COLAB-03/F6-A18 → fechamento da Etapa 6**
+  e, então, a **Etapa 7 (F7)**. F6-AVALIACOES-05 é uma dependência de planejamento, não implementação nesta
+  atualização; a validação integrada continua sendo atividade operacional, não um novo P ou fase, e não reabre
   contratos de auth/autorização.
 
 ### III.4 Contrato visual e de acesso — Issue #312
