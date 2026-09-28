@@ -1,769 +1,100 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { can } from "../authorization/authorizationPolicy";
+import { useAuth } from "../auth/AuthContext";
 import { useUsuarioAtual } from "../contexts/UsuarioAtualContext";
-import CriterionIcon from "../components/CriterionIcon";
-import RelatorioCriterioDetalhe from "../components/RelatorioCriterioDetalhe";
-import RelatorioHistoricoCiclos from "../components/RelatorioHistoricoCiclos";
-import {
-  formatarPeriodoCiclo,
-  getCiclosAvaliacao,
-} from "../services/cicloAvaliacaoStorage";
-import { getColaboradores } from "../services/colaboradorStorage";
-import {
-  formatarNota,
-  getEscalaAvaliacao,
-  getItemEscalaPorNota,
-} from "../services/escalaAvaliacaoStorage";
-import {
-  getRelatorioComparacaoCiclos,
-  getRelatorioDetalheCriterio,
-  getRelatorioEvolucaoIndividual,
-  getRelatorioHistoricoCiclos,
-  getRelatorioHistoricoCriterio,
-  getRelatorioVisaoGeral,
-  type FiltroCargoRelatorio,
-  type FiltrosRelatorio,
-} from "../services/relatorioService";
-import type { SituacaoAvaliacaoCiclo } from "../services/cicloEquipeService";
+import { criarControladorCiclosSoberanos, type CicloSoberano } from "../services/acessoCiclosSoberanos";
+import { criarClienteSupabase } from "../infrastructure/supabase/supabaseClient";
+import { criarRepositorioRelatoriosSoberanos, type LinhaRelatorioSoberano } from "../infrastructure/supabase/relatorios/repositorioRelatoriosSoberanos";
 import "../styles/relatorios.css";
 
-const statusLabels: Record<SituacaoAvaliacaoCiclo, string> = {
-  NAO_INICIADA: "Não iniciada",
-  EM_ANDAMENTO: "Em andamento",
-  PRONTA_PARA_FEEDBACK: "Pronta para Feedback",
-  CONCLUIDA: "Concluída",
-  CANCELADA: "Cancelada",
-  SUSPENSA: "Suspensa",
-  NAO_APLICAVEL: "Não aplicável",
-};
-
-function labelFuncao(
-  funcao: "GERENTE" | "COORDENADOR" | "CONSULTOR" | "ANALISTA" | "ESTAGIARIO" | undefined,
-  senioridade: "JUNIOR" | "PLENO" | "SENIOR" | undefined
-) {
-  if (funcao === "ESTAGIARIO") return "Estagiário";
-  if (funcao === "COORDENADOR") return "Coordenador";
-  if (funcao === "CONSULTOR") return "Consultor";
-  if (funcao === "ANALISTA") {
-    if (senioridade === "JUNIOR") return "Analista Júnior";
-    if (senioridade === "PLENO") return "Analista Pleno";
-    if (senioridade === "SENIOR") return "Analista Sênior";
-    return "Analista";
-  }
-  return "Colaborador";
+function rotuloCiclo(ciclo: CicloSoberano): string { return `${ciclo.ano} • Ciclo ${ciclo.numero}`; }
+function periodo(ciclo: CicloSoberano | undefined): string {
+  if (!ciclo?.dataInicio && !ciclo?.dataFim) return "Período não informado";
+  return `${ciclo.dataInicio ?? "—"} a ${ciclo.dataFim ?? "—"}`;
 }
+function formatarNota(valor: number | null): string { return valor === null ? "—" : valor.toFixed(2); }
+function faixaDaNota(valor: number | null): string { return valor === null ? "SEM_NOTA" : String(Math.round(valor)); }
+
+type Fase = "carregando" | "pronta" | "indisponivel";
 
 function RelatoriosPage() {
   const navigate = useNavigate();
-  const { usuarioAtual, usuarioAtualLegado, estadoResolucaoIdentidade } = useUsuarioAtual();
+  const { organizacaoAtivaId } = useAuth();
+  const { usuarioAtual, estadoResolucaoIdentidade } = useUsuarioAtual();
+  const [ciclos, setCiclos] = useState<readonly CicloSoberano[]>([]);
+  const [cicloId, setCicloId] = useState("");
+  const [linhas, setLinhas] = useState<readonly LinhaRelatorioSoberano[]>([]);
+  const [fase, setFase] = useState<Fase>("carregando");
+  const [mensagem, setMensagem] = useState<string | null>(null);
+  const [filtroStatus, setFiltroStatus] = useState("");
+  const [filtroFaixa, setFiltroFaixa] = useState("");
 
-  const ciclosDisponiveis = useMemo(
-    () =>
-      getCiclosAvaliacao().filter(
-        (ciclo) => ciclo.status === "ATIVO" || ciclo.status === "ENCERRADO"
-      ),
-    []
-  );
+  useEffect(() => {
+    if (!organizacaoAtivaId) return;
+    let ativo = true;
+    const controlador = criarControladorCiclosSoberanos();
+    void controlador.carregar(organizacaoAtivaId).then((resultado) => {
+      if (!ativo) return;
+      if (!resultado.ok) { setFase("indisponivel"); setMensagem(resultado.error.message); return; }
+      setCiclos(resultado.data);
+      const inicial = resultado.data.find((ciclo) => ciclo.status === "ATIVO")?.id ?? resultado.data[0]?.id ?? "";
+      setCicloId(inicial);
+      if (!inicial) { setFase("pronta"); setMensagem(null); }
+    });
+    return () => { ativo = false; controlador.descartar(); };
+  }, [organizacaoAtivaId]);
 
-  const [cicloId, setCicloId] = useState(
-    ciclosDisponiveis.find((ciclo) => ciclo.status === "ATIVO")?.id ??
-      ciclosDisponiveis[0]?.id ??
-      ""
-  );
+  useEffect(() => {
+    if (!organizacaoAtivaId || !cicloId) return;
+    let ativo = true;
+    const cliente = criarClienteSupabase();
+    if (!cliente) {
+      void Promise.resolve().then(() => {
+        if (ativo) { setFase("indisponivel"); setMensagem("Leitura soberana de relatórios indisponível neste ambiente."); }
+      });
+      return;
+    }
+    void criarRepositorioRelatoriosSoberanos(cliente).listar(organizacaoAtivaId, cicloId).then((resultado) => {
+      if (!ativo) return;
+      if (!resultado.ok) { setFase("indisponivel"); setMensagem(resultado.message); return; }
+      setLinhas(resultado.data.colaboradores); setFase("pronta"); setMensagem(null);
+    });
+    return () => { ativo = false; };
+  }, [organizacaoAtivaId, cicloId]);
 
-  const [coordenadorFiltro, setCoordenadorFiltro] = useState("");
-  const [cargoFiltro, setCargoFiltro] = useState("");
-  const [situacaoFiltro, setSituacaoFiltro] = useState("");
-  const [faixaFiltro, setFaixaFiltro] = useState("");
-  const [incluirCanceladas, setIncluirCanceladas] = useState(false);
-  const [criterioAbertoId, setCriterioAbertoId] = useState<string | null>(null);
-  const podeVerRelatorios = usuarioAtualLegado
-    ? can(
-        {
-          actor: {
-            matricula: usuarioAtualLegado.matricula,
-            funcao: usuarioAtualLegado.funcao,
-            status: usuarioAtualLegado.status,
-          },
-        },
-        "report.view",
-        { kind: "global" }
-      )
-    : false;
+  const ciclo = ciclos.find((item) => item.id === cicloId);
+  const linhasFiltradas = useMemo(() => linhas.filter((linha) => {
+    if (filtroStatus && (linha.evaluationStatus ?? "SEM_AVALIACAO") !== filtroStatus) return false;
+    if (filtroFaixa && faixaDaNota(linha.notaMedia) !== filtroFaixa) return false;
+    return true;
+  }), [filtroFaixa, filtroStatus, linhas]);
+  const comNota = linhasFiltradas.filter((linha) => linha.notaMedia !== null);
+  const media = comNota.length ? comNota.reduce((total, linha) => total + (linha.notaMedia ?? 0), 0) / comNota.length : null;
+  const concluidas = linhasFiltradas.filter((linha) => linha.evaluationStatus === "CONCLUIDA").length;
+  const emAndamento = linhasFiltradas.filter((linha) => linha.evaluationStatus === "EM_ANDAMENTO").length;
+  const faixas = [1, 2, 3, 4, 5].map((nota) => ({ nota, quantidade: comNota.filter((linha) => faixaDaNota(linha.notaMedia) === String(nota)).length }));
 
-  if (estadoResolucaoIdentidade === "carregando") {
-    return <main className="virtus-page reports-page"><section className="reports-empty"><h1>Carregando identidade…</h1></section></main>;
-  }
+  if (estadoResolucaoIdentidade === "carregando") return <main className="virtus-page reports-page"><section className="reports-empty"><h1>Carregando identidade…</h1></section></main>;
+  if (!organizacaoAtivaId || !usuarioAtual || estadoResolucaoIdentidade === "resolvida-sem-usuario") return <main className="virtus-page reports-page"><section className="reports-empty"><h1>Acesso restrito</h1><p>O relatório exige uma identidade autenticada e organização ativa.</p></section></main>;
 
-  if (!usuarioAtual || !podeVerRelatorios) {
-    return (
-      <main className="virtus-page reports-page">
-        <section className="reports-empty">
-          <h1>Acesso restrito</h1>
-          <p>Relatórios estão disponíveis para gerentes e coordenadores.</p>
-        </section>
-      </main>
-    );
-  }
-
-  if (!ciclosDisponiveis.length) {
-    return (
-      <main className="virtus-page reports-page">
-        <section className="reports-page-header">
-          <div>
-            <h1>Relatórios</h1>
-            <p>Visão consolidada de desempenho e evolução da equipe.</p>
-          </div>
-        </section>
-        <section className="reports-empty">
-          <h2>Nenhum ciclo disponível</h2>
-          <p>Ative ou encerre um ciclo para habilitar a visão de relatórios.</p>
-        </section>
-      </main>
-    );
-  }
-
-  const ciclo =
-    ciclosDisponiveis.find((item) => item.id === cicloId) ??
-    ciclosDisponiveis[0];
-
-  // #333: os relatórios legados são indexados por matrícula; sem matrícula
-  // informada não há relatório a exibir (nenhum número é inventado).
-  if (!usuarioAtualLegado) {
-    return (
-      <main className="virtus-page reports-page">
-        <section className="reports-empty">
-          <h2>Relatórios indisponíveis</h2>
-          <p>Sua matrícula não está informada neste tenant.</p>
-        </section>
-      </main>
-    );
-  }
-
-  const relatorioBase = getRelatorioVisaoGeral(ciclo, usuarioAtualLegado);
-
-  const filtros: FiltrosRelatorio = {
-    coordenadorMatricula:
-      coordenadorFiltro !== "" ? Number(coordenadorFiltro) : undefined,
-    cargo:
-      cargoFiltro !== "" ? (cargoFiltro as FiltroCargoRelatorio) : undefined,
-    situacao:
-      situacaoFiltro !== ""
-        ? (situacaoFiltro as SituacaoAvaliacaoCiclo)
-        : undefined,
-    faixaNota: faixaFiltro !== "" ? Number(faixaFiltro) : undefined,
-    incluirCanceladas,
-  };
-
-  const relatorio = getRelatorioVisaoGeral(ciclo, usuarioAtualLegado, filtros);
-
-  const colaboradoresCadastro = getColaboradores();
-  const coordenadoresDisponiveis = Array.from(
-    new Set(
-      relatorioBase.colaboradores
-        .map((item) => item.gestorDiretoMatricula)
-        .filter((matricula): matricula is number => matricula !== undefined)
-    )
-  )
-    .map((matricula) =>
-      colaboradoresCadastro.find((item) => item.matricula === matricula)
-    )
-    .filter(
-      (item): item is NonNullable<typeof item> => Boolean(item)
-    )
-    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
-
-  const escalaRelatorio = [...getEscalaAvaliacao()].sort(
-    (a, b) => b.nota - a.nota
-  );
-
-  const filtrosAtivos = [
-    usuarioAtual.funcao === "GERENTE" ? coordenadorFiltro : "",
-    cargoFiltro,
-    situacaoFiltro,
-    faixaFiltro,
-    incluirCanceladas ? "canceladas" : "",
-  ].filter(Boolean).length;
-
-  function limparFiltros() {
-    setCoordenadorFiltro("");
-    setCargoFiltro("");
-    setSituacaoFiltro("");
-    setFaixaFiltro("");
-    setIncluirCanceladas(false);
-  }
-
-  const ciclosOrdenados = [...ciclosDisponiveis].sort(
-    (a, b) => a.ano - b.ano || a.ciclo - b.ciclo
-  );
-  const indiceOrdenado = ciclosOrdenados.findIndex(
-    (item) => item.id === ciclo.id
-  );
-  const cicloAnterior =
-    indiceOrdenado > 0 ? ciclosOrdenados[indiceOrdenado - 1] : undefined;
-
-  const comparacao = getRelatorioComparacaoCiclos(
-    ciclo,
-    cicloAnterior,
-    usuarioAtualLegado,
-    filtros
-  );
-
-  const evolucaoIndividual = getRelatorioEvolucaoIndividual(
-    ciclo,
-    cicloAnterior,
-    usuarioAtualLegado,
-    filtros
-  );
-  const evolucaoPorMatricula = new Map(
-    evolucaoIndividual.map((item) => [item.matricula, item])
-  );
-
-  const historicoCiclos = getRelatorioHistoricoCiclos(
-    ciclosDisponiveis,
-    ciclo,
-    usuarioAtualLegado,
-    filtros
-  );
-
-  const faixaMedia =
-    relatorio.mediaEquipe > 0
-      ? getItemEscalaPorNota(relatorio.mediaEquipe)
-      : undefined;
-
-  const detalheCriterioAberto = criterioAbertoId
-    ? getRelatorioDetalheCriterio(
-        criterioAbertoId,
-        ciclo,
-        cicloAnterior,
-        usuarioAtualLegado,
-        filtros
-      )
-    : undefined;
-
-  const historicoCriterioAberto = criterioAbertoId
-    ? getRelatorioHistoricoCriterio(
-        criterioAbertoId,
-        ciclosDisponiveis,
-        ciclo,
-        usuarioAtualLegado,
-        filtros
-      )
-    : undefined;
-
-  return (
-    <main className="virtus-page reports-page">
-      <section className="reports-page-header">
-        <div>
-          <h1>Relatórios</h1>
-          <p>
-            Visão consolidada de desempenho da{" "}
-            {usuarioAtual.funcao === "COORDENADOR"
-              ? "sua equipe direta"
-              : "equipe"}.
-          </p>
-        </div>
-
-        <label className="reports-cycle-filter">
-          <span>Ciclo</span>
-          <select value={ciclo.id} onChange={(e) => setCicloId(e.target.value)}>
-            {ciclosDisponiveis.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.ano} • Ciclo {item.ciclo}
-                {item.status === "ATIVO" ? " — Ativo" : ""}
-              </option>
-            ))}
-          </select>
-        </label>
-      </section>
-
-      <section className="reports-cycle-context">
-        <div>
-          <strong>
-            {ciclo.ano} • Ciclo {ciclo.ciclo}
-          </strong>
-          <span>{formatarPeriodoCiclo(ciclo.dataInicio, ciclo.dataFim)}</span>
-        </div>
-        <span
-          className={`reports-cycle-status ${
-            ciclo.status === "ATIVO" ? "is-active" : "is-closed"
-          }`}
-        >
-          {ciclo.status === "ATIVO" ? "Ativo" : "Encerrado"}
-        </span>
-      </section>
-
-      <section className="reports-filters" aria-label="Filtros do relatório">
-        <div className="reports-filters__heading">
-          <div>
-            <strong>Filtros</strong>
-            <span>
-              {filtrosAtivos > 0
-                ? `${filtrosAtivos} filtro${filtrosAtivos === 1 ? "" : "s"} ativo${filtrosAtivos === 1 ? "" : "s"}`
-                : "Visão completa do ciclo"}
-            </span>
-          </div>
-
-          {filtrosAtivos > 0 && (
-            <button
-              type="button"
-              className="reports-filters__clear"
-              onClick={limparFiltros}
-            >
-              Limpar filtros
-            </button>
-          )}
-        </div>
-
-        <div className="reports-filters__grid">
-          {usuarioAtual.funcao === "GERENTE" && (
-            <label className="reports-filter-control">
-              <span>Coordenação</span>
-              <select
-                value={coordenadorFiltro}
-                onChange={(event) =>
-                  setCoordenadorFiltro(event.target.value)
-                }
-              >
-                <option value="">Todas</option>
-                {coordenadoresDisponiveis.map((coordenador) => (
-                  <option
-                    key={coordenador.matricula}
-                    value={coordenador.matricula}
-                  >
-                    {coordenador.nome}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-
-          <label className="reports-filter-control">
-            <span>Cargo / senioridade</span>
-            <select
-              value={cargoFiltro}
-              onChange={(event) => setCargoFiltro(event.target.value)}
-            >
-              <option value="">Todos</option>
-              {usuarioAtual.funcao === "GERENTE" && (
-                <>
-                  <option value="COORDENADOR">Coordenador</option>
-                  <option value="CONSULTOR">Consultor</option>
-                </>
-              )}
-              <option value="ANALISTA_SENIOR">Analista Sênior</option>
-              <option value="ANALISTA_PLENO">Analista Pleno</option>
-              <option value="ANALISTA_JUNIOR">Analista Júnior</option>
-              <option value="ESTAGIARIO">Estagiário</option>
-            </select>
-          </label>
-
-          <label className="reports-filter-control">
-            <span>Status</span>
-            <select
-              value={situacaoFiltro}
-              onChange={(event) => setSituacaoFiltro(event.target.value)}
-            >
-              <option value="">Todos</option>
-              <option value="NAO_INICIADA">Não iniciada</option>
-              <option value="EM_ANDAMENTO">Em andamento</option>
-              <option value="PRONTA_PARA_FEEDBACK">Pronta para Feedback</option>
-              <option value="CONCLUIDA">Concluída</option>
-              <option value="CANCELADA">Cancelada</option>
-              <option value="SUSPENSA">Suspensa</option>
-              <option value="NAO_APLICAVEL">Não aplicável</option>
-            </select>
-          </label>
-
-          <label className="reports-filter-control">
-            <span>Faixa de nota</span>
-            <select
-              value={faixaFiltro}
-              onChange={(event) => setFaixaFiltro(event.target.value)}
-            >
-              <option value="">Todas</option>
-              {escalaRelatorio.map((item) => (
-                <option key={item.nota} value={item.nota}>
-                  {item.nota} — {item.significado}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="reports-filter-control reports-filter-control--checkbox">
-            <span>Canceladas</span>
-            <span>
-              <input
-                type="checkbox"
-                checked={incluirCanceladas}
-                onChange={(event) => setIncluirCanceladas(event.target.checked)}
-              />
-              Incluir canceladas
-            </span>
-          </label>
-        </div>
-      </section>
-
-      <section className="reports-kpis" aria-label="Indicadores gerais">
-        <article className="reports-kpi reports-kpi--featured">
-          <span>Média da equipe</span>
-          <strong>{relatorio.mediaEquipe > 0 ? formatarNota(relatorio.mediaEquipe) : "—"}</strong>
-          <small>{faixaMedia?.significado ?? "Sem nota consolidada"}</small>
-        </article>
-        <article className="reports-kpi">
-          <span>Colaboradores</span>
-          <strong>{relatorio.totalElegiveis}</strong>
-          <small>no escopo do relatório</small>
-        </article>
-        <article className="reports-kpi">
-          <span>Com nota consolidada</span>
-          <strong>{relatorio.avaliacoesComNota}</strong>
-          <small>prontas ou concluídas</small>
-        </article>
-        <article className="reports-kpi">
-          <span>Concluídas</span>
-          <strong>{relatorio.concluidas}</strong>
-          <small>{relatorio.prontasParaFeedback} prontas para feedback</small>
-        </article>
-        <article className="reports-kpi">
-          <span>Em andamento</span>
-          <strong>{relatorio.emAndamento}</strong>
-          <small>{relatorio.naoIniciadas} não iniciadas</small>
-        </article>
-      </section>
-
-      <section className="reports-card reports-evolution-card">
-        <div className="reports-card__heading reports-evolution-heading">
-          <div>
-            <h2>Evolução entre ciclos</h2>
-            <p>
-              {cicloAnterior
-                ? `Comparação com ${cicloAnterior.ano} • Ciclo ${cicloAnterior.ciclo}.`
-                : "Não existe ciclo anterior disponível para comparação."}
-            </p>
-          </div>
-        </div>
-
-        {comparacao.possuiComparacao ? (
-          <div className="reports-evolution-layout">
-            <aside className="reports-evolution-overview">
-              <div className="reports-evolution-metric">
-                <span>Média atual</span>
-                <strong>{comparacao.mediaAtual > 0 ? formatarNota(comparacao.mediaAtual) : "—"}</strong>
-              </div>
-
-              <div className="reports-evolution-metric">
-                <span>Média anterior</span>
-                <strong>{comparacao.mediaAnterior > 0 ? formatarNota(comparacao.mediaAnterior) : "—"}</strong>
-              </div>
-
-              <div className="reports-evolution-metric reports-evolution-metric--highlight">
-                <span>Evolução</span>
-                <strong className={
-                  comparacao.variacaoMedia === undefined
-                    ? ""
-                    : comparacao.variacaoMedia > 0.05
-                    ? "is-positive"
-                    : comparacao.variacaoMedia < -0.05
-                    ? "is-negative"
-                    : "is-neutral"
-                }>
-                  {comparacao.variacaoMedia === undefined
-                    ? "—"
-                    : `${comparacao.variacaoMedia > 0 ? "+" : ""}${formatarNota(comparacao.variacaoMedia)}`}
-                </strong>
-              </div>
-
-              <div className="reports-evolution-people">
-                <strong>{comparacao.comparaveis} colaboradores comparáveis</strong>
-                <span className="is-positive">↑ {comparacao.melhoraram} melhoraram</span>
-                <span className="is-neutral">→ {comparacao.mantiveram} mantiveram</span>
-                <span className="is-negative">↓ {comparacao.pioraram} pioraram</span>
-              </div>
-            </aside>
-
-            <div className="reports-evolution-criteria">
-              <div className="reports-evolution-criteria__header">
-                <span>Critério</span>
-                <span>Anterior</span>
-                <span>Atual</span>
-                <span>Evolução</span>
-              </div>
-              {comparacao.criterios.map((criterio, criterioIndex) => (
-                <div className="reports-evolution-criteria__row" key={criterio.criterioId}>
-                  <div className="reports-evolution-criterion-name">
-                    <span className="reports-evolution-criterion-icon">
-                      <CriterionIcon index={criterioIndex} />
-                    </span>
-                    <strong>{criterio.criterioNome}</strong>
-                  </div>
-                  <span>{criterio.anterior > 0 ? formatarNota(criterio.anterior) : "—"}</span>
-                  <span className="reports-evolution-current">
-                    {criterio.atual > 0 ? formatarNota(criterio.atual) : "—"}
-                  </span>
-                  <span className={
-                    criterio.variacao === undefined
-                      ? ""
-                      : criterio.variacao > 0.05
-                      ? "is-positive"
-                      : criterio.variacao < -0.05
-                      ? "is-negative"
-                      : "is-neutral"
-                  }>
-                    {criterio.variacao === undefined
-                      ? "—"
-                      : `${criterio.variacao > 0 ? "+" : ""}${formatarNota(criterio.variacao)}`}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="reports-evolution-empty">
-            Selecione um ciclo que possua um ciclo anterior para visualizar a evolução.
-          </div>
-        )}
-      </section>
-
-      <div className="reports-grid">
-        <section className="reports-card">
-          <div className="reports-card__heading">
-            <div>
-              <h2>Distribuição das notas</h2>
-              <p>Faixas definidas na Régua de Notas.</p>
-            </div>
-          </div>
-
-          <div className="reports-distribution">
-            {relatorio.distribuicao.map((faixa) => (
-              <div className="reports-distribution__row" key={faixa.nota}>
-                <div className="reports-distribution__label">
-                  <span
-                    className="reports-score-dot"
-                    style={{ background: faixa.corFundo, color: faixa.cor }}
-                  >
-                    {faixa.nota}
-                  </span>
-                  <div>
-                    <strong>{faixa.significado}</strong>
-                    <small>{faixa.quantidade} colaborador{faixa.quantidade === 1 ? "" : "es"}</small>
-                  </div>
-                </div>
-                <div className="reports-bar">
-                  <span style={{ width: `${faixa.percentual}%` }} />
-                </div>
-                <strong className="reports-distribution__percent">
-                  {faixa.percentual.toFixed(0)}%
-                </strong>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="reports-card">
-          <div className="reports-card__heading">
-            <div>
-              <h2>Média por critério</h2>
-              <p>Os 8 critérios oficiais da avaliação.</p>
-            </div>
-          </div>
-
-          <div className="reports-criteria">
-            {relatorio.criterios.map((criterio, criterioIndex) => {
-              const aberto = criterioAbertoId === criterio.criterioId;
-
-              return (
-                <div
-                  className={`reports-criterion-group${aberto ? " is-open" : ""}`}
-                  key={criterio.criterioId}
-                >
-                  <button
-                    type="button"
-                    className="reports-criterion reports-criterion--interactive"
-                    aria-expanded={aberto}
-                    onClick={() =>
-                      setCriterioAbertoId((atual) =>
-                        atual === criterio.criterioId
-                          ? null
-                          : criterio.criterioId
-                      )
-                    }
-                  >
-                    <div className="reports-criterion__identity">
-                      <span className="reports-criterion__icon">
-                        <CriterionIcon index={criterioIndex} />
-                      </span>
-                      <div>
-                        <strong>{criterio.criterioNome}</strong>
-                        <small>
-                          {criterio.quantidadeAvaliacoes} avaliação
-                          {criterio.quantidadeAvaliacoes === 1 ? "" : "ões"}
-                        </small>
-                      </div>
-                    </div>
-
-                    <div className="reports-criterion__action">
-                      <span className="reports-criterion__score">
-                        {criterio.media > 0
-                          ? formatarNota(criterio.media)
-                          : "—"}
-                      </span>
-                      <span className="reports-criterion__chevron">
-                        {aberto ? "−" : "+"}
-                      </span>
-                    </div>
-                  </button>
-
-                  {aberto &&
-                    detalheCriterioAberto?.criterioId ===
-                      criterio.criterioId &&
-                    historicoCriterioAberto?.criterioId ===
-                      criterio.criterioId && (
-                      <RelatorioCriterioDetalhe
-                        detalhe={detalheCriterioAberto}
-                        criterioIndex={criterioIndex}
-                        historico={historicoCriterioAberto}
-                      />
-                    )}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      </div>
-
-      <section className="reports-card reports-team-card">
-        <div className="reports-card__heading reports-team-heading">
-          <div>
-            <h2>Desempenho da equipe</h2>
-            <p>
-              Notas aparecem somente quando a avaliação está pronta para feedback
-              ou concluída. Evolução compara com o ciclo anterior disponível.
-            </p>
-          </div>
-          <span>{relatorio.colaboradores.length} colaboradores</span>
-        </div>
-
-        <div className="reports-table-wrap">
-          <div className="reports-table">
-            <div className="reports-table__row reports-table__row--header">
-              <div>Colaborador</div>
-              <div>Status</div>
-              <div>Nota</div>
-              <div>Evolução</div>
-              <div>Faixa</div>
-              <div>Ações</div>
-            </div>
-
-            {relatorio.colaboradores.map((colaborador) => (
-              <div className="reports-table__row" key={colaborador.matricula}>
-                <div className="reports-person">
-                  <div className="reports-avatar">
-                    {colaborador.nome
-                      .split(" ")
-                      .filter(Boolean)
-                      .slice(0, 2)
-                      .map((parte) => parte[0])
-                      .join("")
-                      .toUpperCase()}
-                  </div>
-                  <div>
-                    <strong>{colaborador.nome}</strong>
-                    <span>{labelFuncao(colaborador.funcao, colaborador.senioridade)}</span>
-                  </div>
-                </div>
-
-                <div data-label="Status">
-                  <span className={`reports-status is-${colaborador.situacao.toLowerCase().replaceAll("_", "-")}`}>
-                    {statusLabels[colaborador.situacao]}
-                  </span>
-                </div>
-
-                <div data-label="Nota">
-                  <strong className="reports-table-score">
-                    {colaborador.possuiNotaConsolidada
-                      ? formatarNota(colaborador.notaMedia)
-                      : "—"}
-                  </strong>
-                </div>
-
-                <div data-label="Evolução">
-                  {(() => {
-                    const evolucao = evolucaoPorMatricula.get(
-                      colaborador.matricula
-                    );
-
-                    if (!evolucao) {
-                      return <span className="reports-muted">—</span>;
-                    }
-
-                    const classe =
-                      evolucao.tendencia === "MELHOROU"
-                        ? "is-positive"
-                        : evolucao.tendencia === "PIOROU"
-                        ? "is-negative"
-                        : "is-neutral";
-
-                    const seta =
-                      evolucao.tendencia === "MELHOROU"
-                        ? "↑"
-                        : evolucao.tendencia === "PIOROU"
-                        ? "↓"
-                        : "→";
-
-                    return (
-                      <span
-                        className={`reports-individual-evolution ${classe}`}
-                        title={`Ciclo anterior: ${formatarNota(
-                          evolucao.notaAnterior
-                        )} • Atual: ${formatarNota(evolucao.notaAtual)}`}
-                      >
-                        {seta}{" "}
-                        {evolucao.variacao > 0 ? "+" : ""}
-                        {formatarNota(evolucao.variacao)}
-                      </span>
-                    );
-                  })()}
-                </div>
-
-                <div data-label="Faixa">
-                  {colaborador.faixa ? (
-                    <span
-                      className="reports-range"
-                      style={{
-                        color: colaborador.faixa.cor,
-                        background: colaborador.faixa.corFundo,
-                      }}
-                    >
-                      {colaborador.faixa.significado}
-                    </span>
-                  ) : (
-                    <span className="reports-muted">—</span>
-                  )}
-                </div>
-
-                <div className="reports-actions">
-                  <button
-                    type="button"
-                    className="virtus-btn virtus-btn--outline virtus-btn--small"
-                    onClick={() =>
-                      navigate(`/colaborador/${colaborador.matricula}`)
-                    }
-                  >
-                    Abrir colaborador
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-    
-    </div>
-      </section>
-      <RelatorioHistoricoCiclos historico={historicoCiclos} />
-
-    </main>
-  );
+  return <main className="virtus-page reports-page">
+    <section className="reports-page-header">
+      <div><h1>Relatórios</h1><p>Visão consolidada de desempenho da equipe autorizada.</p></div>
+      <label className="reports-cycle-filter"><span>Ciclo</span><select value={cicloId} onChange={(evento) => { setFase("carregando"); setCicloId(evento.target.value); }}>{ciclos.map((item) => <option key={item.id} value={item.id}>{rotuloCiclo(item)}{item.status === "ATIVO" ? " — Ativo" : ""}</option>)}</select></label>
+    </section>
+    {ciclo && <section className="reports-cycle-context"><div><strong>{rotuloCiclo(ciclo)}</strong><span>{periodo(ciclo)}</span></div><span className={`reports-cycle-status ${ciclo.status === "ATIVO" ? "is-active" : "is-closed"}`}>{ciclo.status === "ATIVO" ? "Ativo" : ciclo.status}</span></section>}
+    {ciclos.length === 0 && fase === "pronta" && <section className="reports-empty"><h2>Nenhum ciclo disponível</h2><p>Não há ciclo soberano disponível para esta organização.</p></section>}
+    {fase === "carregando" && <section className="reports-empty"><h2>Carregando relatório…</h2><p>Consultando o universo autorizado no servidor.</p></section>}
+    {fase === "indisponivel" && <section className="reports-empty"><h2>Relatório indisponível</h2><p>{mensagem}</p></section>}
+    {fase === "pronta" && cicloId && <>
+      <section className="reports-filters" aria-label="Filtros do relatório"><div className="reports-filters__heading"><div><strong>Filtros</strong><span>Aplicados somente sobre a resposta autorizada</span></div></div><div className="reports-filters__grid"><label className="reports-filter-control"><span>Status</span><select value={filtroStatus} onChange={(evento) => setFiltroStatus(evento.target.value)}><option value="">Todos</option><option value="SEM_AVALIACAO">Sem avaliação</option><option value="CONCLUIDA">Concluída</option><option value="EM_ANDAMENTO">Em andamento</option></select></label><label className="reports-filter-control"><span>Faixa de nota</span><select value={filtroFaixa} onChange={(evento) => setFiltroFaixa(evento.target.value)}><option value="">Todas</option>{[1, 2, 3, 4, 5].map((nota) => <option key={nota} value={nota}>{nota}</option>)}</select></label><div className="reports-filter-control"><span>Outros filtros</span><strong>Indisponíveis nesta visão soberana</strong></div></div></section>
+      <section className="reports-kpis" aria-label="Indicadores gerais"><article className="reports-kpi reports-kpi--featured"><span>Média da equipe</span><strong>{formatarNota(media)}</strong><small>{comNota.length ? `${comNota.length} com nota` : "Sem nota consolidada"}</small></article><article className="reports-kpi"><span>Colaboradores</span><strong>{linhasFiltradas.length}</strong><small>no escopo autorizado</small></article><article className="reports-kpi"><span>Com nota consolidada</span><strong>{comNota.length}</strong><small>avaliações com nota</small></article><article className="reports-kpi"><span>Concluídas</span><strong>{concluidas}</strong><small>no ciclo selecionado</small></article><article className="reports-kpi"><span>Em andamento</span><strong>{emAndamento}</strong><small>no ciclo selecionado</small></article></section>
+      <div className="reports-grid"><section className="reports-card"><div className="reports-card__heading"><div><h2>Distribuição das notas</h2><p>Derivada somente das notas retornadas pelo servidor.</p></div></div><div className="reports-distribution">{faixas.map((faixa) => <div className="reports-distribution__row" key={faixa.nota}><div className="reports-distribution__label"><span className="reports-score-dot">{faixa.nota}</span><div><strong>Nota {faixa.nota}</strong><small>{faixa.quantidade} colaborador{faixa.quantidade === 1 ? "" : "es"}</small></div></div><strong className="reports-distribution__percent">{comNota.length ? `${Math.round((faixa.quantidade / comNota.length) * 100)}%` : "—"}</strong></div>)}</div></section><section className="reports-card"><div className="reports-card__heading"><div><h2>Média por critério</h2><p>Indisponível: o contrato atual não retorna critérios.</p></div></div><div className="reports-evolution-empty">Detalhamento por critério indisponível nesta etapa.</div></section></div>
+      <section className="reports-card reports-team-card"><div className="reports-card__heading reports-team-heading"><div><h2>Desempenho da equipe</h2><p>Colaboradores e avaliações retornados pelo escopo soberano.</p></div><span>{linhasFiltradas.length} colaboradores</span></div><div className="reports-table-wrap"><div className="reports-table"><div className="reports-table__row reports-table__row--header"><div>Colaborador</div><div>Status</div><div>Nota</div><div>Data de conclusão</div><div>Ações</div></div>{linhasFiltradas.map((linha) => <div className="reports-table__row" key={linha.collaboratorId}><div className="reports-person"><div className="reports-avatar">{linha.nome.split(" ").filter(Boolean).slice(0, 2).map((parte) => parte[0]).join("").toUpperCase()}</div><div><strong>{linha.nome}</strong><span>{linha.status ?? "Status não informado"}</span></div></div><div data-label="Status"><span className="reports-status">{linha.evaluationStatus ?? "Sem avaliação"}</span></div><div data-label="Nota"><strong className="reports-table-score">{formatarNota(linha.notaMedia)}</strong></div><div data-label="Data de conclusão">{linha.dataConclusao ?? "—"}</div><div className="reports-actions"><button type="button" className="virtus-btn virtus-btn--outline virtus-btn--small" onClick={() => navigate(`/colaborador/${linha.collaboratorId}`)}>Abrir colaborador</button></div></div>)}</div></div></section>
+      <div className="reports-grid"><section className="reports-card"><div className="reports-card__heading"><div><h2>Evolução entre ciclos</h2><p>Indisponível: esta etapa não possui histórico consolidado.</p></div></div><div className="reports-evolution-empty">A evolução será disponibilizada quando houver contrato soberano histórico.</div></section><section className="reports-card"><div className="reports-card__heading"><div><h2>Histórico de ciclos</h2><p>Indisponível nesta visão soberana.</p></div></div><div className="reports-evolution-empty">O histórico avançado não é calculado a partir de dados legados.</div></section></div>
+    </>}
+    <aside aria-label="Funcionalidades indisponíveis">Filtros por cargo, senioridade e coordenador; evolução individual; detalhamento por critério; históricos avançados e exportação permanecem indisponíveis nesta etapa.</aside>
+  </main>;
 }
 
 export default RelatoriosPage;
