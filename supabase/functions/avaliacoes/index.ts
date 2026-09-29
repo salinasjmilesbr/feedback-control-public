@@ -374,7 +374,7 @@ Deno.serve(async (req) => {
                   .eq("organization_id", organizationId)
                   .eq("business_code", businessCode),
             }).resolver({ organizationId: org, matricula: execucao.matriculaAvaliado })
-          : null;
+          : execucao.evaluatedCollaboratorId;
 
         if (!avaliadoId) {
           return {

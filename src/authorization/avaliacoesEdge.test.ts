@@ -297,4 +297,71 @@ describe("fronteira confiÃ¡vel do caminho novo", () => {
     );
     expect(resposta.status).toBe(405);
   });
+
+  it("CREATE por UUID soberano encaminha o alvo sem exigir matricula", async () => {
+    const { d, executarRpc } = deps({ rpcData: AVALIACAO });
+    const resposta = await avaliacoes(
+      requisicao(
+        {
+          organization_id: ORG,
+          operacao: "evaluation.criar",
+          alvo: { type: "collaborator", id: COLABORADOR },
+          cycle_id: CICLO,
+        },
+        { Authorization: "Bearer ok" }
+      ),
+      d
+    );
+
+    expect(resposta.status).toBe(200);
+    expect(executarRpc).toHaveBeenCalledTimes(1);
+    expect(executarRpc.mock.calls[0]![0].evaluatedCollaboratorId).toBe(COLABORADOR);
+  });
+
+  it("INVALID_INPUT do executor retorna 400, nao conflito de estado", async () => {
+    const { d, executarRpc } = deps({
+      rpcError: { code: "INVALID_INPUT", message: "detalhe interno" },
+    });
+    const resposta = await avaliacoes(
+      requisicao(
+        {
+          organization_id: ORG,
+          operacao: "evaluation.criar",
+          alvo: { type: "collaborator", id: COLABORADOR },
+          cycle_id: CICLO,
+        },
+        { Authorization: "Bearer ok" }
+      ),
+      d
+    );
+
+    expect(resposta.status).toBe(400);
+    const corpo = (await resposta.json()) as { error: { code: string; message: string } };
+    expect(corpo.error.code).toBe("INVALID_INPUT");
+    expect(corpo.error.message).not.toContain("detalhe interno");
+    expect(executarRpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("NOT_AUTHORIZED do executor retorna 403", async () => {
+    const { d, executarRpc } = deps({
+      rpcError: { code: "NOT_AUTHORIZED", message: "detalhe interno" },
+    });
+    const resposta = await avaliacoes(
+      requisicao(
+        {
+          organization_id: ORG,
+          operacao: "evaluation.criar",
+          alvo: { type: "collaborator", id: COLABORADOR },
+          cycle_id: CICLO,
+        },
+        { Authorization: "Bearer ok" }
+      ),
+      d
+    );
+
+    expect(resposta.status).toBe(403);
+    const corpo = (await resposta.json()) as { error: { code: string } };
+    expect(corpo.error.code).toBe("NOT_AUTHORIZED");
+    expect(executarRpc).toHaveBeenCalledTimes(1);
+  });
 });
