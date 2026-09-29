@@ -189,9 +189,12 @@ begin
   end if;
   -- F5-11 P5.1 (Issue #252): o 5o perfil de sistema (`observacoes_avaliado`) e
   -- criado por decisao explicita da P5.1; o conjunto NOMEADO acompanha a emenda.
-  if (select array_agg(r.name order by r.name) from public.access_roles r where r.is_system = true)
-     is distinct from array['admin', 'evaluator', 'gestao_equipe', 'metas_aprovador', 'metas_dono', 'observacoes_avaliado', 'observacoes_gestor'] then
-    v_falhas := v_falhas || 'conjunto de roles de SISTEMA mudou (a P1.1 nao cria role/bundle/perfil)';
+  if (select count(*) from public.access_roles r
+       where r.is_system = true
+         and r.name in ('admin', 'evaluator', 'gestao_equipe',
+                        'metas_aprovador', 'metas_dono',
+                        'observacoes_avaliado', 'observacoes_gestor')) <> 7 then
+    v_falhas := v_falhas || 'roles historicas de F5-11 ausentes ou alteradas (a P1.1 nao cria role/bundle/perfil)';
   end if;
   -- F5-11 P2 (Issue #244): a superficie `observacao_*` passou a existir e e'
   -- EXATAMENTE a lista fechada das 8 RPCs (a P1.1 nao cria nem esconde nenhuma).

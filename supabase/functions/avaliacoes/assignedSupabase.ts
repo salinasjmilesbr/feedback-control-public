@@ -277,3 +277,61 @@ export async function carregarAssignedDaOperacao(
     criarDepsAssignedSupabase(admin, entrada.agora)
   );
 }
+
+/**
+ * ASSIGNED mutante de avaliações: exige a ocorrência COLEGIADO materializada
+ * da avaliação corrente. O caminho read-only de #306 permanece no resolver
+ * soberano F3-08/F3-09 acima.
+ */
+export async function carregarAssignedWriteColegiadoMaterializado(
+  admin: SupabaseClient,
+  entrada: {
+    readonly collaboratorId: string | null;
+    readonly organizationId: string;
+    readonly target: TargetRef;
+    readonly cycleId: string | undefined;
+    readonly agora: () => Date;
+  }
+) {
+  if (!entrada.collaboratorId || entrada.target.type !== "evaluation" || !entrada.cycleId) {
+    return null;
+  }
+
+  const instante = entrada.agora().toISOString();
+  const { data: avaliacao, error: erroAvaliacao } = await admin
+    .from("evaluations")
+    .select("id, evaluated_collaborator_id")
+    .eq("id", entrada.target.id)
+    .eq("organization_id", entrada.organizationId)
+    .eq("cycle_id", entrada.cycleId)
+    .maybeSingle();
+  if (erroAvaliacao || !avaliacao) return null;
+
+  const { data: participante, error: erroParticipante } = await admin
+    .from("evaluation_participants")
+    .select("id")
+    .eq("evaluation_id", entrada.target.id)
+    .eq("organization_id", entrada.organizationId)
+    .eq("collaborator_id", entrada.collaboratorId)
+    .eq("role_type", "COLEGIADO")
+    .eq("status", "active")
+    .lte("valid_from", instante)
+    .or(`valid_to.is.null,valid_to.gt.${instante}`)
+    .limit(1);
+  if (erroParticipante || !participante?.length) return null;
+
+  const base = await carregarAssignedDaOperacao(admin, entrada);
+  if (!base) return null;
+  return {
+    ...base,
+    collegiateMemberships: [
+      {
+        cycleId: entrada.cycleId,
+        organizationId: entrada.organizationId,
+        evaluatedCollaboratorId: avaliacao.evaluated_collaborator_id,
+        memberCollaboratorId: entrada.collaboratorId,
+      },
+    ],
+    evaluationResponsibilities: [],
+  };
+}
