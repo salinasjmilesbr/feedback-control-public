@@ -69,17 +69,17 @@ begin
    where c.id = p_cycle_id and c.organization_id = p_organization_id;
   if v_ano is null then raise exception 'F6_404_CYCLE_CONTEXT_REQUIRED'; end if;
 
-  select count(distinct s.reference_date)::integer, min(s.reference_date)
-    into v_reference_dates, v_reference_date
-    from public.collegiate_cycle_snapshots s
-   where s.organization_id = p_organization_id
-     and s.ano = v_ano
-     and s.ciclo = v_numero;
-  if v_reference_dates <> 1 then
-    raise exception 'F6_404_CYCLE_REFERENCE_DATE_AMBIGUOUS';
-  end if;
-
   if p_bundle = 'GESTAO' then
+    select count(distinct s.reference_date)::integer, min(s.reference_date)
+      into v_reference_dates, v_reference_date
+      from public.collegiate_cycle_snapshots s
+     where s.organization_id = p_organization_id
+       and s.ano = v_ano
+       and s.ciclo = v_numero;
+    if v_reference_dates <> 1 then
+      raise exception 'F6_404_CYCLE_REFERENCE_DATE_AMBIGUOUS';
+    end if;
+
       select exists (
       select 1
         from public.collegiate_cycle_snapshots s
@@ -169,15 +169,16 @@ begin
    where c.id = p_cycle_id and c.organization_id = p_organization_id;
   if v_ano is null then return; end if;
 
-  select count(distinct s.reference_date)::integer, min(s.reference_date)
-    into v_reference_dates, v_reference_date
-    from public.collegiate_cycle_snapshots s
-   where s.organization_id = p_organization_id
-     and s.ano = v_ano
-     and s.ciclo = v_numero;
-  if v_reference_dates <> 1 then return; end if;
-
   if p_bundle = 'GESTAO' then
+    select count(distinct s.reference_date)::integer, min(s.reference_date)
+      into v_reference_dates, v_reference_date
+      from public.collegiate_cycle_snapshots s
+     where s.organization_id = p_organization_id
+       and s.ano = v_ano
+       and s.ciclo = v_numero;
+    if v_reference_dates <> 1 then
+      v_eligible := false;
+    else
       select exists (
       select 1
         from public.collegiate_cycle_snapshots s
@@ -187,7 +188,8 @@ begin
         )
        where s.organization_id = p_organization_id
          and s.ano = v_ano and s.ciclo = v_numero
-    ) into v_eligible;
+      ) into v_eligible;
+    end if;
   else
     select exists (
       select 1
