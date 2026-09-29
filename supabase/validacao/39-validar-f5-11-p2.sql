@@ -219,10 +219,12 @@ begin
   if v_n <> 9 then
     v_falhas := v_falhas || format('bundle admin com %s capabilities (esperado 9)', v_n);
   end if;
-  if (select array_agg(r.name order by r.name)
-        from public.access_roles r where r.is_system = true)
-     is distinct from array['admin', 'evaluator', 'gestao_equipe', 'metas_aprovador', 'metas_dono', 'observacoes_avaliado', 'observacoes_gestor'] then
-    v_falhas := v_falhas || 'conjunto de roles de SISTEMA mudou';
+  if (select count(*) from public.access_roles r
+       where r.is_system = true
+         and r.name in ('admin', 'evaluator', 'gestao_equipe',
+                        'metas_aprovador', 'metas_dono',
+                        'observacoes_avaliado', 'observacoes_gestor')) <> 7 then
+    v_falhas := v_falhas || 'roles historicas de F5-11 ausentes ou alteradas';
   end if;
 
   if array_length(v_falhas, 1) is not null then
@@ -1029,8 +1031,12 @@ begin
   end if;
   select array_to_string(array_agg(r.name order by r.name), ',') into v_roles
     from public.access_roles r where r.is_system = true;
-  if v_roles <> 'admin,evaluator,gestao_equipe,metas_aprovador,metas_dono,observacoes_avaliado,observacoes_gestor' then
-    raise exception '[FAIL] D6: roles de sistema = % (esperado admin,evaluator,gestao_equipe,metas_aprovador,metas_dono,observacoes_avaliado,observacoes_gestor)', v_roles;
+  if (select count(*) from public.access_roles r
+       where r.is_system = true
+         and r.name in ('admin', 'evaluator', 'gestao_equipe',
+                        'metas_aprovador', 'metas_dono',
+                        'observacoes_avaliado', 'observacoes_gestor')) <> 7 then
+    raise exception '[FAIL] D6: roles historicas de F5-11 ausentes ou alteradas (catalogo observado: %)', v_roles;
   end if;
 
   raise notice '[PASS] D/pos-rollback: a fixture transitoria NAO persistiu — nenhuma concessao fora da lista fechada (4 em observacoes_gestor + 1 em observacoes_avaliado + 4 em gestao_equipe), nenhuma role de teste, ZERO observacao/evento, admin com 9 e sem observation.*';

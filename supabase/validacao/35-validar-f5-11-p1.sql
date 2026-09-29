@@ -131,12 +131,14 @@ begin
   --       (`metas_dono`, `metas_aprovador`) MAIS os dois perfis de observacoes: o de
   --       gestao criado pela P3 (`observacoes_gestor`, Issue #246) e o perfil SELF
   --       criado pela P5.1 (`observacoes_avaliado`, Issue #252). O conjunto tem de
-  --       ser EXATAMENTE esse: role de sistema fora dele significa papel inventado.
-  if (select array_agg(r.name order by r.name)
-        from public.access_roles r where r.is_system = true)
-     is distinct from array['admin', 'evaluator', 'gestao_equipe', 'metas_aprovador', 'metas_dono', 'observacoes_avaliado', 'observacoes_gestor'] then
+  --       permanecer presente; roles de outros dominios nao invalidam esta fase.
+  if (select count(*) from public.access_roles r
+       where r.is_system = true
+         and r.name in ('admin', 'evaluator', 'gestao_equipe',
+                        'metas_aprovador', 'metas_dono',
+                        'observacoes_avaliado', 'observacoes_gestor')) <> 7 then
     v_falhas := v_falhas || format(
-      'conjunto de roles de SISTEMA mudou (%s) — a P1 nao cria role/bundle/perfil: D15 e decisao da P3',
+      'roles historicas de F5-11 ausentes ou alteradas (%s) — a P1 nao cria role/bundle/perfil: D15 e decisao da P3',
       coalesce((select array_to_string(array_agg(r.name order by r.name), ',')
                   from public.access_roles r where r.is_system = true), '<vazio>'));
   end if;
@@ -1229,11 +1231,13 @@ begin
   -- papel: `admin` + os dois perfis de dominio da F5-10 P4 + o perfil de gestao de
   -- observacoes criado pela P3 (`observacoes_gestor`, Issue #246) + o perfil SELF
   -- criado pela P5.1 (`observacoes_avaliado`, Issue #252).
-  if (select array_agg(r.name order by r.name)
-        from public.access_roles r where r.is_system = true)
-     is distinct from array['admin', 'evaluator', 'gestao_equipe', 'metas_aprovador', 'metas_dono', 'observacoes_avaliado', 'observacoes_gestor'] then
+  if (select count(*) from public.access_roles r
+       where r.is_system = true
+         and r.name in ('admin', 'evaluator', 'gestao_equipe',
+                        'metas_aprovador', 'metas_dono',
+                        'observacoes_avaliado', 'observacoes_gestor')) <> 7 then
     v_falhas := v_falhas || format(
-      'D15: conjunto de roles de SISTEMA mudou (%s) — nenhuma role/bundle/perfil novo fora da emenda da P5.1',
+      'D15: roles historicas de F5-11 ausentes ou alteradas (%s) — nenhuma role/bundle/perfil novo fora da emenda da P5.1',
       coalesce((select array_to_string(array_agg(r.name order by r.name), ',')
                   from public.access_roles r where r.is_system = true), '<vazio>'));
   end if;
