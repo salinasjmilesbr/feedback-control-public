@@ -139,4 +139,5 @@ describe("NavegacaoPrincipal — gates soberanos", () => {
     expect(menuFonte).not.toContain("estrutura_pessoal");
     expect(menuFonte).not.toContain("criarLeituraEstrutura");
   });
+
 });

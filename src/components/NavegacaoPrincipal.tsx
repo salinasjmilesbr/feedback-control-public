@@ -203,6 +203,10 @@ function NavegacaoPrincipal({
     snapshot.organizationId === organizacaoAtivaId &&
     snapshot.capabilities.has("collaborator.read") &&
     snapshot.escoposMinhaEquipe.size > 0;
+  const podeExibirColaboradores =
+    snapshot.organizationId === organizacaoAtivaId &&
+    snapshot.capabilities.has("collaborator.read") &&
+    (snapshot.escoposMinhaEquipe.size > 0 || podeAdministrarEstrutura);
 
   return (
     <nav className="app-nav" aria-label="Navegação principal">
@@ -211,9 +215,9 @@ function NavegacaoPrincipal({
           Início
         </NavItem>
 
-        {podeMinhaEquipe && (
+        {podeExibirColaboradores && (
           <NavItem to="/colaboradores" icon={<IconHome />}>
-            Minha equipe
+            {podeMinhaEquipe ? "Minha equipe" : "Colaboradores"}
           </NavItem>
         )}
 
