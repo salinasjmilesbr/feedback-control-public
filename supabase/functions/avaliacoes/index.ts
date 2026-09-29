@@ -12,7 +12,10 @@ import type { CapabilityComEscopos } from "../../../src/authorization/providers/
 import type { ScopeType } from "../../../src/authorization/policyEngine/types.ts";
 import type { RecursoSoberanoCarregado } from "../../../src/authorization/resourceContextReal.ts";
 import { CAPABILITY_POR_OPERACAO } from "../../../src/infrastructure/supabase/avaliacoes/contrato.ts";
-import { carregarAssignedDaOperacao } from "./assignedSupabase.ts";
+import {
+  carregarAssignedDaOperacao,
+  carregarAssignedWriteColegiadoMaterializado,
+} from "./assignedSupabase.ts";
 import { criarPonteColaborador } from "./ponteColaborador.ts";
 
 const CORS_HEADERS = {
@@ -150,13 +153,69 @@ Deno.serve(async (req) => {
       );
     },
 
-    resolverAlvosEscopo: async ({ authUserId, organizationId, scope, unitId, data }) => {
+    resolverAlvosEscopo: async ({ authUserId, organizationId, scope, unitId, data, capability, alvo, cycleId }) => {
+      // CREATE usa a fotografia do ciclo; WRITE de avaliação usa as ocorrências
+      // materializadas. Ambos permanecem atrás do mesmo resolver do Policy Engine.
+      if (alvo?.type === "evaluation" && cycleId &&
+          (capability === "evaluation.write" || capability === "evaluation.create") &&
+          (scope === "DIRECT_REPORTS" || scope === "DESCENDANTS")) {
+        const { data: avaliacao, error: erroAvaliacao } = await admin
+          .from("evaluations")
+          .select("evaluated_collaborator_id")
+          .eq("id", alvo.id)
+          .eq("organization_id", organizationId)
+          .eq("cycle_id", cycleId)
+          .maybeSingle();
+        if (erroAvaliacao || !avaliacao) return [];
+
+        const roleType = scope === "DIRECT_REPORTS" ? "GESTAO_DIRETA" : "GESTAO_CADEIA";
+        const { data: vinculo, error: erroVinculo } = await admin.rpc("resolver_collaborador_vinculado", {
+          p_user_profile_id: authUserId,
+          p_organization_id: organizationId,
+        });
+        const actorCollaboratorId = (vinculo as { collaborator_id?: string }[] | null)?.[0]?.collaborator_id;
+        if (erroVinculo || !actorCollaboratorId) return [];
+        const { data: participante, error: erroParticipante } = await admin
+          .from("evaluation_participants")
+          .select("id")
+          .eq("organization_id", organizationId)
+          .eq("evaluation_id", alvo.id)
+          .eq("role_type", roleType)
+          .eq("collaborator_id", actorCollaboratorId)
+          .lte("valid_from", data.toISOString())
+          .or(`valid_to.is.null,valid_to.gt.${data.toISOString()}`)
+          .eq("status", "active")
+          .limit(1);
+        if (erroParticipante || !participante?.length) return [];
+        return [{ collaboratorId: avaliacao.evaluated_collaborator_id, positionId: null }];
+      }
+
+      let dataResolucao = data;
+      if (capability === "evaluation.create" && cycleId && alvo?.type === "collaborator") {
+        const { data: ciclo, error: erroCiclo } = await admin
+          .from("evaluation_cycles")
+          .select("ano, numero")
+          .eq("id", cycleId)
+          .eq("organization_id", organizationId)
+          .maybeSingle();
+        if (erroCiclo || !ciclo) return [];
+        const { data: snapshot, error: erroSnapshot } = await admin
+          .from("collegiate_cycle_snapshots")
+          .select("reference_date")
+          .eq("organization_id", organizationId)
+          .eq("ano", ciclo.ano)
+          .eq("ciclo", ciclo.numero)
+          .eq("collaborator_id", alvo.id)
+          .maybeSingle();
+        if (erroSnapshot || !snapshot?.reference_date) return [];
+        dataResolucao = new Date(snapshot.reference_date);
+      }
       const { data: alvos, error } = await admin.rpc("resolver_alvos_escopo", {
         p_user_profile_id: authUserId,
         p_organization_id: organizationId,
         p_scope_type: scope,
         p_organizational_unit_id: unitId,
-        p_data: data.toISOString(),
+        p_data: dataResolucao.toISOString(),
       });
       if (error) return [];
       return ((alvos ?? []) as LinhaAlvoEscopo[]).map((linha) => ({
@@ -209,17 +268,22 @@ Deno.serve(async (req) => {
     // ASSIGNED soberano POR OPERAÇÃO (F5-06, F3-08/F3-09): membro de colegiado
     // e responsável avaliativo alcançam a avaliação. Sem vínculo/registro
     // soberano ⇒ `null` ⇒ o Policy Engine nega o alcance (fail-closed).
-    resolverAssigned: async ({ collaboratorId, organizationId, target, cycleId }) =>
-      carregarAssignedDaOperacao(admin, {
+    resolverAssigned: async ({ collaboratorId, organizationId, target, cycleId, capability }) => {
+      const entradaAssigned = {
         collaboratorId,
         organizationId,
         target,
         cycleId,
         agora: () => new Date(),
-      }),
+      } as const;
+      if (capability === "evaluation.write") {
+        return carregarAssignedWriteColegiadoMaterializado(admin, entradaAssigned);
+      }
+      return carregarAssignedDaOperacao(admin, entradaAssigned);
+    },
 
     // Estado de domínio derivado SERVER-SIDE (o cliente nunca declara estado).
-    carregarContextoAvaliacao: async ({ target, organizationId }) => {
+    carregarContextoAvaliacao: async ({ target, organizationId, cycleId }) => {
       if (target.type === "evaluation") {
         const { data, error } = await admin
           .from("evaluations")
@@ -243,6 +307,7 @@ Deno.serve(async (req) => {
         .select("id, status")
         .eq("organization_id", organizationId)
         .in("status", ["PLANEJADO", "ATIVO"])
+        .eq("id", cycleId ?? "00000000-0000-0000-0000-000000000000")
         .limit(1);
       if (erroCiclos) return null;
 
@@ -515,14 +580,14 @@ Deno.serve(async (req) => {
       return error ? null : (data.user?.id ?? null);
     },
 
-    avaliarAutorizacao: async ({ authUserId, organizationId, operacao, alvo }) => {
+    avaliarAutorizacao: async ({ authUserId, organizationId, operacao, alvo, cycleId }) => {
       const capability = capabilityCanonica(CAPABILITY_POR_OPERACAO[operacao]) as
         | Capability
         | undefined;
       if (!capability) return { allowed: false, code: "FORBIDDEN" as const };
 
       const decisao = await avaliarOperacaoAutorizacao(
-        { authUserId, organizationId, capability, alvo },
+        { authUserId, organizationId, capability, alvo, ...(cycleId ? { cycleId } : {}) },
         autorizacao
       );
       return decisao.allowed

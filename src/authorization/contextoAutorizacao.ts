@@ -201,6 +201,9 @@ export interface EntradaResolverAlvosEscopo {
   readonly scope: ScopeType;
   readonly unitId: string | null;
   readonly data: Date;
+  readonly capability?: Capability;
+  readonly alvo?: TargetRef;
+  readonly cycleId?: string;
 }
 
 export interface EntradaCarregarRecurso {
@@ -264,7 +267,7 @@ export interface DepsContextoAutorizacao {
    * declara estado de domínio.
    */
   carregarContextoAvaliacao?(
-    entrada: EntradaCarregarRecurso
+    entrada: EntradaCarregarRecurso & { readonly cycleId?: string }
   ): Promise<ContextoAvaliacaoSoberano | null>;
   /** ASSIGNED soberano (F3-08/09), quando disponível. */
   readonly assigned?: DadosAssignedSoberanos;
@@ -279,6 +282,7 @@ export interface DepsContextoAutorizacao {
     readonly collaboratorId: string | null;
     readonly organizationId: string;
     readonly target: TargetRef;
+    readonly capability?: Capability;
     readonly cycleId?: string;
   }): Promise<DadosAssignedSoberanos | null>;
   /**
@@ -310,6 +314,8 @@ export interface EntradaOperacaoAutorizacao {
   readonly organizationId: string;
   readonly capability: Capability;
   readonly alvo: TargetRef;
+  /** Ciclo soberano necessário para autorizar CREATE antes da avaliação existir. */
+  readonly cycleId?: string;
   /** Operação de coleção: autoriza a listagem pela existência de alvos estruturais. */
   readonly modoColecao?: "COLLABORATORS";
   /** Data de negócio (intenção funcional validada — D21). */
@@ -555,6 +561,7 @@ export async function avaliarOperacaoAutorizacao(
       ? await deps.carregarContextoAvaliacao({
           target: entrada.alvo,
           organizationId: atorComVinculo.actorContext.organizationId,
+          ...(entrada.cycleId ? { cycleId: entrada.cycleId } : {}),
         })
       : null;
 
@@ -654,8 +661,9 @@ export async function avaliarOperacaoAutorizacao(
     ? await deps.resolverAssigned({
         authUserId: entrada.authUserId,
         collaboratorId: atorComVinculo.actorContext.collaboratorId,
-        organizationId: atorComVinculo.actorContext.organizationId,
-        target: entrada.alvo,
+      organizationId: atorComVinculo.actorContext.organizationId,
+      target: entrada.alvo,
+        capability: entrada.capability,
         ...(resourceContext.cycleId ? { cycleId: resourceContext.cycleId } : {}),
       })
     : null;
@@ -689,6 +697,11 @@ export async function avaliarOperacaoAutorizacao(
         scope,
         unitId,
         data: instanteSoberano,
+        capability: entrada.capability,
+        alvo: entrada.alvo,
+        ...(resourceContext.cycleId ?? entrada.cycleId
+          ? { cycleId: resourceContext.cycleId ?? entrada.cycleId }
+          : {}),
       });
       escoposResolvidos.push({ scope, unitId, alvos });
     }

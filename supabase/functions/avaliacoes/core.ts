@@ -115,6 +115,7 @@ export interface DepsAvaliacoes {
     readonly organizationId: string;
     readonly operacao: OperacaoAvaliacao;
     readonly alvo: { readonly type: "evaluation" | "collaborator"; readonly id: string };
+    readonly cycleId?: string;
     readonly dataNegocio?: unknown;
   }): Promise<{ readonly allowed: boolean; readonly code?: ApplicationErrorCode }>;
   /** Autoriza a coleção por report.read + alvos estruturais resolvidos no servidor. */
@@ -244,6 +245,7 @@ export async function avaliacoes(
     organizationId: entrada.organization_id,
     operacao: entrada.operacao,
     alvo: alvoDaOperacao,
+    ...(entrada.cycle_id ? { cycleId: entrada.cycle_id } : {}),
   });
   if (!decisao.allowed) {
     const code = codigoPublico(decisao.code);
