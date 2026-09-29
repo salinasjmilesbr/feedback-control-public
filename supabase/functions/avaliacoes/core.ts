@@ -156,6 +156,27 @@ function codigoPublico(valor: string | undefined): CodigoPublico {
   }
 }
 
+function statusCodigo(codigo: CodigoPublico): number {
+  switch (codigo) {
+    case "INVALID_INPUT": return 400;
+    case "NOT_AUTHORIZED": return 403;
+    case "NOT_FOUND": return 404;
+    case "CONFLICT": return 409;
+    case "INTERNAL": return 500;
+    default: return 403;
+  }
+}
+
+function codigoErroExecutor(erroRpc: ErroRpcAvaliacao): CodigoPublico {
+  if (erroRpc.code === "INVALID_INPUT" || erroRpc.code === "NOT_AUTHORIZED" || erroRpc.code === "NOT_FOUND" || erroRpc.code === "CONFLICT" || erroRpc.code === "INTERNAL") {
+    return erroRpc.code;
+  }
+  if (erroRpc.code?.startsWith("P") || erroRpc.message?.includes("CONFLICT") || erroRpc.message?.includes("F5-06:")) {
+    return "CONFLICT";
+  }
+  return "INTERNAL";
+}
+
 export async function avaliacoes(
   req: Request,
   deps: DepsAvaliacoes
@@ -272,6 +293,17 @@ export async function avaliacoes(
   });
 
   if (resultado.error) {
+    const code = codigoErroExecutor(resultado.error);
+    if (code !== "CONFLICT") {
+      const message = code === "INVALID_INPUT"
+        ? "Dados da requisicao invalidos."
+        : code === "NOT_FOUND"
+          ? "Recurso nao encontrado."
+          : code === "INTERNAL"
+            ? "Erro interno."
+            : "Operacao negada.";
+      return erro(code, message, statusCodigo(code));
+    }
     // A operação FOI autorizada; a recusa vem do domínio (estado, completude,
     // vínculo, ocorrência não vigente). Resposta genérica de conflito — a
     // mensagem interna do banco nunca é exposta ao cliente.
