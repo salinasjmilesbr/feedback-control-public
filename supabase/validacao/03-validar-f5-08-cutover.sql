@@ -584,8 +584,8 @@ declare
   -- estrutural (famílias distintas exigem chaves distintas; contrato F5-09 §11).
   -- Família nova exige catalogação explícita aqui: o fechamento em (3) reprova
   -- qualquer função com advisory lock fora dos dois catálogos.
-  v_outras_fn  text[] := array['ciclo_lock_organizacao','gerenciar_acesso_funcional_rpc'];
-  v_outras_key text[] := array['evaluation_cycles:','functional-access:'];
+  v_outras_fn  text[] := array['ciclo_lock_organizacao','gerenciar_acesso_funcional_rpc','company_admin_lock_organization'];
+  v_outras_key text[] := array['evaluation_cycles:','functional-access:','company_admins:'];
   v_responsabilidade_fn text[] := array[
     'estrutura_responsabilidade_criar','estrutura_responsabilidade_revogar'];
   v_responsabilidade_key text[] := array['position_responsibilities:','position_responsibilities:'];

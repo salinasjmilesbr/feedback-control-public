@@ -105,6 +105,26 @@ Deno.serve(async (req) => {
     return erro("INVALID_USER", "Usuário inválido.", 400);
   }
 
+  // D3/D12: o caminho genérico de conta não pode desativar um Admin ativo.
+  // A cardinalidade é resolvida pelo predicado soberano, nunca por role textual
+  // no cliente ou por allowlist de usuários.
+  if (action === "disable") {
+    const { data: adminMembership } = await admin
+      .from("user_organization_memberships")
+      .select("organization_id")
+      .eq("user_profile_id", userId)
+      .eq("status", "active");
+    for (const membership of adminMembership ?? []) {
+      const { data: isAdmin } = await admin.rpc("usuario_eh_administrador", {
+        p_user_profile_id: userId,
+        p_organization_id: membership.organization_id,
+      });
+      if (isAdmin === true) {
+        return erro("ADMIN_LIFECYCLE_REQUIRED", "Admin da Empresa exige operação dedicada.", 409);
+      }
+    }
+  }
+
   if (action === "disable") {
     const { error: statusErr } = await admin
       .from("user_profiles")

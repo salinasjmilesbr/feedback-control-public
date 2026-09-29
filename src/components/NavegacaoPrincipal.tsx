@@ -295,6 +295,11 @@ function NavegacaoPrincipal({
           </NavItem>
           </>
         )}
+        {podeAdministrarEstrutura && (
+          <NavItem to="/administracao/admins" icon={<IconSettings />}>
+            Administradores da Empresa
+          </NavItem>
+        )}
       </div>
     </nav>
   );
