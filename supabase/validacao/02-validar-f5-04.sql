@@ -614,7 +614,7 @@ begin
 end $$;
 
 -- ============================================================================
--- 8) Limpeza do cenário sintético (catálogo de sistema da migration intacto)
+-- 8) Encerramento do cenário descartável (auditoria preservada até o descarte)
 -- ============================================================================
 
 /*
@@ -658,18 +658,23 @@ where id in (
 do $$
 declare
   v_n int;
+  v_grants int;
+  v_revokes int;
 begin
   select count(*) into v_n from public.capabilities;
   if v_n <> 31 then
     raise exception '[FAIL] catalogo de sistema foi alterado pela limpeza (% capabilities)', v_n;
   end if;
-  select count(*) into v_n
+  select count(*), count(*) filter (where action = 'grant'), count(*) filter (where action = 'revoke')
+    into v_n, v_grants, v_revokes
   from public.privilege_mutation_audit
   where organization_id::text like 'd5a00000%';
-  if v_n <> 0 then
-    raise exception '[FAIL] limpeza do cenario F5-04 incompleta (audit)';
+  if v_n <> 2 or v_grants <> 1 or v_revokes <> 1 then
+    raise exception '[FAIL] eventos D18 do cenario descartavel deveriam permanecer ate o descarte (total %, grant %, revoke %)',
+      v_n, v_grants, v_revokes;
   end if;
-  raise notice '[PASS] cenario sintetico F5-04 removido ao final; catalogo de sistema intacto';
+  raise notice '[PASS] catalogo intacto e trilha D18 preservada ate o descarte do runner (grant %, revoke %)',
+    v_grants, v_revokes;
 end $$;
 
 do $$
