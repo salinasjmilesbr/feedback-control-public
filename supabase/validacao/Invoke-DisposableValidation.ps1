@@ -7,7 +7,10 @@ param(
     ),
     [Alias('Scripts')]
     [string[]]$Script,
-    [object[]]$Plan
+    [object[]]$Plan,
+    [string]$PlanJson,
+    [string]$PlanJsonBase64,
+    [switch]$PreflightOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -25,7 +28,11 @@ $runtimeContainerName = 'supabase_db_feedback-control'
 
 $scriptsToRun = @()
 $stepsToRun = @()
-if ($null -ne $Plan -and $Plan.Count -gt 0) {
+if (-not [string]::IsNullOrWhiteSpace($PlanJsonBase64)) {
+    $stepsToRun = @([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($PlanJsonBase64)) | ConvertFrom-Json | ForEach-Object { $_ })
+} elseif (-not [string]::IsNullOrWhiteSpace($PlanJson)) {
+    $stepsToRun = @($PlanJson | ConvertFrom-Json | ForEach-Object { $_ })
+} elseif ($null -ne $Plan -and $Plan.Count -gt 0) {
     $stepsToRun = @($Plan)
 } elseif ($null -ne $Script -and $Script.Count -gt 0) {
     $scriptsToRun = @($Script)
@@ -48,24 +55,37 @@ function Resolve-PlanPath {
     return (Resolve-Path -LiteralPath $resolved).Path
 }
 
+function Get-OptionalStepProperty {
+    param([object]$Step, [string]$Name)
+    if ($Step.PSObject.Properties.Name -notcontains $Name) { return $null }
+    return $Step.$Name
+}
+
 if ($stepsToRun.Count -eq 0) {
     $stepsToRun = foreach ($scriptName in $scriptsToRun) { [pscustomobject]@{ Type = 'SQL'; Path = $scriptName } }
 }
 
 $resolvedPlan = foreach ($step in $stepsToRun) {
-    $type = [string]$step.Type
+    $type = [string](Get-OptionalStepProperty -Step $step -Name 'Type')
     if ($type -notin @('SQL', 'MIGRATION_REPLAY', 'PSQL_BACKGROUND', 'PSQL_FOREGROUND', 'WAIT')) {
         throw "Tipo de step desconhecido: $type"
     }
     if ($type -eq 'WAIT') {
-        if ([string]::IsNullOrWhiteSpace([string]$step.Id)) { throw 'WAIT sem Id.' }
-        [pscustomobject]@{ Type = $type; Id = [string]$step.Id }
+        $id = [string](Get-OptionalStepProperty -Step $step -Name 'Id')
+        if ([string]::IsNullOrWhiteSpace($id)) { throw 'WAIT sem Id.' }
+        [pscustomobject]@{ Type = $type; Id = $id }
         continue
     }
-    if (($type -eq 'PSQL_BACKGROUND') -and [string]::IsNullOrWhiteSpace([string]$step.Id)) {
+    $id = [string](Get-OptionalStepProperty -Step $step -Name 'Id')
+    if (($type -eq 'PSQL_BACKGROUND') -and [string]::IsNullOrWhiteSpace($id)) {
         throw 'PSQL_BACKGROUND sem Id.'
     }
-    [pscustomobject]@{ Type = $type; Id = [string]$step.Id; Path = Resolve-PlanPath -Type $type -Path ([string]$step.Path) }
+    [pscustomobject]@{ Type = $type; Id = $id; Path = Resolve-PlanPath -Type $type -Path ([string](Get-OptionalStepProperty -Step $step -Name 'Path')) }
+}
+
+if ($PreflightOnly) {
+    $resolvedPlan | ConvertTo-Json -Compress
+    exit 0
 }
 
 $backgroundProcesses = @{}

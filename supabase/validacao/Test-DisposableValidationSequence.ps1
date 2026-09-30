@@ -40,6 +40,39 @@ Assert-Contains $runner 'Remove-Item -LiteralPath $validationRoot -Recurse -Forc
 Assert-Contains $runner 'Assert-DisposableValidationTarget' 'Guard do alvo descartavel ausente.'
 Assert-Contains $runner 'TEMP' 'Contrato TEMP/TMP nao e referenciado.'
 
+function Invoke-Preflight {
+    param([object[]]$Steps)
+    $json = '[' + (($Steps | ForEach-Object { ConvertTo-Json -InputObject $_ -Compress }) -join ',') + ']'
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))
+    $output = & powershell -NoProfile -ExecutionPolicy Bypass -File $runnerPath -PreflightOnly -PlanJsonBase64 $encoded 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "Preflight falhou: $($output -join ' ')" }
+    return ($output -join "`n")
+}
+
+$simple = Invoke-Preflight @([pscustomobject]@{ Type = 'SQL'; Path = '01-cenario-f5-07.sql' })
+if ($simple -notmatch '"Type":"SQL"') { throw 'Preflight de SQL simples nao normalizou.' }
+$multiple = Invoke-Preflight @(
+    [pscustomobject]@{ Type = 'SQL'; Path = '01-cenario-f5-07.sql' },
+    [pscustomobject]@{ Type = 'SQL'; Path = '02-validar-f5-07.sql' }
+)
+if (($multiple | Select-String -AllMatches '"Type":"SQL"').Matches.Count -ne 2) { throw 'Preflight de Scripts multiplos nao normalizou.' }
+$legacy = Invoke-Preflight @([pscustomobject]@{ Type = 'SQL'; Path = '01-cenario-f5-07.sql' })
+if ($legacy -notmatch '"Path"') { throw 'Preflight de Scenario/Validator nao normalizou.' }
+$withId = Invoke-Preflight @([pscustomobject]@{ Type = 'SQL'; Id = 'optional'; Path = '01-cenario-f5-07.sql' })
+if ($withId -notmatch '"Id":"optional"') { throw 'Plan com Id nao normalizou.' }
+$withoutId = Invoke-Preflight @([pscustomobject]@{ Type = 'SQL'; Path = '01-cenario-f5-07.sql' })
+if ($withoutId -match 'Property.*Id|Id.*cannot be found') { throw 'Plan sem Id ainda falha.' }
+$ErrorActionPreference = 'Continue'
+$waitJson = '[{"Type":"WAIT"}]'
+$waitEncoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($waitJson))
+$waitFailed = & powershell -NoProfile -ExecutionPolicy Bypass -File $runnerPath -PreflightOnly -PlanJsonBase64 $waitEncoded 2>&1
+if (($waitFailed -join ' ') -notmatch 'WAIT sem Id') { throw 'WAIT sem Id deveria falhar.' }
+$unknownJson = '[{"Type":"UNKNOWN","Path":"01-cenario-f5-07.sql"}]'
+$unknownEncoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($unknownJson))
+$unknownFailed = & powershell -NoProfile -ExecutionPolicy Bypass -File $runnerPath -PreflightOnly -PlanJsonBase64 $unknownEncoded 2>&1
+if (($unknownFailed -join ' ') -notmatch 'Tipo de step desconhecido') { throw 'Tipo desconhecido deveria falhar.' }
+$ErrorActionPreference = 'Stop'
+
 $legacyIndex = $runner.IndexOf('$scriptsToRun = @($Scenario) + @($Validator)', [StringComparison]::Ordinal)
 $sequenceIndex = $runner.IndexOf('$scriptsToRun = @($Script)', [StringComparison]::Ordinal)
 if ($sequenceIndex -lt 0 -or $legacyIndex -lt 0) { throw 'Seletores de contrato nao encontrados.' }
