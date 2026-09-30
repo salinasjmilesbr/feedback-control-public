@@ -26,6 +26,8 @@
 -- ----------------------------------------------------------------------------
 -- Limpeza do cenário anterior (ordem respeita FKs ON DELETE RESTRICT)
 -- ----------------------------------------------------------------------------
+begin;
+
 delete from public.evaluation_succession_events
 where organization_id::text like 'd8a00000-0000-0000-0000-0000000000%';
 
@@ -131,7 +133,8 @@ values
   ('d8b00000-0000-0000-0000-0000000000a4', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'userinactive.f4-08@example.invalid', 'x', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
   ('d8b00000-0000-0000-0000-0000000000a5', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'usernone.f4-08@example.invalid', 'x', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
   ('d8b00000-0000-0000-0000-0000000000a6', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'author.f4-08@example.invalid', 'x', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
-  ('d8b00000-0000-0000-0000-0000000000a7', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'profileinactive.f4-08@example.invalid', 'x', now(), '{}'::jsonb, '{}'::jsonb, now(), now());
+  ('d8b00000-0000-0000-0000-0000000000a7', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'profileinactive.f4-08@example.invalid', 'x', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
+  ('d8e00000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'bootstrap-admin.f4-08@example.invalid', 'x', now(), '{}'::jsonb, '{}'::jsonb, now(), now());
 
 insert into public.user_profiles (id, status) values
   ('d8b00000-0000-0000-0000-0000000000a1', 'active'),
@@ -140,7 +143,8 @@ insert into public.user_profiles (id, status) values
   ('d8b00000-0000-0000-0000-0000000000a4', 'active'),
   ('d8b00000-0000-0000-0000-0000000000a5', 'active'),
   ('d8b00000-0000-0000-0000-0000000000a6', 'active'),
-  ('d8b00000-0000-0000-0000-0000000000a7', 'disabled');
+  ('d8b00000-0000-0000-0000-0000000000a7', 'disabled'),
+  ('d8e00000-0000-0000-0000-0000000000f1', 'active');
 
 -- ----------------------------------------------------------------------------
 -- Memberships
@@ -152,7 +156,10 @@ insert into public.user_organization_memberships (id, user_profile_id, organizat
   ('d8d00000-0000-0000-0000-0000000000a4', 'd8b00000-0000-0000-0000-0000000000a3', 'd8a00000-0000-0000-0000-0000000000b1', 'active'),  -- USER_AB -> Beta
   ('d8d00000-0000-0000-0000-0000000000a5', 'd8b00000-0000-0000-0000-0000000000a4', 'd8a00000-0000-0000-0000-0000000000a1', 'disabled'), -- USER_INACTIVE -> Alfa disabled
   ('d8d00000-0000-0000-0000-0000000000a6', 'd8b00000-0000-0000-0000-0000000000a7', 'd8a00000-0000-0000-0000-0000000000a1', 'active'),  -- USER_PROFILE_INACTIVE -> Alfa active
-  ('d8d00000-0000-0000-0000-0000000000a7', 'd8b00000-0000-0000-0000-0000000000a6', 'd8a00000-0000-0000-0000-0000000000a1', 'active');  -- AUTHOR -> Alfa active
+  ('d8d00000-0000-0000-0000-0000000000a7', 'd8b00000-0000-0000-0000-0000000000a6', 'd8a00000-0000-0000-0000-0000000000a1', 'active'),  -- AUTHOR -> Alfa active
+  ('d8d00000-0000-0000-0000-0000000000f1', 'd8e00000-0000-0000-0000-0000000000f1', 'd8a00000-0000-0000-0000-0000000000a1', 'active'),
+  ('d8d00000-0000-0000-0000-0000000000f2', 'd8e00000-0000-0000-0000-0000000000f1', 'd8a00000-0000-0000-0000-0000000000b1', 'active'),
+  ('d8d00000-0000-0000-0000-0000000000f3', 'd8e00000-0000-0000-0000-0000000000f1', 'd8a00000-0000-0000-0000-0000000000c1', 'active');
 
 -- ----------------------------------------------------------------------------
 -- Catálogos: job_roles + seniority_levels
@@ -297,6 +304,12 @@ insert into public.access_roles (id, name, status, is_system, organization_id) v
   ('d8f00000-0000-0000-0000-0000000000f2', 'gestao_f408_beta', 'active', false, 'd8a00000-0000-0000-0000-0000000000b1'),
   ('d8f00000-0000-0000-0000-0000000000f3', 'gestao_f408_gama', 'active', false, 'd8a00000-0000-0000-0000-0000000000c1');
 
+insert into public.membership_access_role_assignments
+  (id, membership_id, organization_id, access_role_id, status, created_by) values
+  ('d8d00000-0000-0000-0000-0000000000f1', 'd8d00000-0000-0000-0000-0000000000f1', 'd8a00000-0000-0000-0000-0000000000a1', 'c0000000-0000-4000-8000-0000000000f1', 'active', 'd8e00000-0000-0000-0000-0000000000f1'),
+  ('d8d00000-0000-0000-0000-0000000000f2', 'd8d00000-0000-0000-0000-0000000000f2', 'd8a00000-0000-0000-0000-0000000000b1', 'c0000000-0000-4000-8000-0000000000f1', 'active', 'd8e00000-0000-0000-0000-0000000000f1'),
+  ('d8d00000-0000-0000-0000-0000000000f3', 'd8d00000-0000-0000-0000-0000000000f3', 'd8a00000-0000-0000-0000-0000000000c1', 'c0000000-0000-4000-8000-0000000000f1', 'active', 'd8e00000-0000-0000-0000-0000000000f1');
+
 insert into public.access_role_capabilities (access_role_id, capability_id)
 select ar.id, c.id
   from public.access_roles ar
@@ -339,3 +352,5 @@ select s.id, s.organization_id, 'd8f00000-0000-0000-0000-0000000000b1'
    select a.id from public.membership_access_role_assignments a
    where a.membership_id = 'd8d00000-0000-0000-0000-0000000000a2' and a.access_role_id = 'd8f00000-0000-0000-0000-0000000000f2'
  );
+
+commit;

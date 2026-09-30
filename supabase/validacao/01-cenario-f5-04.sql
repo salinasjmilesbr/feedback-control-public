@@ -63,6 +63,21 @@ where id in (
 -- ----------------------------------------------------------------------------
 -- Organizações sintéticas (F5-04)
 -- ----------------------------------------------------------------------------
+begin;
+
+insert into auth.users
+  (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+   raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+values
+  ('d8e00000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-000000000000',
+   'authenticated', 'authenticated', 'bootstrap-admin.f5-04@example.invalid',
+   'x', now(), '{}'::jsonb, '{}'::jsonb, now(), now())
+on conflict (id) do nothing;
+
+insert into public.user_profiles (id, status)
+values ('d8e00000-0000-0000-0000-0000000000f1', 'active')
+on conflict (id) do nothing;
+
 insert into public.organizations (id, name) values
   ('d5a00000-0000-0000-0000-0000000000a1', 'Org Sintetica F5-04 Alfa'),
   ('d5a00000-0000-0000-0000-0000000000b1', 'Org Sintetica F5-04 Beta');
@@ -109,6 +124,11 @@ values
 -- ----------------------------------------------------------------------------
 -- Access role customizada de Alfa: `avaliadores` (evaluation.read, grantable)
 -- ----------------------------------------------------------------------------
+insert into public.user_organization_memberships (id, user_profile_id, organization_id, status)
+select gen_random_uuid(), 'd8e00000-0000-0000-0000-0000000000f1', id, 'active'
+  from public.organizations
+ where id::text like 'd5a00000%';
+
 insert into public.access_roles (id, name, status, is_system, organization_id)
 values ('d5f00000-0000-0000-0000-0000000000f1', 'avaliadores', 'active', false,
         'd5a00000-0000-0000-0000-0000000000a1');
@@ -121,6 +141,14 @@ select ar.id, c.id
    and c.code = 'evaluation.read';
 
 -- ----------------------------------------------------------------------------
+insert into public.membership_access_role_assignments
+  (id, membership_id, organization_id, access_role_id, status, created_by)
+select gen_random_uuid(), m.id, m.organization_id,
+       'c0000000-0000-4000-8000-0000000000f1', 'active',
+       'd8e00000-0000-0000-0000-0000000000f1'
+  from public.user_organization_memberships m
+ where m.user_profile_id = 'd8e00000-0000-0000-0000-0000000000f1';
+
 -- Bootstrap: ADMIN_A recebe a role de sistema `admin` pelo primitivo F4-01
 -- (conceder_acesso_role). A concessão via RPC soberana (auth.uid()) é exercitada
 -- na validação 02-validar-f5-04.sql.
@@ -130,3 +158,5 @@ select public.conceder_acesso_role(
   'c0000000-0000-4000-8000-0000000000f1',
   'd5b00000-0000-0000-0000-0000000000a1'
 );
+
+commit;

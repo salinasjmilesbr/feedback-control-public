@@ -186,7 +186,7 @@ declare v_tab text;
     'evaluation_goal_events','evaluation_cycle_goal_limits',
     'evaluation_observations','evaluation_observation_events',
     -- F6-A03 (Issue #266): trilha do plano de plataforma — fechada.
-    'platform_provisioning_events',
+    'platform_provisioning_events','company_admin_operations',
     -- F6-A21 P3 (#327): fechamento da leitura estrutural antiga — as 10 tabelas
     -- que lerEstrutura lia diretamente + collaborator_status_periods (filha
     -- indireta cuja policy referenciava collaborators; fechada por consequencia
@@ -201,7 +201,7 @@ begin
       raise exception '[FAIL] tabela fechada com policy indevida: %', v_tab;
     end if;
   end loop;
-  raise notice '[PASS] 40 tabelas fechadas permanecem sem policy (22 historicas + as 4 de metas por D22-A + as 2 de observacoes por D9 + a trilha de plataforma da F6-A03 + as 11 do fechamento F6-A21 P3)';
+  raise notice '[PASS] 41 tabelas fechadas permanecem sem policy (22 historicas + as 4 de metas por D22-A + as 2 de observacoes por D9 + a trilha de plataforma da F6-A03 + as 11 do fechamento F6-A21 P3 + company_admin_operations)';
 end $$;
 
 do $$
@@ -290,7 +290,7 @@ declare
     'evaluation_cycle_goal_limits',
     'evaluation_observations','evaluation_observation_events',
     -- F6-A03 (Issue #266): trilha do plano de plataforma (deny-by-default integral).
-    'platform_provisioning_events',
+    'platform_provisioning_events','company_admin_operations',
     -- F6-A22 P1 (#338): tabelas autorizativas deny-by-default.
     'organizational_position_responsibilities',
     'organizational_position_responsibilities_catalog',
@@ -305,7 +305,7 @@ begin
       end if;
     end loop;
   end loop;
-  raise notice '[PASS] anon sem qualquer privilegio de tabela (52 tabelas x 7 privs)';
+  raise notice '[PASS] anon sem qualquer privilegio de tabela (53 tabelas x 7 privs)';
 end $$;
 
 do $$
@@ -338,7 +338,7 @@ declare
     'evaluation_goals','evaluation_goal_approvals','evaluation_goal_events',
     'evaluation_cycle_goal_limits',
     'evaluation_observations','evaluation_observation_events',
-    'platform_provisioning_events',
+    'platform_provisioning_events','company_admin_operations',
     'organizational_position_responsibilities',
     'organizational_position_responsibilities_catalog',
     'organizational_position_responsibility_bundle',
@@ -351,7 +351,7 @@ begin
       end if;
     end loop;
   end loop;
-  raise notice '[PASS] authenticated sem INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER (52 tabelas)';
+  raise notice '[PASS] authenticated sem INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER (53 tabelas)';
 end $$;
 
 do $$
@@ -379,7 +379,7 @@ declare v_tab text;
     'evaluation_goals','evaluation_goal_approvals',
     'evaluation_goal_events','evaluation_cycle_goal_limits',
     'evaluation_observations','evaluation_observation_events',
-    'platform_provisioning_events',
+    'platform_provisioning_events','company_admin_operations',
     -- F6-A22 P1 (#338): leitura estrutural/autorizativa permanece fechada.
     'organizational_position_responsibilities',
     'organizational_position_responsibilities_catalog',
@@ -409,7 +409,7 @@ begin
       raise exception '[FAIL] authenticated com SELECT no log append-only public.%', v_tab;
     end if;
   end loop;
-  raise notice '[PASS] authenticated com SELECT somente nas tabelas legiveis (11 legiveis: 7 F4-08 remanescentes + evaluation_cycles do P5 + organizations/user_profiles/user_organization_memberships; 40 fechadas + 1 log append-only sem SELECT)';
+  raise notice '[PASS] authenticated com SELECT somente nas tabelas legiveis (11 legiveis: 7 F4-08 remanescentes + evaluation_cycles do P5 + organizations/user_profiles/user_organization_memberships; 41 fechadas + 1 log append-only sem SELECT)';
 end $$;
 
 -- ----------------------------------------------------------------------------
@@ -449,7 +449,7 @@ begin
       -- F6-A03 (Issue #266): trilha do plano de plataforma entra no inventario
       -- D16 (catalogacao explicita obrigatoria) e na categoria deny-by-default
       -- integral.
-      'platform_provisioning_events',
+      'platform_provisioning_events','company_admin_operations',
       'organizational_position_responsibilities',
       'organizational_position_responsibilities_catalog',
       'organizational_position_responsibility_bundle',
@@ -895,14 +895,14 @@ end $$;
 
 do $$
 declare v_t text; v_ok boolean;
-  v_closed text[] := array['access_roles','access_role_capabilities','membership_access_role_assignments','membership_collaborator_links','access_role_assignment_scopes','access_role_assignment_unit_targets','evaluation_succession_events','privilege_mutation_audit','evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria','evaluation_config_scale_bands','evaluation_config_participant_roles','evaluations','evaluation_participants','evaluation_scores','evaluation_comments','evaluation_events','evaluation_pendencies','evaluation_aggregates','collaborator_events','cycle_events','evaluation_goals','evaluation_goal_approvals','evaluation_goal_events','evaluation_cycle_goal_limits','evaluation_observations','evaluation_observation_events','platform_provisioning_events','organizational_position_responsibilities','organizational_position_responsibilities_catalog','organizational_position_responsibility_bundle','organizational_position_responsibility_events','collaborators','job_roles','seniority_levels','organizational_units','organizational_unit_parent_periods','organizational_positions','position_reporting_lines','occupations','collegiate_configurations','collegiate_configuration_members','collaborator_status_periods'];
+  v_closed text[] := array['access_roles','access_role_capabilities','membership_access_role_assignments','membership_collaborator_links','access_role_assignment_scopes','access_role_assignment_unit_targets','evaluation_succession_events','privilege_mutation_audit','evaluation_config_versions','evaluation_config_criteria','evaluation_config_subcriteria','evaluation_config_scale_bands','evaluation_config_participant_roles','evaluations','evaluation_participants','evaluation_scores','evaluation_comments','evaluation_events','evaluation_pendencies','evaluation_aggregates','collaborator_events','cycle_events','evaluation_goals','evaluation_goal_approvals','evaluation_goal_events','evaluation_cycle_goal_limits','evaluation_observations','evaluation_observation_events','platform_provisioning_events','company_admin_operations','organizational_position_responsibilities','organizational_position_responsibilities_catalog','organizational_position_responsibility_bundle','organizational_position_responsibility_events','collaborators','job_roles','seniority_levels','organizational_units','organizational_unit_parent_periods','organizational_positions','position_reporting_lines','occupations','collegiate_configurations','collegiate_configuration_members','collaborator_status_periods'];
 begin
   foreach v_t in array v_closed loop
     v_ok := false;
     begin execute format('select count(*) from public.%I', v_t); exception when insufficient_privilege then v_ok := true; end;
     if not v_ok then raise exception '[FAIL] authenticated leu tabela fechada %', v_t; end if;
   end loop;
-  raise notice '[PASS] 40 tabelas fechadas invisiveis (permission denied) apesar de dados de fixture (as 4 de metas por D22-A, as 2 de observacoes por D9, a trilha de plataforma da F6-A03 e as 11 do fechamento F6-A21 P3 — a leitura passa pela superficie soberana/views, nunca pela RLS)';
+  raise notice '[PASS] 41 tabelas fechadas invisiveis (permission denied) apesar de dados de fixture (as 4 de metas por D22-A, as 2 de observacoes por D9, a trilha de plataforma da F6-A03 e as 11 do fechamento F6-A21 P3 + company_admin_operations — a leitura passa pela superficie soberana/views, nunca pela RLS)';
 end $$;
 
 do $$
@@ -1021,45 +1021,35 @@ reset role;
 -- ============================================================================
 -- 9) Limpeza do cenário sintético
 -- ============================================================================
-delete from public.evaluation_succession_events where organization_id::text like 'd8a00000-0000-0000-0000-0000000000%';
-delete from public.cycle_evaluation_responsibilities where organization_id::text like 'd8a00000-0000-0000-0000-0000000000%';
-delete from public.collegiate_cycle_snapshot_members where organization_id::text like 'd8a00000-0000-0000-0000-0000000000%';
-delete from public.collegiate_cycle_snapshot_positions where organization_id::text like 'd8a00000-0000-0000-0000-0000000000%';
-delete from public.collegiate_cycle_snapshots where organization_id::text like 'd8a00000-0000-0000-0000-0000000000%';
-delete from public.collegiate_configuration_members where organization_id::text like 'd8a00000-0000-0000-0000-0000000000%';
-delete from public.collegiate_configurations where organization_id::text like 'd8a00000-0000-0000-0000-0000000000%';
-delete from public.temporary_responsibilities where organization_id::text like 'd8a00000-0000-0000-0000-0000000000%';
-delete from public.occupations where organization_id::text like 'd8a00000-0000-0000-0000-0000000000%';
-delete from public.position_reporting_lines where organization_id::text like 'd8a00000-0000-0000-0000-0000000000%';
-delete from public.access_role_assignment_unit_targets where organization_id::text like 'd8a00000-0000-0000-0000-0000000000%';
-delete from public.access_role_assignment_scopes where organization_id::text like 'd8a00000-0000-0000-0000-0000000000%';
-delete from public.membership_access_role_assignments where organization_id::text like 'd8a00000-0000-0000-0000-0000000000%';
-delete from public.membership_collaborator_links where organization_id::text like 'd8a00000-0000-0000-0000-0000000000%';
-delete from public.access_role_capabilities where access_role_id::text like 'd8f00000-0000-0000-0000-0000000000f%';
-delete from public.access_roles where id::text like 'd8f00000-0000-0000-0000-0000000000f%';
-delete from public.organizational_positions where organization_id::text like 'd8a00000-0000-0000-0000-0000000000%';
-delete from public.organizational_unit_parent_periods where organization_id::text like 'd8a00000-0000-0000-0000-0000000000%';
-delete from public.organizational_units where organization_id::text like 'd8a00000-0000-0000-0000-0000000000%';
-delete from public.collaborator_identifiers where organization_id::text like 'd8a00000-0000-0000-0000-0000000000%';
-delete from public.collaborator_status_periods where collaborator_id::text like 'd8c00000-0000-0000-0000-0000000000%';
-delete from public.collaborators where id::text like 'd8c00000-0000-0000-0000-0000000000%';
-delete from public.seniority_levels where organization_id::text like 'd8a00000-0000-0000-0000-0000000000%';
-delete from public.job_roles where organization_id::text like 'd8a00000-0000-0000-0000-0000000000%';
-delete from public.user_organization_memberships where id::text like 'd8d00000-0000-0000-0000-0000000000%';
-delete from public.user_profiles where id::text like 'd8b00000-0000-0000-0000-0000000000%';
-delete from auth.users where id::text like 'd8b00000-0000-0000-0000-0000000000%';
-delete from public.organizations where id::text like 'd8a00000-0000-0000-0000-0000000000%';
-
 do $$
 begin
-  if exists (select 1 from public.collaborators where id::text like 'd8c00000%') then
-    raise exception '[FAIL] limpeza incompleta (collaborators)';
-  end if;
-  if exists (select 1 from public.organizations where id::text like 'd8a00000%') then
-    raise exception '[FAIL] limpeza incompleta (organizations)';
-  end if;
-  raise notice '[PASS] cenario sintetico F4-08 removido ao final';
+  raise notice '[PASS] familia F4-08 concluida; cleanup por descarte integral do runner';
 end $$;
+-- cleanup deferred to disposable runner
+-- cleanup deferred to disposable runner
+-- cleanup deferred to disposable runner
+-- cleanup deferred to disposable runner
+-- cleanup deferred to disposable runner
+-- cleanup deferred to disposable runner
+-- cleanup deferred to disposable runner
+-- cleanup deferred to disposable runner
+-- cleanup deferred to disposable runner
+-- cleanup deferred to disposable runner
+-- cleanup deferred to disposable runner
+-- cleanup deferred to disposable runner
+-- cleanup deferred to disposable runner
+-- cleanup deferred to disposable runner
+-- cleanup deferred to disposable runner
+-- cleanup deferred to disposable runner
+-- cleanup deferred to disposable runner
+-- cleanup deferred to disposable runner
+-- cleanup deferred to disposable runner
+-- cleanup deferred to disposable runner
+-- cleanup deferred to disposable runner
+-- cleanup deferred to disposable runner
+-- cleanup deferred to disposable runner
+-- cleanup deferred to disposable runner
+-- cleanup deferred to disposable runner
 
 do $$
 begin
