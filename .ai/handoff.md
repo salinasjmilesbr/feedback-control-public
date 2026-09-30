@@ -26,19 +26,22 @@ em `.ai/*`, não são duplicadas aqui.
 
 ## 2. Estado atual
 
-- **Base vigente:** `main` em `b3399488e9413aa995055f91658509a6a1c94019` no início da
-  Issue #371.
-- **#365 e #366:** concluídas/integradas; permanecem vigentes o histórico de
-  reporting por posição/ocupação temporal e o contrato estrutural por data
-  civil UTC.
-- **#369:** concluída/integrada; o preflight de migrations permanece no job
-  `supabase-local`, antes do `db reset` existente.
-- **#371:** atividade documental atual.
-- **Após #371:** a próxima atividade funcional continua sendo a Issue **#364**,
-  validação integrada da Etapa 6 com a fotografia Acme; não repetir F4/F5.
-- **Ambiente conhecido:** Docker/Supabase local pode estar indisponível no host;
-  isso não prova indisponibilidade do runtime compartilhado nem defeito do
-  produto.
+- **Baseline vigente:** `main` / `origin/main` em
+  `e067b43448e146a06fa0d9102d6786c50e1ad9a7`; CI padrão #534 está verde nesse SHA.
+- **Etapa 6:** #364, #404, #410, #412 e #413 concluídas; #413 merged. #293 e #310 permanecem abertas.
+  F6-COLAB-03 e F6-A18 são itens planejados sem Issue própria identificada.
+- **#414:** adiada por decisão de produto, fora do escopo imediato; Issue fechada como adiada e PR #415 fechado
+  sem merge. R3-09 continua pendente na #310. Não retomar implementação nem considerar cardinalidade 1–4 entregue
+  sem nova decisão explícita.
+- **Próxima atividade operacional recomendada:** #293/F6-A15, consultando o estado vigente dos findings UX; depois
+  reavaliar a sequência F6-COLAB-03/F6-A18 e o fechamento da Etapa 6. A #310 permanece aberta para os requisitos
+  R3-09 ainda não concluídos.
+- **Supabase local persistente:** há evidência registrada de migrations #414 `20261019000000` a
+  `20261025000000` aplicadas; `20261026000000` não aplicada. O estado Supabase cloud é desconhecido. Não presumir que
+  o banco local corresponde à `main` e não executar rollback/reset destrutivo sem diagnóstico/autorização próprios.
+- **Working tree no checkpoint:** limpo em `main` no baseline acima. A branch #414 tinha uma edição não publicada em
+  `supabase/validacao/01-cenario-f5-08.sql`; ela não deve ser publicada nem incorporada automaticamente. Confirmar
+  `git status` ao retomar.
 
 ## 3. Protocolo de retomada e entrega
 
@@ -84,7 +87,7 @@ em `.ai/*`, não são duplicadas aqui.
 
 - Decisões e evolução da Etapa 6: `docs/plano-mestre.md` e Issues/PRs #293,
   #310, #327, #333, #337, #338, #344, #351/#353, #355, #357/#358, #359, #360,
-  #362, #364, #365, #366, #369 e #371.
+  #362, #364, #365, #366, #369, #371, #404, #410, #412/#413 e #414/#415.
 - Contratos F3/F4/F5: desenhos técnicos correspondentes em `docs/` e regras
   permanentes em `.ai/architecture-rules.md`.
 - Dúvidas técnicas abertas: `docs/dividas-tecnicas.md`.
