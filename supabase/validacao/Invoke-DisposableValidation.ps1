@@ -4,7 +4,8 @@ param(
     [string[]]$Validator = @(
         '02-validar-f5-07.sql',
         '03-validar-f5-07-cutover.sql'
-    )
+    ),
+    [switch]$Interactive
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,9 +25,21 @@ if ($validationRoot -eq $repoRoot -or $validationRoot -eq $sourceRoot) {
 }
 
 function Invoke-Checked {
-    param([string]$FilePath, [string[]]$ArgumentList)
+    param([string]$FilePath, [string[]]$ArgumentList, [switch]$Quiet)
 
-    & $FilePath @ArgumentList
+    if ($Quiet) {
+        $previousErrorAction = $ErrorActionPreference
+        try {
+            # Windows PowerShell promotes native stderr progress to NativeCommandError
+            # under Stop. Keep CLI output (including credentials) out of the terminal.
+            $ErrorActionPreference = 'Continue'
+            & $FilePath @ArgumentList *> $null
+        } finally {
+            $ErrorActionPreference = $previousErrorAction
+        }
+    } else {
+        & $FilePath @ArgumentList
+    }
     if ($LASTEXITCODE -ne 0) {
         throw "Comando falhou ($LASTEXITCODE): $FilePath $($ArgumentList -join ' ')"
     }
@@ -48,13 +61,56 @@ select 'auth_users=' || count(*) || ':' || md5(coalesce(string_agg(id::text || '
     return (@($result) | ForEach-Object { $_.ToString().Trim() } | Where-Object { $_ }) -join "`n"
 }
 
+function Assert-NoDisposableResources {
+    $containers = @(docker ps -a --format '{{.Names}}')
+    if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel inventariar containers Docker.' }
+    $volumes = @(docker volume ls --format '{{.Name}}')
+    if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel inventariar volumes Docker.' }
+    $networks = @(docker network ls --format '{{.Name}}')
+    if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel inventariar redes Docker.' }
+    Assert-NoDisposableResourceNames -Containers $containers -Volumes $volumes -Networks $networks
+}
+
+function Assert-InteractiveMainCheckout {
+    $branch = git -C $repoRoot branch --show-current
+    if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel ler a branch local.' }
+    $head = git -C $repoRoot rev-parse HEAD
+    if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel ler HEAD.' }
+    $originMain = git -C $repoRoot rev-parse refs/remotes/origin/main
+    if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel ler origin/main.' }
+    $relevant = @(git -C $repoRoot status --porcelain --untracked-files=all -- `
+        supabase/migrations supabase/functions supabase/config.toml `
+        supabase/seed.sql supabase/roles.sql src)
+    if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel conferir as fontes da stack.' }
+    Assert-DisposableMainState -Branch $branch -Head $head -OriginMain $originMain -RelevantStatus $relevant
+}
+
+function Assert-InteractiveResourceOwnership {
+    $container = docker inspect $containerName | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel inspecionar o container descartavel.' }
+    $volume = docker volume inspect 'supabase_db_feedback-control-validation' | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel inspecionar o volume descartavel.' }
+    $network = docker network inspect 'supabase_network_feedback-control-validation' | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel inspecionar a rede descartavel.' }
+    Assert-DisposableResourceOwnership -Container $container -Volume $volume -Network $network -Workdir $validationRoot
+}
+
+$startAttempted = $false
+$validationLock = $null
 try {
-    if ((docker ps --format '{{.Names}}') -contains $containerName) {
+    $validationLock = Enter-DisposableValidationLock -TempRoot $env:TEMP
+    if ($Interactive) {
+        Assert-InteractiveMainCheckout
+        Assert-NoDisposableResources
+        Assert-DisposablePortsAvailable -Ports @(55420, 55421, 55422, 55423)
+        if (Test-Path -LiteralPath $validationRoot) { throw "Workdir descartavel preexistente: $validationRoot" }
+    } elseif ((docker ps --format '{{.Names}}') -contains $containerName) {
         throw "A validacao descartavel ja esta em execucao: $containerName. Encerre-a antes de repetir."
     }
 
     New-Item -ItemType Directory -Path $validationRoot -Force | Out-Null
-    Copy-Item -LiteralPath $sourceRoot -Destination $validationProjectRoot -Recurse -Force
+    Copy-DisposableSupabaseSource -SourceRoot $sourceRoot -TargetRoot $validationProjectRoot
+    Write-Host 'Copia descartavel sem supabase/.temp validada antes do start.'
     Copy-Item -LiteralPath (Join-Path $repoRoot 'src') -Destination (Join-Path $validationRoot 'src') -Recurse -Force
 
     $configPath = Join-Path $validationProjectRoot 'config.toml'
@@ -72,37 +128,52 @@ try {
         -RuntimeContainerName $runtimeContainerName -Config $config
     Write-Host 'Config descartavel validado: project_id e portas conferem.'
 
+    if ($Interactive) {
+        $migrationFiles = @(Get-ChildItem -LiteralPath (Join-Path $validationProjectRoot 'migrations') -File -Filter '*.sql' | ForEach-Object { $_.Name })
+        Assert-DisposableEvaluationMigrations -MigrationFiles $migrationFiles
+        Write-Host 'Copia descartavel: #404 presente; migrations #414 ausentes.'
+    }
+
     $runtimeFingerprintBefore = Get-RuntimeFingerprint
     Write-Host "Runtime fingerprint BEFORE:`n$runtimeFingerprintBefore"
 
     $cli = 'npx'
     $cliArgs = @('--yes', 'supabase@2.116.0', '--workdir', $validationRoot)
-    Invoke-Checked $cli ($cliArgs + @('start'))
+    $startAttempted = $true
+    Invoke-Checked $cli ($cliArgs + @('start')) -Quiet:$Interactive
     Invoke-Checked $cli ($cliArgs + @('db', 'reset', '--local', '--yes'))
 
     if (-not ((docker ps --format '{{.Names}}') -contains $containerName)) {
         throw "Container descartavel esperado nao esta em execucao: $containerName"
     }
+    if ($Interactive) { Assert-InteractiveResourceOwnership }
     if ((docker ps --format '{{.Names}}') -contains $runtimeContainerName) {
         Write-Host "Runtime preservado; alvo da validacao: $containerName"
     }
 
-    $scenarioPath = Join-Path (Join-Path $sourceRoot 'validacao') $Scenario
-    if (-not (Test-Path -LiteralPath $scenarioPath -PathType Leaf)) {
-        throw "Cenario inexistente: $Scenario"
-    }
-    Get-Content -LiteralPath $scenarioPath -Raw -Encoding UTF8 |
-        docker exec -i $containerName psql -U postgres -d postgres -v ON_ERROR_STOP=1
-    if ($LASTEXITCODE -ne 0) { throw "Cenario falhou: $Scenario" }
-
-    foreach ($validatorName in $Validator) {
-        $validatorPath = Join-Path (Join-Path $sourceRoot 'validacao') $validatorName
-        if (-not (Test-Path -LiteralPath $validatorPath -PathType Leaf)) {
-            throw "Validador inexistente: $validatorName"
+    if ($Interactive) {
+        $versions = @(docker exec $containerName psql -U postgres -d postgres -At -X -v ON_ERROR_STOP=1 -c 'select version from supabase_migrations.schema_migrations order by version')
+        if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel conferir migrations do banco descartavel.' }
+        Assert-DisposableEvaluationMigrations -MigrationFiles $migrationFiles -AppliedVersions $versions
+        Write-Host 'Banco descartavel: #404 aplicada; migrations #414 ausentes.'
+    } else {
+        $scenarioPath = Join-Path (Join-Path $sourceRoot 'validacao') $Scenario
+        if (-not (Test-Path -LiteralPath $scenarioPath -PathType Leaf)) {
+            throw "Cenario inexistente: $Scenario"
         }
-        Get-Content -LiteralPath $validatorPath -Raw -Encoding UTF8 |
+        Get-Content -LiteralPath $scenarioPath -Raw -Encoding UTF8 |
             docker exec -i $containerName psql -U postgres -d postgres -v ON_ERROR_STOP=1
-        if ($LASTEXITCODE -ne 0) { throw "Validador falhou: $validatorName" }
+        if ($LASTEXITCODE -ne 0) { throw "Cenario falhou: $Scenario" }
+
+        foreach ($validatorName in $Validator) {
+            $validatorPath = Join-Path (Join-Path $sourceRoot 'validacao') $validatorName
+            if (-not (Test-Path -LiteralPath $validatorPath -PathType Leaf)) {
+                throw "Validador inexistente: $validatorName"
+            }
+            Get-Content -LiteralPath $validatorPath -Raw -Encoding UTF8 |
+                docker exec -i $containerName psql -U postgres -d postgres -v ON_ERROR_STOP=1
+            if ($LASTEXITCODE -ne 0) { throw "Validador falhou: $validatorName" }
+        }
     }
 
     $runtimeFingerprintAfter = Get-RuntimeFingerprint
@@ -111,10 +182,35 @@ try {
         throw 'Isolamento falhou: fingerprint do runtime mudou durante a validacao.'
     }
     Write-Host 'Isolamento comprovado: fingerprint do runtime permaneceu identico.'
+    if ($Interactive) {
+        Write-Host "Stack descartavel ativa: project_id=$projectId; API=http://127.0.0.1:55421; Studio=http://127.0.0.1:55423"
+        Write-Host "Workdir descartavel: $validationRoot"
+        Write-Host 'Mantenha este terminal aberto. Digite ENCERRAR e pressione Enter para descartar a stack.'
+        do {
+            $answer = Read-Host 'Comando de encerramento'
+            if ($null -eq $answer) { throw 'Entrada interativa encerrada; iniciando cleanup.' }
+        } while ($answer -ne 'ENCERRAR')
+    }
 }
 finally {
-    if (Test-Path -LiteralPath $validationRoot) {
-        & npx --yes supabase@2.116.0 --workdir $validationRoot stop --no-backup
-        Remove-Item -LiteralPath $validationRoot -Recurse -Force -ErrorAction SilentlyContinue
+    try {
+        if ($Interactive) {
+            Invoke-DisposableInteractiveCleanup -Workdir $validationRoot -TempRoot $env:TEMP `
+                -ProjectId $projectId -ContainerName $containerName `
+                -RuntimeContainerName $runtimeContainerName -StartAttempted $startAttempted `
+                -GetContainers {
+                    $names = @(docker ps -a --format '{{.Names}}')
+                    if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel inventariar containers no cleanup.' }
+                    $names
+                } -AssertOwnership { Assert-InteractiveResourceOwnership } -StopStack {
+                    & npx --yes supabase@2.116.0 --workdir $validationRoot stop --no-backup
+                    if ($LASTEXITCODE -ne 0) { throw "Stop descartavel falhou; workdir preservado para diagnostico: $validationRoot" }
+                }
+        } elseif (Test-Path -LiteralPath $validationRoot) {
+            & npx --yes supabase@2.116.0 --workdir $validationRoot stop --no-backup
+            Remove-Item -LiteralPath $validationRoot -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    } finally {
+        if ($null -ne $validationLock) { $validationLock.Dispose() }
     }
 }
