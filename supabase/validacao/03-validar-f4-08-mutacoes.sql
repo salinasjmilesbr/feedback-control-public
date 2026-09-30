@@ -83,7 +83,7 @@ begin
       -- F6-A03 (Issue #266): a trilha do plano de plataforma tambem entra no
       -- inventario D16 (deny-by-default integral).
       'evaluation_observations','evaluation_observation_events',
-      'platform_provisioning_events',
+      'platform_provisioning_events','company_admin_operations',
       -- F6-A22 P1 (#338): quatro tabelas autorizativas deny-by-default.
       'organizational_position_responsibilities',
       'organizational_position_responsibilities_catalog',
@@ -128,7 +128,7 @@ begin
       -- F6-A03 (Issue #266): a trilha do plano de plataforma tambem entra no
       -- inventario D16 (deny-by-default integral).
       'evaluation_observations','evaluation_observation_events',
-      'platform_provisioning_events',
+      'platform_provisioning_events','company_admin_operations',
       -- F6-A22 P1 (#338): quatro tabelas autorizativas deny-by-default.
       'organizational_position_responsibilities',
       'organizational_position_responsibilities_catalog',
