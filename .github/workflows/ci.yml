@@ -157,6 +157,9 @@ jobs:
         run: npx --yes supabase@2.116.0 db reset --local --yes
 
       - name: Run complete F4-08 family in disposable runner
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
         run: |
           pwsh -NoProfile -Command "& './supabase/validacao/Invoke-DisposableValidation.ps1' -Scenario '01-cenario-f4-08.sql' -Validator '02-validar-f4-08.sql','03-validar-f4-08-mutacoes.sql'"
 
