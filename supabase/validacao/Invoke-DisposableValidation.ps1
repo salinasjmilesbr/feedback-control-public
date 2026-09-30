@@ -43,7 +43,7 @@ function Resolve-PlanPath {
     $root = if ($Type -eq 'MIGRATION_REPLAY') { Join-Path $sourceRoot 'migrations' } else { $validationScriptRoot }
     $resolved = Join-Path $root $Path
     if (-not (Test-Path -LiteralPath $resolved -PathType Leaf)) {
-        throw "Path inexistente para $Type: $Path"
+        throw "Path inexistente para ${Type}: $Path"
     }
     return (Resolve-Path -LiteralPath $resolved).Path
 }
