@@ -1,7 +1,7 @@
 # Auditoria transversal CI #541 — Issue #414 / PR #415
 
-Data: 2026-09-30  
-Branch auditada: `feat/issue-414-company-admin-lifecycle`  
+Data: 2026-09-30
+Branch auditada: `feat/issue-414-company-admin-lifecycle`
 HEAD auditado: `3b65013e524e266e449dd3217cad13538c353846`
 
 ## Escopo e método
