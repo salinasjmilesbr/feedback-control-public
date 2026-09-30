@@ -1,4 +1,4 @@
-# Plano Mestre — Virtus (v20)
+# Plano Mestre — Virtus (v21)
 
 > ## NOTA DE RASTREABILIDADE — LEIA ANTES DE USAR ESTE DOCUMENTO
 >
@@ -27,11 +27,11 @@
 
 | Campo | Valor |
 |---|---|
-| Versão | **v20** |
-| Data-ação | Registro da decisão do orquestrador para validação funcional integrada da Etapa 6 (#362) |
+| Versão | **v21** |
+| Data-ação | Checkpoint pós-#414: adiamento do ciclo de vida de múltiplos Admins da Empresa e reconciliação do estado real da Etapa 6 |
 | Escopo | Reorganizar e preservar TODO o conhecimento vigente de doutrina, processo, roadmap e estado |
 | Modelo | história + roadmap + manual operacional |
-| Fontes | `.ai/*`, `AGENTS.md`, `docs/etapa-5-certificacao.md`, `docs/F5-11-certificacao.md`, `docs/auditorias/*`, desenhos `docs/F3-*/F4-*/F5-*`; Issues **#275**, **#278**, **#293**, **#308**, **#310**, **#327**, **#333**, **#337**, **#338**, **#344**, **#351/#353**, **#355**, **#357/#358**, **#359**, **#360** e **#362**; commits F6 **#296**, **#298**, **#299**, **#301**, **#303** e **#306** |
+| Fontes | `.ai/*`, `AGENTS.md`, `docs/etapa-5-certificacao.md`, `docs/F5-11-certificacao.md`, `docs/auditorias/*`, desenhos `docs/F3-*/F4-*/F5-*`; Issues **#275**, **#278**, **#293**, **#308**, **#310**, **#327**, **#333**, **#337**, **#338**, **#344**, **#351/#353**, **#355**, **#357/#358**, **#359**, **#360**, **#362**, **#364**, **#404**, **#410**, **#412**, **#414**; PRs **#413** e **#415**; commits F6 **#296**, **#298**, **#299**, **#301**, **#303** e **#306** |
 | Registro de dívidas | `docs/dividas-tecnicas.md` (canônico — **não enumerado nem duplicado aqui**) |
 | Handoff operacional | `.ai/handoff.md` |
 
@@ -123,8 +123,9 @@ registro de gate) — o que não tem evidência é **dívida** ou **lacuna**, nu
 | **F6-01** | Primeiro checkpoint da Etapa 6 | Concluída |
 | **Checkpoint Etapa 6 (Issue #308)** | Histórico soberano de ciclos, preservação de data civil no histórico, correção de boot da Edge `avaliacoes`, papel avaliativo mínimo e alinhamentos de capability/infraestrutura | Consolidado nesta v17; ver Parte III |
 | **F6 — checkpoint pós-#359** | Plataforma soberana, leitura estrutural, identidade de posição, gestão de pessoas por posição, isolamento do runner descartável e provas P5 | Consolidado nesta v19; ver Parte III |
-| **F6 — validação integrada (#362)** | Validação funcional end-to-end do cenário Acme reconstruído, antes de #293/F6-A15 | Decidida; execução pendente, sem novo P/fase |
-| **F6-AVALIACOES-05 (planejada; Issue a abrir)** | Provisionamento funcional legítimo do fluxo mutante de Avaliações, integrando à jornada real os contratos de `evaluation.create`/`evaluation.write` e os atores relacionais previstos em F5-06/F5-09 | Lacuna de roadmap revelada pela #364; pré-requisito para sua retomada final; não redefine F5-06/F5-09/#306 e não autoriza grants específicos para a Acme |
+| **F6 — validação integrada (#364; decisão #362)** | Validação funcional end-to-end do cenário Acme reconstruído | Concluída; Issue #364 fechada após checkpoint integrado |
+| **F6-AVALIACOES-05 (#404) + correção #410** | Integração funcional de Avaliações e CREATE por UUID soberano | Concluídas; Issues #404 e #410 fechadas |
+| **R3-09B — jornada Admin → colaborador → convite (#310; #412/#413)** | Jornada navegável e runtime de cadastro, convite e login no tenant correto | Concluída; Issue #412 fechada e PR #413 merged |
 
 Detalhamento por fase (critérios, decisões, evidências): `docs/F5-01-desenho-tecnico.md` …
 `docs/F5-11-desenho-tecnico.md`, `docs/F5-09-p9-matriz-integrada.md`,
@@ -141,6 +142,8 @@ sem inventar detalhe além do que o roadmap vigente define. Notação única: **
 | **F5-12 (Issue #256)** | Validação integrada e fechamento formal da Etapa 5 | **É a certificação transversal já produzida** — não há fase posterior de fechamento dentro da F5 |
 | **Etapa 7 (F7)** | **Segurança/hardening para produção** | Escopo definido pelo roadmap vigente; exige Issue + desenho fechado |
 | **Etapas 8–10 (F8–F10)** | **Arquitetura-alvo**, **migração**, **pré-produção** e **produção** (posteriores) | Vêm do roadmap vigente; o detalhamento exige Issue + desenho próprios e **não** é fabricado nesta v17 |
+| **#414 / PR #415 — ciclo de vida de múltiplos Admins** | Reavaliar cardinalidade, delegação e ciclo de vida de Admins da Empresa | Adiada por decisão de produto; Issue e PR fechados sem merge; R3-09 segue pendente na #310 |
+| **#310 — R3-09 restante** | Branding soberano e requisitos de ciclo de vida/administração da organização ainda não concluídos | Issue aberta; #412/#413 concluiu somente o incremento R3-09B de cadastro/convite |
 | Backlog: dívidas e findings bloqueantes | Limpeza de resíduos legados, provas literais faltantes e defeitos de diagnóstico; **DT-013** e o defeito distinto de boot da Edge `avaliacoes` estão resolvidos | Registro canônico: `docs/dividas-tecnicas.md` (seção de **FINDINGS BLOQUEANTES**); **#293/F6-A15** é o registro canônico dos findings UX; conversão de outros registros em Issue só por decisão explícita (Parte XV) |
 
 ### II.3 Próxima fase estrutural após a Etapa 6
@@ -189,7 +192,7 @@ fechado**; os itens F6 ainda pendentes permanecem no estado da Etapa 6 descrito 
 - **#359 — regressão P5:** a prova de mesmo cargo reutilizado agora consulta o resolvedor pelo ocupante
   vigente da posição sem responsabilidade e exige zero grants derivados; a validação foi executada no
   ambiente descartável com fingerprint do runtime compartilhado idêntico antes/depois.
-- **#362 — decisão de validação funcional integrada:** antes de #293/F6-A15, a Etapa 6 terá uma rodada
+- **#362 — decisão de validação funcional integrada:** antes de #293/F6-A15, a Etapa 6 realizou uma rodada
   end-to-end no produto/runtime usando a fotografia Acme já reconstruída. A cobertura mínima inclui ciclos,
   avaliações, metas, observações, históricos/relatórios, as personas Ricardo → Mariana → Felipe → João,
   o Administrador da empresa e a Gestão Virtus quando aplicável, além de ALLOW/DENY conforme
@@ -201,53 +204,67 @@ fechado**; os itens F6 ainda pendentes permanecem no estado da Etapa 6 descrito 
   - **F6-COLAB-02 (#298)**, preservando a data civil no histórico organizacional;
   - **correção do boot da Edge `avaliacoes` (#303)**, com o import relativo compatível com Deno e
     validação funcional em runtime concluída; o antigo `503 / BOOT_ERROR` distinto do DT-013 está resolvido;
-  - **papel avaliativo mínimo (#306)** implementado e integrado à `main`, com migrations locais aplicadas;
-    a validação funcional em runtime permanece pendente;
+  - **papel avaliativo mínimo (#306)** implementado e integrado à `main`; sua prova runtime integrada foi concluída
+    como parte da #364;
   - alinhamento da capability `cycle.read` (#296) e atualização operacional de snippets locais (#299).
   Essas entregas são fatos integrados na `main` de referência deste checkpoint; não alteram os contratos
   F4/F5 nem transformam melhorias de backlog em itens concluídos.
 - **F6-A03, F6-A04, F6-A09, F6-A12, F6-A13 e F6-A14** estão resolvidas e validadas.
 - **F6-A11** está implementada, com o bootstrap validado.
 - **F6-A17** foi corrigida pelos PRs **#289/#290** e está **resolvida e validada em runtime** na ORG5.
-- **#364 — checkpoint consolidado (comentário #5862568699):** a validação integrada reutilizou as provas
-  válidas de Cycle 1 READ, Metas READ, Relatórios soberanos (#400-A/#400-B), Observações CREATE/READ/EDIT/HISTORY,
-  estrutura/hierarquia/provisionamento e ALLOW/DENY. Observações DELETE/REVOKE permanece
-  **BLOCKED-AMBIENTE**. Em Avaliações, F5-06/F5-09 já previam `evaluation.create`/`evaluation.write` e os atores
-  relacionais; a #364 revelou que faltava no roadmap uma atividade de provisionamento funcional para conectar esses
-  contratos à jornada real. A implementação e a validação técnica de **#306** permanecem concluídas; está **BLOCKED**
-  somente sua prova runtime integrada **evaluator + ASSIGNED** na fotografia Acme da #364, por ausência de identidade/
-  estado legitimamente atribuídos para a prova. Não há novo defeito de produto demonstrado, nenhuma preparação artificial
-  é permitida e não há teste executável restante sem mudança legítima de pré-condição.
-- **F6-AVALIACOES-05 (atividade planejada; Issue ainda não aberta):** deverá fechar o provisionamento funcional
-  legítimo ausente no roadmap, conectando os atores relacionais previstos por **GESTAO_CADEIA**, **GESTAO_DIRETA** e
-  **COLEGIADO** às capabilities já existentes `evaluation.create` e `evaluation.write`, sob o Policy Engine e os
-  scopes vigentes, com tenant, snapshot e auditoria preservados. A atividade não redefine F5-06/F5-09/#306; apenas
-  fecha essa integração/provisionamento funcional ausente. Não pode derivar autoridade de cargo/nome nem criar grants
-  artificiais específicos para a Acme; após ela, #364 retoma somente as provas runtime necessárias de Avaliações.
+- **#364 — validação integrada:** concluída e fechada em 2026-09-29. O checkpoint final registra as provas integradas
+  concluídas para Avaliações (provisionamento, CREATE, materialização, WRITE e DENY), Observações incluindo DELETE
+  lógico/auditável, Cycle 1, Metas, Relatórios e demais evidências reutilizadas. O comentário consolidado anterior
+  permanece como histórico, não como estado atual da Issue.
+- **#404 / F6-AVALIACOES-05:** concluída e fechada em 2026-09-29; conectou os atores relacionais previstos aos contratos
+  existentes de mutação de Avaliações. A correção #410 do CREATE por UUID soberano também está concluída e fechada.
+  F5-06/F5-09/#306 permanecem contratos preservados, não itens reabertos por este checkpoint.
+- **#412 / PR #413 — R3-09B:** concluídos; o PR #413 foi merged e a prova runtime Admin da Empresa → cadastro de
+  colaborador → convite → login no tenant correto foi registrada na #310. Isso não fecha os requisitos distintos de
+  branding e ciclo de vida/cardinalidade de Admins.
+- **#414 / PR #415 — ciclo de vida de Admins da Empresa:** adiados por decisão de produto em 2026-09-30. A Issue
+  #414 está fechada como adiada; o PR #415 está fechado **sem merge**. A branch fica apenas como referência; suas
+  migrations e alterações funcionais não integram `main`. Reavaliar futuramente segurança, delegação, experiência
+  administrativa e validação transversal. Não tratar #414 como concluída nem implementar automaticamente o limite
+  1–4 em outra atividade.
+- **R3-09 permanece pendente na #310:** continuam por concluir/reavaliar os requisitos de branding soberano da
+  organização e de ciclo de vida/cardinalidade de Admins. O fluxo R3-09B está concluído; a #310 permanece aberta.
 - **F6-A01, F6-A02, F6-A06, F6-A10 e F6-A16** ficam registradas como melhorias pendentes;
   não são tratadas como defeitos resolvidos neste checkpoint.
-- **#293/F6-A15** permanece pendente e é o registro canônico dos findings UX; o estado dos itens deve ser consultado ali,
+- **#293/F6-A15** permanece aberta e é o registro canônico dos findings UX; o estado dos itens deve ser consultado ali,
   sem duplicar uma segunda lista de autoridade neste plano.
-- **F6-COLAB-03** está pendente.
-- **F6-A18** entra no backlog: administração segura e exclusão de organizações pelo Admin Virtus.
+- **F6-COLAB-03** permanece pendente, sem Issue própria identificada no estado atual do GitHub.
+- **F6-A18** permanece planejada no backlog: administração segura e exclusão de organizações pelo Admin Virtus; sem
+  Issue própria identificada.
 - **Decisão vigente para ciclos:** a quantidade é configurável entre **1–6 por organização/ano**,
   com **default 3**, sem invalidar ciclos já existentes.
 
-### III.3 Pendente de CI/PR/merge/runtime
+### III.3 Estado operacional e sequência restante
+- **Concluídas:** #364, #404/F6-AVALIACOES-05, #410 e #412/R3-09B; PR #413 merged.
+- **Abertas:** #293/F6-A15 (próxima atividade recomendada) e #310 (R3-09 residual). A #310 não está fechada:
+  R3-09B foi comprovada, mas branding e ciclo de vida de Admins continuam por resolver/reavaliar.
+- **Adiada:** #414; PR #415 fechado sem merge. A cardinalidade 1–4 não é requisito concluído nem autorização
+  automática para implementar em outra Issue.
+- **Planejadas sem Issue própria identificada:** F6-COLAB-03 e F6-A18.
+- **Bloqueios:** não há novo bloqueio técnico demonstrado para iniciar #293. O fechamento integral de R3-09 na #310
+  aguarda decisão futura sobre os itens residuais; a decisão de produto já adiou a parcela de múltiplos Admins.
 - O **CI oficial do PR/SHA** é a **autoridade final** (em especial para os pares de concorrência) e é
   responsabilidade do **orquestrador** — as certificações registram isso explicitamente.
 - **PR e merge são do orquestrador** (`gh` ausente no ambiente do agente; DEV-04): o agente entrega
   branch + SHA + título/corpo quando não há mecanismo autorizado de abertura de PR.
-- **Estado da `main` de referência deste registro:** `d64b4599f532335a90ef58ef58895d093bd63623` (`test(#338): provar mesmo cargo com responsabilidades distintas (#359)`).
-- O SHA anterior `c07d872` pertence ao checkpoint da v16.3 e é preservado apenas como histórico no Git,
-  não como estado vigente.
-- A #364 permanece aberta após seu checkpoint consolidado. A sequência mínima vigente é:
-  **F6-AVALIACOES-05 → retomada da #364 somente com as provas runtime necessárias de Avaliações**;
-  **Observações DELETE/REVOKE** continua sendo pendência runtime da própria #364, retomável quando o ambiente
-  permitir, sem mudança de produto; depois seguem **#293/F6-A15 → F6-COLAB-03/F6-A18 → fechamento da Etapa 6**
-  e, então, a **Etapa 7 (F7)**. F6-AVALIACOES-05 é uma dependência de planejamento, não implementação nesta
-  atualização; a validação integrada continua sendo atividade operacional, não um novo P ou fase, e não reabre
-  contratos de auth/autorização.
+- **Estado GitHub conferido nesta versão:** #293 e #310 abertas; #364, #404, #410, #412 e #414 fechadas; PR #413
+  merged; PR #415 fechado sem merge. F6-COLAB-03 e F6-A18 são itens planejados, não Issues abertas identificadas.
+- **Próxima atividade operacional recomendada:** retomar #293/F6-A15, o registro canônico aberto dos findings UX,
+  consultando seus itens e critérios vigentes e preservando os contratos soberanos. #364 e #404/#410 estão concluídas;
+  #293 é a próxima atividade aberta explicitamente prevista no encadeamento da Etapa 6.
+- Depois de #293/F6-A15, revisar o escopo e a ordem de F6-COLAB-03/F6-A18 antes do fechamento formal da Etapa 6.
+  Manter #310 aberta para concluir/reavaliar R3-09; adiar #414 não autoriza declarar esse requisito concluído. A Etapa 7
+  (F7) continua sendo a etapa estrutural seguinte após o fechamento da Etapa 6; preservar sem alterações o roadmap já
+  registrado para as Etapas 7–10.
+- **Ambiente local:** a auditoria registrada na Issue #414 confirma migrations #414 `20261019000000`–
+  `20261025000000` aplicadas no Supabase local persistente e `20261026000000` não aplicada. O estado Supabase cloud
+  não foi verificado. O banco local não deve ser presumido equivalente à `main`; não executar rollback/reset destrutivo
+  sem diagnóstico e autorização próprios.
 
 ### III.4 Contrato visual e de acesso — Issue #312
 - A identidade pública/plataforma passa a ter contrato normativo em `docs/brand/virtus-brand-guide.md` e matriz de aceite em `docs/brand/virtus-visual-acceptance.md`.
@@ -695,7 +712,7 @@ fontes. Itens conhecidos:
 
 ---
 
-*Fim da v18. Este documento é história + roadmap + manual operacional. Em caso de divergência com
+*Fim da v21. Este documento é história + roadmap + manual operacional. Em caso de divergência com
 `.ai/*` ou com o desenho de uma atividade, prevalece a fonte normativa — e a divergência deve ser
 registrada aqui.*
 ## Decisão normativa permanente — validação SQL
