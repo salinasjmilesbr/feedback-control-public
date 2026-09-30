@@ -44,7 +44,7 @@ export interface ResultadoCutover<T> {
 export interface AvaliacaoNovaCriada {
   readonly evaluationId: string;
   readonly cycleId: string;
-  /** Registro do cutover: avaliação existe EXCLUSIVAMENTE no PostgreSQL. */
+  /** Marcador local de navegação legado; ausente no CREATE canônico por UUID. */
   readonly cutoverRegistrado: boolean;
 }
 
@@ -99,6 +99,11 @@ export interface DepsCutoverAvaliacoes {
 }
 
 export interface CutoverAvaliacoes {
+  criarPorUuid(entrada: {
+    readonly organizationId: string;
+    readonly cycleId: string;
+    readonly evaluatedCollaboratorId: string;
+  }): Promise<ResultadoCutover<Omit<AvaliacaoNovaCriada, "cutoverRegistrado">>>;
   /** Cria avaliação NOVA: resolve ciclo + colaborador e cria no PostgreSQL. */
   criarNova(
     entrada: EntradaCriarAvaliacaoNova
@@ -108,6 +113,12 @@ export interface CutoverAvaliacoes {
     readonly organizationId: string;
     readonly evaluationId: string;
   }): Promise<ResultadoCutover<PainelParticipante>>;
+  gravarNotasPorId(entrada: {
+    readonly organizationId: string;
+    readonly evaluationId: string;
+    readonly painel: PainelParticipante;
+    readonly notas: readonly { readonly subcriterionId: string; readonly nota: number }[];
+  }): Promise<ResultadoCutover<number | null>>;
   /**
    * Notas da PRÓPRIA ocorrência. A ocorrência é resolvida SERVER-SIDE a partir
    * do ator autenticado (correção de IDOR); a tela informa apenas o NOME do
@@ -206,6 +217,23 @@ export function criarCutoverAvaliacoes(
   }
 
   return {
+    async criarPorUuid(entrada) {
+      if (![entrada.organizationId, entrada.cycleId, entrada.evaluatedCollaboratorId].every(ehIdTecnicoPostgres)) {
+        return { ok: false, erro: "Identificadores soberanos inválidos.", codigo: "INVALID_INPUT" };
+      }
+      const criada = await deps.repositorio.criar(entrada);
+      if (!criada.ok) return falha(criada.error);
+      if (!ehIdTecnicoPostgres(criada.data)) {
+        return { ok: false, erro: "Identificador da avaliação inválido na resposta do servidor.", codigo: "INTERNAL" };
+      }
+      return {
+        ok: true,
+        data: {
+          evaluationId: criada.data,
+          cycleId: entrada.cycleId,
+        },
+      };
+    },
     async criarNova(entrada) {
       // 1) ano+ciclo (INTENÇÃO) → UUID soberano do ciclo, dentro do tenant. O
       //    Edge também resolve a matrícula para o ALVO autorizável (F3-01).
@@ -247,6 +275,21 @@ export function criarCutoverAvaliacoes(
       const resultado = await deps.repositorio.painelParticipante(entrada);
       if (!resultado.ok) return falha(resultado.error);
       return { ok: true, data: resultado.data };
+    },
+
+    async gravarNotasPorId(entrada) {
+      const ids = new Set(entrada.painel.subcriterios.map((item) => item.subcriterionId));
+      if (entrada.painel.evaluationId !== entrada.evaluationId ||
+          entrada.painel.organizationId !== entrada.organizationId ||
+          entrada.notas.some((item) => !ids.has(item.subcriterionId))) {
+        return { ok: false, erro: "Nota fora do catálogo congelado da avaliação.", codigo: "INVALID_INPUT" };
+      }
+      if (entrada.notas.length === 0) return { ok: true, data: null };
+      return propagar(await deps.repositorio.gravarNotas({
+        organizationId: entrada.organizationId,
+        evaluationId: entrada.evaluationId,
+        notas: entrada.notas.map((item) => ({ subcriterion_id: item.subcriterionId, nota: item.nota })),
+      }), (data) => data);
     },
 
     async gravarNotasDoPainel(entrada) {

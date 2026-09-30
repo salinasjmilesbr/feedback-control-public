@@ -102,6 +102,7 @@ import {
   type MapaDeNomesDeColaborador,
 } from "./observacoesSoberanasDaPagina";
 import { useEstruturaSoberana } from "./useEstruturaSoberana";
+import { listarCapabilitiesEfetivas } from "../services/capabilitiesSoberanas";
 
 /** Estado da leitura soberana do colaborador e da sua trilha de eventos. */
 export type EstadoDetalheColaborador =
@@ -421,6 +422,10 @@ function ColaboradorDetalhePage({
     readonly estado: EstadoDetalheColaborador;
   } | null>(null);
   const [versao, setVersao] = useState(0);
+  const [criacaoAvaliacao, setCriacaoAvaliacao] = useState<{
+    readonly chave: string;
+    readonly disponivel: boolean;
+  } | null>(null);
   const [estadoConvite, setEstadoConvite] = useState<
     | { readonly fase: "inativo" }
     | { readonly fase: "processando" }
@@ -443,6 +448,23 @@ function ColaboradorDetalhePage({
 
   /** Chave da leitura corrente: organização + identificador + versão de recarga. */
   const chaveCarregamento = `${organizacaoAtivaId ?? "sem-organizacao"}|${identificador}|${versao}`;
+
+  useEffect(() => {
+    if (!organizacaoAtivaId || !ehUuid(identificador)) return;
+    let vigente = true;
+    const chave = `${organizacaoAtivaId}|${identificador}`;
+    void (async () => {
+      const [capabilities, ciclo] = await Promise.all([
+        listarCapabilitiesEfetivas(organizacaoAtivaId),
+        obterRepositorioCiclosSoberanos()?.obterCicloAtivo(organizacaoAtivaId),
+      ]);
+      if (vigente) setCriacaoAvaliacao({
+        chave,
+        disponivel: capabilities.includes("evaluation.create") && ciclo?.ok === true && ciclo.data !== null,
+      });
+    })();
+    return () => { vigente = false; };
+  }, [identificador, organizacaoAtivaId]);
 
   useLayoutEffect(() => {
     window.scrollTo(0, 0);
@@ -763,6 +785,15 @@ function ColaboradorDetalhePage({
         </div>
 
         <div className="virtus-page-actions collaborator-profile-actions">
+          {criacaoAvaliacao?.chave === `${organizacaoAtivaId}|${identificador}` &&
+            criacaoAvaliacao.disponivel && (
+              <Link
+                to={`/colaborador/${colaborador.collaboratorId}/avaliacoes/nova`}
+                className="virtus-btn collaborator-link-button"
+              >
+                Nova avaliação
+              </Link>
+            )}
           <Link
             to={`/colaborador/${colaborador.collaboratorId}/editar`}
             className="virtus-btn virtus-btn--outline collaborator-link-button"
@@ -1225,12 +1256,6 @@ function AcervoLegado({
           </div>
 
           <div className="collaborator-history-controls">
-            <Link
-              className="virtus-btn virtus-btn--outline collaborator-link-button collaborator-link-button--compact"
-              to={`/colaborador/${colaboradorLegado.matricula}/novo-feedback`}
-            >
-              Nova avaliação (rota legada)
-            </Link>
             <label className="collaborator-show-cancelled">
               <input
                 type="checkbox"

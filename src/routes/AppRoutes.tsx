@@ -36,6 +36,7 @@ import EditarColaboradorPage from "../pages/EditarColaboradorPage";
 import NovoFeedbackPage from "../pages/NovoFeedbackPage";
 import FeedbackDetalhePage from "../pages/FeedbackDetalhePage";
 import EditarFeedbackPage from "../pages/EditarFeedbackPage";
+import { AvaliacaoUuidPage } from "../pages/AvaliacaoUuidPage";
 import ConfiguracoesAparenciaPage from "../pages/ConfiguracoesAparenciaPage";
 import RelatoriosPage from "../pages/RelatoriosPage";
 import CatalogosPage from "../pages/CatalogosPage";
@@ -202,6 +203,9 @@ function AppRoutes() {
               path="/colaborador/:collaboratorId/editar"
               element={<EditarColaboradorPage />}
             />
+            <Route path="/colaborador/:collaboratorId/avaliacoes/nova" element={<AvaliacaoUuidPage modo="nova" />} />
+            <Route path="/colaborador/:collaboratorId/avaliacoes/:evaluationId" element={<AvaliacaoUuidPage modo="detalhe" />} />
+            <Route path="/colaborador/:collaboratorId/avaliacoes/:evaluationId/editar" element={<AvaliacaoUuidPage modo="editar" />} />
 
             {/*
               Rotas ainda por MATRÍCULA: consumidores fora do escopo F5-07

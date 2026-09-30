@@ -114,6 +114,20 @@ export async function criarAvaliacaoSoberana(
   return operacoes.criarNova(entrada);
 }
 
+/** CREATE canônico por UUID: sem ponte de matrícula nem marcador local. */
+export async function criarAvaliacaoPorUuidSoberano(
+  entrada: {
+    readonly organizationId: string;
+    readonly cycleId: string;
+    readonly evaluatedCollaboratorId: string;
+  },
+  deps: DependenciasAcessoAvaliacoes = {}
+): Promise<ResultadoCutover<Omit<AvaliacaoNovaCriada, "cutoverRegistrado">>> {
+  const operacoes = obterOperacoesAvaliacaoSoberanas(deps);
+  if (!operacoes) return { ok: false, erro: ERRO_SEM_CAMINHO };
+  return operacoes.criarPorUuid(entrada);
+}
+
 /** Painel de EDIÇÃO da própria ocorrência do ator autenticado. */
 export async function carregarPainelSoberano(
   entrada: { readonly organizationId: string; readonly evaluationId: string },
@@ -122,6 +136,21 @@ export async function carregarPainelSoberano(
   const operacoes = obterOperacoesAvaliacaoSoberanas(deps);
   if (!operacoes) return { ok: false, erro: ERRO_SEM_CAMINHO };
   return operacoes.carregarPainel(entrada);
+}
+
+/** Notas por UUID do catálogo congelado; participante segue resolvido no servidor. */
+export async function gravarNotasPorIdSoberanas(
+  entrada: {
+    readonly organizationId: string;
+    readonly evaluationId: string;
+    readonly painel: PainelParticipante;
+    readonly notas: readonly { readonly subcriterionId: string; readonly nota: number }[];
+  },
+  deps: DependenciasAcessoAvaliacoes = {}
+): Promise<ResultadoCutover<number | null>> {
+  const operacoes = obterOperacoesAvaliacaoSoberanas(deps);
+  if (!operacoes) return { ok: false, erro: ERRO_SEM_CAMINHO };
+  return operacoes.gravarNotasPorId(entrada);
 }
 
 /** Notas da própria ocorrência, por NOME de subcritério do catálogo congelado. */
