@@ -134,6 +134,7 @@ delete from public.organizations
 -- ----------------------------------------------------------------------------
 -- Organizações
 -- ----------------------------------------------------------------------------
+begin;
 insert into public.organizations (id, name) values
   ('d7a00000-0000-0000-0000-0000000000a1', 'Org Sintetica F5-07 Alfa'),
   ('d7a00000-0000-0000-0000-0000000000b1', 'Org Sintetica F5-07 Beta');
@@ -433,3 +434,6 @@ begin
 
   raise notice '[PASS] cenario F5-07 pronto: 2 organizacoes, 7 atores, 9 colaboradores (8 Alfa + 1 Beta), estrutura F3, vinculos, autorizacao, snapshot/ciclo';
 end $$;
+
+\ir 00-bootstrap-f6-414-fixture-admins.sql
+commit;

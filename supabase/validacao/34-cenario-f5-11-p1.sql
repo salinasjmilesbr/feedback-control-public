@@ -43,6 +43,8 @@ begin
 end $$;
 \else
 
+begin;
+
 -- ----------------------------------------------------------------------------
 -- 1) Organizacoes sinteticas
 -- ----------------------------------------------------------------------------
@@ -305,4 +307,6 @@ begin
   raise notice '[PASS] cenario F5-11 P1: 2 orgs, 2 memberships ativas, 3 colaboradores soberanos, 3 ciclos (Alfa ATIVO, Alfa ENCERRADO, Beta ATIVO), 2 vinculos membership<->colaborador, 4 observacoes (1 comunicada, 1 excluida logicamente, 1 em ciclo encerrado), 6 eventos na trilha (4 CRIADA)';
 end $$;
 
+\ir 00-bootstrap-f6-414-fixture-admins.sql
+commit;
 \endif

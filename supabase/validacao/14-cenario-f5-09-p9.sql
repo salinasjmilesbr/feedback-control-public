@@ -75,6 +75,8 @@ begin
 end $$;
 \else
 
+begin;
+
 -- ----------------------------------------------------------------------------
 -- 1) Organizacoes sinteticas
 -- ----------------------------------------------------------------------------
@@ -435,6 +437,8 @@ begin
   raise notice '[PASS] cenario F5-09 P9: 3 orgs (Alfa/Beta/Gama), 5 perfis, 5 memberships ativas, 3 colaboradores ativos com estrutura e colegiado, capabilities apenas nos atores designados e fantasma sem vinculo';
 end $$;
 
+\ir 00-bootstrap-f6-414-fixture-admins.sql
+commit;
 \endif
 
 -- ----------------------------------------------------------------------------

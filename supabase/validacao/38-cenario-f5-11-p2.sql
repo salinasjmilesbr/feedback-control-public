@@ -59,6 +59,8 @@ begin
   raise notice '[PASS] cenario F5-11 P2 ja carregado — reexecucao no-op (fixture insert-once)';
 end $$;
 \else
+
+begin;
 do $$
 begin
   if exists (
@@ -327,4 +329,6 @@ begin
   raise notice '[PASS] cenario F5-11 P2: 2 organizacoes (Alfa e Beta), 7 identidades (GESTOR, SUB_ATIVO, OUTRO, SEM_CAP, PERFIL_INATIVO, MEMBERSHIP_OFF e BETA), 10 colaboradores, 7 posicoes com 4 subordinados diretos do GESTOR, 7 ocupacoes (1 encerrada pelo desligamento), 9 periodos de status (active/leave/inactive e 1 colaborador SEM status), 7 vinculos ativos, 5 ciclos (1 ATIVO por organizacao) e ZERO observacao/evento previos';
 end $$;
 
+\ir 00-bootstrap-f6-414-fixture-admins.sql
+commit;
 \endif

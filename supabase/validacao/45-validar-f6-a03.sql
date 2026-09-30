@@ -794,6 +794,31 @@ begin
   raise notice '[PASS] E3: trigger append-only bloqueia UPDATE da trilha inclusive para o owner';
 end $$;
 
+-- #414: E4 desativa o founder. Um segundo Admin tecnico, sem anchor
+-- colaborador ou capabilities funcionais, preserva cardinalidade >= 1.
+do $$
+declare
+  v_org uuid := current_setting('f6a03.org_alfa')::uuid;
+  v_membership uuid;
+  v_admin uuid;
+begin
+  select id into v_admin from public.access_roles
+   where name = 'admin' and is_system = true and organization_id is null;
+  insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+  values ('f6a30000-0000-4000-8000-000000000006', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'admin.tecnico.f6-a03@example.invalid', 'x', now(), '{}'::jsonb, '{}'::jsonb, now(), now())
+  on conflict (id) do nothing;
+  insert into public.user_profiles (id, status)
+  values ('f6a30000-0000-4000-8000-000000000006', 'active')
+  on conflict (id) do nothing;
+  insert into public.user_organization_memberships (user_profile_id, organization_id, status)
+  values ('f6a30000-0000-4000-8000-000000000006', v_org, 'active')
+  on conflict (user_profile_id, organization_id) do update set status = 'active'
+  returning id into v_membership;
+  insert into public.membership_access_role_assignments (membership_id, organization_id, access_role_id, status, created_by)
+  values (v_membership, v_org, v_admin, 'active', 'f6a30000-0000-4000-8000-000000000006')
+  on conflict (membership_id, access_role_id) do update set status = 'active';
+end $$;
+
 -- (E4) REPLAY e ESTAVEL: repetir a MESMA intencao devolve o MESMO
 --      `organization_id` mesmo que o perfil do primeiro Admin tenha sido
 --      INATIVADO depois (a idempotencia e resolvida ANTES da validacao de estado
@@ -1064,6 +1089,8 @@ reset role;
 -- F6-A14: scopes sao filhos da assignment; removê-los antes da assignment
 -- preserva a FK e trata o scope ORGANIZATION do bootstrap como parte legitima
 -- do fixture, sem alterar a implementacao ou enfraquecer a restricao.
+/* Descarte do runner substitui teardown fisico: D12 impede desmontar o ultimo Admin. */
+/*
 delete from public.access_role_assignment_scopes s
  using public.membership_access_role_assignments a,
        public.user_organization_memberships m,
@@ -1162,3 +1189,6 @@ begin
   raise notice '[PASS] G: higiene completa — nenhum residuo do cenario F6-A03 (inclusive da ancora funcional do primeiro Admin)';
   raise notice '[PASS] F6-A03/F6-A11: A/B/C/C7-C9/D/D24/E/E5-E6/F/G concluidos — bootstrap de plataforma validado (RLS+ACL, append-only, gate fail-closed, D16/D17, separacao de planos, assinatura NOVA sem sobrecarga, ancora funcional D24, rollback da forma nova, idempotencia por replay sem duplicacao e isolamento multi-tenant)';
 end $$;
+*/
+
+do $$ begin raise notice '[PASS] G: higiene delegada ao descarte integral do runner descartavel'; end $$;

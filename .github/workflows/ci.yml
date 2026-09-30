@@ -123,6 +123,123 @@ jobs:
     needs: scope
     if: always() && (needs.scope.result != 'success' || needs.scope.outputs.docs_only != 'true')
     runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Guard destructive local reset targets
+        run: pwsh -NoProfile -File supabase/validacao/Test-DisposableValidationGuard.ps1
+
+      - name: Migration preflight (static)
+        run: node scripts/preflight-migrations.mjs
+
+      - name: Start shared local runtime for isolation fingerprint
+        run: npx --yes supabase@2.116.0 db start --yes
+
+      - name: Run F4-08 family in disposable runner
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+        run: pwsh -NoProfile -Command "& './supabase/validacao/Invoke-DisposableValidation.ps1' -Script '01-cenario-f4-08.sql','02-validar-f4-08.sql','03-validar-f4-08-mutacoes.sql'"
+
+      - name: Run F5-04 family in disposable runner
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+        run: pwsh -NoProfile -Command "& './supabase/validacao/Invoke-DisposableValidation.ps1' -Script '01-cenario-f5-04.sql','02-validar-f5-04.sql'"
+
+      - name: Run F5-08 family in disposable runner
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+        run: pwsh -NoProfile -Command "& './supabase/validacao/Invoke-DisposableValidation.ps1' -Script '01-cenario-f5-08.sql','02-validar-f5-08.sql','03-validar-f5-08-cutover.sql'"
+
+      - name: Run F5-09 family in disposable runner
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+        run: |
+          pwsh -NoProfile -Command '
+            $plan = @(
+              @{ Type="SQL"; Path="01-cenario-f5-09.sql" }, @{ Type="SQL"; Path="02-validar-f5-09.sql" },
+              @{ Type="SQL"; Path="03-cenario-f5-09-p2.sql" }, @{ Type="SQL"; Path="04-validar-f5-09-p2.sql" },
+              @{ Type="SQL"; Path="05-cenario-f5-09-p3.sql" }, @{ Type="SQL"; Path="06-validar-f5-09-p3.sql" },
+              @{ Type="SQL"; Path="07-cenario-f5-09-p4.sql" }, @{ Type="SQL"; Path="08-validar-f5-09-p4.sql" },
+              @{ Type="SQL"; Path="09-cenario-f5-09-p5.sql" }, @{ Type="SQL"; Path="10-validar-f5-09-p5.sql" },
+              @{ Type="SQL"; Path="11-validar-f5-09-p7.sql" }, @{ Type="SQL"; Path="12-cenario-f5-09-p7-d28.sql" },
+              @{ Type="MIGRATION_REPLAY"; Path="20260921000000_f5_09_p7_catalog_admin_bundle.sql" },
+              @{ Type="MIGRATION_REPLAY"; Path="20260921000000_f5_09_p7_catalog_admin_bundle.sql" },
+              @{ Type="SQL"; Path="13-validar-f5-09-p7-d28.sql" }, @{ Type="SQL"; Path="14-cenario-f5-09-p9.sql" },
+              @{ Type="SQL"; Path="15-validar-f5-09-p9.sql" }, @{ Type="PSQL_BACKGROUND"; Id="p9"; Path="16-sessao-a-f5-09-p9-concorrencia.sql" },
+              @{ Type="PSQL_FOREGROUND"; Path="17-sessao-b-f5-09-p9-concorrencia.sql" }, @{ Type="WAIT"; Id="p9" },
+              @{ Type="SQL"; Path="18-validar-f5-09-p9-concorrencia.sql" }
+            )
+            & "./supabase/validacao/Invoke-DisposableValidation.ps1" -Plan $plan
+          '
+
+      - name: Run F5-10 family in disposable runner
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+        run: |
+          pwsh -NoProfile -Command '
+            $plan = @(
+              @{ Type="SQL"; Path="19-cenario-f5-10-p1.sql" }, @{ Type="SQL"; Path="20-validar-f5-10-p1.sql" },
+              @{ Type="SQL"; Path="21-cenario-f5-10-p2.sql" }, @{ Type="SQL"; Path="22-validar-f5-10-p2.sql" },
+              @{ Type="SQL"; Path="23-cenario-f5-10-p3.sql" }, @{ Type="SQL"; Path="24-validar-f5-10-p3.sql" },
+              @{ Type="SQL"; Path="25-cenario-f5-10-p4.sql" }, @{ Type="SQL"; Path="26-validar-f5-10-p4.sql" },
+              @{ Type="SQL"; Path="28-validar-f5-10-p5-2.sql" }, @{ Type="SQL"; Path="29-cenario-f5-10-p7.sql" },
+              @{ Type="SQL"; Path="30-validar-f5-10-p7.sql" }, @{ Type="PSQL_BACKGROUND"; Id="p7"; Path="31-sessao-a-f5-10-p7-concorrencia.sql" },
+              @{ Type="PSQL_FOREGROUND"; Path="32-sessao-b-f5-10-p7-concorrencia.sql" }, @{ Type="WAIT"; Id="p7" },
+              @{ Type="SQL"; Path="33-validar-f5-10-p7-concorrencia.sql" }
+            )
+            & "./supabase/validacao/Invoke-DisposableValidation.ps1" -Plan $plan
+          '
+
+      - name: Run F5-11 family in disposable runner
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+        run: pwsh -NoProfile -Command "& './supabase/validacao/Invoke-DisposableValidation.ps1' -Script '34-cenario-f5-11-p1.sql','35-validar-f5-11-p1.sql','36-cenario-f5-11-p1-1.sql','37-validar-f5-11-p1-1.sql','38-cenario-f5-11-p2.sql','39-validar-f5-11-p2.sql','40-cenario-f5-11-p3.sql','41-validar-f5-11-p3.sql','42-cenario-f5-11-p5-1.sql','43-validar-f5-11-p5-1.sql'"
+
+      - name: Run F6-A03 family in disposable runner
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+        run: pwsh -NoProfile -Command "& './supabase/validacao/Invoke-DisposableValidation.ps1' -Script '44-cenario-f6-a03.sql','45-validar-f6-a03.sql'"
+
+      - name: Run F5-06 family in disposable runner
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+        run: pwsh -NoProfile -Command "& './supabase/validacao/Invoke-DisposableValidation.ps1' -Script '01-cenario-f5-06.sql','02-validar-f5-06.sql','03-validar-f5-06-cutover.sql'"
+
+      - name: Run F5-07 family in disposable runner
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+        run: pwsh -NoProfile -Command "& './supabase/validacao/Invoke-DisposableValidation.ps1' -Script '01-cenario-f5-07.sql','02-validar-f5-07.sql','03-validar-f5-07-cutover.sql'"
+
+  supabase-local-legacy:
+    name: Supabase local — RLS/policy validation
+    # disposable-validation-guard: isolated-github-runner
+    needs: scope
+    if: false # substituido por familias descartaveis acima
+    runs-on: ubuntu-latest
     # Cenarios/validadores SQL: F4-08, F5-04, F5-08 P6, F5-09 P1 e regressao F5-06/F5-07.
     timeout-minutes: 40
     defaults:

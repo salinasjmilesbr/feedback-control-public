@@ -38,6 +38,8 @@ begin
   raise notice '[PASS] cenario F5-11 P3 ja carregado - reexecucao no-op (fixture insert-once)';
 end $$;
 \else
+
+begin;
 do $$
 begin
   if exists (
@@ -255,4 +257,6 @@ begin
   raise notice '[PASS] cenario F5-11 P3: 1 organizacao-marcadora, 1 descendente (neto) com posicao sob o subordinado direto, 5 assignments de observacoes_gestor (4 com scope: DIRECT_REPORTS, DESCENDANTS, ORGANIZATION e SELF; 1 SEM scope) e 4 observacoes ficticias (1 comunicada sobre o neto, 1 nao comunicada, 1 sobre o subordinado direto e 1 fora da relacao)';
 end $$;
 
+\ir 00-bootstrap-f6-414-fixture-admins.sql
+commit;
 \endif

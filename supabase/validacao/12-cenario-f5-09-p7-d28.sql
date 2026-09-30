@@ -19,6 +19,8 @@
 
 \set ON_ERROR_STOP on
 
+begin;
+
 -- Guarda de estado limpo (insert-once).
 do $$
 begin
@@ -88,3 +90,6 @@ begin
 
   raise notice '[PASS] cenario D28: estado E preparado (admin x cycle.manage ausente) e role customizada com as 3 excepcionais';
 end $$;
+
+\ir 00-bootstrap-f6-414-fixture-admins.sql
+commit;

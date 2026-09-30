@@ -60,6 +60,7 @@ delete from auth.users where id::text like 'd6b00000%';
 delete from public.organizations where id::text like 'd6a00000%';
 
 -- Organizações
+begin;
 insert into public.organizations (id, name) values
   ('d6a00000-0000-0000-0000-0000000000a1', 'Org Sintetica F5-06 Alfa'),
   ('d6a00000-0000-0000-0000-0000000000b1', 'Org Sintetica F5-06 Beta');
@@ -316,3 +317,6 @@ begin
     v_eval, 'FINAL', null, 'Feedback final sintetico do gestor.',
     'd6b00000-0000-0000-0000-0000000000a3');
 end $$;
+
+\ir 00-bootstrap-f6-414-fixture-admins.sql
+commit;

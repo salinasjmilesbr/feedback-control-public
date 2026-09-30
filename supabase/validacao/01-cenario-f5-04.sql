@@ -153,10 +153,13 @@ select gen_random_uuid(), m.id, m.organization_id,
 -- (conceder_acesso_role). A concessão via RPC soberana (auth.uid()) é exercitada
 -- na validação 02-validar-f5-04.sql.
 -- ----------------------------------------------------------------------------
-select public.conceder_acesso_role(
-  'd5d00000-0000-0000-0000-0000000000a1',
-  'c0000000-0000-4000-8000-0000000000f1',
-  'd5b00000-0000-0000-0000-0000000000a1'
-);
+insert into public.membership_access_role_assignments
+  (id, membership_id, organization_id, access_role_id, status, created_by)
+values
+  ('d5e00000-0000-0000-0000-0000000000a1',
+   'd5d00000-0000-0000-0000-0000000000a1',
+   'd5a00000-0000-0000-0000-0000000000a1',
+   'c0000000-0000-4000-8000-0000000000f1', 'active',
+   'd5b00000-0000-0000-0000-0000000000a1');
 
 commit;

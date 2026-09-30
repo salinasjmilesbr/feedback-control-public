@@ -50,6 +50,8 @@ begin
 end $$;
 \else
 
+begin;
+
 -- ----------------------------------------------------------------------------
 -- 1) Organizacoes sinteticas
 -- ----------------------------------------------------------------------------
@@ -313,6 +315,8 @@ begin
   raise notice '[PASS] cenario F5-09 P3: 2 orgs, 4 atores, 2 colaboradores de base ativos SEM evento soberano (caso P7), estrutura relacional (gestor de B2 = B1), 6 posicoes e 4 reporting lines';
 end $$;
 
+\ir 00-bootstrap-f6-414-fixture-admins.sql
+commit;
 \endif
 
 -- ----------------------------------------------------------------------------

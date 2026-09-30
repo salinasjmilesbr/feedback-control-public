@@ -44,6 +44,8 @@ begin
 end $$;
 \else
 
+begin;
+
 -- ----------------------------------------------------------------------------
 -- 1) Organizacoes sinteticas
 -- ----------------------------------------------------------------------------
@@ -171,4 +173,6 @@ begin
   raise notice '[PASS] cenario F5-09 P5: 2 orgs, 6 identidades (4 Alfa: ativa/sem membership/inativa/profile inativo + 1 Beta + 1 fantasma), 3 ciclos (Alfa ATIVO+PLANEJADO, Beta ATIVO)';
 end $$;
 
+\ir 00-bootstrap-f6-414-fixture-admins.sql
+commit;
 \endif

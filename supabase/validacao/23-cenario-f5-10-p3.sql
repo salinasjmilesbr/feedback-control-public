@@ -60,6 +60,8 @@ begin
 end $$;
 \else
 
+begin;
+
 -- ----------------------------------------------------------------------------
 -- 1) Organizacoes sinteticas
 -- ----------------------------------------------------------------------------
@@ -469,4 +471,6 @@ begin
   raise notice '[PASS] cenario F5-10 P3: 2 orgs, 9 atores (a8 novo: dono do colaborador ...0004), 7 colaboradores, 6 vinculos, 4 roles com capabilities EXISTENTES (goal.read/write/approve + cycle.manage) e 9 atribuicoes, 2 ciclos ATIVO, 3 quotas (Alfa 3 negocio + 1 individual, Beta 1), 5 metas, 4 avaliacoes (1 CANCELADA, 1 sem participantes), 4 participantes congelados (2 papeis + 1 overlay), 5 eventos de criacao e ZERO aprovacoes';
 end $$;
 
+\ir 00-bootstrap-f6-414-fixture-admins.sql
+commit;
 \endif

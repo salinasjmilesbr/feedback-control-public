@@ -140,6 +140,7 @@ where id in (
 -- ----------------------------------------------------------------------------
 -- 1) Organizacoes, atores e catalogos
 -- ----------------------------------------------------------------------------
+begin;
 insert into public.organizations (id, name) values
   ('f8a00000-0000-0000-0000-0000000000a1', 'Org Sintetica F5-08 Alfa'),
   ('f8a00000-0000-0000-0000-0000000000b1', 'Org Sintetica F5-08 Beta');
@@ -169,6 +170,25 @@ insert into public.user_organization_memberships
   ('f8d00000-0000-0000-0000-0000000000a2',
    'f8c00000-0000-0000-0000-0000000000a2',
    'f8a00000-0000-0000-0000-0000000000a1', 'active');
+
+-- Admins tÃ©cnicos mÃ­nimos, separados dos atores funcionais: o perfil
+-- sem-capability de Alfa e o ator isolado de Beta nÃ£o possuem colaborador.
+insert into public.membership_access_role_assignments
+  (id, membership_id, organization_id, access_role_id, status, created_by)
+select 'f8e00000-0000-0000-0000-0000000000a1',
+       'f8d00000-0000-0000-0000-0000000000a2',
+       'f8a00000-0000-0000-0000-0000000000a1', r.id, 'active',
+       'f8c00000-0000-0000-0000-0000000000a2'
+  from public.access_roles r
+ where r.name = 'admin' and r.is_system = true and r.organization_id is null;
+insert into public.membership_access_role_assignments
+  (id, membership_id, organization_id, access_role_id, status, created_by)
+select 'f8e00000-0000-0000-0000-0000000000b1',
+       'f8d00000-0000-0000-0000-0000000000b1',
+       'f8a00000-0000-0000-0000-0000000000b1', r.id, 'active',
+       'f8c00000-0000-0000-0000-0000000000b1'
+  from public.access_roles r
+ where r.name = 'admin' and r.is_system = true and r.organization_id is null;
 
 insert into public.job_roles (id, organization_id, name, code, status) values
   ('f8e00000-0000-0000-0000-0000000000a1',
@@ -497,3 +517,5 @@ begin
 
   raise notice '[PASS] cenario F5-08 P1+P2 aplicado (2 orgs, 30 unidades, 17 periodos, 8 posicoes, 3 colaboradores, 1 evento, capabilities resolvidas)';
 end $$;
+
+commit;

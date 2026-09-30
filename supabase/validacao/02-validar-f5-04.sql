@@ -581,6 +581,7 @@ end $$;
 -- 8) Limpeza do cenário sintético (catálogo de sistema da migration intacto)
 -- ============================================================================
 
+/*
 delete from public.privilege_mutation_audit
 where organization_id in (
   'd5a00000-0000-0000-0000-0000000000a1',
@@ -617,6 +618,7 @@ where id in (
   'd5a00000-0000-0000-0000-0000000000b1'
 );
 
+*/
 do $$
 declare
   v_n int;

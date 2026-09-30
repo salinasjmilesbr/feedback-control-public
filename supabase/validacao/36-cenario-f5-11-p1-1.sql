@@ -52,6 +52,8 @@ begin
 end $$;
 \else
 
+begin;
+
 -- ----------------------------------------------------------------------------
 -- 1) Organizacao sintetica (UMA so: o finding e INTRA-tenant)
 -- ----------------------------------------------------------------------------
@@ -253,4 +255,6 @@ begin
   raise notice '[PASS] cenario F5-11 P1.1: 1 organizacao, 5 identidades na MESMA organizacao (A e B: perfil ativo + membership ativa + vinculo ativo; C: vinculo DISABLED; D: membership DISABLED com vinculo ATIVO; E: perfil DISABLED com membership e vinculo ATIVOS), 5 colaboradores, 4 vinculos ATIVOS + 1 DISABLED, 1 ciclo ATIVO, 1 observacao coerente e 1 evento';
 end $$;
 
+\ir 00-bootstrap-f6-414-fixture-admins.sql
+commit;
 \endif

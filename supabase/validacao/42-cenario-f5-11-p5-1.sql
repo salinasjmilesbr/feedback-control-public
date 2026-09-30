@@ -18,6 +18,8 @@
 
 \set ON_ERROR_STOP on
 
+begin;
+
 do $cenario$
 declare
   v_org        uuid;
@@ -344,3 +346,6 @@ begin
     v_obs_com, v_obs_nao, v_obs_exc, v_obs_ter, v_assign,
     v_org2, v_self_membership2, v_self_colab2, v_assign2;
 end $selffix$;
+
+\ir 00-bootstrap-f6-414-fixture-admins.sql
+commit;

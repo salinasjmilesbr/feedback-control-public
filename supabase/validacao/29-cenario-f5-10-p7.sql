@@ -107,6 +107,8 @@ begin
 end $$;
 \else
 
+begin;
+
 -- ----------------------------------------------------------------------------
 -- 1) Organizacoes sinteticas
 -- ----------------------------------------------------------------------------
@@ -698,4 +700,6 @@ begin
   raise notice '[PASS] cenario F5-10 P7: estado limpo (5 metas de fixture em Alfa/Beta, 5 eventos CRIADA, 0 aprovacoes, Gama-P7 intocada) — pronto para o validador 30 e para a corrida 31/32/33';
 end $$;
 
+\ir 00-bootstrap-f6-414-fixture-admins.sql
+commit;
 \endif

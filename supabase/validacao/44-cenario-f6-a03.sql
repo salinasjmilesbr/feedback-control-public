@@ -86,6 +86,7 @@ delete from auth.users
 -- ----------------------------------------------------------------------------
 -- Organização PREEXISTENTE (estado que o provisionamento não pode tocar)
 -- ----------------------------------------------------------------------------
+begin;
 insert into public.organizations (id, name)
 values ('f6a30000-0000-4000-8000-0000000000a1', 'F6-A03 Legado (preexistente)');
 
@@ -166,3 +167,6 @@ begin
 
   raise notice '[PASS] F6-A03 cenario: identidades sinteticas, organizacao LEGADO preexistente e trilha limpa';
 end $$;
+
+\ir 00-bootstrap-f6-414-fixture-admins.sql
+commit;
