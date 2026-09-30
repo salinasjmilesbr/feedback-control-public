@@ -303,17 +303,53 @@ reset role;
 -- 5.2) Autorização administrativa: USER_A (não-admin) não concede.
 set role service_role;
 do $$
-declare v_ok boolean := false;
+declare
+  v_ok boolean := false;
+  v_sqlstate text;
+  v_message text;
+  v_assign_before integer;
+  v_audit_before integer;
+  v_assign_after integer;
+  v_audit_after integer;
 begin
+  select count(*) into v_assign_before
+    from public.membership_access_role_assignments
+   where membership_id = 'd5d00000-0000-0000-0000-0000000000a1'
+     and access_role_id = 'd5f00000-0000-0000-0000-0000000000f1';
+  select count(*) into v_audit_before
+    from public.privilege_mutation_audit
+   where membership_id = 'd5d00000-0000-0000-0000-0000000000a1'
+     and access_role_id = 'd5f00000-0000-0000-0000-0000000000f1'
+     and actor_user_profile_id = 'd5b00000-0000-0000-0000-0000000000a2';
   begin
     perform public.conceder_acesso_role_rpc(
       'd5d00000-0000-0000-0000-0000000000a1',  -- membership do ADMIN_A
       'd5f00000-0000-0000-0000-0000000000f1',  -- avaliadores
       'd5b00000-0000-0000-0000-0000000000a2'   -- ator = USER_A (nao-admin)
     );
-  exception when raise_exception then v_ok := true; end;
+  exception when insufficient_privilege then
+    get stacked diagnostics
+      v_sqlstate = returned_sqlstate,
+      v_message = message_text;
+    if v_sqlstate = '42501' and v_message = 'F5_04_NOT_AUTHORIZED' then
+      v_ok := true;
+    end if;
+  end;
   if not v_ok then
-    raise exception '[FAIL] nao-admin concedeu role (autoridade administrativa ausente)';
+    raise exception '[FAIL] nao-admin deveria retornar F5_04_NOT_AUTHORIZED/42501, recebeu % / %', v_sqlstate, v_message;
+  end if;
+  select count(*) into v_assign_after
+    from public.membership_access_role_assignments
+   where membership_id = 'd5d00000-0000-0000-0000-0000000000a1'
+     and access_role_id = 'd5f00000-0000-0000-0000-0000000000f1';
+  select count(*) into v_audit_after
+    from public.privilege_mutation_audit
+   where membership_id = 'd5d00000-0000-0000-0000-0000000000a1'
+     and access_role_id = 'd5f00000-0000-0000-0000-0000000000f1'
+     and actor_user_profile_id = 'd5b00000-0000-0000-0000-0000000000a2';
+  if v_assign_after <> v_assign_before or v_audit_after <> v_audit_before then
+    raise exception '[FAIL] DENY do nao-admin deixou persistencia indevida (assignment % -> %, audit % -> %)',
+      v_assign_before, v_assign_after, v_audit_before, v_audit_after;
   end if;
   raise notice '[PASS] autorizacao administrativa: nao-admin NAO concede (D16/Q3)';
 end $$;
