@@ -64,8 +64,8 @@ function repositorio(ler: RepositorioAvaliacoes["ler"]): RepositorioAvaliacoes {
         faixa: null,
         criterios: [],
         subcriterios: [],
-        colegiado: [],
-        comentariosFinais: [],
+        gestao: { gestaoCadeia: null, gestaoDireta: null },
+        colegiadoAgregado: [],
       },
     }),
   };

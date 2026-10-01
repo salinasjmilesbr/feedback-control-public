@@ -88,8 +88,8 @@ function repositorioFalso(): RepositorioAvaliacoes {
         faixa: null,
         criterios: [],
         subcriterios: [],
-        colegiado: [],
-        comentariosFinais: [],
+        gestao: { gestaoCadeia: null, gestaoDireta: null },
+        colegiadoAgregado: [],
       },
     }),
   };

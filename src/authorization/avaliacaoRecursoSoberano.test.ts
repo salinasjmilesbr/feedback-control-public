@@ -5,6 +5,7 @@ import {
   avaliacaoEditavel,
   estadoDominioAvaliacao,
   estadoDominioCriacaoAvaliacao,
+  estadoDominioLeituraColetivaAvaliacao,
 } from "./estadoDominioAvaliacao.ts";
 import {
   ehTipoRecursoSoberano,
@@ -95,11 +96,53 @@ describe("estado de domínio da avaliação (F5-06 D8/D18)", () => {
       const probe = estadoDominioAvaliacao({ status });
       expect(probe.allows("evaluation.write")).toBe(false);
       expect(probe.allows("evaluation.create")).toBe(false);
-      // leitura e operações excepcionais seguem para o engine decidir (capability própria)
-      expect(probe.allows("evaluation.read")).toBe(true);
+      // operações excepcionais seguem para o engine decidir (capability própria)
       expect(probe.allows("evaluation.reopen")).toBe(true);
       expect(probe.allows("evaluation.cancel")).toBe(true);
     }
+  });
+
+  it("F6 Inc.1 (R2/R3): leitura exige participação vigente ou SELF pós-CONCLUIDA", () => {
+    // Sem fato de RELAÇÃO resolvido server-side ⇒ fail-closed em qualquer estado.
+    for (const status of ["RASCUNHO", "PRONTA_PARA_FEEDBACK", "CONCLUIDA", "CANCELADA", ""]) {
+      expect(estadoDominioAvaliacao({ status }).allows("evaluation.read")).toBe(false);
+    }
+    // Participante materializado vigente lê em RASCUNHO/PRONTA/CONCLUIDA…
+    for (const status of ["RASCUNHO", "PRONTA_PARA_FEEDBACK", "CONCLUIDA"]) {
+      expect(
+        estadoDominioAvaliacao({ status, atorEhParticipanteVigente: true }).allows("evaluation.read")
+      ).toBe(true);
+    }
+    // …mas não em CANCELADA.
+    expect(
+      estadoDominioAvaliacao({ status: "CANCELADA", atorEhParticipanteVigente: true }).allows(
+        "evaluation.read"
+      )
+    ).toBe(false);
+    // SELF (avaliado): DENY antes de CONCLUIDA; ALLOW somente na janela pós-conclusão.
+    for (const status of ["RASCUNHO", "PRONTA_PARA_FEEDBACK", "CANCELADA", ""]) {
+      expect(
+        estadoDominioAvaliacao({ status, atorEhAvaliado: true }).allows("evaluation.read")
+      ).toBe(false);
+    }
+    expect(
+      estadoDominioAvaliacao({ status: "CONCLUIDA", atorEhAvaliado: true }).allows("evaluation.read")
+    ).toBe(true);
+  });
+
+  it("F6 Inc.1 (R2): probe da leitura coletiva admite os três estados sem liberar mutação", () => {
+    for (const status of ["RASCUNHO", "PRONTA_PARA_FEEDBACK", "CONCLUIDA"]) {
+      const coletivo = estadoDominioLeituraColetivaAvaliacao({ status });
+      expect(coletivo.allows("evaluation.read")).toBe(true);
+      expect(coletivo.allows("evaluation.write")).toBe(true);
+    }
+    for (const status of ["CANCELADA", ""]) {
+      const coletivo = estadoDominioLeituraColetivaAvaliacao({ status });
+      expect(coletivo.allows("evaluation.read")).toBe(false);
+      expect(coletivo.allows("evaluation.write")).toBe(false);
+    }
+    // O gate de MUTAÇÃO permanece negando escrita em CONCLUIDA.
+    expect(estadoDominioAvaliacao({ status: "CONCLUIDA" }).allows("evaluation.write")).toBe(false);
   });
 
   it("permite escrita em RASCUNHO/PRONTA_PARA_FEEDBACK", () => {
@@ -194,12 +237,29 @@ describe("Policy Engine sobre o recurso avaliação", () => {
     expect(decisao.allowed).toBe(true);
   });
 
-  it("SELF correto ⇒ ALLOW (o próprio avaliado lê a sua avaliação)", async () => {
-    const decisao = await avaliarOperacaoAutorizacao(
+  it("F6 Inc.1 (R3): SELF lê a própria avaliação SOMENTE após CONCLUIDA", async () => {
+    // Pré-CONCLUIDA: o avaliado NÃO recebe status nem conteúdo por rota SELF.
+    for (const status of ["RASCUNHO", "PRONTA_PARA_FEEDBACK"]) {
+      const negada = await avaliarOperacaoAutorizacao(
+        { authUserId: USER, organizationId: ORG, capability: "evaluation.read", alvo: { type: "evaluation", id: AVALIACAO } },
+        deps({
+          contexto: { status },
+          alvos: { SELF: [{ collaboratorId: AVALIADO, positionId: null }] },
+          vinculo: AVALIADO,
+        })
+      );
+      expect(negada.allowed).toBe(false);
+    }
+    // Pós-CONCLUIDA: janela de transparência (R3).
+    const permitida = await avaliarOperacaoAutorizacao(
       { authUserId: USER, organizationId: ORG, capability: "evaluation.read", alvo: { type: "evaluation", id: AVALIACAO } },
-      deps({ alvos: { SELF: [{ collaboratorId: AVALIADO, positionId: null }] }, vinculo: AVALIADO })
+      deps({
+        contexto: { status: "CONCLUIDA" },
+        alvos: { SELF: [{ collaboratorId: AVALIADO, positionId: null }] },
+        vinculo: AVALIADO,
+      })
     );
-    expect(decisao.allowed).toBe(true);
+    expect(permitida.allowed).toBe(true);
   });
 
   it("DIRECT_REPORTS/DESCENDANTS alcançam a avaliação do colaborador em escopo", async () => {

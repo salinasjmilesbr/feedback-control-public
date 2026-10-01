@@ -295,8 +295,21 @@ describe("repositório de avaliações (caminho novo)", () => {
           faixa: { nota: 3, significado: "Dentro do esperado", descricao: "...", limite_minimo: 2.9 },
           criterios: [{ criterio: "Comunicacao", nota: 3.5 }],
           subcriterios: [{ criterio: "Comunicacao", subcriterio: "Clareza", nota: 3.5 }],
+          gestao: {
+            GESTAO_CADEIA: {
+              presente: true,
+              notas: [{ subcriterion_id: "sub-1", nota: 4 }],
+              comentarios: [{ criterion_id: "cri-1", texto: "Comentario do gerente." }],
+              feedback_final: "Feedback final.",
+            },
+            GESTAO_DIRETA: null,
+          },
+          colegiado_agregado: [
+            { subcriterion_id: "sub-1", subcriterio: "Clareza", criterio: "Comunicacao", nota: 3.5 },
+          ],
+          // PAYLOAD HOSTIL da versão anterior: a identidade do colegiado NÃO
+          // pode sobreviver à projeção (R3).
           colegiado: [{ colaborador: "Membro Sintetico" }],
-          comentarios_finais: [{ role_type: "GESTAO_CADEIA", texto: "Feedback final." }],
         },
       },
     });
@@ -314,7 +327,20 @@ describe("repositório de avaliações (caminho novo)", () => {
     expect(serializado).not.toContain("participant_id");
     expect(serializado).not.toContain("voto");
     expect(serializado).not.toContain("nota_individual");
-    expect(resultado.data.colegiado).toHaveLength(1);
+    // R3 (prioridade 5): nenhuma identidade do colegiado, ainda que o servidor
+    // envie a chave antiga — a projeção só carrega o que o contrato permite.
+    expect(serializado).not.toContain("Membro Sintetico");
+    expect(serializado).not.toContain("colaborador");
+    // Blocos INDIVIDUAIS de gestão; ausência do papel permanece ausência.
+    expect(resultado.data.gestao.gestaoCadeia?.feedbackFinal).toBe("Feedback final.");
+    expect(resultado.data.gestao.gestaoCadeia?.notas).toEqual([
+      { subcriterionId: "sub-1", nota: 4 },
+    ]);
+    expect(resultado.data.gestao.gestaoDireta).toBeNull();
+    // Colegiado SOMENTE agregado por SUBCRITÉRIO.
+    expect(resultado.data.colegiadoAgregado).toEqual([
+      { subcriterionId: "sub-1", subcriterio: "Clareza", criterio: "Comunicacao", nota: 3.5 },
+    ]);
   });
 });
 
