@@ -54,6 +54,10 @@ function repositorioFalso(
   };
 
   const padrao: RepositorioAvaliacoes = {
+    obterDoColaboradorNoCiclo: async () => ({
+      ok: true,
+      data: { evaluationId: null, status: null, podeEditar: false },
+    }),
     criar: (entrada) => registrar("criar", entrada, { ok: true, data: AVALIACAO }),
     ler: (entrada) => registrar("ler", entrada, { ok: true, data: avaliacaoSoberana() }),
     gravarNotas: (entrada) => registrar("gravarNotas", entrada, { ok: true, data: 3.5 }),

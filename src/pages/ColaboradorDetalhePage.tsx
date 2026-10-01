@@ -102,7 +102,11 @@ import {
   type MapaDeNomesDeColaborador,
 } from "./observacoesSoberanasDaPagina";
 import { useEstruturaSoberana } from "./useEstruturaSoberana";
-import { listarCapabilitiesEfetivas } from "../services/capabilitiesSoberanas";
+import { descobrirAvaliacaoDoColaboradorNoCiclo } from "../services/acessoAvaliacoesSoberanas";
+import {
+  acaoDaAvaliacaoDoColaborador,
+  type AcaoAvaliacaoDoColaborador,
+} from "./colaboradorDetalheAvaliacaoAcao";
 
 /** Estado da leitura soberana do colaborador e da sua trilha de eventos. */
 export type EstadoDetalheColaborador =
@@ -422,9 +426,9 @@ function ColaboradorDetalhePage({
     readonly estado: EstadoDetalheColaborador;
   } | null>(null);
   const [versao, setVersao] = useState(0);
-  const [criacaoAvaliacao, setCriacaoAvaliacao] = useState<{
+  const [acaoAvaliacao, setAcaoAvaliacao] = useState<{
     readonly chave: string;
-    readonly disponivel: boolean;
+    readonly acao: AcaoAvaliacaoDoColaborador | null;
   } | null>(null);
   const [estadoConvite, setEstadoConvite] = useState<
     | { readonly fase: "inativo" }
@@ -449,18 +453,39 @@ function ColaboradorDetalhePage({
   /** Chave da leitura corrente: organização + identificador + versão de recarga. */
   const chaveCarregamento = `${organizacaoAtivaId ?? "sem-organizacao"}|${identificador}|${versao}`;
 
+  /**
+   * DESCOBERTA soberana da avaliação do colaborador no ciclo ATIVO.
+   *
+   * A ação (Nova/Editar/Consultar) NÃO é decidida nesta tela: o servidor
+   * devolve `{ evaluationId, status, podeEditar }` pelo OR autorizado no Policy
+   * Engine (`evaluation.create` ∨ `evaluation.write` ∨ `evaluation.read`).
+   * Erro, DENY ou ausência de ciclo ⇒ NENHUMA ação (fail-closed) — nunca o
+   * acervo legado.
+   */
   useEffect(() => {
     if (!organizacaoAtivaId || !ehUuid(identificador)) return;
     let vigente = true;
     const chave = `${organizacaoAtivaId}|${identificador}`;
     void (async () => {
-      const [capabilities, ciclo] = await Promise.all([
-        listarCapabilitiesEfetivas(organizacaoAtivaId),
-        obterRepositorioCiclosSoberanos()?.obterCicloAtivo(organizacaoAtivaId),
-      ]);
-      if (vigente) setCriacaoAvaliacao({
+      const ciclo = await obterRepositorioCiclosSoberanos()?.obterCicloAtivo(organizacaoAtivaId);
+      if (!vigente) return;
+      const cicloId = ciclo?.ok === true && ciclo.data ? ciclo.data.id : null;
+      if (!cicloId) {
+        setAcaoAvaliacao({ chave, acao: null });
+        return;
+      }
+      const descoberta = await descobrirAvaliacaoDoColaboradorNoCiclo({
+        organizationId: organizacaoAtivaId,
+        cycleId: cicloId,
+        evaluatedCollaboratorId: identificador,
+      });
+      if (!vigente) return;
+      setAcaoAvaliacao({
         chave,
-        disponivel: capabilities.includes("evaluation.create") && ciclo?.ok === true && ciclo.data !== null,
+        acao:
+          descoberta.ok && descoberta.data
+            ? acaoDaAvaliacaoDoColaborador(identificador, descoberta.data)
+            : null,
       });
     })();
     return () => { vigente = false; };
@@ -785,13 +810,17 @@ function ColaboradorDetalhePage({
         </div>
 
         <div className="virtus-page-actions collaborator-profile-actions">
-          {criacaoAvaliacao?.chave === `${organizacaoAtivaId}|${identificador}` &&
-            criacaoAvaliacao.disponivel && (
+          {acaoAvaliacao?.chave === `${organizacaoAtivaId}|${identificador}` &&
+            acaoAvaliacao.acao?.tipo === "EXISTENTE_SEM_ACESSO" && (
+              <span role="status">{acaoAvaliacao.acao.label}</span>
+            )}
+          {acaoAvaliacao?.chave === `${organizacaoAtivaId}|${identificador}` &&
+            acaoAvaliacao.acao?.destino && (
               <Link
-                to={`/colaborador/${colaborador.collaboratorId}/avaliacoes/nova`}
+                to={acaoAvaliacao.acao.destino}
                 className="virtus-btn collaborator-link-button"
               >
-                Nova avaliação
+                {acaoAvaliacao.acao.label}
               </Link>
             )}
           <Link

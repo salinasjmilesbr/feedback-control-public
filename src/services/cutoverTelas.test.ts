@@ -71,6 +71,10 @@ function repositorioFalso(
   const chamadas: string[] = [];
 
   const base: RepositorioAvaliacoes = {
+    obterDoColaboradorNoCiclo: async () => ({
+      ok: true,
+      data: { evaluationId: null, status: null, podeEditar: false },
+    }),
     criar: async () => ({ ok: true, data: AVALIACAO }),
     ler: async () => ({ ok: true, data: null }),
     gravarNotas: async () => ({ ok: true, data: 3.5 }),

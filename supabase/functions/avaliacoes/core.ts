@@ -23,6 +23,7 @@ import {
   ehOperacaoAvaliacao,
   validarEntradaAvaliacao,
   type CodigoPublico,
+  type DescobertaAvaliacaoDoColaborador,
   type EntradaAvaliacao,
   type OperacaoAvaliacao,
 } from "../../../src/infrastructure/supabase/avaliacoes/contrato.ts";
@@ -131,6 +132,28 @@ export interface DepsAvaliacoes {
     readonly cycleId: string;
   }): Promise<{ readonly data?: ResultadoRelatorioSoberano; readonly error?: ErroRpcAvaliacao | null }>;
   /**
+   * Autoriza a DESCOBERTA da avaliação do colaborador no ciclo (OR explícito de
+   * `evaluation.create` ∨ `evaluation.write` ∨ `evaluation.read`, decidido no
+   * Policy Engine contra a avaliação carregada server-side). Nenhuma capability
+   * nova; a decisão de EDIÇÃO vem exclusivamente do ramo `evaluation.write`.
+   */
+  avaliarDescoberta?(entrada: {
+    readonly authUserId: string;
+    readonly organizationId: string;
+    readonly cycleId: string;
+    readonly alvo: { readonly type: "collaborator"; readonly id: string };
+  }): Promise<{ readonly allowed: boolean; readonly code?: ApplicationErrorCode }>;
+  /** Payload mínimo da descoberta (id soberano + status + poder editar). */
+  executarDescoberta?(entrada: {
+    readonly authUserId: string;
+    readonly organizationId: string;
+    readonly cycleId: string;
+    readonly evaluatedCollaboratorId: string;
+  }): Promise<{
+    readonly data?: DescobertaAvaliacaoDoColaborador | null;
+    readonly error?: ErroRpcAvaliacao | null;
+  }>;
+  /**
    * Resolve a matrícula (INTENÇÃO da tela) para o UUID do colaborador avaliado,
    * na fronteira confiável (ponte F3-01). Necessária em `criar` e
    * `resolver_ciclo`, porque o alvo autorizável precisa ser o UUID soberano.
@@ -234,6 +257,55 @@ export async function avaliacoes(
       return erro(code, "Relatório indisponível.", code === "NOT_FOUND" ? 404 : 409);
     }
     return json({ ok: true, operacao: entrada.operacao, resultado: resultado.data ?? null }, 200);
+  }
+
+  // Descoberta soberana da avaliação do colaborador no ciclo: LEITURA gated pelo
+  // OR explícito (create ∨ write ∨ read). Decisão ANTES da resposta; nenhum id
+  // de avaliação vem do cliente e `podeEditar` é decidido no ramo `write`.
+  if (entrada.operacao === "evaluation.do_colaborador_no_ciclo") {
+    if (!deps.avaliarDescoberta || !deps.executarDescoberta) {
+      return erro("INTERNAL", "Operação não disponível.", 500);
+    }
+    const alvoDescoberta = entrada.alvo;
+    if (!alvoDescoberta || alvoDescoberta.type !== "collaborator") {
+      return erro("INVALID_INPUT", "Alvo inválido.", 400);
+    }
+    const cycleId = entrada.cycle_id;
+    if (!cycleId) {
+      return erro("INVALID_INPUT", "cycle_id obrigatório.", 400);
+    }
+
+    const autorizacao = await deps.avaliarDescoberta({
+      authUserId: callerId,
+      organizationId: entrada.organization_id,
+      cycleId,
+      alvo: { type: "collaborator", id: alvoDescoberta.id },
+    });
+    if (!autorizacao.allowed) {
+      const code = codigoPublico(autorizacao.code);
+      return erro(code, "Operação negada.", code === "NOT_FOUND" ? 404 : 403);
+    }
+
+    const resultado = await deps.executarDescoberta({
+      authUserId: callerId,
+      organizationId: entrada.organization_id,
+      cycleId,
+      evaluatedCollaboratorId: alvoDescoberta.id,
+    });
+    if (resultado.error) {
+      const code = codigoErroExecutor(resultado.error);
+      return erro(code, "Descoberta indisponível.", statusCodigo(code));
+    }
+    if (!resultado.data) return erro("INTERNAL", "Descoberta indisponível.", 500);
+
+    return json(
+      {
+        ok: true,
+        operacao: entrada.operacao,
+        resultado: resultado.data,
+      },
+      200
+    );
   }
 
   // 2.1) Alvo SOBERANO: quando a tela informa a MATRÍCULA do avaliado (criação e

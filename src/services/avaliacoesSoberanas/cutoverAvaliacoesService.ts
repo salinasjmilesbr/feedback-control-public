@@ -24,7 +24,10 @@ import type {
   RepositorioAvaliacoes,
   ResultadoRepositorio,
 } from "../../infrastructure/supabase/avaliacoes/repositorioAvaliacoes.ts";
-import type { CodigoPublico } from "../../infrastructure/supabase/avaliacoes/contrato.ts";
+import type {
+  CodigoPublico,
+  DescobertaAvaliacaoDoColaborador,
+} from "../../infrastructure/supabase/avaliacoes/contrato.ts";
 import { mensagemErroAvaliacoes } from "./serviceAvaliacoes.ts";
 import { registrarAvaliacaoCortada, type ArmazenamentoCutover } from "../../infrastructure/supabase/avaliacoes/cutover.ts";
 import { ehIdTecnicoPostgres } from "../../infrastructure/supabase/avaliacoes/cutover.ts";
@@ -104,6 +107,18 @@ export interface CutoverAvaliacoes {
     readonly cycleId: string;
     readonly evaluatedCollaboratorId: string;
   }): Promise<ResultadoCutover<Omit<AvaliacaoNovaCriada, "cutoverRegistrado">>>;
+  /**
+   * Descoberta soberana da avaliação do colaborador no ciclo: LEITURA
+   * autorizada pelo OR explícito (`evaluation.create` ∨ `evaluation.write` ∨
+   * `evaluation.read`) decidido no Policy Engine. Devolve o payload MÍNIMO —
+   * `evaluationId: null` quando não há avaliação NÃO CANCELADA. Fail-closed:
+   * nunca cai para acervo local nem inventa ação.
+   */
+  descobrirDoColaboradorNoCiclo(entrada: {
+    readonly organizationId: string;
+    readonly cycleId: string;
+    readonly evaluatedCollaboratorId: string;
+  }): Promise<ResultadoCutover<DescobertaAvaliacaoDoColaborador>>;
   /** Cria avaliação NOVA: resolve ciclo + colaborador e cria no PostgreSQL. */
   criarNova(
     entrada: EntradaCriarAvaliacaoNova
@@ -233,6 +248,16 @@ export function criarCutoverAvaliacoes(
           cycleId: entrada.cycleId,
         },
       };
+    },
+    async descobrirDoColaboradorNoCiclo(entrada) {
+      if (
+        ![entrada.organizationId, entrada.cycleId, entrada.evaluatedCollaboratorId].every(
+          ehIdTecnicoPostgres
+        )
+      ) {
+        return { ok: false, erro: "Identificadores soberanos inválidos.", codigo: "INVALID_INPUT" };
+      }
+      return propagar(await deps.repositorio.obterDoColaboradorNoCiclo(entrada), (dados) => dados);
     },
     async criarNova(entrada) {
       // 1) ano+ciclo (INTENÇÃO) → UUID soberano do ciclo, dentro do tenant. O

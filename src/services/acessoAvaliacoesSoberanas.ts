@@ -32,6 +32,7 @@ import {
   type ResultadoCutover,
 } from "./avaliacoesSoberanas/cutoverAvaliacoesService.ts";
 import type { PainelParticipante } from "../infrastructure/supabase/avaliacoes/repositorioAvaliacoes.ts";
+import type { DescobertaAvaliacaoDoColaborador } from "../infrastructure/supabase/avaliacoes/contrato.ts";
 
 /** Operações soberanas oferecidas às telas (mesmo contrato do cutover). */
 export type OperacoesAvaliacaoSoberanas = CutoverAvaliacoes;
@@ -126,6 +127,26 @@ export async function criarAvaliacaoPorUuidSoberano(
   const operacoes = obterOperacoesAvaliacaoSoberanas(deps);
   if (!operacoes) return { ok: false, erro: ERRO_SEM_CAMINHO };
   return operacoes.criarPorUuid(entrada);
+}
+
+/**
+ * DESCOBERTA soberana da avaliação do colaborador no ciclo: LEITURA autorizada
+ * pelo OR explícito (`evaluation.create` ∨ `evaluation.write` ∨ `evaluation.read`)
+ * no Policy Engine. Payload MÍNIMO (`evaluationId`, `status`, `podeEditar`);
+ * `evaluationId: null` = nenhuma avaliação NÃO CANCELADA. Sem caminho
+ * configurado ⇒ recusa explícita (fail-closed, nunca acervo local).
+ */
+export async function descobrirAvaliacaoDoColaboradorNoCiclo(
+  entrada: {
+    readonly organizationId: string;
+    readonly cycleId: string;
+    readonly evaluatedCollaboratorId: string;
+  },
+  deps: DependenciasAcessoAvaliacoes = {}
+): Promise<ResultadoCutover<DescobertaAvaliacaoDoColaborador>> {
+  const operacoes = obterOperacoesAvaliacaoSoberanas(deps);
+  if (!operacoes) return { ok: false, erro: ERRO_SEM_CAMINHO };
+  return operacoes.descobrirDoColaboradorNoCiclo(entrada);
 }
 
 /** Painel de EDIÇÃO da própria ocorrência do ator autenticado. */

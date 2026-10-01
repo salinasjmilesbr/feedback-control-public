@@ -66,6 +66,10 @@ function repositorioFalso(
   comportamentos: Partial<RepositorioAvaliacoes> = {}
 ): RepositorioAvaliacoes {
   const base: RepositorioAvaliacoes = {
+    obterDoColaboradorNoCiclo: async () => ({
+      ok: true,
+      data: { evaluationId: null, status: null, podeEditar: false },
+    }),
     criar: async () => ({ ok: true, data: UUID_BANCO }),
     ler: async () => ({ ok: true, data: null }),
     gravarNotas: async () => ({ ok: true, data: null }),
