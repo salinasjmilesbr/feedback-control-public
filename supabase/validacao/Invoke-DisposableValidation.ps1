@@ -5,7 +5,8 @@ param(
         '02-validar-f5-07.sql',
         '03-validar-f5-07-cutover.sql'
     ),
-    [switch]$Interactive
+    [switch]$Interactive,
+    [string]$TargetCommit
 )
 
 $ErrorActionPreference = 'Stop'
@@ -83,6 +84,7 @@ function Assert-InteractiveMainCheckout {
         supabase/seed.sql supabase/roles.sql src)
     if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel conferir as fontes da stack.' }
     Assert-DisposableMainState -Branch $branch -Head $head -OriginMain $originMain -RelevantStatus $relevant
+    return $head
 }
 
 function Assert-InteractiveResourceOwnership {
@@ -97,10 +99,18 @@ function Assert-InteractiveResourceOwnership {
 
 $startAttempted = $false
 $validationLock = $null
+$candidateManifest = $null
+if ($PSBoundParameters.ContainsKey('TargetCommit') -and -not $Interactive) {
+    throw 'TargetCommit exige o modo Interactive.'
+}
 try {
     $validationLock = Enter-DisposableValidationLock -TempRoot $env:TEMP
     if ($Interactive) {
-        Assert-InteractiveMainCheckout
+        $baselineCommit = Assert-InteractiveMainCheckout
+        if ($PSBoundParameters.ContainsKey('TargetCommit')) {
+            $candidateManifest = Assert-DisposableTargetCommit -RepoRoot $repoRoot `
+                -BaselineCommit $baselineCommit -TargetCommit $TargetCommit
+        }
         Assert-NoDisposableResources
         Assert-DisposablePortsAvailable -Ports @(55420, 55421, 55422, 55423)
         if (Test-Path -LiteralPath $validationRoot) { throw "Workdir descartavel preexistente: $validationRoot" }
@@ -109,9 +119,29 @@ try {
     }
 
     New-Item -ItemType Directory -Path $validationRoot -Force | Out-Null
-    Copy-DisposableSupabaseSource -SourceRoot $sourceRoot -TargetRoot $validationProjectRoot
+    if ($null -ne $candidateManifest) {
+        $applicationFiles = @('index.html', 'package.json', 'package-lock.json',
+            'vite.config.ts', 'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json', 'eslint.config.js')
+        Export-DisposableCommitPaths -RepoRoot $repoRoot -Commit $baselineCommit `
+            -ProjectRoot $validationRoot -Paths @('supabase')
+        Export-DisposableCommitPaths -RepoRoot $repoRoot -Commit $TargetCommit `
+            -ProjectRoot $validationRoot -Paths (@('src', 'public') + $applicationFiles)
+        Assert-DisposableExportedTree -RepoRoot $repoRoot -Commit $baselineCommit `
+            -ProjectRoot $validationRoot -Path 'supabase'
+        Assert-DisposableExportedTree -RepoRoot $repoRoot -Commit $TargetCommit `
+            -ProjectRoot $validationRoot -Path 'src'
+        Assert-DisposableExportedTree -RepoRoot $repoRoot -Commit $TargetCommit `
+            -ProjectRoot $validationRoot -Path 'public'
+        Assert-DisposableExportedFiles -RepoRoot $repoRoot -Commit $TargetCommit `
+            -ProjectRoot $validationRoot -Paths $applicationFiles
+        Assert-DisposableSourceCopyWithoutTemp -ProjectRoot $validationProjectRoot
+        $candidateManifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $validationRoot 'candidate-manifest.json') -Encoding UTF8
+        Write-Host "Baseline Supabase: $baselineCommit; aplicacao candidata: $TargetCommit"
+    } else {
+        Copy-DisposableSupabaseSource -SourceRoot $sourceRoot -TargetRoot $validationProjectRoot
+        Copy-Item -LiteralPath (Join-Path $repoRoot 'src') -Destination (Join-Path $validationRoot 'src') -Recurse -Force
+    }
     Write-Host 'Copia descartavel sem supabase/.temp validada antes do start.'
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'src') -Destination (Join-Path $validationRoot 'src') -Recurse -Force
 
     $configPath = Join-Path $validationProjectRoot 'config.toml'
     $config = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8

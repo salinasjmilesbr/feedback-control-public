@@ -118,6 +118,112 @@ function Assert-DisposableMainState {
     }
 }
 
+function Get-DisposableCommitProbe {
+    param([string]$RepoRoot, [string[]]$ArgumentList)
+
+    # Sob ErrorActionPreference=Stop o stderr nativo vira erro terminante antes da
+    # mensagem do guard; aqui o stderr e capturado e o exit code fica em $LASTEXITCODE.
+    $previousErrorAction = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        return (& git -C $RepoRoot @ArgumentList 2>&1 | ForEach-Object { $_.ToString() })
+    } finally {
+        $ErrorActionPreference = $previousErrorAction
+    }
+}
+
+function Get-DisposableCommitHash {
+    param([string]$RepoRoot, [string[]]$ArgumentList)
+
+    $output = @(Get-DisposableCommitProbe -RepoRoot $RepoRoot -ArgumentList $ArgumentList)
+    if ($LASTEXITCODE -ne 0 -or $output.Count -ne 1 -or $output[0] -cnotmatch '^[0-9a-f]{40}$') {
+        throw 'Commit de referencia sem hash de arvore unico e valido.'
+    }
+    return $output[0]
+}
+
+function Assert-DisposableTargetCommit {
+    param([string]$RepoRoot, [string]$BaselineCommit, [string]$TargetCommit)
+
+    if ($TargetCommit -cnotmatch '^[0-9a-f]{40}$' -or $BaselineCommit -cnotmatch '^[0-9a-f]{40}$') {
+        throw 'TargetCommit e baseline exigem SHA completo.'
+    }
+    $kind = @(Get-DisposableCommitProbe -RepoRoot $RepoRoot -ArgumentList @('cat-file', '-t', $TargetCommit))
+    if ($LASTEXITCODE -ne 0 -or $kind.Count -ne 1 -or $kind[0] -cne 'commit') {
+        throw 'TargetCommit inexistente ou nao e commit.'
+    }
+    $null = Get-DisposableCommitProbe -RepoRoot $RepoRoot -ArgumentList @('merge-base', '--is-ancestor', $BaselineCommit, $TargetCommit)
+    if ($LASTEXITCODE -ne 0) { throw 'TargetCommit nao inclui a main vigente.' }
+    $baselineSupabase = Get-DisposableCommitHash -RepoRoot $RepoRoot -ArgumentList @('rev-parse', "${BaselineCommit}:supabase")
+    $candidateSupabase = Get-DisposableCommitHash -RepoRoot $RepoRoot -ArgumentList @('rev-parse', "${TargetCommit}:supabase")
+    if ($candidateSupabase -cne $baselineSupabase) {
+        throw 'TargetCommit altera Supabase; este modo exige a arvore da main.'
+    }
+    $candidateSrc = Get-DisposableCommitHash -RepoRoot $RepoRoot -ArgumentList @('rev-parse', "${TargetCommit}:src")
+    return [pscustomobject]@{
+        BaselineCommit = $BaselineCommit
+        TargetCommit = $TargetCommit
+        BaselineSupabaseTree = $baselineSupabase
+        CandidateSrcTree = $candidateSrc
+    }
+}
+
+function Export-DisposableCommitPaths {
+    param([string]$RepoRoot, [string]$Commit, [string]$ProjectRoot, [string[]]$Paths)
+
+    Assert-DisposableValidationWorkdir -Workdir $ProjectRoot -TempRoot (Split-Path -Parent $ProjectRoot)
+    $archive = Join-Path $ProjectRoot 'source-snapshot.zip'
+    if (Test-Path -LiteralPath $archive) { throw 'Arquivo de snapshot descartavel ja existe.' }
+    try {
+        git -C $RepoRoot archive --format=zip "--output=$archive" $Commit -- @Paths
+        if ($LASTEXITCODE -ne 0) { throw 'Falha ao materializar o commit imutavel.' }
+        Expand-Archive -LiteralPath $archive -DestinationPath $ProjectRoot -Force
+    } finally {
+        if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
+    }
+}
+
+function Assert-DisposableExportedTree {
+    param([string]$RepoRoot, [string]$Commit, [string]$ProjectRoot, [string]$Path)
+
+    $entries = @(git -C $RepoRoot ls-tree -r --full-tree $Commit -- $Path)
+    if ($LASTEXITCODE -ne 0 -or $entries.Count -eq 0) { throw "Arvore exportada ausente: $Path" }
+    $expected = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($entry in $entries) {
+        if ($entry -cnotmatch '^100(?:644|755) blob ([0-9a-f]{40})\t(.+)$') {
+            throw "Entrada Git nao suportada na arvore: $Path"
+        }
+        $oid = $Matches[1]
+        $relative = $Matches[2]
+        if (-not $relative.StartsWith("$Path/", [System.StringComparison]::Ordinal) -or
+            $relative -match '(^|/)(\.\.|\.temp|start-secrets|docker\.env|\.env[^/]*)($|/)') {
+            throw 'Snapshot contem path inseguro.'
+        }
+        $null = $expected.Add($relative)
+        $file = Join-Path $ProjectRoot ($relative.Replace('/', [IO.Path]::DirectorySeparatorChar))
+        if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Arquivo do commit ausente: $relative" }
+        $actual = git -C $RepoRoot hash-object --no-filters -- $file
+        if ($LASTEXITCODE -ne 0 -or $actual -ne $oid) { throw "Arquivo diverge do commit: $relative" }
+    }
+    $actualFiles = @(Get-ChildItem -LiteralPath (Join-Path $ProjectRoot $Path) -Recurse -File -Force)
+    if ($actualFiles.Count -ne $expected.Count) { throw "Arquivos extras ou ausentes na arvore: $Path" }
+}
+
+function Assert-DisposableExportedFiles {
+    param([string]$RepoRoot, [string]$Commit, [string]$ProjectRoot, [string[]]$Paths)
+
+    foreach ($relative in $Paths) {
+        $expected = git -C $RepoRoot rev-parse "${Commit}:$relative"
+        if ($LASTEXITCODE -ne 0 -or $expected -notmatch '^[0-9a-f]{40}$') {
+            throw "Arquivo do commit invalido: $relative"
+        }
+        $file = Join-Path $ProjectRoot $relative
+        if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Arquivo exportado ausente: $relative" }
+        $actual = git -C $RepoRoot hash-object --no-filters -- $file
+        if ($LASTEXITCODE -ne 0 -or $actual -ne $expected) { throw "Arquivo diverge do commit: $relative" }
+    }
+}
+
 function Assert-DisposablePortsAvailable {
     param([int[]]$Ports)
 

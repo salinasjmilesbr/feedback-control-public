@@ -252,6 +252,12 @@ O runner cria `feedback-control-validation` em diretório temporário, com porta
 descartáveis, e recusa o runtime `supabase_db_feedback-control` antes de qualquer
 reset. Não execute reset ou `stop --no-backup` diretamente neste checkout.
 
+Para homologar um candidato antes do merge, o modo interativo aceita
+`-TargetCommit <SHA completo>`: o `supabase/**` continua vindo da `main` vigente e
+somente o código da aplicação (`src/`, `public/` e arquivos de build) vem do
+commit candidato, sem check-out do candidato. Detalhes e regras fail-closed em
+`supabase/validacao/README.md`.
+
 ## Seed de desenvolvimento (F1-05)
 
 O seed sintético (`supabase/seed.sql`) é reaplicado automaticamente a cada
