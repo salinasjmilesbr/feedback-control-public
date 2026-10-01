@@ -107,6 +107,25 @@ function Set-CandidateFile {
 }
 
 try {
+    # ------------------------------------------------ identidade de raiz Windows
+    $pathWindows = 'C:\Virtus\CandidateWorktree'
+    if (-not (Test-DisposablePathIdentity -Left $pathWindows -Right 'C:/Virtus/CandidateWorktree')) {
+        throw 'FAIL: separadores Windows equivalentes deveriam identificar a mesma raiz.'
+    }
+    Write-Host 'PASS: mesma raiz com / versus \ => PASS.'
+    if (-not (Test-DisposablePathIdentity -Left $pathWindows -Right 'c:\virtus\candidateworktree')) {
+        throw 'FAIL: variacao de caixa Windows deveria identificar a mesma raiz.'
+    }
+    Write-Host 'PASS: mesma raiz com variacao de case Windows => PASS.'
+    if (Test-DisposablePathIdentity -Left $pathWindows -Right 'C:\Virtus\CandidateOther') {
+        throw 'FAIL: caminho diferente foi aceito como mesma raiz.'
+    }
+    Write-Host 'PASS: caminho diferente => DENY.'
+    if (Test-DisposablePathIdentity -Left $pathWindows -Right 'C:\Virtus\CandidateWorktree-evil') {
+        throw 'FAIL: prefixo textual semelhante foi aceito como mesma raiz.'
+    }
+    Write-Host 'PASS: prefixo textual semelhante, raiz diferente => DENY.'
+
     # ------------------------------------------------------------------ positivo
     $fixture = New-CandidateFixture -Name 'positivo'
     $candidate = $fixture.Candidate
