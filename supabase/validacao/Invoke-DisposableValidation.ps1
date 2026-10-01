@@ -6,7 +6,8 @@ param(
         '03-validar-f5-07-cutover.sql'
     ),
     [switch]$Interactive,
-    [string]$TargetCommit
+    [string]$TargetCommit,
+    [string]$CandidateWorktree
 )
 
 $ErrorActionPreference = 'Stop'
@@ -100,16 +101,29 @@ function Assert-InteractiveResourceOwnership {
 $startAttempted = $false
 $validationLock = $null
 $candidateManifest = $null
+$worktreeManifest = $null
 if ($PSBoundParameters.ContainsKey('TargetCommit') -and -not $Interactive) {
     throw 'TargetCommit exige o modo Interactive.'
+}
+if ($PSBoundParameters.ContainsKey('CandidateWorktree') -and -not $Interactive) {
+    throw 'CandidateWorktree exige o modo Interactive.'
+}
+if ($PSBoundParameters.ContainsKey('CandidateWorktree') -and $PSBoundParameters.ContainsKey('TargetCommit')) {
+    throw 'CandidateWorktree e TargetCommit sao mutuamente exclusivos.'
 }
 try {
     $validationLock = Enter-DisposableValidationLock -TempRoot $env:TEMP
     if ($Interactive) {
-        $baselineCommit = Assert-InteractiveMainCheckout
-        if ($PSBoundParameters.ContainsKey('TargetCommit')) {
-            $candidateManifest = Assert-DisposableTargetCommit -RepoRoot $repoRoot `
-                -BaselineCommit $baselineCommit -TargetCommit $TargetCommit
+        if ($PSBoundParameters.ContainsKey('CandidateWorktree')) {
+            $candidatePath = Assert-DisposableCandidateWorktreePath -CandidateWorktree $CandidateWorktree -RepoRoot $repoRoot
+            $worktreeManifest = Assert-DisposableCandidateWorktreeCheckout -RepoRoot $repoRoot -CandidateWorktree $candidatePath
+            $baselineCommit = $worktreeManifest.BaselineCommit
+        } else {
+            $baselineCommit = Assert-InteractiveMainCheckout
+            if ($PSBoundParameters.ContainsKey('TargetCommit')) {
+                $candidateManifest = Assert-DisposableTargetCommit -RepoRoot $repoRoot `
+                    -BaselineCommit $baselineCommit -TargetCommit $TargetCommit
+            }
         }
         Assert-NoDisposableResources
         Assert-DisposablePortsAvailable -Ports @(55420, 55421, 55422, 55423)
@@ -119,7 +133,18 @@ try {
     }
 
     New-Item -ItemType Directory -Path $validationRoot -Force | Out-Null
-    if ($null -ne $candidateManifest) {
+    if ($null -ne $worktreeManifest) {
+        $worktreeManifest = Invoke-DisposableCandidateWorktreeMaterialization -RepoRoot $repoRoot `
+            -BaselineCommit $worktreeManifest.BaselineCommit `
+            -CandidateWorktree $worktreeManifest.CandidatePath `
+            -CandidateBranch $worktreeManifest.CandidateBranch `
+            -ProjectRoot $validationRoot
+        $worktreeManifest | ConvertTo-Json -Depth 6 | Set-Content `
+            -LiteralPath (Join-Path $validationRoot 'candidate-worktree-manifest.json') -Encoding UTF8
+        Write-Host "Baseline origin/main: $($worktreeManifest.BaselineCommit); candidato (worktree nao commitado): $($worktreeManifest.Candidate.Path)"
+        Write-Host "Snapshot verificado antes de Docker/Supabase: $($worktreeManifest.SnapshotFileCount) arquivo(s); fingerprint $($worktreeManifest.SnapshotFingerprint)"
+        Write-Host "Operacoes materializadas: $($worktreeManifest.Operations.Count); migrations novas: $(@($worktreeManifest.NewMigrations).Count); historicas verificadas: $(@($worktreeManifest.HistoricalMigrations).Count)"
+    } elseif ($null -ne $candidateManifest) {
         $applicationFiles = @('index.html', 'package.json', 'package-lock.json',
             'vite.config.ts', 'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json', 'eslint.config.js')
         Export-DisposableCommitPaths -RepoRoot $repoRoot -Commit $baselineCommit `
@@ -157,6 +182,28 @@ try {
         -ProjectId $projectId -ContainerName $containerName `
         -RuntimeContainerName $runtimeContainerName -Config $config
     Write-Host 'Config descartavel validado: project_id e portas conferem.'
+
+    if ($null -ne $worktreeManifest) {
+        # A transformacao CONTROLADA do config.toml ocorre DEPOIS do fingerprint do
+        # snapshot e e registrada SEPARADAMENTE (o fingerprint acima nao a inclui).
+        [pscustomobject]@{
+            Mode                = 'CandidateWorktree'
+            ConfigPath          = 'supabase/config.toml'
+            BaselineCommit      = $worktreeManifest.BaselineCommit
+            SnapshotFingerprint = $worktreeManifest.SnapshotFingerprint
+            ConfigSha256        = (Get-DisposableSha256 -Path $configPath)
+            Transformations     = @(
+                "project_id -> $projectId",
+                'api.port 54321 -> 55421',
+                'db.port 54322 -> 55422',
+                'db.shadow_port 54320 -> 55420',
+                'studio.port 54323 -> 55423',
+                'local_smtp.enabled true -> false'
+            )
+        } | ConvertTo-Json -Depth 4 | Set-Content `
+            -LiteralPath (Join-Path $validationRoot 'candidate-worktree-config-transform.json') -Encoding UTF8
+        Write-Host 'Transformacao de config registrada separadamente do manifesto do snapshot.'
+    }
 
     if ($Interactive) {
         $migrationFiles = @(Get-ChildItem -LiteralPath (Join-Path $validationProjectRoot 'migrations') -File -Filter '*.sql' | ForEach-Object { $_.Name })
