@@ -175,7 +175,12 @@ function Export-DisposableCommitPaths {
     $archive = Join-Path $ProjectRoot 'source-snapshot.zip'
     if (Test-Path -LiteralPath $archive) { throw 'Arquivo de snapshot descartavel ja existe.' }
     try {
-        git -C $RepoRoot archive --format=zip "--output=$archive" $Commit -- @Paths
+        # `git archive` honra `core.autocrlf` e gravaria LF->CRLF no snapshot, o que
+        # faria a prova de identidade por bytes crus (`hash-object --no-filters`)
+        # divergir do blob sem qualquer mudanca real de conteudo. O snapshot deve
+        # conter exatamente os bytes do blob; a conversao de EOL nao participa da
+        # materializacao descartavel.
+        git -C $RepoRoot -c core.autocrlf=false archive --format=zip "--output=$archive" $Commit -- @Paths
         if ($LASTEXITCODE -ne 0) { throw 'Falha ao materializar o commit imutavel.' }
         Expand-Archive -LiteralPath $archive -DestinationPath $ProjectRoot -Force
     } finally {
