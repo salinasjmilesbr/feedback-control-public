@@ -10,6 +10,7 @@ import {
 import {
   estadoDominioAvaliacao,
   estadoDominioCriacaoAvaliacao,
+  estadoDominioLeituraColetivaAvaliacao,
 } from "./estadoDominioAvaliacao.ts";
 import { estadoDominioCiclo } from "./estadoDominioCiclo.ts";
 import { estadoDominioMeta } from "./estadoDominioMeta.ts";
@@ -236,6 +237,14 @@ export interface ContextoAvaliacaoSoberano {
    * probe NEGA a mutação (fail-closed).
    */
   readonly cicloStatus?: string;
+  /**
+   * F6 Incremento 1 (R2): o ator possui ocorrência MATERIALIZADA e VIGENTE
+   * nesta avaliação, resolvida server-side. Campo OPCIONAL e retrocompatível —
+   * ausente ⇒ tratado como `false` (fail-closed): sem participação comprovada a
+   * leitura do recurso avaliação é negada, exceto para o próprio avaliado em
+   * `CONCLUIDA` (R3). NUNCA é declarado pelo cliente.
+   */
+  readonly atorEhParticipanteVigente?: boolean;
 }
 
 export interface DepsContextoAutorizacao {
@@ -267,7 +276,15 @@ export interface DepsContextoAutorizacao {
    * declara estado de domínio.
    */
   carregarContextoAvaliacao?(
-    entrada: EntradaCarregarRecurso & { readonly cycleId?: string }
+    entrada: EntradaCarregarRecurso & {
+      readonly cycleId?: string;
+      /**
+       * Ator autenticado (server-side) — necessário APENAS para resolver, na
+       * fronteira confiável, se ele possui ocorrência materializada vigente na
+       * avaliação (R2). Nunca vem do cliente.
+       */
+      readonly authUserId?: string;
+    }
   ): Promise<ContextoAvaliacaoSoberano | null>;
   /** ASSIGNED soberano (F3-08/09), quando disponível. */
   readonly assigned?: DadosAssignedSoberanos;
@@ -322,6 +339,15 @@ export interface EntradaOperacaoAutorizacao {
   readonly dataNegocio?: unknown;
   /** Estado do domínio declarado pelo serviço (ausente ⇒ DENY). */
   readonly domainState?: DomainStateProbe;
+  /**
+   * F6 Incremento 1 (R2): seleciona o probe de domínio PRÓPRIO da LEITURA
+   * COLETIVA dos participantes (admite RASCUNHO/PRONTA_PARA_FEEDBACK/CONCLUIDA
+   * para os entitlements de participante). Definido EXCLUSIVAMENTE pela
+   * fronteira confiável (Edge) na operação de leitura coletiva; nunca vem do
+   * cliente. NÃO amplia capability nem scope: apenas escolhe a condição de
+   * ESTADO — a mutação continua regida por `estadoDominioAvaliacao`.
+   */
+  readonly probeLeituraColetiva?: boolean;
 }
 
 /** Id soberano normalizado (`trim` + não vazio) ou `null` — comparação fail-closed. */
@@ -561,6 +587,7 @@ export async function avaliarOperacaoAutorizacao(
       ? await deps.carregarContextoAvaliacao({
           target: entrada.alvo,
           organizationId: atorComVinculo.actorContext.organizationId,
+          authUserId: entrada.authUserId,
           ...(entrada.cycleId ? { cycleId: entrada.cycleId } : {}),
         })
       : null;
@@ -601,11 +628,27 @@ export async function avaliarOperacaoAutorizacao(
               })
             : contextoAvaliacao
           ? entrada.alvo.type === "evaluation"
-            ? estadoDominioAvaliacao({
+            ? (entrada.probeLeituraColetiva === true
+                ? estadoDominioLeituraColetivaAvaliacao
+                : estadoDominioAvaliacao)({
                 status: contextoAvaliacao.status,
                 ...(contextoAvaliacao.encerradaComPendencias === undefined
                   ? {}
                   : { encerradaComPendencias: contextoAvaliacao.encerradaComPendencias }),
+                // R2/R3 (Incremento 1): fatos de RELAÇÃO resolvidos server-side.
+                // Participação vigente vem da fronteira confiável (ocorrência
+                // materializada); SELF é derivado do vínculo soberano contra o
+                // dono real da linha. Ambos ausentes ⇒ `false` (fail-closed).
+                atorEhParticipanteVigente:
+                  contextoAvaliacao.atorEhParticipanteVigente === true,
+                atorEhAvaliado:
+                  atorComVinculo.actorContext.collaboratorId !== null &&
+                  atorComVinculo.actorContext.collaboratorId ===
+                    (identificadorSoberano(recurso.ownerCollaboratorId) ??
+                      identificadorSoberano(
+                        (recurso as { readonly evaluatedCollaboratorId?: unknown })
+                          .evaluatedCollaboratorId
+                      )),
               })
             : estadoDominioCriacaoAvaliacao({
                 cicloPermiteNovaAvaliacao: contextoAvaliacao.cicloPermiteNovaAvaliacao === true,

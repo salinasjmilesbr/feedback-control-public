@@ -48,7 +48,25 @@ export interface AvaliacaoSoberana {
   readonly encerradaComPendencias: boolean;
 }
 
-/** Projeção de TRANSPARÊNCIA do avaliado (D20): nunca voto/nota individual. */
+/** Bloco INDIVIDUAL de um papel de gestão materializado (R3). */
+export interface BlocoGestaoAvaliado {
+  readonly notas: readonly { readonly subcriterionId: string; readonly nota: number }[];
+  readonly comentarios: readonly {
+    readonly criterionId: string | null;
+    readonly texto: string;
+  }[];
+  readonly feedbackFinal: string | null;
+}
+
+/**
+ * Projeção de TRANSPARÊNCIA do avaliado (R3).
+ *
+ * Entrega os agregados oficiais, os blocos INDIVIDUAIS do gerente
+ * (`GESTAO_CADEIA`) e do coordenador (`GESTAO_DIRETA`) e o colegiado SOMENTE
+ * como parcela agregada por SUBCRITÉRIO. NUNCA expõe voto individual,
+ * `participant_id` ou identidade correlacionável do colegiado — inclusive com
+ * N=1. Ausência de papel/voto permanece ausência (nunca zero).
+ */
 export interface TransparenciaAvaliado {
   readonly evaluationId: string;
   readonly notaMedia: number | null;
@@ -64,8 +82,17 @@ export interface TransparenciaAvaliado {
     readonly subcriterio: string;
     readonly nota: number;
   }[];
-  readonly colegiado: readonly { readonly colaborador: string }[];
-  readonly comentariosFinais: readonly { readonly roleType: string; readonly texto: string }[];
+  /** `null` = papel ausente/não materializado (nunca bloco zerado). */
+  readonly gestao: {
+    readonly gestaoCadeia: BlocoGestaoAvaliado | null;
+    readonly gestaoDireta: BlocoGestaoAvaliado | null;
+  };
+  readonly colegiadoAgregado: readonly {
+    readonly subcriterionId: string;
+    readonly subcriterio: string;
+    readonly criterio: string;
+    readonly nota: number;
+  }[];
 }
 
 export interface ErroRepositorioAvaliacoes {
@@ -588,9 +615,39 @@ function projetarAvaliacao(valor: unknown): AvaliacaoSoberana {
   };
 }
 
+function projetarBlocoGestao(valor: unknown): BlocoGestaoAvaliado | null {
+  if (typeof valor !== "object" || valor === null || Array.isArray(valor)) return null;
+  const registro = valor as Record<string, unknown>;
+  return {
+    notas: Array.isArray(registro.notas)
+      ? (registro.notas as Record<string, unknown>[]).map((item) => ({
+          subcriterionId: String(item.subcriterion_id),
+          nota: Number(item.nota),
+        }))
+      : [],
+    comentarios: Array.isArray(registro.comentarios)
+      ? (registro.comentarios as Record<string, unknown>[]).map((item) => ({
+          criterionId:
+            item.criterion_id === null || item.criterion_id === undefined
+              ? null
+              : String(item.criterion_id),
+          texto: String(item.texto),
+        }))
+      : [],
+    feedbackFinal:
+      typeof registro.feedback_final === "string" && registro.feedback_final.trim() !== ""
+        ? registro.feedback_final
+        : null,
+  };
+}
+
 function projetarTransparencia(valor: unknown): TransparenciaAvaliado {
   const registro = comoRegistro(valor);
   const faixa = registro.faixa;
+  const gestao =
+    typeof registro.gestao === "object" && registro.gestao !== null
+      ? (registro.gestao as Record<string, unknown>)
+      : {};
   return {
     evaluationId: String(registro.evaluation_id),
     notaMedia:
@@ -619,15 +676,16 @@ function projetarTransparencia(valor: unknown): TransparenciaAvaliado {
           nota: Number(item.nota),
         }))
       : [],
-    colegiado: Array.isArray(registro.colegiado)
-      ? (registro.colegiado as Record<string, unknown>[]).map((item) => ({
-          colaborador: String(item.colaborador),
-        }))
-      : [],
-    comentariosFinais: Array.isArray(registro.comentarios_finais)
-      ? (registro.comentarios_finais as Record<string, unknown>[]).map((item) => ({
-          roleType: String(item.role_type),
-          texto: String(item.texto),
+    gestao: {
+      gestaoCadeia: projetarBlocoGestao(gestao.GESTAO_CADEIA),
+      gestaoDireta: projetarBlocoGestao(gestao.GESTAO_DIRETA),
+    },
+    colegiadoAgregado: Array.isArray(registro.colegiado_agregado)
+      ? (registro.colegiado_agregado as Record<string, unknown>[]).map((item) => ({
+          subcriterionId: String(item.subcriterion_id),
+          subcriterio: String(item.subcriterio),
+          criterio: String(item.criterio),
+          nota: Number(item.nota),
         }))
       : [],
   };

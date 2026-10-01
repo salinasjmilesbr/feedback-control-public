@@ -29,6 +29,7 @@ export type OperacaoAvaliacao =
   | "evaluation.painel_participante"
   | "evaluation.resolver_ciclo"
   | "evaluation.do_colaborador_no_ciclo"
+  | "evaluation.painel_participantes"
   | "report.listar";
 
 /** Alvo autorizável (mesmo `TargetRef` do Policy Engine). */
@@ -109,6 +110,13 @@ export const CAPABILITY_POR_OPERACAO: Readonly<Record<OperacaoAvaliacao, string>
    * fechado permanece intacto.
    */
   "evaluation.do_colaborador_no_ciclo": "evaluation.read",
+  /**
+   * Leitura COLETIVA dos participantes (R2). O código é NOMINAL: o entitlement
+   * real é o OR explícito `evaluation.write` (scope do papel) ou
+   * `evaluation.read + ASSIGNED` — ver `resolverLeituraColetiva`. Nenhuma
+   * capability nova é criada.
+   */
+  "evaluation.painel_participantes": "evaluation.write",
 };
 
 /**
@@ -124,6 +132,108 @@ export const CAPABILIDADES_DESCOBERTA_AVALIACAO: readonly string[] = [
   "evaluation.write",
   "evaluation.read",
 ];
+
+/**
+ * R2 — entitlements que sustentam a LEITURA COLETIVA dos participantes.
+ *
+ * `evaluation.write` em qualquer scope de F6-AVALIACOES-05 D4, conforme o papel
+ * (`DIRECT_REPORTS`/`DESCENDANTS`/`ASSIGNED`); OU `evaluation.read` SOMENTE com
+ * `ASSIGNED` (papel `evaluator` de #306). `evaluation.read` isolado, SELF,
+ * scope administrativo ou acesso excepcional sem ASSIGNED NÃO bastam. Nenhuma
+ * capability/scope/bundle é ampliado.
+ */
+export const SCOPES_ESCRITA_LEITURA_COLETIVA: readonly string[] = [
+  "DIRECT_REPORTS",
+  "DESCENDANTS",
+  "ASSIGNED",
+];
+export const SCOPE_LEITURA_LEITURA_COLETIVA = "ASSIGNED";
+
+/**
+ * Regra PURA do entitlement da leitura coletiva (fail-closed).
+ *
+ * Exige, SIMULTANEAMENTE: ocorrência materializada vigente do ator (resolvida
+ * server-side) E um dos dois caminhos de capability/scope. Qualquer ausência
+ * nega. Não decide tenant, relação nem estado — isso é do Policy Engine.
+ */
+export function resolverLeituraColetiva(entrada: {
+  readonly participanteVigente: boolean;
+  readonly autorizaEscrita: boolean;
+  readonly autorizaLeituraAssigned: boolean;
+}): { readonly allowed: boolean } {
+  if (entrada.participanteVigente !== true) return { allowed: false };
+  return {
+    allowed: entrada.autorizaEscrita === true || entrada.autorizaLeituraAssigned === true,
+  };
+}
+
+/**
+ * Projeção COLETIVA dos participantes (R2) — payload server-side.
+ *
+ * Participantes veem identidades/papéis dos demais, todas as notas individuais
+ * existentes (inclusive de cada colegiado), comentários por critério e Feedbacks
+ * Finais existentes. `progressoFactual` é apenas CONTAGEM derivada dos dados —
+ * NÃO é completude normativa (pendências por ocorrência são do Incremento 2).
+ */
+export interface PainelParticipantesAvaliacao {
+  readonly evaluationId: string;
+  readonly organizationId: string;
+  readonly cycleId: string;
+  readonly cycleAno: number;
+  readonly cycleNumero: number;
+  readonly configVersionId: string;
+  readonly status: string;
+  readonly evaluatedCollaboratorId: string;
+  /** Própria ocorrência: identificável para renderização; não concede escrita. */
+  readonly meuParticipante: {
+    readonly ocorrenciaId: string;
+    readonly roleType: string;
+    readonly meusPapeis: readonly string[];
+  };
+  readonly participantes: readonly {
+    readonly collaboratorId: string;
+    readonly nome: string | null;
+    readonly roleType: string;
+    readonly validFrom: string;
+    readonly validTo: string | null;
+  }[];
+  readonly criterios: readonly {
+    readonly criterionId: string;
+    readonly code: string;
+    readonly name: string;
+    readonly position: number;
+  }[];
+  readonly subcriterios: readonly {
+    readonly subcriterionId: string;
+    readonly code: string;
+    readonly name: string;
+    readonly position: number;
+    readonly criterionCode: string;
+  }[];
+  readonly notas: readonly {
+    readonly collaboratorId: string;
+    readonly roleType: string;
+    readonly subcriterionId: string;
+    readonly nota: number;
+  }[];
+  readonly comentarios: readonly {
+    readonly collaboratorId: string;
+    readonly roleType: string;
+    readonly criterionId: string;
+    readonly texto: string;
+  }[];
+  readonly feedbacksFinais: readonly {
+    readonly collaboratorId: string;
+    readonly roleType: string;
+    readonly texto: string;
+  }[];
+  readonly progressoFactual: readonly {
+    readonly collaboratorId: string;
+    readonly roleType: string;
+    readonly notasInformadas: number;
+    readonly subcriteriosTotal: number;
+  }[];
+}
 
 /** Payload MÍNIMO da descoberta: id soberano, estado e permissão de edição. */
 export interface DescobertaAvaliacaoDoColaborador {
@@ -284,6 +394,20 @@ export function validarEntradaAvaliacao(corpo: unknown): ResultadoValidacao {
     }
     if (!ehUuid(cru.cycle_id)) {
       return { ok: false, code: "INVALID_INPUT", message: "cycle_id obrigatório e inválido." };
+    }
+  }
+
+  // Leitura COLETIVA dos participantes (R2): LEITURA estrita — allowlist própria.
+  // Nenhuma nota, comentário, ocorrência ou intenção de mutação é aceita.
+  if (cru.operacao === "evaluation.painel_participantes") {
+    const permitidas = ["operacao", "organization_id", "alvo"];
+    if (Object.keys(cru).some((chave) => !permitidas.includes(chave))) {
+      return {
+        ok: false,
+        code: "INVALID_INPUT",
+        message:
+          "A leitura coletiva dos participantes aceita apenas operacao, organization_id e alvo.",
+      };
     }
   }
 

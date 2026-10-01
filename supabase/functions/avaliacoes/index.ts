@@ -13,7 +13,10 @@ import type { ScopeType } from "../../../src/authorization/policyEngine/types.ts
 import type { RecursoSoberanoCarregado } from "../../../src/authorization/resourceContextReal.ts";
 import {
   CAPABILITY_POR_OPERACAO,
+  SCOPE_LEITURA_LEITURA_COLETIVA,
   resolverDescobertaAvaliacao,
+  resolverLeituraColetiva,
+  type PainelParticipantesAvaliacao,
 } from "../../../src/infrastructure/supabase/avaliacoes/contrato.ts";
 import {
   carregarAssignedDaOperacao,
@@ -290,7 +293,7 @@ Deno.serve(async (req) => {
     },
 
     // Estado de domínio derivado SERVER-SIDE (o cliente nunca declara estado).
-    carregarContextoAvaliacao: async ({ target, organizationId, cycleId }) => {
+    carregarContextoAvaliacao: async ({ target, organizationId, cycleId, authUserId }) => {
       if (target.type === "evaluation") {
         const { data, error } = await admin
           .from("evaluations")
@@ -299,9 +302,29 @@ Deno.serve(async (req) => {
           .eq("organization_id", organizationId)
           .maybeSingle();
         if (error || !data) return null;
+
+        // F6 Incremento 1 (R2/R3): participação MATERIALIZADA e VIGENTE do ator,
+        // resolvida pelo MESMO helper soberano do caminho de escrita (o cliente
+        // nunca informa ocorrência). Ausência ⇒ vazio (não é erro ⇒ `false`);
+        // erro/ambiguidade ⇒ `null` (indeterminação ⇒ fail-closed).
+        let atorEhParticipanteVigente = false;
+        if (authUserId) {
+          const { data: ocorrencias, error: erroOcorrencia } = await admin.rpc(
+            "evaluation_ocorrencia_do_ator",
+            {
+              p_organization_id: organizationId,
+              p_evaluation_id: target.id,
+              p_actor_user_profile_id: authUserId,
+            }
+          );
+          if (erroOcorrencia) return null;
+          atorEhParticipanteVigente = Array.isArray(ocorrencias) && ocorrencias.length > 0;
+        }
+
         return {
           status: data.status,
           encerradaComPendencias: data.encerrada_com_pendencias === true,
+          atorEhParticipanteVigente,
         };
       }
 
@@ -723,6 +746,86 @@ Deno.serve(async (req) => {
       const decisao = autorizacaoDescoberta(estado);
       if (!decisao.allowed) return { error: { code: decisao.code } };
       return { data: decisao.resultado };
+    },
+
+    // F6 Incremento 1 (R2) — LEITURA COLETIVA dos participantes.
+    //
+    // M1: o probe de domínio próprio (`probeLeituraColetiva`) é determinado
+    // EXCLUSIVAMENTE por ESTA operação confiável da Edge — nunca por input do
+    // cliente (o corpo só admite operacao/organization_id/alvo e o flag não
+    // existe no payload). A concessão exige ocorrência MATERIALIZADA e VIGENTE
+    // do ator E um dos dois caminhos de entitlement: `evaluation.write` (scope
+    // do papel) OU `evaluation.read` SOMENTE com `ASSIGNED` (#306). Este caminho
+    // concede LEITURA apenas: nenhuma escrita é liberada (o gate de mutação, que
+    // nega `evaluation.write` em CONCLUIDA, permanece intacto).
+    avaliarPainelParticipantes: async ({ authUserId, organizationId, evaluationId }) => {
+      const { data: ocorrencias, error: erroOcorrencia } = await admin.rpc(
+        "evaluation_ocorrencia_do_ator",
+        {
+          p_organization_id: organizationId,
+          p_evaluation_id: evaluationId,
+          p_actor_user_profile_id: authUserId,
+        }
+      );
+      if (erroOcorrencia) return { allowed: false, code: "INTERNAL" as const };
+      const participanteVigente = Array.isArray(ocorrencias) && ocorrencias.length > 0;
+
+      let autorizaEscrita = false;
+      let autorizaLeituraAssigned = false;
+      if (participanteVigente) {
+        const alvo = { type: "evaluation" as const, id: evaluationId };
+        const escrita = await avaliarOperacaoAutorizacao(
+          {
+            authUserId,
+            organizationId,
+            capability: "evaluation.write",
+            alvo,
+            probeLeituraColetiva: true,
+          },
+          autorizacao
+        );
+        autorizaEscrita = escrita.allowed === true;
+
+        if (!autorizaEscrita) {
+          const leitura = await avaliarOperacaoAutorizacao(
+            {
+              authUserId,
+              organizationId,
+              capability: "evaluation.read",
+              alvo,
+              probeLeituraColetiva: true,
+            },
+            autorizacao
+          );
+          if (leitura.allowed === true) {
+            const capabilities = await autorizacao.resolverCapabilitiesEscopos(
+              authUserId,
+              organizationId
+            );
+            autorizaLeituraAssigned = capabilities.some(
+              (item) =>
+                item.capability === "evaluation.read" &&
+                item.scopes.includes(SCOPE_LEITURA_LEITURA_COLETIVA)
+            );
+          }
+        }
+      }
+
+      const decisao = resolverLeituraColetiva({
+        participanteVigente,
+        autorizaEscrita,
+        autorizaLeituraAssigned,
+      });
+      return decisao.allowed ? { allowed: true } : { allowed: false, code: "FORBIDDEN" as const };
+    },
+
+    executarPainelParticipantes: async ({ authUserId, evaluationId }) => {
+      const { data, error } = await admin.rpc("evaluation_painel_participantes", {
+        p_evaluation_id: evaluationId,
+        p_actor_user_profile_id: authUserId,
+      });
+      if (error) return { error: { code: "INTERNAL" as const } };
+      return { data: (data ?? null) as PainelParticipantesAvaliacao | null };
     },
 
     executarRpc,

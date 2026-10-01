@@ -26,6 +26,7 @@ import {
   type DescobertaAvaliacaoDoColaborador,
   type EntradaAvaliacao,
   type OperacaoAvaliacao,
+  type PainelParticipantesAvaliacao,
 } from "../../../src/infrastructure/supabase/avaliacoes/contrato.ts";
 import type { ApplicationErrorCode } from "../../../src/errors/applicationErrors.ts";
 
@@ -151,6 +152,29 @@ export interface DepsAvaliacoes {
     readonly evaluatedCollaboratorId: string;
   }): Promise<{
     readonly data?: DescobertaAvaliacaoDoColaborador | null;
+    readonly error?: ErroRpcAvaliacao | null;
+  }>;
+  /**
+   * F6 Incremento 1 (R2): autoriza a LEITURA COLETIVA dos participantes.
+   *
+   * O caminho (`probeLeituraColetiva` + entitlements) é determinado
+   * EXCLUSIVAMENTE pela operação confiável da Edge — NUNCA por input do cliente.
+   * Exige ocorrência materializada vigente E (`evaluation.write` com scope do
+   * papel OU `evaluation.read + ASSIGNED`). Concede LEITURA apenas: nenhuma
+   * escrita é liberada por este caminho.
+   */
+  avaliarPainelParticipantes?(entrada: {
+    readonly authUserId: string;
+    readonly organizationId: string;
+    readonly evaluationId: string;
+  }): Promise<{ readonly allowed: boolean; readonly code?: ApplicationErrorCode }>;
+  /** Executa a RPC da projeção COLETIVA (R2) com credencial privilegiada. */
+  executarPainelParticipantes?(entrada: {
+    readonly authUserId: string;
+    readonly organizationId: string;
+    readonly evaluationId: string;
+  }): Promise<{
+    readonly data?: PainelParticipantesAvaliacao | null;
     readonly error?: ErroRpcAvaliacao | null;
   }>;
   /**
@@ -306,6 +330,45 @@ export async function avaliacoes(
       },
       200
     );
+  }
+
+  // Leitura COLETIVA dos participantes (R2): identidades/papéis dos demais,
+  // notas individuais EXISTENTES, comentários por critério e Feedbacks Finais
+  // existentes dos papéis que os possuem, além de progresso FACTUAL. A operação
+  // é de LEITURA — a concessão nunca libera escrita em estado algum.
+  if (entrada.operacao === "evaluation.painel_participantes") {
+    if (!deps.avaliarPainelParticipantes || !deps.executarPainelParticipantes) {
+      return erro("INTERNAL", "Operação não disponível.", 500);
+    }
+    const alvoColetivo = entrada.alvo;
+    if (!alvoColetivo || alvoColetivo.type !== "evaluation") {
+      return erro("INVALID_INPUT", "Alvo inválido.", 400);
+    }
+
+    const autorizacao = await deps.avaliarPainelParticipantes({
+      authUserId: callerId,
+      organizationId: entrada.organization_id,
+      evaluationId: alvoColetivo.id,
+    });
+    if (!autorizacao.allowed) {
+      const code = codigoPublico(autorizacao.code);
+      return erro(code, "Operação negada.", code === "NOT_FOUND" ? 404 : 403);
+    }
+
+    const resultado = await deps.executarPainelParticipantes({
+      authUserId: callerId,
+      organizationId: entrada.organization_id,
+      evaluationId: alvoColetivo.id,
+    });
+    if (resultado.error) {
+      const code = codigoErroExecutor(resultado.error);
+      return erro(code, "Leitura coletiva indisponível.", statusCodigo(code));
+    }
+    // Payload ausente após ALLOW é inconsistência: falha fechado sem revelar
+    // existência de terceiros.
+    if (!resultado.data) return erro("INTERNAL", "Leitura coletiva indisponível.", 500);
+
+    return json({ ok: true, operacao: entrada.operacao, resultado: resultado.data }, 200);
   }
 
   // 2.1) Alvo SOBERANO: quando a tela informa a MATRÍCULA do avaliado (criação e

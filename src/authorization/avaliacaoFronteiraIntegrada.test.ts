@@ -44,6 +44,11 @@ interface Cenario {
   readonly recurso?: RecursoSoberanoCarregado | null;
   readonly alvos?: Record<string, readonly { collaboratorId: string | null; positionId: string | null }[]>;
   readonly vinculo?: string | null;
+  /**
+   * F6 Inc.1 (R2): o ator possui ocorrência MATERIALIZADA vigente? Resolvido na
+   * fronteira (nunca declarado pelo cliente). Ausente ⇒ `false` (fail-closed).
+   */
+  readonly participanteVigente?: boolean;
 }
 
 /**
@@ -82,7 +87,10 @@ function fronteira(cenario: Cenario = {}): DepsContextoAutorizacao {
     // e a aptidão do avaliado — ambos resolvidos server-side.
     carregarContextoAvaliacao: async ({ target }) =>
       target.type === "evaluation"
-        ? { status: cenario.status ?? "RASCUNHO" }
+        ? {
+            status: cenario.status ?? "RASCUNHO",
+            atorEhParticipanteVigente: cenario.participanteVigente === true,
+          }
         : { status: "CRIACAO", cicloPermiteNovaAvaliacao: true, avaliadoApto: true },
     resolverAssigned: async () => null,
   };
@@ -233,17 +241,95 @@ describe("fronteira de avaliações: Edge + Policy Engine real + domínio", () =
     expect(executadas).toHaveLength(0);
   });
 
-  it("o próprio AVALIADO lê a sua avaliação por SELF ⇒ ALLOW", async () => {
+  it("F6 Inc.1 (R3): o próprio AVALIADO lê por SELF somente após CONCLUIDA", async () => {
+    // Pré-CONCLUIDA ⇒ DENY: nenhuma RPC é executada (fail-closed).
     const { d, executadas } = deps({
       capability: "evaluation.read",
       scopes: ["SELF"],
       alvos: { SELF: [{ collaboratorId: AVALIADO, positionId: null }] },
       vinculo: AVALIADO,
     });
-    const resposta = await avaliacoes(requisicao(corpoAvaliacao("evaluation.ler")), d);
+    const negada = await avaliacoes(requisicao(corpoAvaliacao("evaluation.ler")), d);
+    expect(negada.status).not.toBe(200);
+    expect(executadas).toHaveLength(0);
 
-    expect(resposta.status).toBe(200);
-    expect(executadas).toHaveLength(1);
+    // Pós-CONCLUIDA ⇒ ALLOW (janela de transparência da R3).
+    const { d: dConcluida, executadas: execConcluida } = deps({
+      capability: "evaluation.read",
+      scopes: ["SELF"],
+      alvos: { SELF: [{ collaboratorId: AVALIADO, positionId: null }] },
+      vinculo: AVALIADO,
+      status: "CONCLUIDA",
+    });
+    const permitida = await avaliacoes(requisicao(corpoAvaliacao("evaluation.ler")), dConcluida);
+    expect(permitida.status).toBe(200);
+    expect(execConcluida).toHaveLength(1);
+  });
+
+  it("F6 Inc.1 (M2): participante VIGENTE lê por evaluation.ler nos três estados", async () => {
+    for (const status of ["RASCUNHO", "PRONTA_PARA_FEEDBACK", "CONCLUIDA"]) {
+      const { d, executadas } = deps({
+        capability: "evaluation.read",
+        scopes: ["DESCENDANTS"],
+        alvos: { DESCENDANTS: [{ collaboratorId: AVALIADO, positionId: null }] },
+        vinculo: GESTOR,
+        status,
+        participanteVigente: true,
+      });
+      const resposta = await avaliacoes(requisicao(corpoAvaliacao("evaluation.ler")), d);
+      expect(resposta.status, status).toBe(200);
+      expect(executadas, status).toHaveLength(1);
+    }
+  });
+
+  it("F6 Inc.1: leitura SEM participação vigente (leitor administrativo) ⇒ DENY sem RPC", async () => {
+    const { d, executadas } = deps({
+      capability: "evaluation.read",
+      scopes: ["ORGANIZATION"],
+      alvos: { ORGANIZATION: [{ collaboratorId: AVALIADO, positionId: null }] },
+      vinculo: GESTOR,
+      status: "RASCUNHO",
+      participanteVigente: false,
+    });
+    const resposta = await avaliacoes(requisicao(corpoAvaliacao("evaluation.ler")), d);
+    expect(resposta.status).not.toBe(200);
+    expect(executadas).toHaveLength(0);
+  });
+
+  it("F6 Inc.1 (M1): em CONCLUIDA o participante LÊ, mas a MUTAÇÃO continua negada", async () => {
+    // LEITURA em CONCLUIDA: permitida ao participante vigente.
+    const { d: dLeitura, executadas: execLeitura } = deps({
+      capability: "evaluation.read",
+      scopes: ["DESCENDANTS"],
+      alvos: { DESCENDANTS: [{ collaboratorId: AVALIADO, positionId: null }] },
+      vinculo: GESTOR,
+      status: "CONCLUIDA",
+      participanteVigente: true,
+    });
+    const leitura = await avaliacoes(requisicao(corpoAvaliacao("evaluation.ler")), dLeitura);
+    expect(leitura.status).toBe(200);
+    expect(execLeitura).toHaveLength(1);
+
+    // MUTAÇÃO na MESMA avaliação CONCLUIDA: o probe de MUTAÇÃO permanece o gate
+    // (a leitura coletiva NÃO libera escrita) ⇒ DENY, sem RPC executada.
+    const { d: dMutacao, executadas: execMutacao } = deps({
+      capability: "evaluation.write",
+      scopes: ["DESCENDANTS"],
+      alvos: { DESCENDANTS: [{ collaboratorId: AVALIADO, positionId: null }] },
+      vinculo: GESTOR,
+      status: "CONCLUIDA",
+      participanteVigente: true,
+    });
+    const mutacao = await avaliacoes(
+      requisicao(
+        corpoAvaliacao("evaluation.gravar_notas", {
+          notas: [{ subcriterion_id: SUB, nota: 4 }],
+        })
+      ),
+      dMutacao
+    );
+    expect(mutacao.status).not.toBe(200);
+    expect(execMutacao).toHaveLength(0);
   });
 
   it("o COLEGA (sem vínculo com o avaliado) NÃO lê ⇒ 403", async () => {
