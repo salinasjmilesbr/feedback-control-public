@@ -390,6 +390,25 @@ function Assert-DisposableCandidatePathSafe {
     }
 }
 
+function ConvertTo-DisposableCanonicalPath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $canonical = [IO.Path]::GetFullPath($Path).Replace([char]'/', [char]'\')
+    $root = [IO.Path]::GetPathRoot($canonical)
+    if ($canonical.Length -gt $root.Length) {
+        $canonical = $canonical.TrimEnd([char]'\')
+    }
+    return $canonical
+}
+
+function Test-DisposablePathIdentity {
+    param([Parameter(Mandatory = $true)][string]$Left, [Parameter(Mandatory = $true)][string]$Right)
+
+    $canonicalLeft = ConvertTo-DisposableCanonicalPath -Path $Left
+    $canonicalRight = ConvertTo-DisposableCanonicalPath -Path $Right
+    return [string]::Equals($canonicalLeft, $canonicalRight, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
 function Assert-DisposableCandidateWorktreePath {
     param([string]$CandidateWorktree, [string]$RepoRoot)
 
@@ -412,7 +431,7 @@ function Assert-DisposableCandidateWorktreePath {
         throw 'CandidateWorktree e o worktree de infraestrutura sao aninhados (path ambiguo).'
     }
     $top = @(Get-DisposableCommitProbe -RepoRoot $candidate -ArgumentList @('rev-parse', '--show-toplevel'))
-    if ($LASTEXITCODE -ne 0 -or $top.Count -ne 1 -or $top[0].Trim() -ne $candidate) {
+    if ($LASTEXITCODE -ne 0 -or $top.Count -ne 1 -or -not (Test-DisposablePathIdentity -Left $top[0].Trim() -Right $candidate)) {
         throw 'CandidateWorktree nao e a raiz de um worktree Git.'
     }
     return $candidate
