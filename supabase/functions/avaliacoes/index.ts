@@ -11,12 +11,19 @@ import type { Capability } from "../../../src/authorization/Capability.ts";
 import type { CapabilityComEscopos } from "../../../src/authorization/providers/reais.ts";
 import type { ScopeType } from "../../../src/authorization/policyEngine/types.ts";
 import type { RecursoSoberanoCarregado } from "../../../src/authorization/resourceContextReal.ts";
-import { CAPABILITY_POR_OPERACAO } from "../../../src/infrastructure/supabase/avaliacoes/contrato.ts";
+import {
+  CAPABILITY_POR_OPERACAO,
+  resolverDescobertaAvaliacao,
+} from "../../../src/infrastructure/supabase/avaliacoes/contrato.ts";
 import {
   carregarAssignedDaOperacao,
   carregarAssignedWriteColegiadoMaterializado,
 } from "./assignedSupabase.ts";
 import { criarPonteColaborador } from "./ponteColaborador.ts";
+import {
+  carregarEstadoDescoberta,
+  type EstadoDescoberta,
+} from "./descobertaSupabase.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -570,6 +577,81 @@ Deno.serve(async (req) => {
     return { data: resultado };
   };
 
+  // ---------------------------------------------------------------------------
+  // Descoberta soberana da avaliação do colaborador no ciclo.
+  //
+  // LEITURA: um ÚNICO carregamento serve à decisão (os três ramos — create ∨
+  // write ∨ read) e ao payload mínimo. Memoizado POR ATOR dentro da requisição
+  // (as deps são criadas a cada requisição) — nunca entre requisições/atores.
+  // ---------------------------------------------------------------------------
+  let descobertaMemo: { chave: string; promessa: Promise<EstadoDescoberta> } | null = null;
+
+  const carregarDescoberta = (
+    authUserId: string,
+    organizationId: string,
+    cycleId: string,
+    collaboratorId: string
+  ): Promise<EstadoDescoberta> => {
+    const chave = `${authUserId}|${organizationId}|${cycleId}|${collaboratorId}`;
+    if (descobertaMemo?.chave === chave) return descobertaMemo.promessa;
+
+    const promessa = carregarEstadoDescoberta(
+      {
+        // Tenant revalidado server-side: ciclo de OUTRO tenant é inexistente.
+        cicloDoTenant: async () => {
+          const { data, error } = await admin
+            .from("evaluation_cycles")
+            .select("id")
+            .eq("id", cycleId)
+            .eq("organization_id", organizationId)
+            .maybeSingle();
+          return !error && Boolean(data);
+        },
+        // Unicidade: no máximo UMA avaliação NÃO CANCELADA por
+        // (organização, ciclo, colaborador) — índice parcial
+        // `uq_evaluations_org_cycle_collaborator_nao_cancelada`.
+        avaliacaoNaoCancelada: async () => {
+          const { data, error } = await admin
+            .from("evaluations")
+            .select("id, status")
+            .eq("organization_id", organizationId)
+            .eq("cycle_id", cycleId)
+            .eq("evaluated_collaborator_id", collaboratorId)
+            .neq("status", "CANCELADA")
+            .maybeSingle();
+          if (error) throw new Error("avaliacao indisponivel");
+          return data && typeof data.id === "string" && typeof data.status === "string"
+            ? { id: data.id, status: data.status }
+            : null;
+        },
+        autorizar: async (capability, alvo) => {
+          const decisao = await avaliarOperacaoAutorizacao(
+            { authUserId, organizationId, capability, alvo, cycleId },
+            autorizacao
+          );
+          return decisao.allowed === true;
+        },
+      },
+      collaboratorId
+    );
+
+    descobertaMemo = { chave, promessa };
+    return promessa;
+  };
+
+  const autorizacaoDescoberta = (estado: EstadoDescoberta) => {
+    if (!estado.cicloOk) return { allowed: false as const, code: "NOT_FOUND" as const };
+    const decisao = resolverDescobertaAvaliacao({
+      avaliacao: estado.encontrada,
+      autorizaCriar: estado.autorizaCriar,
+      autorizaEscrever: estado.autorizaEscrever,
+      autorizaLer: estado.autorizaLer,
+    });
+    return decisao.allowed
+      ? { allowed: true as const, resultado: decisao.resultado }
+      : { allowed: false as const, code: "FORBIDDEN" as const };
+  };
+
   const deps: DepsAvaliacoes = {
     resolveCaller: async (authHeader) => {
       const caller = createClient(url, anonKey, {
@@ -618,6 +700,29 @@ Deno.serve(async (req) => {
       return decisao.allowed
         ? { allowed: true }
         : { allowed: false, code: decisao.denial?.publicCode ?? "FORBIDDEN" };
+    },
+
+    avaliarDescoberta: async ({ authUserId, organizationId, cycleId, alvo }) => {
+      const estado = await carregarDescoberta(authUserId, organizationId, cycleId, alvo.id);
+      const decisao = autorizacaoDescoberta(estado);
+      return decisao.allowed ? { allowed: true } : { allowed: false, code: decisao.code };
+    },
+
+    executarDescoberta: async ({
+      authUserId,
+      organizationId,
+      cycleId,
+      evaluatedCollaboratorId,
+    }) => {
+      const estado = await carregarDescoberta(
+        authUserId,
+        organizationId,
+        cycleId,
+        evaluatedCollaboratorId
+      );
+      const decisao = autorizacaoDescoberta(estado);
+      if (!decisao.allowed) return { error: { code: decisao.code } };
+      return { data: decisao.resultado };
     },
 
     executarRpc,

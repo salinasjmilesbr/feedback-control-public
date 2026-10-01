@@ -71,6 +71,10 @@ function repositorioFalso(
   const chamadas: string[] = [];
 
   const base: RepositorioAvaliacoes = {
+    obterDoColaboradorNoCiclo: async () => ({
+      ok: true,
+      data: { evaluationId: null, status: null, podeEditar: false },
+    }),
     criar: async () => ({ ok: true, data: AVALIACAO }),
     ler: async () => ({ ok: true, data: null }),
     gravarNotas: async () => ({ ok: true, data: 3.5 }),
@@ -114,6 +118,38 @@ function repositorioFalso(
 describe("cutover: criação, edição e encerramento soberanos", () => {
   beforeEach(() => {
     instalarLocalStorageEmMemoria();
+  });
+
+  it("CREATE canônico envia cycleId e evaluatedCollaboratorId sem matrícula ou storage", async () => {
+    const criar = vi.fn(async () => ({ ok: true as const, data: AVALIACAO }));
+    const repo = repositorioFalso({ criar });
+    const cutover = criarCutoverAvaliacoes({ repositorio: repo, armazenamento: criarArmazenamentoMemoria() });
+    const resultado = await cutover.criarPorUuid({ organizationId: ORG, cycleId: CICLO, evaluatedCollaboratorId: AVALIADO });
+    expect(resultado.data?.evaluationId).toBe(AVALIACAO);
+    expect(resultado.data).not.toHaveProperty("cutoverRegistrado");
+    expect(repo.chamadas).toEqual(["criar"]);
+    expect(criar).toHaveBeenCalledWith({ organizationId: ORG, cycleId: CICLO, evaluatedCollaboratorId: AVALIADO });
+    expect(localStorage.getItem(CHAVE_LEGADO)).toBeNull();
+  });
+
+  it("UUID inválido e DENY da Edge não caem para CREATE legado", async () => {
+    const repo = repositorioFalso({ criar: async () => ({ ok: false, error: { code: "FORBIDDEN", message: "negado" } }) });
+    const cutover = criarCutoverAvaliacoes({ repositorio: repo });
+    expect((await cutover.criarPorUuid({ organizationId: ORG, cycleId: CICLO, evaluatedCollaboratorId: "inválido" })).codigo).toBe("INVALID_INPUT");
+    expect(repo.chamadas).toEqual([]);
+    expect((await cutover.criarPorUuid({ organizationId: ORG, cycleId: CICLO, evaluatedCollaboratorId: AVALIADO })).codigo).toBe("FORBIDDEN");
+    expect(repo.chamadas).toEqual(["criar"]);
+  });
+
+  it("notas por UUID usam apenas o catálogo congelado e não enviam participant_id", async () => {
+    const gravarNotas = vi.fn(async () => ({ ok: true as const, data: 4 }));
+    const repo = repositorioFalso({ gravarNotas });
+    const cutover = criarCutoverAvaliacoes({ repositorio: repo });
+    const entrada = { organizationId: ORG, evaluationId: AVALIACAO, painel: painel(), notas: [{ subcriterionId: SUB, nota: 4 }] };
+    expect((await cutover.gravarNotasPorId(entrada)).ok).toBe(true);
+    expect(gravarNotas).toHaveBeenCalledWith({ organizationId: ORG, evaluationId: AVALIACAO, notas: [{ subcriterion_id: SUB, nota: 4 }] });
+    expect((await cutover.gravarNotasPorId({ ...entrada, notas: [{ subcriterionId: AVALIADO, nota: 4 }] })).codigo).toBe("INVALID_INPUT");
+    expect(repo.chamadas).toEqual(["gravarNotas"]);
   });
 
   it("criação resolve ano+ciclo e matrícula e NUNCA escreve no localStorage", async () => {

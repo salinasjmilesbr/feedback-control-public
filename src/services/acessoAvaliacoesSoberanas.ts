@@ -32,6 +32,7 @@ import {
   type ResultadoCutover,
 } from "./avaliacoesSoberanas/cutoverAvaliacoesService.ts";
 import type { PainelParticipante } from "../infrastructure/supabase/avaliacoes/repositorioAvaliacoes.ts";
+import type { DescobertaAvaliacaoDoColaborador } from "../infrastructure/supabase/avaliacoes/contrato.ts";
 
 /** Operações soberanas oferecidas às telas (mesmo contrato do cutover). */
 export type OperacoesAvaliacaoSoberanas = CutoverAvaliacoes;
@@ -114,6 +115,40 @@ export async function criarAvaliacaoSoberana(
   return operacoes.criarNova(entrada);
 }
 
+/** CREATE canônico por UUID: sem ponte de matrícula nem marcador local. */
+export async function criarAvaliacaoPorUuidSoberano(
+  entrada: {
+    readonly organizationId: string;
+    readonly cycleId: string;
+    readonly evaluatedCollaboratorId: string;
+  },
+  deps: DependenciasAcessoAvaliacoes = {}
+): Promise<ResultadoCutover<Omit<AvaliacaoNovaCriada, "cutoverRegistrado">>> {
+  const operacoes = obterOperacoesAvaliacaoSoberanas(deps);
+  if (!operacoes) return { ok: false, erro: ERRO_SEM_CAMINHO };
+  return operacoes.criarPorUuid(entrada);
+}
+
+/**
+ * DESCOBERTA soberana da avaliação do colaborador no ciclo: LEITURA autorizada
+ * pelo OR explícito (`evaluation.create` ∨ `evaluation.write` ∨ `evaluation.read`)
+ * no Policy Engine. Payload MÍNIMO (`evaluationId`, `status`, `podeEditar`);
+ * `evaluationId: null` = nenhuma avaliação NÃO CANCELADA. Sem caminho
+ * configurado ⇒ recusa explícita (fail-closed, nunca acervo local).
+ */
+export async function descobrirAvaliacaoDoColaboradorNoCiclo(
+  entrada: {
+    readonly organizationId: string;
+    readonly cycleId: string;
+    readonly evaluatedCollaboratorId: string;
+  },
+  deps: DependenciasAcessoAvaliacoes = {}
+): Promise<ResultadoCutover<DescobertaAvaliacaoDoColaborador>> {
+  const operacoes = obterOperacoesAvaliacaoSoberanas(deps);
+  if (!operacoes) return { ok: false, erro: ERRO_SEM_CAMINHO };
+  return operacoes.descobrirDoColaboradorNoCiclo(entrada);
+}
+
 /** Painel de EDIÇÃO da própria ocorrência do ator autenticado. */
 export async function carregarPainelSoberano(
   entrada: { readonly organizationId: string; readonly evaluationId: string },
@@ -122,6 +157,21 @@ export async function carregarPainelSoberano(
   const operacoes = obterOperacoesAvaliacaoSoberanas(deps);
   if (!operacoes) return { ok: false, erro: ERRO_SEM_CAMINHO };
   return operacoes.carregarPainel(entrada);
+}
+
+/** Notas por UUID do catálogo congelado; participante segue resolvido no servidor. */
+export async function gravarNotasPorIdSoberanas(
+  entrada: {
+    readonly organizationId: string;
+    readonly evaluationId: string;
+    readonly painel: PainelParticipante;
+    readonly notas: readonly { readonly subcriterionId: string; readonly nota: number }[];
+  },
+  deps: DependenciasAcessoAvaliacoes = {}
+): Promise<ResultadoCutover<number | null>> {
+  const operacoes = obterOperacoesAvaliacaoSoberanas(deps);
+  if (!operacoes) return { ok: false, erro: ERRO_SEM_CAMINHO };
+  return operacoes.gravarNotasPorId(entrada);
 }
 
 /** Notas da própria ocorrência, por NOME de subcritério do catálogo congelado. */

@@ -22,6 +22,7 @@ import {
   ehUuid,
   type AlvoAvaliacao,
   type CodigoPublico,
+  type DescobertaAvaliacaoDoColaborador,
   type OperacaoAvaliacao,
 } from "./contrato.ts";
 
@@ -201,6 +202,20 @@ export interface RepositorioAvaliacoes {
     readonly numero: number;
     readonly matriculaAvaliado: number | string;
   }): Promise<ResultadoRepositorio<string>>;
+  /**
+   * Descoberta da avaliação do colaborador no ciclo: LEITURA autorizada pelo OR
+   * explícito (`evaluation.create` ∨ `evaluation.write` ∨ `evaluation.read`)
+   * decidido no Policy Engine contra a avaliação carregada server-side.
+   *
+   * Devolve o payload MÍNIMO (`evaluationId`, `status`, `podeEditar`) —
+   * `evaluationId: null` quando não há avaliação NÃO CANCELADA. Nenhuma
+   * matrícula e nenhuma capability nova participam desta leitura.
+   */
+  obterDoColaboradorNoCiclo(entrada: {
+    readonly organizationId: string;
+    readonly cycleId: string;
+    readonly evaluatedCollaboratorId: string;
+  }): Promise<ResultadoRepositorio<DescobertaAvaliacaoDoColaborador>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -438,6 +453,53 @@ export function criarRepositorioAvaliacoesSupabase(
         ),
         (resultado) => projetarCicloResolvido(resultado)
       ),
+
+    obterDoColaboradorNoCiclo: (entrada) =>
+      invocar(
+        montarCorpo(
+          "evaluation.do_colaborador_no_ciclo",
+          entrada.organizationId,
+          // UUID soberano do colaborador avaliado — sem ponte de matrícula.
+          { type: "collaborator", id: entrada.evaluatedCollaboratorId },
+          { cycle_id: entrada.cycleId }
+        ),
+        (resultado) => projetarDescoberta(resultado)
+      ),
+  };
+}
+
+/** Payload mínimo da descoberta — normalizado e fail-closed. */
+function projetarDescoberta(valor: unknown): DescobertaAvaliacaoDoColaborador {
+  const registro = comoRegistro(valor ?? {});
+  if (registro.existeSemAcesso === true &&
+      Object.keys(registro).every((chave) => ["existeSemAcesso", "podeEditar"].includes(chave)) &&
+      !Object.hasOwn(registro, "evaluationId") &&
+      !Object.hasOwn(registro, "status") &&
+      registro.podeEditar === false) {
+    return { existeSemAcesso: true, podeEditar: false };
+  }
+  const id = registro.evaluationId;
+  const status = registro.status;
+  if (registro.existeSemAcesso !== undefined ||
+      !Object.hasOwn(registro, "evaluationId") ||
+      !Object.hasOwn(registro, "status") ||
+      typeof registro.podeEditar !== "boolean") {
+    throw new Error("Resposta de descoberta inválida.");
+  }
+  if (id !== null && !(typeof id === "string" && ehUuid(id))) {
+    throw new Error("Resposta de descoberta inválida.");
+  }
+  if (id === null && status !== null) {
+    throw new Error("Resposta de descoberta inválida.");
+  }
+  if (id !== null && (typeof status !== "string" || !status)) {
+    throw new Error("Resposta de descoberta inválida.");
+  }
+  return {
+    evaluationId: id,
+    status: status as string | null,
+    // `podeEditar` só é verdadeiro quando o SERVIDOR o declarou (ramo write).
+    podeEditar: registro.podeEditar === true,
   };
 }
 

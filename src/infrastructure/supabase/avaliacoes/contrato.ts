@@ -28,6 +28,7 @@ export type OperacaoAvaliacao =
   | "evaluation.transparencia"
   | "evaluation.painel_participante"
   | "evaluation.resolver_ciclo"
+  | "evaluation.do_colaborador_no_ciclo"
   | "report.listar";
 
 /** Alvo autorizável (mesmo `TargetRef` do Policy Engine). */
@@ -98,11 +99,103 @@ export const CAPABILITY_POR_OPERACAO: Readonly<Record<OperacaoAvaliacao, string>
   // Resolver ano+ciclo é pré-requisito de criação ⇒ mesma capability de criação.
   "evaluation.resolver_ciclo": "evaluation.create",
   "report.listar": "report.read",
+  /**
+   * Descoberta da avaliação do colaborador no ciclo.
+   *
+   * O código declarado aqui é NOMINAL (a operação é uma LEITURA). A decisão real
+   * é o OR explícito das três capabilities que habilitam alguma AÇÃO sobre o
+   * par (colaborador, ciclo) — ver `CAPABILIDADES_DESCOBERTA_AVALIACAO` e
+   * `resolverDescobertaAvaliacao`. Nenhuma capability nova é criada e o catálogo
+   * fechado permanece intacto.
+   */
+  "evaluation.do_colaborador_no_ciclo": "evaluation.read",
 };
+
+/**
+ * Conjunto FECHADO e explícito de capabilities aceitas pela descoberta.
+ *
+ * Cada uma corresponde a uma ação que o ator JÁ poderia executar com o id em
+ * mãos: criar (`create`), editar a própria ocorrência (`write`) ou consultar
+ * (`read`). A descoberta não amplia autoridade — apenas permite à ficha decidir
+ * QUAL ação oferecer.
+ */
+export const CAPABILIDADES_DESCOBERTA_AVALIACAO: readonly string[] = [
+  "evaluation.create",
+  "evaluation.write",
+  "evaluation.read",
+];
+
+/** Payload MÍNIMO da descoberta: id soberano, estado e permissão de edição. */
+export interface DescobertaAvaliacaoDoColaborador {
+  readonly evaluationId?: string | null;
+  readonly status?: string | null;
+  /** CREATE válido permite conhecer somente a existência, sem acessar conteúdo.
+   * Nesse ramo evaluationId e status são OMITIDOS do JSON, não nulos. */
+  readonly existeSemAcesso?: true;
+  /**
+   * Decidido SERVER-SIDE pelo ramo `evaluation.write` (ocorrência materializada
+   * vigente). A UI nunca reconstrói scopes/relações para decidir edição.
+   */
+  readonly podeEditar: boolean;
+}
+
+/** Estados da avaliação relevantes para a decisão da ficha. */
+export type StatusAvaliacaoDescoberta = "RASCUNHO" | "CONCLUIDA" | string;
+
+/**
+ * Regra PURA da descoberta (fail-closed).
+ *
+ * - existe avaliação não cancelada ⇒ ALLOW com conteúdo se `evaluation.write`
+ *   ou `evaluation.read`; somente `evaluation.create` ⇒ ALLOW com o bit de
+ *   existência, sem id, status ou qualquer dado da avaliação.
+ *   `podeEditar` vem EXCLUSIVAMENTE do ramo `write`; o status devolvido é o da
+ *   avaliação real.
+ * - NÃO existe (ou só cancelada) ⇒ ALLOW **somente** para quem pode CRIAR, com
+ *   `{evaluationId:null, status:null, podeEditar:false}`; qualquer outro ator
+ *   recebe DENY (não se revela ausência a quem não poderia agir).
+ *
+ * A função nunca lança e nunca devolve dados locais.
+ */
+export function resolverDescobertaAvaliacao(estado: {
+  readonly avaliacao: { readonly id: string; readonly status: string } | null;
+  readonly autorizaCriar: boolean;
+  readonly autorizaEscrever: boolean;
+  readonly autorizaLer: boolean;
+}):
+  | { readonly allowed: true; readonly resultado: DescobertaAvaliacaoDoColaborador }
+  | { readonly allowed: false } {
+  if (!estado.avaliacao) {
+    if (!estado.autorizaCriar) return { allowed: false };
+    return {
+      allowed: true,
+      resultado: { evaluationId: null, status: null, podeEditar: false },
+    };
+  }
+
+  const allowed = estado.autorizaEscrever || estado.autorizaLer;
+  if (!allowed) {
+    return estado.autorizaCriar
+      ? { allowed: true, resultado: { existeSemAcesso: true, podeEditar: false } }
+      : { allowed: false };
+  }
+
+  return {
+    allowed: true,
+    resultado: {
+      evaluationId: estado.avaliacao.id,
+      status: estado.avaliacao.status,
+      podeEditar:
+        estado.autorizaEscrever &&
+        ["RASCUNHO", "PRONTA_PARA_FEEDBACK"].includes(estado.avaliacao.status),
+    },
+  };
+}
 
 /** Alvo autorizável de cada operação (criação e resolução de ciclo usam o colaborador). */
 export function tipoAlvoDaOperacao(operacao: OperacaoAvaliacao): AlvoAvaliacao["type"] {
-  return operacao === "evaluation.criar" || operacao === "evaluation.resolver_ciclo"
+  return operacao === "evaluation.criar" ||
+    operacao === "evaluation.resolver_ciclo" ||
+    operacao === "evaluation.do_colaborador_no_ciclo"
     ? "collaborator"
     : "evaluation";
 }
@@ -176,6 +269,22 @@ export function validarEntradaAvaliacao(corpo: unknown): ResultadoValidacao {
       return { ok: false, code: "INVALID_INPUT", message: "cycle_id obrigatório e inválido." };
     }
     return { ok: true, entrada: cru as unknown as EntradaAvaliacao };
+  }
+
+  // Descoberta da avaliação do colaborador: LEITURA estrita — allowlist de
+  // chaves própria. Nenhum campo de escrita/intenção de mutação é aceito.
+  if (cru.operacao === "evaluation.do_colaborador_no_ciclo") {
+    const permitidas = ["operacao", "organization_id", "alvo", "cycle_id"];
+    if (Object.keys(cru).some((chave) => !permitidas.includes(chave))) {
+      return {
+        ok: false,
+        code: "INVALID_INPUT",
+        message: "A descoberta da avaliação do colaborador aceita apenas operacao, organization_id, alvo e cycle_id.",
+      };
+    }
+    if (!ehUuid(cru.cycle_id)) {
+      return { ok: false, code: "INVALID_INPUT", message: "cycle_id obrigatório e inválido." };
+    }
   }
 
   const alvoCru = cru.alvo;

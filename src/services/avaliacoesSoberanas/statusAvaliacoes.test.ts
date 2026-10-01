@@ -39,6 +39,10 @@ function avaliacao(parcial: Partial<AvaliacaoSoberana> = {}): AvaliacaoSoberana 
 
 function repositorio(ler: RepositorioAvaliacoes["ler"]): RepositorioAvaliacoes {
   return {
+    obterDoColaboradorNoCiclo: async () => ({
+      ok: true,
+      data: { evaluationId: null, status: null, podeEditar: false },
+    }),
     criar: async () => ({ ok: true, data: AVALIACAO }),
     ler,
     gravarNotas: async () => ({ ok: true, data: null }),

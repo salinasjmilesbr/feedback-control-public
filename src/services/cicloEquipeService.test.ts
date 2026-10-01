@@ -119,6 +119,10 @@ function repositorioFalso(
   const chamadas: string[] = [];
   let sequencia = 0;
   const base: RepositorioAvaliacoes = {
+    obterDoColaboradorNoCiclo: async () => ({
+      ok: true,
+      data: { evaluationId: null, status: null, podeEditar: false },
+    }),
     // Cada criação devolve um id técnico DISTINTO (como o PostgreSQL faria):
     // ids repetidos esconderiam erros de livro-caixa e de contagem.
     criar: async () => {
