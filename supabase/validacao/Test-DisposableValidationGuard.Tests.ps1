@@ -9,6 +9,7 @@ $testRoot = Join-Path ([IO.Path]::GetTempPath()) "feedback-control-validation-gu
 $workdir = $null
 $candidateWorkdir = $null
 $dangerous = $null
+$crlfWorkdir = $null
 function Invoke-GuardFixture {
     param([hashtable]$Files, [bool]$ShouldPass, [string]$Name)
     $fixture = Join-Path $testRoot $Name
@@ -261,6 +262,31 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'FAIL: restauracao do HEAD da fixture.' }
     Write-Host 'PASS: candidato sem codigo de aplicacao (src) rejeitado fail-closed.'
 
+    # Regressao (smoke real, supabase/.gitignore): `git archive` honra
+    # `core.autocrlf` e grava LF->CRLF no ZIP, o que fazia a prova de identidade
+    # (`hash-object --no-filters`) divergir do blob sem qualquer mudanca real.
+    git -C $candidateRepo config core.autocrlf true
+    $multiLinha = Join-Path $candidateRepo 'src/multilinha.txt'
+    [System.IO.File]::WriteAllText($multiLinha, "linha-um`nlinha-dois`nlinha-tres`n", (New-Object System.Text.UTF8Encoding($false)))
+    git -C $candidateRepo add -- src/multilinha.txt
+    git -C $candidateRepo -c user.name=Fixture -c user.email=fixture@example.test commit --quiet -m multilinha
+    if ($LASTEXITCODE -ne 0) { throw 'FAIL: commit multilinha da fixture.' }
+    $multilinhaCommit = git -C $candidateRepo rev-parse HEAD
+    $multilinhaOid = git -C $candidateRepo rev-parse "${multilinhaCommit}:src/multilinha.txt"
+    $multilinhaBlobSize = [int](git -C $candidateRepo cat-file -s $multilinhaOid)
+    $crlfWorkdir = Join-Path ([IO.Path]::GetTempPath()) "feedback-control-validation-$($PID + 500000)"
+    New-Item -ItemType Directory -Path $crlfWorkdir -Force | Out-Null
+    Export-DisposableCommitPaths -RepoRoot $candidateRepo -Commit $multilinhaCommit -ProjectRoot $crlfWorkdir -Paths @('src')
+    Assert-DisposableExportedTree -RepoRoot $candidateRepo -Commit $multilinhaCommit -ProjectRoot $crlfWorkdir -Path 'src'
+    $materializado = [System.IO.File]::ReadAllBytes((Join-Path $crlfWorkdir 'src/multilinha.txt'))
+    if ($materializado.Length -ne $multilinhaBlobSize) {
+        throw "FAIL: materializacao alterou o tamanho do arquivo ($($materializado.Length) != $multilinhaBlobSize)."
+    }
+    if (@($materializado | Where-Object { $_ -eq 13 }).Count -ne 0) {
+        throw 'FAIL: materializacao introduziu CR (conversao de EOL).'
+    }
+    Write-Host 'PASS: materializacao preserva os bytes do blob mesmo com core.autocrlf=true.'
+
     $occupied = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, 0)
     $occupied.Start()
     $occupiedPort = $occupied.LocalEndpoint.Port
@@ -359,5 +385,9 @@ try {
     if ($null -ne $dangerous -and (Test-Path -LiteralPath $dangerous)) {
         Assert-DisposableValidationWorkdir -Workdir $dangerous -TempRoot ([IO.Path]::GetTempPath().TrimEnd('\'))
         Remove-Item -LiteralPath $dangerous -Recurse -Force
+    }
+    if ($null -ne $crlfWorkdir -and (Test-Path -LiteralPath $crlfWorkdir)) {
+        Assert-DisposableValidationWorkdir -Workdir $crlfWorkdir -TempRoot ([IO.Path]::GetTempPath().TrimEnd('\'))
+        Remove-Item -LiteralPath $crlfWorkdir -Recurse -Force
     }
 }
