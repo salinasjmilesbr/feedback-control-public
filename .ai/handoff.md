@@ -26,8 +26,18 @@ em `.ai/*`, não são duplicadas aqui.
 
 ## 2. Estado atual
 
-- **Baseline vigente:** `main` / `origin/main` em
-  `e067b43448e146a06fa0d9102d6786c50e1ad9a7`; CI padrão #534 está verde nesse SHA.
+> **Checkpoint documental de Avaliações (Incremento 0):** worktree isolado
+> `feedback-control-docs-avaliacoes-i0`, branch
+> `docs/f6-avaliacoes-contrato-soberano-i0`, base `origin/main` em
+> `d7c3191b1de33be0d13afa1507fc7b8ce518d29a`. A revisão normativa
+> proposta está em `docs/F6-avaliacoes-contrato-soberano-revisao.md`;
+> **sem código, commit, push ou PR** nesta etapa. Os incrementos 1–4 e a
+> retomada funcional da #421 dependem da revisão/integração do desenho.
+> A árvore original da #421 e `auditoria-v21.txt` não foram transportados.
+
+- **Baseline local deste checkpoint:** `main` / `origin/main` em
+  `d7c3191b1de33be0d13afa1507fc7b8ce518d29a`; o CI desse SHA não foi
+  verificado nesta atividade documental.
 - **Etapa 6:** #364, #404, #410, #412 e #413 concluídas; #413 merged. #293 e #310 permanecem abertas.
   F6-COLAB-03 e F6-A18 são itens planejados sem Issue própria identificada.
 - **#414:** adiada por decisão de produto, fora do escopo imediato; Issue fechada como adiada e PR #415 fechado

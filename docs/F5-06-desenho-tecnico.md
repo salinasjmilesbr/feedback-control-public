@@ -10,6 +10,13 @@
 > Base: `main` (F5-01…F5-05 concluídas; F5-05 mergeada via PR #172)
 > Leitura de referência: `docs/F5-01…F5-05-desenho-tecnico.md`, `docs/F4-0x-desenho-tecnico.md`
 
+> **Emenda normativa posterior — Incremento 0 de Avaliações:**
+> `docs/F6-avaliacoes-contrato-soberano-revisao.md` emenda D8, D14, D18–D20,
+> workflow (§7) e transparência (§9) nos pontos expressamente identificados.
+> As demais decisões F5-06 permanecem vigentes. A emenda documental não
+> declara o runtime atual conforme; sua implementação ocorre em incrementos
+> posteriores, após integração do desenho em `main`.
+
 ---
 
 ## 1. Objetivo e limites

@@ -125,6 +125,7 @@ registro de gate) — o que não tem evidência é **dívida** ou **lacuna**, nu
 | **F6 — checkpoint pós-#359** | Plataforma soberana, leitura estrutural, identidade de posição, gestão de pessoas por posição, isolamento do runner descartável e provas P5 | Consolidado nesta v19; ver Parte III |
 | **F6 — validação integrada (#364; decisão #362)** | Validação funcional end-to-end do cenário Acme reconstruído | Concluída; Issue #364 fechada após checkpoint integrado |
 | **F6-AVALIACOES-05 (#404) + correção #410** | Integração funcional de Avaliações e CREATE por UUID soberano | Concluídas; Issues #404 e #410 fechadas |
+| **Avaliações — revisão contratual (Incremento 0, pré-#421)** | Emenda normativa F5-06/F6 para projeções, completude por ocorrência e estados sequenciais | Desenho em `docs/F6-avaliacoes-contrato-soberano-revisao.md`; incrementos funcionais 1–4 ainda não implementados; #421 depende dos contratos soberanos para a jornada completa |
 | **R3-09B — jornada Admin → colaborador → convite (#310; #412/#413)** | Jornada navegável e runtime de cadastro, convite e login no tenant correto | Concluída; Issue #412 fechada e PR #413 merged |
 
 Detalhamento por fase (critérios, decisões, evidências): `docs/F5-01-desenho-tecnico.md` …

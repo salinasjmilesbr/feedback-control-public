@@ -5,6 +5,12 @@
 > migration ou dado é alterado por este documento.
 > **Estado:** FECHADO — decisões D1–D8 incorporadas após auditoria arquitetural.
 
+> **Emenda normativa posterior — Incremento 0 de Avaliações:**
+> `docs/F6-avaliacoes-contrato-soberano-revisao.md` precisa D4/D8 para a
+> leitura coletiva dos participantes, autoria das transições e transparência
+> SELF. Bundles, capabilities, scopes e demais decisões permanecem vigentes.
+> Esta emenda documental não indica implementação no runtime atual.
+
 ## 1. Objetivo e limites
 
 Conectar genericamente os atores relacionais de Avaliações às capabilities mutantes já previstas
