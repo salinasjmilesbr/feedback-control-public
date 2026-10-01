@@ -207,6 +207,44 @@ try {
         if (@($ignoredManifest.Operations | Where-Object { $_.Path -eq $path }).Count -ne 0) { throw "FAIL: path ignorado entrou no inventario: $path" }
     }
     Write-Host 'PASS: arquivo ignorado relevante NAO entra no inventario nem no snapshot.'
+
+    # ------------------- hotfix: templates .env* permitidos / segredos negados
+    # (regra UNICA de nome aplicada por varredura de raiz, varredura recursiva,
+    # inventario e materializacao)
+    $templates = New-CandidateFixture -Name 'env-templates'
+    foreach ($template in @('.env.example', '.env.sample', '.env.template')) {
+        Set-CandidateFile $templates.Candidate $template "TEMPLATE=1`n"
+    }
+    Set-CandidateFile $templates.Candidate 'src/app.ts' "export const valor = 'templates';`n"
+    $templatesWorkdir = New-MaterializationWorkdir
+    $templatesManifest = Invoke-Materialization -Fixture $templates -Workdir $templatesWorkdir
+    foreach ($template in @('.env.example', '.env.sample', '.env.template')) {
+        if (Test-Path -LiteralPath (Join-Path $templatesWorkdir $template)) { throw "FAIL: template foi materializado: $template" }
+        if (@($templatesManifest.Operations | Where-Object { $_.Path -eq $template }).Count -ne 0) { throw "FAIL: template entrou no inventario: $template" }
+    }
+    Write-Host 'PASS: .env.example/.env.sample/.env.template PERMITIDOS na raiz (nao materializados).'
+
+    $insideTemplate = New-CandidateFixture -Name 'env-template-inside'
+    Set-CandidateFile $insideTemplate.Candidate 'supabase/.env.example' "TEMPLATE=1`n"
+    git -C $insideTemplate.Candidate add -f -- supabase/.env.example
+    $insideTemplateWorkdir = New-MaterializationWorkdir
+    $insideTemplateManifest = Invoke-Materialization -Fixture $insideTemplate -Workdir $insideTemplateWorkdir
+    if (@($insideTemplateManifest.Operations | Where-Object { $_.Path -eq 'supabase/.env.example' -and $_.Operation -eq 'add' }).Count -ne 1) {
+        throw 'FAIL: template dentro da allowlist nao foi materializado (regra inconsistente).'
+    }
+    Write-Host 'PASS: template permitido tambem dentro da allowlist (varredura+inventario+materializacao consistentes).'
+
+    foreach ($segredo in @('.env', '.env.local', '.env.production', '.env.production.local')) {
+        $fixtureSegredo = New-CandidateFixture -Name ("env-negado-" + ($segredo -replace '[^a-z]', ''))
+        Set-CandidateFile $fixtureSegredo.Candidate $segredo "SEGREDO=1`n"
+        Assert-FailsClosed -Name "segredo $segredo no candidato" -ExpectedMessage 'proibido' -Action { Invoke-Materialization -Fixture $fixtureSegredo }
+    }
+    $naoTemplate = New-CandidateFixture -Name 'env-nao-template'
+    Set-CandidateFile $naoTemplate.Candidate '.env.example.local' "SEGREDO=1`n"
+    Assert-FailsClosed -Name 'segredo .env.example.local' -ExpectedMessage 'proibido' -Action { Invoke-Materialization -Fixture $naoTemplate }
+    $insideSecret = New-CandidateFixture -Name 'env-negado-inside'
+    Set-CandidateFile $insideSecret.Candidate 'supabase/.env.production' "SEGREDO=1`n"
+    Assert-FailsClosed -Name 'segredo dentro da allowlist' -ExpectedMessage 'proibido' -Action { Invoke-Materialization -Fixture $insideSecret }
     # Path PROIBIDO e ignorado pelo Git: a varredura explicita reprova mesmo assim.
     $ignoredSecret = New-CandidateFixture -Name 'ignored-secret' -ExtraGitignore @('.env.local')
     Set-CandidateFile $ignoredSecret.Candidate '.env.local' "SEGREDO=1`n"
@@ -252,10 +290,74 @@ try {
     $safetyText = Get-Content -LiteralPath (Join-Path $psscriptRoot 'DisposableValidationSafety.ps1') -Raw -Encoding UTF8
     foreach ($needle in @('CandidateWorktree alterado durante a captura', 'Hash divergente no snapshot', 'Tamanho divergente no snapshot',
                           'Migration historica do baseline alterada/removida pelo candidato', 'Versao de migration duplicada no snapshot',
-                          'Path proibido no candidato', 'Path fora da allowlist do CandidateWorktree', 'symlink/reparse point')) {
+                          'Path proibido no candidato', 'Path fora da allowlist do CandidateWorktree',
+                          'CandidateWorktree contem link/redirecionamento de path', 'Test-DisposableCloudReparseTag',
+                          'Get-DisposableReparseTag', 'Assert-DisposablePathComponentsResolve',
+                          'CandidateWorktree ilegivel (falha de leitura/hidratacao)', 'CandidateWorktree com leitura parcial')) {
         if ($safetyText -notmatch [regex]::Escape($needle)) { throw "FAIL: guard ausente no modulo de seguranca: $needle" }
     }
     Write-Host 'PASS: guards de captura/verificacao/seguranca presentes no modulo.'
+
+    # ------------------- classificacao por TAG de reparse (determinista e fail-closed)
+    # Seguranca e estabelecida SOMENTE por identificacao POSITIVA da tag cloud; a
+    # ausencia de metadata de link (LinkType/Target/ResolveLinkTarget) NAO torna
+    # nada seguro (host 5.1 nao preenche LinkType para tags desconhecidas).
+    foreach ($tagAllow in @('0x9000601a', '0x9000001a', '0x9000101a', '0x9000e01a')) {
+        if (-not (Test-DisposableCloudReparseTag -Tag $tagAllow)) { throw "FAIL: tag cloud $tagAllow deveria ser ALLOW." }
+    }
+    Write-Host 'PASS: tags cloud permitidas => ALLOW.'
+    $casosDeny = @(
+        @{ Nome = 'SymbolicLink'; Tag = '0xa000000c' },
+        @{ Nome = 'Junction/MountPoint'; Tag = '0xa0000003' },
+        @{ Nome = 'LX_SYMLINK (WSL)'; Tag = '0xa000001d' },
+        @{ Nome = 'APPEXECLINK'; Tag = '0x8000001b' },
+        @{ Nome = 'tag desconhecida'; Tag = '0xdeadbeef' },
+        @{ Nome = 'texto nao-hex'; Tag = 'nao-eh-hex' },
+        @{ Nome = 'string vazia'; Tag = '' },
+        @{ Nome = 'nulo'; Tag = $null }
+    )
+    foreach ($caso in $casosDeny) {
+        if (Test-DisposableCloudReparseTag -Tag $caso.Tag) { throw "FAIL: $($caso.Nome) deveria ser DENY." }
+    }
+    Write-Host 'PASS: SymbolicLink/Junction/LX_SYMLINK/APPEXECLINK/desconhecida/invalida/nula => DENY.'
+
+    # --------------- excecao de template restrita a ARQUIVOS (nao diretorios)
+    $envDir = New-CandidateFixture -Name 'env-template-dir'
+    Set-CandidateFile $envDir.Candidate 'supabase/.env.example/interno.txt' "x`n"
+    Assert-FailsClosed -Name 'diretorio .env.example nao recebe a excecao' -ExpectedMessage 'proibido' -Action { Invoke-Materialization -Fixture $envDir }
+
+    # Comportamental: arquivo regular real nao redireciona e nao tem tag.
+    $realFile = Join-Path $env:TEMP ('redirect-probe-' + [guid]::NewGuid().ToString('N') + '.txt')
+    Set-Content -LiteralPath $realFile -Value 'conteudo regular'
+    try {
+        if (Test-DisposablePathRedirects -Path $realFile) { throw 'FAIL: arquivo regular classificado como redirecionamento.' }
+        if ($null -ne (Get-DisposableReparseTag -Path $realFile)) { throw 'FAIL: arquivo regular nao deveria ter tag (leitor nao fail-closed).' }
+        Write-Host 'PASS: arquivo regular real nao redireciona e leitor de tag retorna nulo (fail-closed).'
+        # Comportamental: junction real (nao exige privilegio) redireciona e e DENY.
+        $alvoDir = Join-Path $env:TEMP ('redirect-alvo-' + [guid]::NewGuid().ToString('N'))
+        $junctionDir = Join-Path $env:TEMP ('redirect-junction-' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $alvoDir -Force | Out-Null
+        New-Item -ItemType Directory -Path $junctionDir -Force | Out-Null
+        $junction = Join-Path $junctionDir 'link'
+        $criou = $true
+        try { New-Item -ItemType Junction -Path $junction -Target $alvoDir -ErrorAction Stop | Out-Null } catch { $criou = $false }
+        if ($criou) {
+            $tagJunction = Get-DisposableReparseTag -Path $junction
+            if ($tagJunction -ine '0xa0000003') { throw "FAIL: tag da junction inesperada: '$tagJunction'." }
+            if (-not (Test-DisposablePathRedirects -Path $junction)) { throw 'FAIL: junction real nao classificada como redirecionamento.' }
+            Write-Host 'PASS: junction real => tag 0xa0000003 => DENY.'
+            $linkCandidate = New-CandidateFixture -Name 'junction-candidato'
+            Set-Content -LiteralPath (Join-Path $alvoDir 'arquivo.ts') -Value 'export {};'
+            New-Item -ItemType Junction -Path (Join-Path $linkCandidate.Candidate 'src\redireciona') -Target $alvoDir -ErrorAction Stop | Out-Null
+            $mensagem = ''
+            try { Assert-DisposablePathComponentsResolve -Root $linkCandidate.Candidate -Relative 'src/redireciona/arquivo.ts' } catch { $mensagem = $_.Exception.Message }
+            if ($mensagem -notmatch 'redirecionamento') { throw "FAIL: junction intermediaria nao reprovada (mensagem: '$mensagem')." }
+            Write-Host 'PASS: junction INTERMEDIARIA no caminho do candidato reprova fail-closed.'
+        } else {
+            Write-Host 'PASS (parcial): criacao de junction indisponivel neste host; DENY de Junction coberto pela classificacao determinista.'
+        }
+        Remove-Item -LiteralPath $junctionDir, $alvoDir -Recurse -Force -ErrorAction SilentlyContinue
+    } finally { Remove-Item -LiteralPath $realFile -Force -ErrorAction SilentlyContinue }
 
     Write-Host 'PASS: suíte CandidateWorktree concluída.'
 } finally {

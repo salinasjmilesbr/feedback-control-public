@@ -304,8 +304,43 @@ $script:DisposableCandidateApplicationFiles = @(
     'index.html', 'package.json', 'package-lock.json', 'vite.config.ts',
     'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json', 'eslint.config.js'
 )
-$script:DisposableForbiddenRelativePattern = '(^|/)(\.\.|\.env[^/]*|\.temp|start-secrets|docker\.env|node_modules|\.git)(/|$)'
-$script:DisposableForbiddenFullPattern = '(^|/)(\.env[^/]*|\.temp|start-secrets|docker\.env|node_modules|\.git)(/|$)'
+# Segmentos proibidos em QUALQUER profundidade (o caso `.env*` e decidido por
+# NOME, para permitir os templates versionados — ver o helper abaixo).
+$script:DisposableForbiddenRelativePattern = '(^|/)(\.\.|\.temp|start-secrets|docker\.env|node_modules|\.git)(/|$)'
+$script:DisposableForbiddenFullPattern = '(^|/)(\.\.|\.temp|start-secrets|docker\.env|node_modules|\.git)(/|$)'
+# Templates versionados e INTENCIONAIS do repositorio: nao sao segredo.
+$script:DisposableEnvTemplateNames = @('.env.example', '.env.sample', '.env.template')
+
+<#
+Regra UNICA de nome de segredo/estado local, aplicada de forma consistente pelo
+inventario (path-safety), pela varredura de raiz e pela varredura recursiva:
+
+- `.env.example`, `.env.sample` e `.env.template` sao PERMITIDOS (templates);
+- `.env` e qualquer `.env.<sufixo>` (inclui `.env.local`, `.env.production` e
+  `.env.production.local`) continuam PROIBIDOS;
+- `.temp`, `start-secrets` e `docker.env` continuam PROIBIDOS.
+
+A comparacao e case-insensitive (semantica do filesystem no Windows) e o
+allowlist e por nome EXATO — `.env.example.local` NAO e template e segue proibido.
+#>
+function Test-DisposableForbiddenSecretName {
+    param([string]$Name, [bool]$IsDirectory = $false)
+
+    if ([string]::IsNullOrWhiteSpace($Name)) { return $false }
+    # Templates versionados sao excecao APENAS quando sao ARQUIVOS. Um DIRETORIO
+    # com nome de template NAO recebe a excecao e cai na regra de `.env.*` abaixo.
+    if (-not $IsDirectory) {
+        foreach ($template in $script:DisposableEnvTemplateNames) {
+            if ($Name.Equals($template, [System.StringComparison]::OrdinalIgnoreCase)) { return $false }
+        }
+    }
+    if ($Name.Equals('.env', [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
+    if ($Name.StartsWith('.env.', [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
+    foreach ($estado in @('.temp', 'start-secrets', 'docker.env')) {
+        if ($Name.Equals($estado, [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    return $false
+}
 $script:DisposableMigrationFilePattern = '^[0-9]{14}_[a-z0-9_]+\.sql$'
 $script:DisposableHistoricalMigrationException = 'Migration historica do baseline alterada/removida pelo candidato'
 
@@ -344,6 +379,11 @@ function Assert-DisposableCandidatePathSafe {
     if ($Relative -match $script:DisposableForbiddenRelativePattern) {
         throw "Path proibido no candidato (segredo/estado local): $Relative"
     }
+    foreach ($segmento in ($Relative -split '/')) {
+        if (Test-DisposableForbiddenSecretName -Name $segmento) {
+            throw "Path proibido no candidato (segredo/estado local): $Relative"
+        }
+    }
     $root = ($Relative -split '/')[0]
     if ($script:DisposableCandidateRoots -notcontains $root -and $script:DisposableCandidateApplicationFiles -notcontains $Relative) {
         throw "Path fora da allowlist do CandidateWorktree: $Relative"
@@ -361,8 +401,8 @@ function Assert-DisposableCandidateWorktreePath {
     }
     $candidate = (Resolve-Path -LiteralPath $CandidateWorktree -ErrorAction Stop).Path
     $infra = (Resolve-Path -LiteralPath $RepoRoot -ErrorAction Stop).Path
-    if ((Get-Item -LiteralPath $candidate -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
-        throw 'CandidateWorktree nao pode ser symlink/reparse point.'
+    if (Test-DisposablePathRedirects -Path $candidate) {
+        throw 'CandidateWorktree nao pode ser link/redirecionamento de path.'
     }
     if ($candidate -eq $infra) {
         throw 'CandidateWorktree nao pode ser o proprio worktree de infraestrutura.'
@@ -427,12 +467,92 @@ function Get-DisposableCandidateStatusEntries {
     return $entries
 }
 
+# Tags cloud do Windows/OneDrive (placeholders). SOMENTE estas sao permitidas
+# quando o item tem o atributo ReparsePoint. Qualquer outra tag — SymbolicLink
+# (0xa000000c), MountPoint/Junction (0xa0000003), LX_SYMLINK/WSL (0xa000001d),
+# APPEXECLINK (0x8000001b), desconhecida, ilegivel ou nao determinavel — => DENY.
+# Armazenadas como HEX CANONICO (8 digitos, minusculas): evita a ambiguidade de
+# sinal do literal `0x…` do PowerShell (que vira Int32 negativo quando > 0x7FFFFFFF).
+$script:DisposableCloudReparseTags = @(
+    '9000001a',   # IO_REPARSE_TAG_CLOUD
+    '9000101a', '9000201a', '9000301a', '9000401a', '9000501a', '9000601a',
+    '9000701a', '9000801a', '9000901a', '9000a01a', '9000b01a', '9000c01a',
+    '9000e01a'    # IO_REPARSE_TAG_CLOUD_14 (placeholder de DIRETORIO do OneDrive)
+)
+
+function Test-DisposableCloudReparseTag {
+    param($Tag)
+
+    # Classificacao PURA e deterministica: aceita SOMENTE tags cloud conhecidas.
+    # Entrada numerica ou string hex ("0x9000601a"); qualquer outra => false.
+    if ($null -eq $Tag) { return $false }
+    if ($Tag -is [int] -or $Tag -is [long] -or $Tag -is [int64] -or $Tag -is [uint32] -or $Tag -is [uint64]) {
+        $hex = ('{0:x}' -f ([uint64][long]$Tag)).PadLeft(8, '0')
+    } else {
+        $texto = ([string]$Tag).Trim()
+        if ($texto -notmatch '^(0x)?[0-9a-fA-F]{1,16}$') { return $false }
+        $hex = ($texto -replace '^0[xX]', '').ToLowerInvariant().PadLeft(8, '0')
+    }
+    return ($script:DisposableCloudReparseTags -contains $hex)
+}
+
+function Get-DisposableReparseTag {
+    param([string]$Path)
+
+    # Obtencao NATIVA e deterministica da tag via `fsutil reparsepoint query`
+    # (leitura nao exige elevacao). Funciona no Windows PowerShell 5.1. A saida e
+    # localizada; extraimos o PRIMEIRO `0x<hex>` da PRIMEIRA linha (que e sempre a
+    # "Reparse Tag"), sem depender de rotulo. Falha, saida vazia, ausencia de tag ou
+    # formato inesperado => $null (o chamador nega — fail-closed).
+    try { $saida = @(& fsutil reparsepoint query $Path 2>&1) } catch { return $null }
+    if ($LASTEXITCODE -ne 0 -or $saida.Count -eq 0) { return $null }
+    $primeira = [string]$saida[0]
+    $m = [regex]::Match($primeira, '0x[0-9a-fA-F]+')
+    if (-not $m.Success) { return $null }
+    return $m.Value
+}
+
+function Test-DisposablePathRedirects {
+    param([string]$Path)
+
+    $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+    if (-not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { return $false }
+    # E reparse: so e seguro se a TAG for positivamente cloud. LinkType/Target e
+    # ResolveLinkTarget NAO estabelecem seguranca (o host 5.1 nao tem a API e nao
+    # preenche LinkType para tags desconhecidas — por isso a decisao e pela tag).
+    $tag = Get-DisposableReparseTag -Path $Path
+    if ($null -eq $tag) { return $true }
+    if (Test-DisposableCloudReparseTag -Tag $tag) { return $false }
+    return $true
+}
+
+function Assert-DisposablePathComponentsResolve {
+    param([string]$Root, [string]$Relative)
+
+    # Nenhum componente do caminho — inclusive diretorios INTERMEDIARIOS — pode
+    # redirecionar a resolucao para outro alvo (symlink/junction de diretorio). Um
+    # junction no meio do caminho levaria bytes de fora do worktree para dentro do
+    # snapshot, entao a checagem e por componente, nao apenas no arquivo final.
+    $current = $Root
+    foreach ($segmento in ($Relative -split '/')) {
+        $current = Join-Path $current $segmento
+        if (-not (Test-Path -LiteralPath $current)) { continue }
+        if (Test-DisposablePathRedirects -Path $current) {
+            throw "CandidateWorktree contem link/redirecionamento de path: $Relative"
+        }
+    }
+}
+
 function Copy-DisposableCandidateFileBytes {
     param([string]$SourcePath, [string]$TargetPath)
 
     $targetDir = Split-Path -Parent $TargetPath
     if (-not (Test-Path -LiteralPath $targetDir)) { New-Item -ItemType Directory -Path $targetDir -Force | Out-Null }
-    $bytes = [IO.File]::ReadAllBytes($SourcePath)
+    # Leitura INTEGRAL do arquivo do candidato (hidrata placeholder de nuvem sob
+    # demanda). Se a leitura falhar ou vier parcial, reprova fail-closed; o arquivo
+    # do candidato NAO e alterado.
+    try { $bytes = [IO.File]::ReadAllBytes($SourcePath) } catch { throw "CandidateWorktree ilegivel (falha de leitura/hidratacao): $SourcePath" }
+    if ($bytes.Length -ne (Get-Item -LiteralPath $SourcePath -Force).Length) { throw "CandidateWorktree com leitura parcial: $SourcePath" }
     [IO.File]::WriteAllBytes($TargetPath, $bytes)
     # Alteracao durante a captura: o arquivo do candidato precisa continuar
     # identico ao que foi materializado.
@@ -449,19 +569,24 @@ function Assert-DisposableCandidateNoForbiddenPaths {
 
     # (1) RAIZ do worktree: segredo/estado local presente no candidato reprova a
     # certificacao MESMO quando o Git o ignora (o host pode ter ignore global de
-    # `.env*`, o que o esconderia do inventario).
+    # `.env*`, o que o esconderia do inventario). Templates versionados
+    # (`.env.example`/`.env.sample`/`.env.template`) sao permitidos.
     $rootEntries = @(Get-ChildItem -LiteralPath $CandidateWorktree -Force -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -match '^(\.env.*|\.temp|start-secrets|docker\.env)$' })
+        Where-Object { Test-DisposableForbiddenSecretName -Name $_.Name -IsDirectory $_.PSIsContainer })
     if ($rootEntries.Count -gt 0) {
         throw "CandidateWorktree contem path proibido (segredo/estado local): $($rootEntries[0].Name)"
     }
-    # (2) Roots allowlisted (recursivo): qualquer caminho proibido de materializacao
-    # (`.env*`, `.temp`, `start-secrets`, `docker.env`, `node_modules`, `.git`).
+    # (2) Roots allowlisted (recursivo): mesma regra de nome + segmentos proibidos
+    # de materializacao (`..`, `.temp`, `start-secrets`, `docker.env`,
+    # `node_modules`, `.git`).
     foreach ($root in $script:DisposableCandidateRoots) {
         $rootPath = Join-Path $CandidateWorktree $root
         if (-not (Test-Path -LiteralPath $rootPath -PathType Container)) { continue }
         $found = @(Get-ChildItem -LiteralPath $rootPath -Recurse -Force -ErrorAction SilentlyContinue |
-            Where-Object { $_.FullName.Replace('\', '/') -match $script:DisposableForbiddenFullPattern })
+            Where-Object {
+                (Test-DisposableForbiddenSecretName -Name $_.Name -IsDirectory $_.PSIsContainer) -or
+                ($_.FullName.Replace('\', '/') -match $script:DisposableForbiddenFullPattern)
+            })
         if ($found.Count -gt 0) {
             throw "CandidateWorktree contem path proibido (segredo/estado local): $(Get-DisposableRelativePath -Root $CandidateWorktree -FullName $found[0].FullName)"
         }
@@ -551,7 +676,7 @@ function Invoke-DisposableCandidateWorktreeMaterialization {
             continue
         }
         $item = Get-Item -LiteralPath $source -Force
-        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "CandidateWorktree contem symlink/reparse point: $($entry.Path)" }
+        Assert-DisposablePathComponentsResolve -Root $CandidateWorktree -Relative $entry.Path
         if ($item.PSIsContainer) { throw "CandidateWorktree contem diretorio nao suportado: $($entry.Path)" }
         if ($isHistoricalNew) { throw "$($script:DisposableHistoricalMigrationException): $($entry.Path)" }
         $bytes = Copy-DisposableCandidateFileBytes -SourcePath $source -TargetPath $target
@@ -612,6 +737,7 @@ function Invoke-DisposableCandidateWorktreeMaterialization {
             AllowlistRoots     = @($script:DisposableCandidateRoots)
             ApplicationFiles   = @($script:DisposableCandidateApplicationFiles)
             ForbiddenPattern   = $script:DisposableForbiddenRelativePattern
+            AllowedEnvTemplates = @($script:DisposableEnvTemplateNames)
         }
         Operations           = $ordered
         HistoricalMigrations = $migrations.Historical
