@@ -288,3 +288,336 @@ function Invoke-DisposableInteractiveCleanup {
     }
     Remove-Item -LiteralPath $Workdir -Recurse -Force
 }
+
+# ============================================================================
+# Modo CandidateWorktree (contrato fechado)
+#
+# Certifica um worktree NAO COMMITADO (src/** e supabase/**) cujo HEAD e
+# exatamente origin/main. Baseline e exportado por `git archive`; as diferencas
+# do candidato entram por INVENTARIO Git NUL-safe e copia dos BYTES FINAIS,
+# sem patches e sem tocar o index/staging do candidato. Tudo e verificado antes
+# de qualquer Docker/Supabase.
+# ============================================================================
+
+$script:DisposableCandidateRoots = @('src', 'public', 'supabase')
+$script:DisposableCandidateApplicationFiles = @(
+    'index.html', 'package.json', 'package-lock.json', 'vite.config.ts',
+    'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json', 'eslint.config.js'
+)
+$script:DisposableForbiddenRelativePattern = '(^|/)(\.\.|\.env[^/]*|\.temp|start-secrets|docker\.env|node_modules|\.git)(/|$)'
+$script:DisposableForbiddenFullPattern = '(^|/)(\.env[^/]*|\.temp|start-secrets|docker\.env|node_modules|\.git)(/|$)'
+$script:DisposableMigrationFilePattern = '^[0-9]{14}_[a-z0-9_]+\.sql$'
+$script:DisposableHistoricalMigrationException = 'Migration historica do baseline alterada/removida pelo candidato'
+
+function Get-DisposableSha256 {
+    param([string]$Path)
+
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $stream = [System.IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try {
+        return ([BitConverter]::ToString($sha.ComputeHash($stream)) -replace '-', '').ToLowerInvariant()
+    } finally {
+        $stream.Dispose()
+        $sha.Dispose()
+    }
+}
+
+function Get-DisposableRelativePath {
+    param([string]$Root, [string]$FullName)
+
+    $prefix = $Root.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+    if (-not $FullName.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Path fora do workdir descartavel: $FullName"
+    }
+    return $FullName.Substring($prefix.Length).Replace('\', '/')
+}
+
+function Assert-DisposableCandidatePathSafe {
+    param([string]$Relative)
+
+    if ([string]::IsNullOrWhiteSpace($Relative) -or $Relative -match '[\x00-\x1f]') {
+        throw 'Candidato com path vazio ou de controle.'
+    }
+    if ([IO.Path]::IsPathRooted($Relative) -or $Relative -match '\\' -or $Relative -match ':') {
+        throw "Path inseguro/ambiguo no candidato: $Relative"
+    }
+    if ($Relative -match $script:DisposableForbiddenRelativePattern) {
+        throw "Path proibido no candidato (segredo/estado local): $Relative"
+    }
+    $root = ($Relative -split '/')[0]
+    if ($script:DisposableCandidateRoots -notcontains $root -and $script:DisposableCandidateApplicationFiles -notcontains $Relative) {
+        throw "Path fora da allowlist do CandidateWorktree: $Relative"
+    }
+}
+
+function Assert-DisposableCandidateWorktreePath {
+    param([string]$CandidateWorktree, [string]$RepoRoot)
+
+    if ([string]::IsNullOrWhiteSpace($CandidateWorktree) -or -not [IO.Path]::IsPathRooted($CandidateWorktree)) {
+        throw 'CandidateWorktree exige caminho absoluto.'
+    }
+    if (-not (Test-Path -LiteralPath $CandidateWorktree -PathType Container)) {
+        throw "CandidateWorktree inexistente: $CandidateWorktree"
+    }
+    $candidate = (Resolve-Path -LiteralPath $CandidateWorktree -ErrorAction Stop).Path
+    $infra = (Resolve-Path -LiteralPath $RepoRoot -ErrorAction Stop).Path
+    if ((Get-Item -LiteralPath $candidate -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw 'CandidateWorktree nao pode ser symlink/reparse point.'
+    }
+    if ($candidate -eq $infra) {
+        throw 'CandidateWorktree nao pode ser o proprio worktree de infraestrutura.'
+    }
+    if ($candidate.StartsWith($infra + '\', [System.StringComparison]::OrdinalIgnoreCase) -or
+        $infra.StartsWith($candidate + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw 'CandidateWorktree e o worktree de infraestrutura sao aninhados (path ambiguo).'
+    }
+    $top = @(Get-DisposableCommitProbe -RepoRoot $candidate -ArgumentList @('rev-parse', '--show-toplevel'))
+    if ($LASTEXITCODE -ne 0 -or $top.Count -ne 1 -or $top[0].Trim() -ne $candidate) {
+        throw 'CandidateWorktree nao e a raiz de um worktree Git.'
+    }
+    return $candidate
+}
+
+function Assert-DisposableCandidateWorktreeCheckout {
+    param([string]$RepoRoot, [string]$CandidateWorktree)
+
+    $baseline = Get-DisposableCommitHash -RepoRoot $RepoRoot -ArgumentList @('rev-parse', 'refs/remotes/origin/main')
+    if ($baseline -cnotmatch '^[0-9a-f]{40}$') { throw 'origin/main invalido para o baseline.' }
+    $headProbe = @(Get-DisposableCommitProbe -RepoRoot $CandidateWorktree -ArgumentList @('rev-parse', 'HEAD'))
+    if ($LASTEXITCODE -ne 0 -or $headProbe.Count -ne 1) { throw 'Nao foi possivel ler HEAD do CandidateWorktree.' }
+    $head = $headProbe[0].Trim()
+    if ($head -cne $baseline) {
+        throw "HEAD do CandidateWorktree diverge do baseline (origin/main): $head <> $baseline"
+    }
+    $branchProbe = @(Get-DisposableCommitProbe -RepoRoot $CandidateWorktree -ArgumentList @('branch', '--show-current'))
+    $branch = if ($branchProbe.Count -eq 1) { $branchProbe[0].Trim() } else { '' }
+    return [pscustomobject]@{
+        BaselineCommit  = $baseline
+        CandidatePath   = $CandidateWorktree
+        CandidateHead   = $head
+        CandidateBranch = $branch
+    }
+}
+
+function Get-DisposableCandidateStatusEntries {
+    param([string]$CandidateWorktree)
+
+    $pathSpecs = @($script:DisposableCandidateRoots) + @($script:DisposableCandidateApplicationFiles)
+    # Saida NUL-safe capturada como STRING unica: o formato `-z` nao usa newlines e
+    # preserva os NUL, sem redirecionamento de processo nem arquivo temporario.
+    $text = (& git -C $CandidateWorktree -c core.quotePath=false status --porcelain=v1 -z --untracked-files=all -- @pathSpecs) -join ''
+    if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel inventariar o CandidateWorktree.' }
+    $tokens = @($text.Split([char]0) | Where-Object { $_ -ne '' })
+    $entries = [System.Collections.Generic.List[object]]::new()
+    $index = 0
+    while ($index -lt $tokens.Count) {
+        $token = $tokens[$index]
+        if ($token.Length -lt 4 -or $token[2] -ne ' ') { throw "Entrada de status invalida: $token" }
+        $status = $token.Substring(0, 2)
+        $path = $token.Substring(3)
+        $original = $null
+        $index++
+        if ($status[0] -eq 'R' -or $status[0] -eq 'C') {
+            if ($index -ge $tokens.Count) { throw 'Entrada de rename/copy sem origem.' }
+            $original = $tokens[$index]
+            $index++
+        }
+        $entries.Add([pscustomobject]@{ Status = $status; Path = $path; OriginalPath = $original })
+    }
+    return $entries
+}
+
+function Copy-DisposableCandidateFileBytes {
+    param([string]$SourcePath, [string]$TargetPath)
+
+    $targetDir = Split-Path -Parent $TargetPath
+    if (-not (Test-Path -LiteralPath $targetDir)) { New-Item -ItemType Directory -Path $targetDir -Force | Out-Null }
+    $bytes = [IO.File]::ReadAllBytes($SourcePath)
+    [IO.File]::WriteAllBytes($TargetPath, $bytes)
+    # Alteracao durante a captura: o arquivo do candidato precisa continuar
+    # identico ao que foi materializado.
+    $after = Get-DisposableSha256 -Path $SourcePath
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $materialized = ([BitConverter]::ToString($sha.ComputeHash($bytes)) -replace '-', '').ToLowerInvariant() } finally { $sha.Dispose() }
+    if ($after -ne $materialized) { throw "CandidateWorktree alterado durante a captura: $SourcePath" }
+    if ((Get-DisposableSha256 -Path $TargetPath) -ne $materialized) { throw "Snapshot divergente do candidato: $TargetPath" }
+    return [pscustomobject]@{ Size = $bytes.Length; Sha256 = $materialized }
+}
+
+function Assert-DisposableCandidateNoForbiddenPaths {
+    param([string]$CandidateWorktree)
+
+    # (1) RAIZ do worktree: segredo/estado local presente no candidato reprova a
+    # certificacao MESMO quando o Git o ignora (o host pode ter ignore global de
+    # `.env*`, o que o esconderia do inventario).
+    $rootEntries = @(Get-ChildItem -LiteralPath $CandidateWorktree -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '^(\.env.*|\.temp|start-secrets|docker\.env)$' })
+    if ($rootEntries.Count -gt 0) {
+        throw "CandidateWorktree contem path proibido (segredo/estado local): $($rootEntries[0].Name)"
+    }
+    # (2) Roots allowlisted (recursivo): qualquer caminho proibido de materializacao
+    # (`.env*`, `.temp`, `start-secrets`, `docker.env`, `node_modules`, `.git`).
+    foreach ($root in $script:DisposableCandidateRoots) {
+        $rootPath = Join-Path $CandidateWorktree $root
+        if (-not (Test-Path -LiteralPath $rootPath -PathType Container)) { continue }
+        $found = @(Get-ChildItem -LiteralPath $rootPath -Recurse -Force -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName.Replace('\', '/') -match $script:DisposableForbiddenFullPattern })
+        if ($found.Count -gt 0) {
+            throw "CandidateWorktree contem path proibido (segredo/estado local): $(Get-DisposableRelativePath -Root $CandidateWorktree -FullName $found[0].FullName)"
+        }
+    }
+}
+
+function Get-DisposableBaselineMigrationNames {
+    param([string]$RepoRoot, [string]$BaselineCommit)
+
+    $entries = @(git -C $RepoRoot ls-tree -r --name-only $BaselineCommit -- supabase/migrations)
+    if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel listar migrations do baseline.' }
+    return @($entries | ForEach-Object { $_.Trim() } | Where-Object { $_ -like 'supabase/migrations/*.sql' } | ForEach-Object { ($_ -split '/')[-1] })
+}
+
+function Assert-DisposableSnapshotMigrations {
+    param([string]$ProjectRoot, [string[]]$BaselineMigrationNames)
+
+    $migrationDir = Join-Path $ProjectRoot 'migrations'
+    if (-not (Test-Path -LiteralPath $migrationDir -PathType Container)) { throw 'Snapshot sem supabase/migrations.' }
+    $snapshotNames = @(Get-ChildItem -LiteralPath $migrationDir -File -Filter '*.sql' | ForEach-Object { $_.Name })
+    $missing = @($BaselineMigrationNames | Where-Object { $snapshotNames -notcontains $_ })
+    if ($missing.Count -gt 0) { throw "Migration historica ausente do snapshot: $($missing -join ', ')" }
+    $historicais = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($name in $BaselineMigrationNames) { $null = $historicais.Add($name) }
+    $novas = @($snapshotNames | Where-Object { -not $historicais.Contains($_) })
+    foreach ($name in $novas) {
+        if ($name -notmatch $script:DisposableMigrationFilePattern) { throw "Migration nova com versao/nome invalido: $name" }
+    }
+    $versoes = @{}
+    foreach ($name in $snapshotNames) {
+        $version = $name.Substring(0, 14)
+        if ($versoes.ContainsKey($version)) { throw "Versao de migration duplicada no snapshot: $version" }
+        $versoes[$version] = $name
+    }
+    Assert-DisposableEvaluationMigrations -MigrationFiles $snapshotNames
+    return [pscustomobject]@{ Historical = @($BaselineMigrationNames | Sort-Object); New = @($novas | Sort-Object) }
+}
+
+function Invoke-DisposableCandidateWorktreeMaterialization {
+    param(
+        [string]$RepoRoot,
+        [string]$BaselineCommit,
+        [string]$CandidateWorktree,
+        [string]$ProjectRoot,
+        [string]$CandidateBranch
+    )
+
+    $paths = @($script:DisposableCandidateRoots) + @($script:DisposableCandidateApplicationFiles)
+    Export-DisposableCommitPaths -RepoRoot $RepoRoot -Commit $BaselineCommit -ProjectRoot $ProjectRoot -Paths $paths
+    foreach ($root in $script:DisposableCandidateRoots) {
+        Assert-DisposableExportedTree -RepoRoot $RepoRoot -Commit $BaselineCommit -ProjectRoot $ProjectRoot -Path $root
+    }
+    Assert-DisposableExportedFiles -RepoRoot $RepoRoot -Commit $BaselineCommit -ProjectRoot $ProjectRoot -Paths $script:DisposableCandidateApplicationFiles
+    Assert-DisposableSourceCopyWithoutTemp -ProjectRoot (Join-Path $ProjectRoot 'supabase')
+
+    $baselineMigrations = Get-DisposableBaselineMigrationNames -RepoRoot $RepoRoot -BaselineCommit $BaselineCommit
+    $historicais = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($name in $baselineMigrations) { $null = $historicais.Add($name) }
+
+    Assert-DisposableCandidateNoForbiddenPaths -CandidateWorktree $CandidateWorktree
+    $entries = Get-DisposableCandidateStatusEntries -CandidateWorktree $CandidateWorktree
+    $operations = [System.Collections.Generic.List[object]]::new()
+    foreach ($entry in $entries) {
+        Assert-DisposableCandidatePathSafe -Relative $entry.Path
+        $isMigrationPath = $entry.Path -like 'supabase/migrations/*.sql'
+        $isHistoricalNew = $isMigrationPath -and $historicais.Contains(($entry.Path -split '/')[-1])
+        $original = $entry.OriginalPath
+        if ($null -ne $original) {
+            Assert-DisposableCandidatePathSafe -Relative $original
+            $originalName = ($original -split '/')[-1]
+            if ($original -like 'supabase/migrations/*.sql' -and $historicais.Contains($originalName)) { throw "$($script:DisposableHistoricalMigrationException): $original" }
+            $sourceOriginal = Join-Path $ProjectRoot ($original.Replace('/', [IO.Path]::DirectorySeparatorChar))
+            if (Test-Path -LiteralPath $sourceOriginal) {
+                Remove-Item -LiteralPath $sourceOriginal -Force
+                # Rename/copy: a origem entra no manifesto como `delete` para que o
+                # delta do snapshot fique COMPLETO e verificavel.
+                $operations.Add([pscustomobject]@{ Path = $original; Operation = 'delete'; Size = 0; Sha256 = '' })
+            }
+        }
+        $source = Join-Path $CandidateWorktree ($entry.Path.Replace('/', [IO.Path]::DirectorySeparatorChar))
+        $target = Join-Path $ProjectRoot ($entry.Path.Replace('/', [IO.Path]::DirectorySeparatorChar))
+        $existed = Test-Path -LiteralPath $target -PathType Leaf
+        if (-not (Test-Path -LiteralPath $source)) {
+            if ($isHistoricalNew) { throw "$($script:DisposableHistoricalMigrationException): $($entry.Path)" }
+            if ($existed) { Remove-Item -LiteralPath $target -Force }
+            $operations.Add([pscustomobject]@{ Path = $entry.Path; Operation = 'delete'; Size = 0; Sha256 = '' })
+            continue
+        }
+        $item = Get-Item -LiteralPath $source -Force
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "CandidateWorktree contem symlink/reparse point: $($entry.Path)" }
+        if ($item.PSIsContainer) { throw "CandidateWorktree contem diretorio nao suportado: $($entry.Path)" }
+        if ($isHistoricalNew) { throw "$($script:DisposableHistoricalMigrationException): $($entry.Path)" }
+        $bytes = Copy-DisposableCandidateFileBytes -SourcePath $source -TargetPath $target
+        $operations.Add([pscustomobject]@{
+            Path = $entry.Path
+            Operation = if ($existed) { 'modify' } else { 'add' }
+            Size = $bytes.Size
+            Sha256 = $bytes.Sha256
+        })
+    }
+
+    $ordered = @($operations | Sort-Object -Property Path)
+    # Verificacao INTEGRAL do snapshot, por bytes, antes de qualquer Docker/Supabase.
+    foreach ($operation in $ordered) {
+        $target = Join-Path $ProjectRoot ($operation.Path.Replace('/', [IO.Path]::DirectorySeparatorChar))
+        if ($operation.Operation -eq 'delete') {
+            if (Test-Path -LiteralPath $target) { throw "Falha ao remover path do snapshot: $($operation.Path)" }
+            continue
+        }
+        if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { throw "Path materializado ausente: $($operation.Path)" }
+        if ((Get-Item -LiteralPath $target).Length -ne $operation.Size) { throw "Tamanho divergente no snapshot: $($operation.Path)" }
+        if ((Get-DisposableSha256 -Path $target) -ne $operation.Sha256) { throw "Hash divergente no snapshot: $($operation.Path)" }
+    }
+
+    $migrations = Assert-DisposableSnapshotMigrations -ProjectRoot (Join-Path $ProjectRoot 'supabase') -BaselineMigrationNames $baselineMigrations
+
+    # Fingerprint DETERMINISTICO do snapshot INTEGRAL (baseline + bytes finais do
+    # candidato), por path|tamanho|SHA-256 ordenado. A transformacao controlada
+    # de config.toml acontece DEPOIS e e registrada separadamente.
+    $snapshotFiles = [System.Collections.Generic.List[object]]::new()
+    foreach ($root in $script:DisposableCandidateRoots) {
+        $rootPath = Join-Path $ProjectRoot $root
+        if (Test-Path -LiteralPath $rootPath -PathType Container) {
+            foreach ($file in Get-ChildItem -LiteralPath $rootPath -Recurse -File -Force) { $snapshotFiles.Add($file) }
+        }
+    }
+    foreach ($name in $script:DisposableCandidateApplicationFiles) {
+        $file = Join-Path $ProjectRoot $name
+        if (Test-Path -LiteralPath $file -PathType Leaf) { $snapshotFiles.Add((Get-Item -LiteralPath $file -Force)) }
+    }
+    $canonical = (($snapshotFiles | ForEach-Object {
+        "$(Get-DisposableRelativePath -Root $ProjectRoot -FullName $_.FullName)|$($_.Length)|$(Get-DisposableSha256 -Path $_.FullName)"
+    }) | Sort-Object) -join "`n"
+    $fingerprintSha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $fingerprint = ([BitConverter]::ToString($fingerprintSha.ComputeHash([Text.Encoding]::UTF8.GetBytes($canonical))) -replace '-', '').ToLowerInvariant()
+    } finally { $fingerprintSha.Dispose() }
+
+    return [pscustomobject]@{
+        Mode                 = 'CandidateWorktree'
+        BaselineCommit       = $BaselineCommit
+        Candidate            = [pscustomobject]@{
+            Path   = $CandidateWorktree
+            Head   = $BaselineCommit
+            Branch = $CandidateBranch
+        }
+        Policy               = [pscustomobject]@{
+            AllowlistRoots     = @($script:DisposableCandidateRoots)
+            ApplicationFiles   = @($script:DisposableCandidateApplicationFiles)
+            ForbiddenPattern   = $script:DisposableForbiddenRelativePattern
+        }
+        Operations           = $ordered
+        HistoricalMigrations = $migrations.Historical
+        NewMigrations        = $migrations.New
+        RequiredMigration    = '20261018000000_f6_404_evaluation_mutation_bundles.sql'
+        SnapshotFileCount    = $snapshotFiles.Count
+        SnapshotFingerprint  = $fingerprint
+    }
+}

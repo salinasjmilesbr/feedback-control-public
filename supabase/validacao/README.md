@@ -1224,3 +1224,47 @@ aplicação materializada exatamente do `-TargetCommit`, `supabase/**` exatament
 `main`, rejeição de `.temp`/segredos, arquivo extra, main/`origin/main`/fontes
 protegidas, lock, ownership, cleanup após erro/interrupção e regressão do caminho
 sem `-TargetCommit`. Nenhum teste executa `start`, `db reset` ou Docker.
+
+## Certificação de worktree NÃO COMMITADO com `-CandidateWorktree`
+
+Modo **opt-in** (`-Interactive`) para certificar um worktree com alterações
+locais em `src/**` e `supabase/**` — inclusive **migrations novas** — sem exigir
+commit. O runner é executado da branch/worktree **própria de infraestrutura**; o
+candidato é outro worktree, cujo `HEAD` tem de ser **exatamente `origin/main`**.
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File supabase/validacao/Invoke-DisposableValidation.ps1 `
+  -Interactive -CandidateWorktree 'C:\caminho\absoluto\do\worktree-candidato'
+```
+
+Regras do modo:
+
+- **exclusivo** com `-TargetCommit` (erro se ambos) e exige `-Interactive`;
+- os guards dos modos atuais permanecem **inalterados**;
+- baseline exportado por `git -c core.autocrlf=false archive`; diferenças do
+  candidato obtidas por inventário Git **NUL-safe** e aplicadas por **cópia dos
+  bytes finais** (sem patches, sem tocar o index/staging do candidato);
+- `add`/`modify`/`delete`/`rename` são tratados; `rename` entra como
+  `delete(origem)` + `add(destino)` para que o delta fique completo;
+- allowlist: `src/**`, `public/**`, `supabase/**` e os application files do
+  runner; fora dela nada é materializado;
+- reprovam: `.env*`, `.temp`, `start-secrets`, `docker.env`, `node_modules`,
+  `.git`, symlinks/reparse points, submodules e paths inseguros/ambíguos
+  (inclusive segredos **ignorados** pelo Git);
+- migrations existentes em `origin/main` são **imutáveis** (alterar/remover
+  reprova); migrations novas precisam de versão/nome válidos e **sem versão
+  duplicada**; `#404` obrigatória e `#414` proibida — tudo verificado **antes de
+  qualquer Docker/Supabase**;
+- o snapshot é verificado **integralmente** (tamanho + SHA-256 por path) e gera
+  `candidate-worktree-manifest.json` (baseline, candidato, allowlist, operações,
+  migrations históricas/novas, fingerprint determinístico do snapshot) e
+  `candidate-worktree-config-transform.json` (transformação de config registrada
+  **separadamente**, posterior ao fingerprint);
+- lock, isolamento, `project_id`/portas, cleanup e fingerprints before/after da
+  base persistente permanecem os mesmos.
+
+Testes (estáticos, sem Docker):
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File supabase/validacao/Test-DisposableCandidateWorktree.Tests.ps1
+```

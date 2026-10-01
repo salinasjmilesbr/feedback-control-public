@@ -26,6 +26,21 @@ em `.ai/*`, não são duplicadas aqui.
 
 ## 2. Estado atual
 
+> **Checkpoint de infraestrutura (runner descartável — modo CandidateWorktree):**
+> worktree `feedback-control/node_modules/.infra-cw`, branch
+> `feat/f6-runner-candidate-worktree`, base `origin/main` em
+> `15b2f26b338c8698f2457c1195297c14154df06d`. Adiciona `-CandidateWorktree`
+> (opt-in com `-Interactive`, exclusivo com `-TargetCommit`) para certificar
+> worktree **não commitado** com `src/**` e `supabase/**`, inclusive migrations
+> novas: baseline de `origin/main`, inventário Git NUL-safe, cópia dos bytes
+> finais sem tocar index/staging, verificação integral + manifesto + fingerprint
+> antes de Docker/Supabase, migrations históricas imutáveis, `#404` obrigatória e
+> `#414` proibida. Auditoria independente: PASS — apto para versionamento.
+> **Pendência registrada (não bloqueante):** M1 — a captura NUL-safe passa pelo
+> pipeline de texto do PowerShell, então nomes de arquivo não-ASCII (ou com
+> quebra de linha) podem ser mal-decodificados e produzir certificação
+> incompleta; não afeta o repo atual (paths ASCII).
+>
 > **Checkpoint documental de Avaliações (Incremento 0):** worktree isolado
 > `feedback-control-docs-avaliacoes-i0`, branch
 > `docs/f6-avaliacoes-contrato-soberano-i0`, base `origin/main` em
