@@ -1166,3 +1166,61 @@ powershell.exe -NoProfile -File supabase/validacao/Invoke-DisposableValidation.p
 todo `db reset --local` em arquivos executáveis, exceto o runner descartável e
 o job CI explicitamente marcado como isolado. O CI executa esse guard antes de
 iniciar a stack Supabase.
+
+## Homologação de candidato com `-TargetCommit` (modo interativo)
+
+O modo interativo (`-Interactive`) mantém a stack descartável ativa para
+homologação manual. Para homologar um candidato **antes do merge**, sem check-out
+do candidato, o runner aceita `-TargetCommit <SHA>`:
+
+```powershell
+powershell.exe -NoProfile -File supabase/validacao/Invoke-DisposableValidation.ps1 `
+  -Interactive -TargetCommit 9c7cb7dee0ba565b48c3ea110764307f38bd20bd
+```
+
+Separação materializada na cópia descartável (materialização por
+`git archive` de cada commit — nunca working tree, nunca check-out):
+
+| Origem | Conteúdo |
+| --- | --- |
+| **baseline** (`main` vigente, obrigatoriamente `HEAD` alinhado a `origin/main` e limpo nas fontes protegidas) | `supabase/**` — migrations, funções, `config.toml`, seed, roles |
+| **`-TargetCommit`** | código da aplicação: `src/**`, `public/**` e os arquivos de build (`index.html`, `package.json`, `package-lock.json`, `vite.config.ts`, `tsconfig*.json`, `eslint.config.js`) |
+
+Regras fail-closed do `-TargetCommit` (sem afrouxar nenhum guard existente):
+
+- exige `-Interactive`: sem ele o runner recusa com
+  `TargetCommit exige o modo Interactive`;
+- exige SHA **completo** de 40 caracteres hexadecimais minúsculos; SHA abreviado,
+  maiúsculo ou fora de formato é recusado (`TargetCommit e baseline exigem SHA completo.`);
+- exige commit **existente localmente** (`TargetCommit inexistente ou nao e commit.`);
+- exige ancestralidade: a `main` vigente tem de estar contida no candidato,
+  rejeitando candidato obsoleto ou incompatível (`TargetCommit nao inclui a main vigente.`);
+- exige que a **árvore** `supabase/` do candidato seja idêntica à da `main`
+  (`TargetCommit altera Supabase; este modo exige a arvore da main.`) — o Supabase
+  da cópia descartável vem sempre da baseline;
+- recusa candidato sem árvore `src` válida
+  (`Commit de referencia sem hash de arvore unico e valido.`).
+
+Depois da materialização, cada arquivo é conferido byte a byte contra o blob do
+commit (`hash-object --no-filters`) e a contagem de arquivos da árvore é fechada
+(arquivo extra no workdir reprova). `supabase/.temp`, `start-secrets`, `docker.env`
+e `.env*` são recusados na origem e ausentes da cópia. O runner registra no
+terminal o SHA da baseline Supabase e o SHA da aplicação candidata (o mesmo par vai
+para `candidate-manifest.json` dentro do workdir temporário). Todos os guards
+existentes permanecem: lock exclusivo, `project_id`/portas descartáveis,
+proteção contra recursos preexistentes, ownership de container/volume/rede,
+fingerprint do runtime compartilhado antes/depois e cleanup.
+
+Sem `-TargetCommit` o modo interativo é idêntico ao anterior (cópia do
+`supabase/**` e de `src/` do checkout), e o caminho não interativo não muda.
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File supabase/validacao/Test-DisposableValidationGuard.Tests.ps1
+```
+
+A suíte de guarda cobre: SHA válido, SHA abreviado, SHA inválido/inexistente,
+candidato obsoleto, candidato que altera Supabase, candidato sem `src`,
+aplicação materializada exatamente do `-TargetCommit`, `supabase/**` exatamente da
+`main`, rejeição de `.temp`/segredos, arquivo extra, main/`origin/main`/fontes
+protegidas, lock, ownership, cleanup após erro/interrupção e regressão do caminho
+sem `-TargetCommit`. Nenhum teste executa `start`, `db reset` ou Docker.

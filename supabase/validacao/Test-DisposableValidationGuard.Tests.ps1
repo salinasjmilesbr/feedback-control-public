@@ -6,6 +6,9 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $guard = Join-Path $PSScriptRoot 'Test-DisposableValidationGuard.ps1'
 . (Join-Path $PSScriptRoot 'DisposableValidationSafety.ps1')
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) "feedback-control-validation-guard-$PID"
+$workdir = $null
+$candidateWorkdir = $null
+$dangerous = $null
 function Invoke-GuardFixture {
     param([hashtable]$Files, [bool]$ShouldPass, [string]$Name)
     $fixture = Join-Path $testRoot $Name
@@ -14,6 +17,13 @@ function Invoke-GuardFixture {
     $passed = $true; try { & $guard -Root $fixture } catch { $passed = $false; $failure = $_.Exception.Message }
     if (-not $passed) { Write-Host "Guard output ($Name): $failure" }
     if ($passed -ne $ShouldPass) { throw "FAIL: $Name" }; Write-Host "PASS: $Name"
+}
+function Add-FixtureCommit {
+    param([string]$RepoRoot, [string]$Message, [scriptblock]$Changes)
+    & $Changes $RepoRoot
+    git -C $RepoRoot -c user.name=Fixture -c user.email=fixture@example.test commit --quiet -m $Message
+    if ($LASTEXITCODE -ne 0) { throw "FAIL: commit de fixture: $Message" }
+    return (git -C $RepoRoot rev-parse HEAD)
 }
 try {
     $directReset = 'npx --yes supabase@2.116.0 db ' + 'reset --local --yes'
@@ -69,6 +79,54 @@ try {
         throw 'FAIL: contrato interativo/cleanup ausente no runner.'
     }
     Write-Host 'PASS: modo interativo opt-in e cleanup explicito presentes.'
+    if ($runnerText -notmatch '\[string\]\$TargetCommit' -or
+        $runnerText -notmatch "TargetCommit exige o modo Interactive" -or
+        $runnerText -notmatch "Assert-DisposableTargetCommit -RepoRoot \`$repoRoot" -or
+        $runnerText -notmatch "Commit \`$baselineCommit" -or
+        $runnerText -notmatch "Commit \`$TargetCommit" -or
+        $runnerText -notmatch 'Export-DisposableCommitPaths -RepoRoot \$repoRoot -Commit \$baselineCommit[^\r\n]*`[\r\n]+\s*-ProjectRoot \$validationRoot -Paths @\(.supabase.\)' -or
+        $runnerText -notmatch 'Export-DisposableCommitPaths -RepoRoot \$repoRoot -Commit \$TargetCommit[^\r\n]*`[\r\n]+\s*-ProjectRoot \$validationRoot -Paths \(@\(.src., .public.\) \+ \$applicationFiles\)' -or
+        $runnerText -notmatch [regex]::Escape("aplicacao candidata: `$TargetCommit")) {
+        throw 'FAIL: wiring de TargetCommit ausente ou divergente no runner.'
+    }
+    $targetGuardIndex = $runnerText.IndexOf('Assert-DisposableTargetCommit -RepoRoot')
+    $startIndex = $runnerText.IndexOf('Invoke-Checked $cli ($cliArgs + @(''start''))')
+    if ($targetGuardIndex -lt 0 -or $startIndex -lt 0 -or $targetGuardIndex -ge $startIndex) {
+        throw 'FAIL: o guard de TargetCommit precisa preceder qualquer start do stack descartavel.'
+    }
+    $workdirIndex = $runnerText.IndexOf('New-Item -ItemType Directory -Path $validationRoot')
+    if ($workdirIndex -lt 0 -or $targetGuardIndex -ge $workdirIndex) {
+        throw 'FAIL: o guard de TargetCommit precisa preceder a criacao do workdir descartavel.'
+    }
+    # Ancoras sao trechos de chamada (definicoes de funcao vem antes das chamadas).
+    $orderedMarkers = @(
+        '$baselineCommit = Assert-InteractiveMainCheckout',
+        'Assert-DisposableTargetCommit -RepoRoot $repoRoot',
+        '-Ports @(55420, 55421, 55422, 55423)',
+        'New-Item -ItemType Directory -Path $validationRoot',
+        'Export-DisposableCommitPaths -RepoRoot $repoRoot -Commit $baselineCommit',
+        'Export-DisposableCommitPaths -RepoRoot $repoRoot -Commit $TargetCommit',
+        'Assert-DisposableExportedTree -RepoRoot $repoRoot -Commit $baselineCommit',
+        'Assert-DisposableExportedTree -RepoRoot $repoRoot -Commit $TargetCommit',
+        'Assert-DisposableExportedFiles -RepoRoot $repoRoot -Commit $TargetCommit',
+        'Assert-DisposableSourceCopyWithoutTemp -ProjectRoot $validationProjectRoot',
+        'Invoke-Checked $cli ($cliArgs + @(''start''))'
+    )
+    $previousIndex = -1
+    foreach ($marker in $orderedMarkers) {
+        $index = $runnerText.IndexOf($marker)
+        if ($index -lt 0 -or $index -le $previousIndex) {
+            throw "FAIL: ordem das chamadas do runner diverge em [$marker]."
+        }
+        $previousIndex = $index
+    }
+    Write-Host 'PASS: ordem baseline -> TargetCommit -> recursos/portas -> materializacao -> verificacao -> start.'
+    $baselineExportIndex = $runnerText.IndexOf('-Commit $baselineCommit')
+    $targetExportIndex = $runnerText.IndexOf('-Commit $TargetCommit')
+    if ($baselineExportIndex -lt 0 -or $targetExportIndex -lt 0 -or $baselineExportIndex -ge $targetExportIndex) {
+        throw 'FAIL: Supabase baseline deve ser materializada antes da aplicacao candidata.'
+    }
+    Write-Host 'PASS: TargetCommit opt-in, separacao baseline/candidato e guard antes do start.'
     Assert-DisposableMainState -Branch 'main' -Head 'abc' -OriginMain 'abc' -RelevantStatus @()
     foreach ($case in @(
         @{ Branch = 'feature'; Head = 'abc'; OriginMain = 'abc'; Status = @() },
@@ -80,6 +138,128 @@ try {
         if (-not $denied) { throw 'FAIL: checkout interativo inseguro foi aceito.' }
     }
     Write-Host 'PASS: main/origin/main/fontes locais guardados.'
+
+    $candidateRepo = Join-Path $testRoot 'candidate-repo'
+    New-Item -ItemType Directory -Path (Join-Path $candidateRepo 'src') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $candidateRepo 'public') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $candidateRepo 'supabase/.temp/start-secrets') -Force | Out-Null
+    git -C $candidateRepo init --quiet
+    if ($LASTEXITCODE -ne 0) { throw 'FAIL: git init da fixture.' }
+    Set-Content -LiteralPath (Join-Path $candidateRepo 'src/marker.txt') -Value 'antigo' -NoNewline
+    Set-Content -LiteralPath (Join-Path $candidateRepo 'public/asset.txt') -Value 'asset' -NoNewline
+    Set-Content -LiteralPath (Join-Path $candidateRepo 'supabase/config.toml') -Value 'main' -NoNewline
+    git -C $candidateRepo add -- src public supabase/config.toml
+    git -C $candidateRepo -c user.name=Fixture -c user.email=fixture@example.test commit --quiet -m antigo
+    if ($LASTEXITCODE -ne 0) { throw 'FAIL: commit antigo da fixture.' }
+    $oldCommit = git -C $candidateRepo rev-parse HEAD
+    Set-Content -LiteralPath (Join-Path $candidateRepo 'src/marker.txt') -Value 'baseline' -NoNewline
+    git -C $candidateRepo add -- src/marker.txt
+    git -C $candidateRepo -c user.name=Fixture -c user.email=fixture@example.test commit --quiet -m baseline
+    if ($LASTEXITCODE -ne 0) { throw 'FAIL: commit baseline da fixture.' }
+    $baseCommit = git -C $candidateRepo rev-parse HEAD
+    Set-Content -LiteralPath (Join-Path $candidateRepo 'src/marker.txt') -Value 'candidato' -NoNewline
+    git -C $candidateRepo add -- src/marker.txt
+    git -C $candidateRepo -c user.name=Fixture -c user.email=fixture@example.test commit --quiet -m candidato
+    if ($LASTEXITCODE -ne 0) { throw 'FAIL: commit candidato da fixture.' }
+    $validCommit = git -C $candidateRepo rev-parse HEAD
+    $candidateSupabaseExpected = git -C $candidateRepo rev-parse "${baseCommit}:supabase"
+    $manifest = Assert-DisposableTargetCommit -RepoRoot $candidateRepo -BaselineCommit $baseCommit -TargetCommit $validCommit
+    if ($manifest.BaselineCommit -ne $baseCommit -or $manifest.TargetCommit -ne $validCommit -or
+        $manifest.BaselineSupabaseTree -ne (git -C $candidateRepo rev-parse "${baseCommit}:supabase") -or
+        $manifest.CandidateSrcTree -ne (git -C $candidateRepo rev-parse "${validCommit}:src")) {
+        throw 'FAIL: manifesto do candidato incorreto.'
+    }
+    Write-Host 'PASS: SHA valido aceito com manifesto baseline/candidato.'
+    $abbreviated = $validCommit.Substring(0, 8)
+    $shaMessage = 'TargetCommit e baseline exigem SHA completo.'
+    $expected = [pscustomobject]@{ target = $abbreviated; message = $shaMessage }
+    $denied = $false
+    try { $null = Assert-DisposableTargetCommit -RepoRoot $candidateRepo -BaselineCommit $baseCommit -TargetCommit $expected.target } catch { $denied = $_.Exception.Message -eq $expected.message }
+    if (-not $denied) { throw 'FAIL: SHA abreviado aceito ou falhou por mensagem alheia ao guard.' }
+    Write-Host 'PASS: SHA abreviado rejeitado.'
+    foreach ($invalid in @('invalido', ('z' * 40), ('0' * 39), $validCommit.ToUpperInvariant(), $abbreviated + 'zzzz')) {
+        $denied = $false
+        try { $null = Assert-DisposableTargetCommit -RepoRoot $candidateRepo -BaselineCommit $baseCommit -TargetCommit $invalid } catch { $denied = $_.Exception.Message -eq $shaMessage }
+        if (-not $denied) { throw "FAIL: TargetCommit invalido aceito (ou mensagem divergente): $invalid" }
+    }
+    Write-Host 'PASS: formatos invalidos rejeitados (nao-SHA, 39 caracteres, maiusculo, nao hexadecimal).'
+    $expected = [pscustomobject]@{ target = ('f' * 40); message = 'TargetCommit inexistente ou nao e commit.' }
+    $denied = $false
+    try { $null = Assert-DisposableTargetCommit -RepoRoot $candidateRepo -BaselineCommit $baseCommit -TargetCommit $expected.target } catch { $denied = $_.Exception.Message -eq $expected.message }
+    if (-not $denied) { throw 'FAIL: TargetCommit de 40 caracteres inexistente aceito.' }
+    $expected = [pscustomobject]@{ target = ('f' * 40).ToUpperInvariant(); message = $shaMessage }
+    $denied = $false
+    try { $null = Assert-DisposableTargetCommit -RepoRoot $candidateRepo -BaselineCommit $baseCommit -TargetCommit $expected.target } catch { $denied = $_.Exception.Message -eq $expected.message }
+    if (-not $denied) { throw 'FAIL: TargetCommit inexistente em maiusculo aceito.' }
+    Write-Host 'PASS: SHA completo inexistente rejeitado.'
+    $expected = [pscustomobject]@{ target = $oldCommit; message = 'TargetCommit nao inclui a main vigente.' }
+    $denied = $false
+    try { $null = Assert-DisposableTargetCommit -RepoRoot $candidateRepo -BaselineCommit $baseCommit -TargetCommit $expected.target } catch { $denied = $_.Exception.Message -eq $expected.message }
+    if (-not $denied) { throw 'FAIL: candidato obsoleto (anterior a baseline) aceito.' }
+    Write-Host 'PASS: candidato obsoleto que nao inclui a main rejeitado.'
+    Set-Content -LiteralPath (Join-Path $candidateRepo 'supabase/config.toml') -Value 'alterado' -NoNewline
+    git -C $candidateRepo add -- supabase/config.toml
+    git -C $candidateRepo -c user.name=Fixture -c user.email=fixture@example.test commit --quiet -m incompativel
+    if ($LASTEXITCODE -ne 0) { throw 'FAIL: commit incompativel da fixture.' }
+    $incompatibleCommit = git -C $candidateRepo rev-parse HEAD
+    $incompatibleMessage = ''
+    try { $null = Assert-DisposableTargetCommit -RepoRoot $candidateRepo -BaselineCommit $baseCommit -TargetCommit $incompatibleCommit } catch { $incompatibleMessage = $_.Exception.Message }
+    if ($incompatibleMessage -ne 'TargetCommit altera Supabase; este modo exige a arvore da main.') {
+        throw "FAIL: candidato que altera Supabase nao falhou pela mensagem do guard (mensagem: $incompatibleMessage)."
+    }
+    if ($manifest.BaselineSupabaseTree -ne $candidateSupabaseExpected) { throw 'FAIL: Supabase baseline incorreta no manifesto.' }
+    Write-Host 'PASS: Supabase alterada no candidato rejeitada fail-closed.'
+
+    $dangerousCandidate = Add-FixtureCommit -RepoRoot $candidateRepo -Message 'segredo' -Changes { param($repo) Set-Content -LiteralPath (Join-Path $repo 'supabase/.env.local') -Value 'fixture' -NoNewline; git -C $repo add -f -- supabase/.env.local }
+    $dangerous = Join-Path ([IO.Path]::GetTempPath()) "feedback-control-validation-$($PID + 400000)"
+    New-Item -ItemType Directory -Path $dangerous -Force | Out-Null
+    Export-DisposableCommitPaths -RepoRoot $candidateRepo -Commit $dangerousCandidate -ProjectRoot $dangerous -Paths @('supabase')
+    $dangerAccepted = $false
+    try { Assert-DisposableExportedTree -RepoRoot $candidateRepo -Commit $dangerousCandidate -ProjectRoot $dangerous -Path 'supabase'; $dangerAccepted = $true } catch { }
+    if ($dangerAccepted) { throw 'FAIL: snapshot com .env/segredo aceito.' }
+    Write-Host 'PASS: snapshot com .env/segredo rejeitado pela arvore exportada.'
+
+    $candidateWorkdir = Join-Path ([IO.Path]::GetTempPath()) "feedback-control-validation-$($PID + 300000)"
+    New-Item -ItemType Directory -Path $candidateWorkdir -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $candidateRepo 'src/untracked.txt') -Value 'fora do commit' -NoNewline
+    Set-Content -LiteralPath (Join-Path $candidateRepo 'supabase/.temp/start-secrets/docker.env') -Value 'fixture' -NoNewline
+    Export-DisposableCommitPaths -RepoRoot $candidateRepo -Commit $baseCommit -ProjectRoot $candidateWorkdir -Paths @('supabase')
+    Export-DisposableCommitPaths -RepoRoot $candidateRepo -Commit $validCommit -ProjectRoot $candidateWorkdir -Paths @('src', 'public')
+    Assert-DisposableExportedTree -RepoRoot $candidateRepo -Commit $baseCommit -ProjectRoot $candidateWorkdir -Path 'supabase'
+    Assert-DisposableExportedTree -RepoRoot $candidateRepo -Commit $validCommit -ProjectRoot $candidateWorkdir -Path 'src'
+    Assert-DisposableExportedTree -RepoRoot $candidateRepo -Commit $validCommit -ProjectRoot $candidateWorkdir -Path 'public'
+    Assert-DisposableSourceCopyWithoutTemp -ProjectRoot (Join-Path $candidateWorkdir 'supabase')
+    if ((Get-Content -LiteralPath (Join-Path $candidateWorkdir 'src/marker.txt') -Raw) -ne 'candidato' -or
+        (Get-Content -LiteralPath (Join-Path $candidateWorkdir 'supabase/config.toml') -Raw) -ne 'main' -or
+        (Test-Path -LiteralPath (Join-Path $candidateWorkdir 'src/untracked.txt')) -or
+        (Test-Path -LiteralPath (Join-Path $candidateWorkdir 'supabase/.temp'))) {
+        throw 'FAIL: snapshot misturou working tree, segredo ou Supabase candidata.'
+    }
+    Write-Host 'PASS: snapshot materializa Supabase baseline e src candidata sem estado local.'
+    Set-Content -LiteralPath (Join-Path $candidateWorkdir 'src/extra.txt') -Value 'extra' -NoNewline
+    $extraAccepted = $false
+    try { Assert-DisposableExportedTree -RepoRoot $candidateRepo -Commit $validCommit -ProjectRoot $candidateWorkdir -Path 'src'; $extraAccepted = $true } catch { }
+    if ($extraAccepted) { throw 'FAIL: arquivo extra no workdir aceito.' }
+    Remove-Item -LiteralPath (Join-Path $candidateWorkdir 'src/extra.txt') -Force
+    Write-Host 'PASS: arquivo extra no workdir descartavel rejeitado.'
+
+    $oldHead = git -C $candidateRepo rev-parse HEAD
+    git -C $candidateRepo checkout --quiet $validCommit
+    if ($LASTEXITCODE -ne 0) { throw 'FAIL: checkout da fixture para o candidato valido.' }
+    git -C $candidateRepo rm -r --quiet --cached src
+    Remove-Item -LiteralPath (Join-Path $candidateRepo 'src/untracked.txt') -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path $candidateRepo 'src') -Recurse -Force
+    git -C $candidateRepo -c user.name=Fixture -c user.email=fixture@example.test commit --quiet -m sem-src
+    if ($LASTEXITCODE -ne 0) { throw 'FAIL: commit sem src da fixture.' }
+    $noSrcCommit = git -C $candidateRepo rev-parse HEAD
+    $noSrcMessage = ''
+    try { $null = Assert-DisposableTargetCommit -RepoRoot $candidateRepo -BaselineCommit $baseCommit -TargetCommit $noSrcCommit } catch { $noSrcMessage = $_.Exception.Message }
+    if ($noSrcMessage -ne 'Commit de referencia sem hash de arvore unico e valido.') {
+        throw "FAIL: candidato sem src nao falhou pela mensagem do guard (mensagem: $noSrcMessage)."
+    }
+    git -C $candidateRepo checkout --quiet $oldHead
+    if ($LASTEXITCODE -ne 0) { throw 'FAIL: restauracao do HEAD da fixture.' }
+    Write-Host 'PASS: candidato sem codigo de aplicacao (src) rejeitado fail-closed.'
 
     $occupied = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, 0)
     $occupied.Start()
@@ -171,5 +351,13 @@ try {
     if ($null -ne $workdir -and (Test-Path -LiteralPath $workdir)) {
         Assert-DisposableValidationWorkdir -Workdir $workdir -TempRoot ([IO.Path]::GetTempPath().TrimEnd('\'))
         Remove-Item -LiteralPath $workdir -Recurse -Force
+    }
+    if ($null -ne $candidateWorkdir -and (Test-Path -LiteralPath $candidateWorkdir)) {
+        Assert-DisposableValidationWorkdir -Workdir $candidateWorkdir -TempRoot ([IO.Path]::GetTempPath().TrimEnd('\'))
+        Remove-Item -LiteralPath $candidateWorkdir -Recurse -Force
+    }
+    if ($null -ne $dangerous -and (Test-Path -LiteralPath $dangerous)) {
+        Assert-DisposableValidationWorkdir -Workdir $dangerous -TempRoot ([IO.Path]::GetTempPath().TrimEnd('\'))
+        Remove-Item -LiteralPath $dangerous -Recurse -Force
     }
 }
