@@ -7,10 +7,13 @@
 -- `supabase/migrations/20261028000000_f6_issue427_cardinalidade_ocupacoes.sql`.
 --
 -- Fixture para `55-validar-f6-427.sql`. Este arquivo semeia SOMENTE o que as
--- provas precisam, com prefixo UUID `f9` (nao colide com F4-08 `d8`, F5-02 `d2`,
--- F5-04 `d5`, F5-06 `d6`, F5-07 `d7`, F5-08 `f8`, F5-09 `ea`/`ec`, F6-A22 `f6a2`):
---   f9a00000 organizacoes        | f9b00000 auth.users/user_profiles
---   f9d00000 memberships         | f9c00000 colaboradores
+-- provas precisam, com prefixos UUID EXCLUSIVOS desta Issue (verificados contra
+-- TODOS os arquivos do repositorio): `f9a42700` organizacoes e `f9d42700`
+-- memberships. A familia anterior (`f9a00000`/`f9d00000`) COLIDIA com
+-- `01-cenario-f5-09.sql`, que o CI executa ANTES: o marcador insert-once ja
+-- existia e o cenario virava no-op sem carregar a fixture (defeito do CI #570).
+--   f9a42700 organizacoes        | f9b00000 auth.users/user_profiles
+--   f9d42700 memberships         | f9c00000 colaboradores
 --   f9800000 estrutura (units/positions/reporting/occupations/temporarias)
 --   f9f00000 autorizacao (role customizada + scope) e ciclos/cenarios
 --
@@ -53,14 +56,37 @@
 select exists (
   select 1
     from public.organizations
-   where id in ('f9a00000-0000-0000-0000-0000000000a1',
-                'f9a00000-0000-0000-0000-0000000000b1')
+   where id in ('f9a42700-0000-0000-0000-0000000000a1',
+                'f9a42700-0000-0000-0000-0000000000b1')
 ) as cenario_f6_427_carregado \gset
 
 \if :cenario_f6_427_carregado
 do $$
+declare
+  v_org  uuid := 'f9a42700-0000-0000-0000-0000000000a1';
+  v_orgb uuid := 'f9a42700-0000-0000-0000-0000000000b1';
+  v_n    int;
 begin
-  raise notice '[PASS] cenario F6-427 ja carregado — reexecucao no-op (fixture insert-once)';
+  -- O marcador e EXCLUSIVO desta fixture (namespace `f9X42700`, verificado
+  -- contra TODOS os arquivos do repositorio). Ainda assim, marcador presente com
+  -- fixture INCOMPLETA e FALHA ALTA: nunca um no-op silencioso que deixaria o
+  -- validador reprovar por pre-condicao (defeito observado no CI #570, quando o
+  -- marcador era `f9a00000...a1/b1`, organizacoes ja criadas pelo
+  -- `01-cenario-f5-09.sql`, e o cenario virava no-op sem carregar a fixture).
+  select count(*) into v_n from public.organizations where id in (v_org, v_orgb);
+  if v_n <> 2 then
+    raise exception '[FAIL] cenario F6-427: marcador presente mas organizacoes=% (esperado 2) — estado parcial; reexecute apos `supabase db reset`', v_n;
+  end if;
+  select count(*) into v_n from public.collaborators where organization_id = v_org;
+  if v_n <> 9 then
+    raise exception '[FAIL] cenario F6-427: marcador presente mas colaboradores Alfa=% (esperado 9) — fixture INCOMPLETA; reexecute apos `supabase db reset`', v_n;
+  end if;
+  select count(*) into v_n from public.collaborators where organization_id = v_orgb;
+  if v_n <> 1 then
+    raise exception '[FAIL] cenario F6-427: marcador presente mas colaboradores Beta=% (esperado 1) — fixture INCOMPLETA; reexecute apos `supabase db reset`', v_n;
+  end if;
+
+  raise notice '[PASS] cenario F6-427 ja carregado — reexecucao no-op (fixture insert-once COMPLETA: 2 organizacoes, 9 colaboradores Alfa, 1 Beta)';
 end $$;
 \else
 
@@ -68,8 +94,8 @@ end $$;
 -- 1) Organizacoes sinteticas
 -- ----------------------------------------------------------------------------
 insert into public.organizations (id, name) values
-  ('f9a00000-0000-0000-0000-0000000000a1', 'Org Sintetica F6-427 Alfa'),
-  ('f9a00000-0000-0000-0000-0000000000b1', 'Org Sintetica F6-427 Beta');
+  ('f9a42700-0000-0000-0000-0000000000a1', 'Org Sintetica F6-427 Alfa'),
+  ('f9a42700-0000-0000-0000-0000000000b1', 'Org Sintetica F6-427 Beta');
 
 -- ----------------------------------------------------------------------------
 -- 2) Identidades sinteticas (auth.users) + perfis internos + memberships
@@ -95,10 +121,10 @@ insert into public.user_profiles (id, status) values
 
 insert into public.user_organization_memberships
   (id, user_profile_id, organization_id, status) values
-  ('f9d00000-0000-0000-0000-0000000000a1','f9b00000-0000-0000-0000-0000000000a1','f9a00000-0000-0000-0000-0000000000a1','active'),
-  ('f9d00000-0000-0000-0000-0000000000a2','f9b00000-0000-0000-0000-0000000000a2','f9a00000-0000-0000-0000-0000000000a1','active'),
-  ('f9d00000-0000-0000-0000-0000000000b1','f9b00000-0000-0000-0000-0000000000a3','f9a00000-0000-0000-0000-0000000000b1','active'),
-  ('f9d00000-0000-0000-0000-0000000000a4','f9b00000-0000-0000-0000-0000000000a4','f9a00000-0000-0000-0000-0000000000a1','disabled');
+  ('f9d42700-0000-0000-0000-0000000000a1','f9b00000-0000-0000-0000-0000000000a1','f9a42700-0000-0000-0000-0000000000a1','active'),
+  ('f9d42700-0000-0000-0000-0000000000a2','f9b00000-0000-0000-0000-0000000000a2','f9a42700-0000-0000-0000-0000000000a1','active'),
+  ('f9d42700-0000-0000-0000-0000000000b1','f9b00000-0000-0000-0000-0000000000a3','f9a42700-0000-0000-0000-0000000000b1','active'),
+  ('f9d42700-0000-0000-0000-0000000000a4','f9b00000-0000-0000-0000-0000000000a4','f9a42700-0000-0000-0000-0000000000a1','disabled');
 
 -- ----------------------------------------------------------------------------
 -- 3) Autorizacao: role de SISTEMA `admin` (bundle com org.structure.manage,
@@ -111,14 +137,14 @@ insert into public.user_organization_memberships
 -- ----------------------------------------------------------------------------
 insert into public.membership_access_role_assignments
   (id, membership_id, organization_id, access_role_id, status, created_by) values
-  ('f9f00000-0000-0000-0000-0000000000a1','f9d00000-0000-0000-0000-0000000000a1',
-   'f9a00000-0000-0000-0000-0000000000a1','c0000000-0000-4000-8000-0000000000f1',
+  ('f9f00000-0000-0000-0000-0000000000a1','f9d42700-0000-0000-0000-0000000000a1',
+   'f9a42700-0000-0000-0000-0000000000a1','c0000000-0000-4000-8000-0000000000f1',
    'active','f9b00000-0000-0000-0000-0000000000a1');
 
 insert into public.access_role_assignment_scopes
   (id, assignment_id, organization_id, scope_type, status, created_by) values
   ('f9f00000-0000-0000-0000-0000000000b1','f9f00000-0000-0000-0000-0000000000a1',
-   'f9a00000-0000-0000-0000-0000000000a1','ORGANIZATION','active',
+   'f9a42700-0000-0000-0000-0000000000a1','ORGANIZATION','active',
    'f9b00000-0000-0000-0000-0000000000a1');
 
 -- ----------------------------------------------------------------------------
@@ -126,64 +152,64 @@ insert into public.access_role_assignment_scopes
 --    Hierarquia: P2 -> P1, P3 -> P1, P4 -> P1, P6 -> P1.
 -- ----------------------------------------------------------------------------
 insert into public.job_roles (id, organization_id, name, code, status) values
-  ('f9800000-0000-0000-0000-0000000000e1','f9a00000-0000-0000-0000-0000000000a1','Analista F6-427','ANL-F6-427','active'),
-  ('f9800000-0000-0000-0000-0000000000e2','f9a00000-0000-0000-0000-0000000000b1','Analista F6-427 Beta','ANL-F6-427-B','active');
+  ('f9800000-0000-0000-0000-0000000000e1','f9a42700-0000-0000-0000-0000000000a1','Analista F6-427','ANL-F6-427','active'),
+  ('f9800000-0000-0000-0000-0000000000e2','f9a42700-0000-0000-0000-0000000000b1','Analista F6-427 Beta','ANL-F6-427-B','active');
 
 insert into public.seniority_levels (id, organization_id, name) values
-  ('f9800000-0000-0000-0000-0000000000e3','f9a00000-0000-0000-0000-0000000000a1','Pleno F6-427'),
-  ('f9800000-0000-0000-0000-0000000000e4','f9a00000-0000-0000-0000-0000000000b1','Pleno F6-427 Beta');
+  ('f9800000-0000-0000-0000-0000000000e3','f9a42700-0000-0000-0000-0000000000a1','Pleno F6-427'),
+  ('f9800000-0000-0000-0000-0000000000e4','f9a42700-0000-0000-0000-0000000000b1','Pleno F6-427 Beta');
 
 insert into public.organizational_units (id, organization_id, name, valid_from) values
-  ('f9800000-0000-0000-0000-0000000000b1','f9a00000-0000-0000-0000-0000000000a1','Unidade F6-427 Alfa','2024-01-01T00:00:00Z'),
-  ('f9800000-0000-0000-0000-0000000000b2','f9a00000-0000-0000-0000-0000000000b1','Unidade F6-427 Beta','2024-01-01T00:00:00Z');
+  ('f9800000-0000-0000-0000-0000000000b1','f9a42700-0000-0000-0000-0000000000a1','Unidade F6-427 Alfa','2024-01-01T00:00:00Z'),
+  ('f9800000-0000-0000-0000-0000000000b2','f9a42700-0000-0000-0000-0000000000b1','Unidade F6-427 Beta','2024-01-01T00:00:00Z');
 
 insert into public.organizational_positions (
   id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from, name
 ) values
-  ('f9800000-0000-0000-0000-0000000000c1','f9a00000-0000-0000-0000-0000000000a1','f9800000-0000-0000-0000-0000000000b1','f9800000-0000-0000-0000-0000000000e1','f9800000-0000-0000-0000-0000000000e3','2024-01-01T00:00:00Z','F6-427 posicao P1'),
-  ('f9800000-0000-0000-0000-0000000000c2','f9a00000-0000-0000-0000-0000000000a1','f9800000-0000-0000-0000-0000000000b1','f9800000-0000-0000-0000-0000000000e1','f9800000-0000-0000-0000-0000000000e3','2024-01-01T00:00:00Z','F6-427 posicao P2'),
-  ('f9800000-0000-0000-0000-0000000000c3','f9a00000-0000-0000-0000-0000000000a1','f9800000-0000-0000-0000-0000000000b1','f9800000-0000-0000-0000-0000000000e1','f9800000-0000-0000-0000-0000000000e3','2024-01-01T00:00:00Z','F6-427 posicao P3'),
-  ('f9800000-0000-0000-0000-0000000000c4','f9a00000-0000-0000-0000-0000000000a1','f9800000-0000-0000-0000-0000000000b1','f9800000-0000-0000-0000-0000000000e1','f9800000-0000-0000-0000-0000000000e3','2024-01-01T00:00:00Z','F6-427 posicao P4'),
-  ('f9800000-0000-0000-0000-0000000000c5','f9a00000-0000-0000-0000-0000000000a1','f9800000-0000-0000-0000-0000000000b1','f9800000-0000-0000-0000-0000000000e1','f9800000-0000-0000-0000-0000000000e3','2024-01-01T00:00:00Z','F6-427 posicao P5'),
-  ('f9800000-0000-0000-0000-0000000000c6','f9a00000-0000-0000-0000-0000000000a1','f9800000-0000-0000-0000-0000000000b1','f9800000-0000-0000-0000-0000000000e1','f9800000-0000-0000-0000-0000000000e3','2024-01-01T00:00:00Z','F6-427 posicao P6'),
-  ('f9800000-0000-0000-0000-0000000000c9','f9a00000-0000-0000-0000-0000000000a1','f9800000-0000-0000-0000-0000000000b1','f9800000-0000-0000-0000-0000000000e1','f9800000-0000-0000-0000-0000000000e3','2024-01-01T00:00:00Z','F6-427 posicao P9'),
-  ('f9800000-0000-0000-0000-0000000000d1','f9a00000-0000-0000-0000-0000000000b1','f9800000-0000-0000-0000-0000000000b2','f9800000-0000-0000-0000-0000000000e2','f9800000-0000-0000-0000-0000000000e4','2024-01-01T00:00:00Z','F6-427 posicao PB1');
+  ('f9800000-0000-0000-0000-0000000000c1','f9a42700-0000-0000-0000-0000000000a1','f9800000-0000-0000-0000-0000000000b1','f9800000-0000-0000-0000-0000000000e1','f9800000-0000-0000-0000-0000000000e3','2024-01-01T00:00:00Z','F6-427 posicao P1'),
+  ('f9800000-0000-0000-0000-0000000000c2','f9a42700-0000-0000-0000-0000000000a1','f9800000-0000-0000-0000-0000000000b1','f9800000-0000-0000-0000-0000000000e1','f9800000-0000-0000-0000-0000000000e3','2024-01-01T00:00:00Z','F6-427 posicao P2'),
+  ('f9800000-0000-0000-0000-0000000000c3','f9a42700-0000-0000-0000-0000000000a1','f9800000-0000-0000-0000-0000000000b1','f9800000-0000-0000-0000-0000000000e1','f9800000-0000-0000-0000-0000000000e3','2024-01-01T00:00:00Z','F6-427 posicao P3'),
+  ('f9800000-0000-0000-0000-0000000000c4','f9a42700-0000-0000-0000-0000000000a1','f9800000-0000-0000-0000-0000000000b1','f9800000-0000-0000-0000-0000000000e1','f9800000-0000-0000-0000-0000000000e3','2024-01-01T00:00:00Z','F6-427 posicao P4'),
+  ('f9800000-0000-0000-0000-0000000000c5','f9a42700-0000-0000-0000-0000000000a1','f9800000-0000-0000-0000-0000000000b1','f9800000-0000-0000-0000-0000000000e1','f9800000-0000-0000-0000-0000000000e3','2024-01-01T00:00:00Z','F6-427 posicao P5'),
+  ('f9800000-0000-0000-0000-0000000000c6','f9a42700-0000-0000-0000-0000000000a1','f9800000-0000-0000-0000-0000000000b1','f9800000-0000-0000-0000-0000000000e1','f9800000-0000-0000-0000-0000000000e3','2024-01-01T00:00:00Z','F6-427 posicao P6'),
+  ('f9800000-0000-0000-0000-0000000000c9','f9a42700-0000-0000-0000-0000000000a1','f9800000-0000-0000-0000-0000000000b1','f9800000-0000-0000-0000-0000000000e1','f9800000-0000-0000-0000-0000000000e3','2024-01-01T00:00:00Z','F6-427 posicao P9'),
+  ('f9800000-0000-0000-0000-0000000000d1','f9a42700-0000-0000-0000-0000000000b1','f9800000-0000-0000-0000-0000000000b2','f9800000-0000-0000-0000-0000000000e2','f9800000-0000-0000-0000-0000000000e4','2024-01-01T00:00:00Z','F6-427 posicao PB1');
 
 insert into public.position_reporting_lines
   (id, organization_id, subordinate_position_id, manager_position_id, reason, valid_from) values
-  ('f9800000-0000-0000-0000-0000000000f1','f9a00000-0000-0000-0000-0000000000a1','f9800000-0000-0000-0000-0000000000c2','f9800000-0000-0000-0000-0000000000c1','reporting line F6-427 P2->P1','2024-01-01T00:00:00Z'),
-  ('f9800000-0000-0000-0000-0000000000f2','f9a00000-0000-0000-0000-0000000000a1','f9800000-0000-0000-0000-0000000000c3','f9800000-0000-0000-0000-0000000000c1','reporting line F6-427 P3->P1','2024-01-01T00:00:00Z'),
-  ('f9800000-0000-0000-0000-0000000000f3','f9a00000-0000-0000-0000-0000000000a1','f9800000-0000-0000-0000-0000000000c4','f9800000-0000-0000-0000-0000000000c1','reporting line F6-427 P4->P1','2024-01-01T00:00:00Z'),
-  ('f9800000-0000-0000-0000-0000000000f4','f9a00000-0000-0000-0000-0000000000a1','f9800000-0000-0000-0000-0000000000c6','f9800000-0000-0000-0000-0000000000c1','reporting line F6-427 P6->P1','2024-01-01T00:00:00Z');
+  ('f9800000-0000-0000-0000-0000000000f1','f9a42700-0000-0000-0000-0000000000a1','f9800000-0000-0000-0000-0000000000c2','f9800000-0000-0000-0000-0000000000c1','reporting line F6-427 P2->P1','2024-01-01T00:00:00Z'),
+  ('f9800000-0000-0000-0000-0000000000f2','f9a42700-0000-0000-0000-0000000000a1','f9800000-0000-0000-0000-0000000000c3','f9800000-0000-0000-0000-0000000000c1','reporting line F6-427 P3->P1','2024-01-01T00:00:00Z'),
+  ('f9800000-0000-0000-0000-0000000000f3','f9a42700-0000-0000-0000-0000000000a1','f9800000-0000-0000-0000-0000000000c4','f9800000-0000-0000-0000-0000000000c1','reporting line F6-427 P4->P1','2024-01-01T00:00:00Z'),
+  ('f9800000-0000-0000-0000-0000000000f4','f9a42700-0000-0000-0000-0000000000a1','f9800000-0000-0000-0000-0000000000c6','f9800000-0000-0000-0000-0000000000c1','reporting line F6-427 P6->P1','2024-01-01T00:00:00Z');
 
 -- ----------------------------------------------------------------------------
 -- 5) Colaboradores, identificadores, periodos de status e ocupacoes
 -- ----------------------------------------------------------------------------
 insert into public.collaborators
   (id, organization_id, full_name, email, admission_date) values
-  ('f9c00000-0000-0000-0000-0000000000c1','f9a00000-0000-0000-0000-0000000000a1','Colaborador F6-427 Um','colaborador.f6-427.1@example.invalid', date '2024-01-01'),
-  ('f9c00000-0000-0000-0000-0000000000c2','f9a00000-0000-0000-0000-0000000000a1','Colaborador F6-427 Dois','colaborador.f6-427.2@example.invalid', date '2024-01-01'),
-  ('f9c00000-0000-0000-0000-0000000000c3','f9a00000-0000-0000-0000-0000000000a1','Colaborador F6-427 Tres','colaborador.f6-427.3@example.invalid', date '2024-01-01'),
-  ('f9c00000-0000-0000-0000-0000000000c4','f9a00000-0000-0000-0000-0000000000a1','Colaborador F6-427 Quatro','colaborador.f6-427.4@example.invalid', date '2024-01-01'),
-  ('f9c00000-0000-0000-0000-0000000000c5','f9a00000-0000-0000-0000-0000000000a1','Colaborador F6-427 Cinco','colaborador.f6-427.5@example.invalid', date '2024-01-01'),
-  ('f9c00000-0000-0000-0000-0000000000c6','f9a00000-0000-0000-0000-0000000000a1','Colaborador F6-427 Seis','colaborador.f6-427.6@example.invalid', date '2024-01-01'),
-  ('f9c00000-0000-0000-0000-0000000000c7','f9a00000-0000-0000-0000-0000000000a1','Colaborador F6-427 Sete','colaborador.f6-427.7@example.invalid', date '2024-01-01'),
-  ('f9c00000-0000-0000-0000-0000000000c8','f9a00000-0000-0000-0000-0000000000a1','Colaborador F6-427 Oito','colaborador.f6-427.8@example.invalid', date '2024-01-01'),
-  ('f9c00000-0000-0000-0000-0000000000c9','f9a00000-0000-0000-0000-0000000000a1','Colaborador F6-427 Nove','colaborador.f6-427.9@example.invalid', date '2024-01-01'),
-  ('f9c00000-0000-0000-0000-0000000000b1','f9a00000-0000-0000-0000-0000000000b1','Colaborador F6-427 Beta','colaborador.f6-427.beta@example.invalid', date '2024-01-01');
+  ('f9c00000-0000-0000-0000-0000000000c1','f9a42700-0000-0000-0000-0000000000a1','Colaborador F6-427 Um','colaborador.f6-427.1@example.invalid', date '2024-01-01'),
+  ('f9c00000-0000-0000-0000-0000000000c2','f9a42700-0000-0000-0000-0000000000a1','Colaborador F6-427 Dois','colaborador.f6-427.2@example.invalid', date '2024-01-01'),
+  ('f9c00000-0000-0000-0000-0000000000c3','f9a42700-0000-0000-0000-0000000000a1','Colaborador F6-427 Tres','colaborador.f6-427.3@example.invalid', date '2024-01-01'),
+  ('f9c00000-0000-0000-0000-0000000000c4','f9a42700-0000-0000-0000-0000000000a1','Colaborador F6-427 Quatro','colaborador.f6-427.4@example.invalid', date '2024-01-01'),
+  ('f9c00000-0000-0000-0000-0000000000c5','f9a42700-0000-0000-0000-0000000000a1','Colaborador F6-427 Cinco','colaborador.f6-427.5@example.invalid', date '2024-01-01'),
+  ('f9c00000-0000-0000-0000-0000000000c6','f9a42700-0000-0000-0000-0000000000a1','Colaborador F6-427 Seis','colaborador.f6-427.6@example.invalid', date '2024-01-01'),
+  ('f9c00000-0000-0000-0000-0000000000c7','f9a42700-0000-0000-0000-0000000000a1','Colaborador F6-427 Sete','colaborador.f6-427.7@example.invalid', date '2024-01-01'),
+  ('f9c00000-0000-0000-0000-0000000000c8','f9a42700-0000-0000-0000-0000000000a1','Colaborador F6-427 Oito','colaborador.f6-427.8@example.invalid', date '2024-01-01'),
+  ('f9c00000-0000-0000-0000-0000000000c9','f9a42700-0000-0000-0000-0000000000a1','Colaborador F6-427 Nove','colaborador.f6-427.9@example.invalid', date '2024-01-01'),
+  ('f9c00000-0000-0000-0000-0000000000b1','f9a42700-0000-0000-0000-0000000000b1','Colaborador F6-427 Beta','colaborador.f6-427.beta@example.invalid', date '2024-01-01');
 
 insert into public.collaborator_identifiers
   (collaborator_id, organization_id, business_code, valid_from) values
-  ('f9c00000-0000-0000-0000-0000000000c1','f9a00000-0000-0000-0000-0000000000a1','F6427-0001','2024-01-01T00:00:00Z'),
-  ('f9c00000-0000-0000-0000-0000000000c2','f9a00000-0000-0000-0000-0000000000a1','F6427-0002','2024-01-01T00:00:00Z'),
-  ('f9c00000-0000-0000-0000-0000000000c3','f9a00000-0000-0000-0000-0000000000a1','F6427-0003','2024-01-01T00:00:00Z'),
-  ('f9c00000-0000-0000-0000-0000000000c4','f9a00000-0000-0000-0000-0000000000a1','F6427-0004','2024-01-01T00:00:00Z'),
-  ('f9c00000-0000-0000-0000-0000000000c5','f9a00000-0000-0000-0000-0000000000a1','F6427-0005','2024-01-01T00:00:00Z'),
-  ('f9c00000-0000-0000-0000-0000000000c6','f9a00000-0000-0000-0000-0000000000a1','F6427-0006','2024-01-01T00:00:00Z'),
-  ('f9c00000-0000-0000-0000-0000000000c7','f9a00000-0000-0000-0000-0000000000a1','F6427-0007','2024-01-01T00:00:00Z'),
-  ('f9c00000-0000-0000-0000-0000000000c8','f9a00000-0000-0000-0000-0000000000a1','F6427-0008','2024-01-01T00:00:00Z'),
-  ('f9c00000-0000-0000-0000-0000000000c9','f9a00000-0000-0000-0000-0000000000a1','F6427-0009','2024-01-01T00:00:00Z'),
-  ('f9c00000-0000-0000-0000-0000000000b1','f9a00000-0000-0000-0000-0000000000b1','F6427-9001','2024-01-01T00:00:00Z');
+  ('f9c00000-0000-0000-0000-0000000000c1','f9a42700-0000-0000-0000-0000000000a1','F6427-0001','2024-01-01T00:00:00Z'),
+  ('f9c00000-0000-0000-0000-0000000000c2','f9a42700-0000-0000-0000-0000000000a1','F6427-0002','2024-01-01T00:00:00Z'),
+  ('f9c00000-0000-0000-0000-0000000000c3','f9a42700-0000-0000-0000-0000000000a1','F6427-0003','2024-01-01T00:00:00Z'),
+  ('f9c00000-0000-0000-0000-0000000000c4','f9a42700-0000-0000-0000-0000000000a1','F6427-0004','2024-01-01T00:00:00Z'),
+  ('f9c00000-0000-0000-0000-0000000000c5','f9a42700-0000-0000-0000-0000000000a1','F6427-0005','2024-01-01T00:00:00Z'),
+  ('f9c00000-0000-0000-0000-0000000000c6','f9a42700-0000-0000-0000-0000000000a1','F6427-0006','2024-01-01T00:00:00Z'),
+  ('f9c00000-0000-0000-0000-0000000000c7','f9a42700-0000-0000-0000-0000000000a1','F6427-0007','2024-01-01T00:00:00Z'),
+  ('f9c00000-0000-0000-0000-0000000000c8','f9a42700-0000-0000-0000-0000000000a1','F6427-0008','2024-01-01T00:00:00Z'),
+  ('f9c00000-0000-0000-0000-0000000000c9','f9a42700-0000-0000-0000-0000000000a1','F6427-0009','2024-01-01T00:00:00Z'),
+  ('f9c00000-0000-0000-0000-0000000000b1','f9a42700-0000-0000-0000-0000000000b1','F6427-9001','2024-01-01T00:00:00Z');
 
 insert into public.collaborator_status_periods
   (collaborator_id, status, valid_from, valid_to) values
@@ -206,13 +232,13 @@ insert into public.collaborator_status_periods
 -- fim do periodo anterior — VALIDO pela semantica meio-aberta.
 insert into public.occupations
   (id, organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to) values
-  ('f9800000-0000-0000-0000-000000000101','f9a00000-0000-0000-0000-0000000000a1','f9c00000-0000-0000-0000-0000000000c1','f9800000-0000-0000-0000-0000000000c1','ocupacao F6-427 c1 em P1','2024-01-01T00:00:00Z','2033-01-01T00:00:00Z'),
-  ('f9800000-0000-0000-0000-000000000102','f9a00000-0000-0000-0000-0000000000a1','f9c00000-0000-0000-0000-0000000000c1','f9800000-0000-0000-0000-0000000000c3','ocupacao F6-427 c1 em P3 (consecutiva, meio-aberta)','2033-01-01T00:00:00Z',null),
-  ('f9800000-0000-0000-0000-000000000103','f9a00000-0000-0000-0000-0000000000a1','f9c00000-0000-0000-0000-0000000000c2','f9800000-0000-0000-0000-0000000000c2','ocupacao F6-427 c2 em P2','2024-01-01T00:00:00Z',null),
-  ('f9800000-0000-0000-0000-000000000104','f9a00000-0000-0000-0000-0000000000a1','f9c00000-0000-0000-0000-0000000000c3','f9800000-0000-0000-0000-0000000000c5','ocupacao F6-427 c3 em P5','2024-01-01T00:00:00Z',null),
-  ('f9800000-0000-0000-0000-000000000105','f9a00000-0000-0000-0000-0000000000a1','f9c00000-0000-0000-0000-0000000000c4','f9800000-0000-0000-0000-0000000000c4','ocupacao F6-427 c4 em P4','2024-01-01T00:00:00Z',null),
-  ('f9800000-0000-0000-0000-000000000106','f9a00000-0000-0000-0000-0000000000a1','f9c00000-0000-0000-0000-0000000000c7','f9800000-0000-0000-0000-0000000000c9','ocupacao F6-427 c7 em P9 (destino do definir)','2024-01-01T00:00:00Z',null),
-  ('f9800000-0000-0000-0000-0000000001b1','f9a00000-0000-0000-0000-0000000000b1','f9c00000-0000-0000-0000-0000000000b1','f9800000-0000-0000-0000-0000000000d1','ocupacao F6-427 cB em PB1','2024-01-01T00:00:00Z',null);
+  ('f9800000-0000-0000-0000-000000000101','f9a42700-0000-0000-0000-0000000000a1','f9c00000-0000-0000-0000-0000000000c1','f9800000-0000-0000-0000-0000000000c1','ocupacao F6-427 c1 em P1','2024-01-01T00:00:00Z','2033-01-01T00:00:00Z'),
+  ('f9800000-0000-0000-0000-000000000102','f9a42700-0000-0000-0000-0000000000a1','f9c00000-0000-0000-0000-0000000000c1','f9800000-0000-0000-0000-0000000000c3','ocupacao F6-427 c1 em P3 (consecutiva, meio-aberta)','2033-01-01T00:00:00Z',null),
+  ('f9800000-0000-0000-0000-000000000103','f9a42700-0000-0000-0000-0000000000a1','f9c00000-0000-0000-0000-0000000000c2','f9800000-0000-0000-0000-0000000000c2','ocupacao F6-427 c2 em P2','2024-01-01T00:00:00Z',null),
+  ('f9800000-0000-0000-0000-000000000104','f9a42700-0000-0000-0000-0000000000a1','f9c00000-0000-0000-0000-0000000000c3','f9800000-0000-0000-0000-0000000000c5','ocupacao F6-427 c3 em P5','2024-01-01T00:00:00Z',null),
+  ('f9800000-0000-0000-0000-000000000105','f9a42700-0000-0000-0000-0000000000a1','f9c00000-0000-0000-0000-0000000000c4','f9800000-0000-0000-0000-0000000000c4','ocupacao F6-427 c4 em P4','2024-01-01T00:00:00Z',null),
+  ('f9800000-0000-0000-0000-000000000106','f9a42700-0000-0000-0000-0000000000a1','f9c00000-0000-0000-0000-0000000000c7','f9800000-0000-0000-0000-0000000000c9','ocupacao F6-427 c7 em P9 (destino do definir)','2024-01-01T00:00:00Z',null),
+  ('f9800000-0000-0000-0000-0000000001b1','f9a42700-0000-0000-0000-0000000000b1','f9c00000-0000-0000-0000-0000000000b1','f9800000-0000-0000-0000-0000000000d1','ocupacao F6-427 cB em PB1','2024-01-01T00:00:00Z',null);
 
 -- ----------------------------------------------------------------------------
 -- 6) Evento soberano ADMISSAO — ator ADMIN do tenant, effective_date POSTERIOR a
@@ -225,17 +251,17 @@ insert into public.collaborator_events
    cycle_scope, reason, before_value, after_value, payload_hash,
    result_entity_id, actor_user_profile_id, actor_membership_id, operation_id)
 values
-  ('f9a00000-0000-0000-0000-0000000000a1','f9c00000-0000-0000-0000-0000000000c8',null,
+  ('f9a42700-0000-0000-0000-0000000000a1','f9c00000-0000-0000-0000-0000000000c8',null,
    'ADMISSAO', now() - interval '30 days','CICLO_ATUAL_E_POSTERIORES',
    'Admissao soberana F6-427 c8', null, jsonb_build_object('origem','fixture'),
    repeat('c', 64),'f9c00000-0000-0000-0000-0000000000c8',
-   'f9b00000-0000-0000-0000-0000000000a1','f9d00000-0000-0000-0000-0000000000a1',
+   'f9b00000-0000-0000-0000-0000000000a1','f9d42700-0000-0000-0000-0000000000a1',
    'f9f00000-0000-0000-0000-0000000000c1'),
-  ('f9a00000-0000-0000-0000-0000000000a1','f9c00000-0000-0000-0000-0000000000c9',null,
+  ('f9a42700-0000-0000-0000-0000000000a1','f9c00000-0000-0000-0000-0000000000c9',null,
    'ADMISSAO', now() - interval '30 days','CICLO_ATUAL_E_POSTERIORES',
    'Admissao soberana F6-427 c9', null, jsonb_build_object('origem','fixture'),
    repeat('d', 64),'f9c00000-0000-0000-0000-0000000000c9',
-   'f9b00000-0000-0000-0000-0000000000a1','f9d00000-0000-0000-0000-0000000000a1',
+   'f9b00000-0000-0000-0000-0000000000a1','f9d42700-0000-0000-0000-0000000000a1',
    'f9f00000-0000-0000-0000-0000000000c2');
 
 -- ----------------------------------------------------------------------------
@@ -253,27 +279,33 @@ declare
   v_gestor   uuid;
   v_escopo   int;
 begin
-  select count(*) into v_n from public.organizations where id::text like 'f9a00000%';
+  select count(*) into v_n from public.organizations
+   where id in ('f9a42700-0000-0000-0000-0000000000a1',
+                'f9a42700-0000-0000-0000-0000000000b1');
   if v_n <> 2 then
     raise exception '[FAIL] cenario F6-427: organizacoes esperadas=2, encontradas=%', v_n;
   end if;
 
-  select count(*) into v_n from public.user_organization_memberships where id::text like 'f9d00000%';
+  select count(*) into v_n from public.user_organization_memberships
+   where id in ('f9d42700-0000-0000-0000-0000000000a1',
+                'f9d42700-0000-0000-0000-0000000000a2',
+                'f9d42700-0000-0000-0000-0000000000b1',
+                'f9d42700-0000-0000-0000-0000000000a4');
   if v_n <> 4 then
     raise exception '[FAIL] cenario F6-427: memberships esperadas=4, encontradas=%', v_n;
   end if;
 
-  select count(*) into v_n from public.collaborators where organization_id = 'f9a00000-0000-0000-0000-0000000000a1';
+  select count(*) into v_n from public.collaborators where organization_id = 'f9a42700-0000-0000-0000-0000000000a1';
   if v_n <> 9 then
     raise exception '[FAIL] cenario F6-427: colaboradores Alfa esperados=9, encontrados=%', v_n;
   end if;
 
-  select count(*) into v_n from public.occupations where organization_id = 'f9a00000-0000-0000-0000-0000000000a1';
+  select count(*) into v_n from public.occupations where organization_id = 'f9a42700-0000-0000-0000-0000000000a1';
   if v_n <> 6 then
     raise exception '[FAIL] cenario F6-427: ocupacoes Alfa esperadas=6, encontradas=%', v_n;
   end if;
 
-  select count(*) into v_n from public.collaborator_events where organization_id = 'f9a00000-0000-0000-0000-0000000000a1';
+  select count(*) into v_n from public.collaborator_events where organization_id = 'f9a42700-0000-0000-0000-0000000000a1';
   if v_n <> 2 then
     raise exception '[FAIL] cenario F6-427: eventos ADMISSAO esperados=2, encontrados=%', v_n;
   end if;
@@ -288,7 +320,7 @@ begin
      and b.id > a.id
      and tstzrange(a.valid_from, coalesce(a.valid_to, 'infinity'::timestamptz), '[)')
       && tstzrange(b.valid_from, coalesce(b.valid_to, 'infinity'::timestamptz), '[)')
-   where a.organization_id::text like 'f9a00000%';
+   where a.organization_id = 'f9a42700-0000-0000-0000-0000000000a1';
   if v_sobrep <> 0 then
     raise exception '[FAIL] cenario F6-427: fixture com % sobreposicao(oes) por colaborador', v_sobrep;
   end if;
@@ -329,14 +361,14 @@ begin
   -- ator sem assignment.
   select count(*) into v_cap
     from public.resolver_capabilities_escopos_efetivas(
-      'f9b00000-0000-0000-0000-0000000000a1','f9a00000-0000-0000-0000-0000000000a1') x
+      'f9b00000-0000-0000-0000-0000000000a1','f9a42700-0000-0000-0000-0000000000a1') x
    where x.capability_code = 'org.structure.manage';
   if v_cap <> 1 then
     raise exception '[FAIL] cenario F6-427: ator ADMIN sem org.structure.manage (%)', v_cap;
   end if;
   select count(*) into v_cap
     from public.resolver_capabilities_escopos_efetivas(
-      'f9b00000-0000-0000-0000-0000000000a2','f9a00000-0000-0000-0000-0000000000a1') x
+      'f9b00000-0000-0000-0000-0000000000a2','f9a42700-0000-0000-0000-0000000000a1') x
    where x.capability_code = 'org.structure.manage';
   if v_cap <> 0 then
     raise exception '[FAIL] cenario F6-427: ator sem assignment resolveu org.structure.manage';

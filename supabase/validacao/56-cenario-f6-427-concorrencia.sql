@@ -16,7 +16,7 @@
 -- CONTRATO DE EXCLUSIVIDADE DESTA FIXTURE: a organizacao
 --   `f427a000-0000-0000-0000-0000000000a1` (Org Sintetica F6-427 Concorrencia)
 -- nasce AQUI e NAO e usada por nenhum outro validador (o cenario `55-cenario-
--- f6-427.sql` usa as organizacoes `f9a00000...a1/b1`). Se outro validador passar
+-- f6-427.sql` usa as organizacoes `f9a42700...a1/b1`). Se outro validador passar
 -- a escrever nesta organizacao, os asserts da corrida e do validador 59 falham
 -- com mensagem explicita — e a correcao e REATRIBUIR a organizacao, nunca
 -- afrouxar a prova.
