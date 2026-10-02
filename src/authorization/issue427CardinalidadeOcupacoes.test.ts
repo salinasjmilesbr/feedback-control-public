@@ -95,6 +95,42 @@ describe("Issue #427 — cardinalidade soberana de ocupações (contrato da migr
     expect(migration).not.toContain("order by o.valid_from desc, o.created_at desc");
   });
 
+  it("padroniza a ordem dos locks (colaborador for update antes do advisory)", () => {
+    const inicioDefinir = migration.indexOf(
+      "create or replace function public.estrutura_ocupacao_definir"
+    );
+    const inicioTrocar = migration.indexOf(
+      "create or replace function public.estrutura_ocupacao_trocar"
+    );
+    const fimTrocar = migration.indexOf(
+      "create or replace function public.organizacao_resolver_gestor_direto"
+    );
+    expect(inicioDefinir).toBeGreaterThan(-1);
+    expect(inicioTrocar).toBeGreaterThan(inicioDefinir);
+    expect(fimTrocar).toBeGreaterThan(inicioTrocar);
+
+    for (const corpo of [
+      migration.slice(inicioDefinir, inicioTrocar),
+      migration.slice(inicioTrocar, fimTrocar),
+    ]) {
+      // Os comentarios mencionam `for update`; a ordem real e medida sobre o
+      // codigo sem comentarios (o advisory lock e unico por funcao).
+      const codigo = corpo.replace(/--[^\n]*/g, "");
+      const primeiraLinha = codigo.indexOf("for update");
+      const primeiroAdvisory = codigo.indexOf("pg_advisory_xact_lock");
+      expect(primeiraLinha).toBeGreaterThan(-1);
+      expect(primeiroAdvisory).toBeGreaterThan(-1);
+      // Ordem canonica deterministica: linha do colaborador -> advisory da
+      // organizacao. Inverter reintroduz deadlock entre definir e trocar.
+      expect(primeiraLinha).toBeLessThan(primeiroAdvisory);
+      expect(codigo.indexOf("pg_advisory_xact_lock")).toBe(
+        codigo.lastIndexOf("pg_advisory_xact_lock")
+      );
+    }
+    // A guarda da propria migration tambem trava a ordem.
+    expect(migration).toContain("ordem canonica de locks violada em %");
+  });
+
   it("comprova cardinalidade nas materializações e na admissão pós-ativação", () => {
     expect(migration).toContain(
       "create or replace function public.materializar_colegiado_ciclo"

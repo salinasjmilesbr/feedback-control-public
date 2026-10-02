@@ -7,6 +7,13 @@
 --   2) `55-cenario-f6-427.sql` (fixture isolada)
 --   3) este arquivo            (asserts `[PASS]` / `[FAIL]`)
 --
+-- CONCORRENCIA REAL (auditoria da #427): este arquivo e de SESSAO UNICA e prova a
+-- BARREIRA, nao paralelismo. A disputa entre duas sessoes PostgreSQL — `definir`
+-- x `trocar` sobre o mesmo colaborador, duas tentativas de ocupacao sobreposta,
+-- ausencia de deadlock nao tratado e ausencia de efeito parcial — e provada por
+-- `56-cenario-f6-427-concorrencia.sql`, `57-sessao-a-f6-427-concorrencia.sql`,
+-- `58-sessao-b-f6-427-concorrencia.sql` e `59-validar-f6-427-concorrencia.sql`.
+--
 -- Contrato coberto: Issue #427 (comentario "Desenho tecnico fechado para
 -- implementacao") + migration
 -- `20261028000000_f6_issue427_cardinalidade_ocupacoes.sql`.

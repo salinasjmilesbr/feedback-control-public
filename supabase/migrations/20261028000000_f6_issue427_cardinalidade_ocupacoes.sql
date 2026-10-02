@@ -262,6 +262,13 @@ begin
     raise exception 'F5_07_CONFLICT: colaborador inativo nao pode receber ocupacao';
   end if;
 
+  -- F6 / #427 — ORDEM CANONICA DE LOCKS (identica a
+  -- `estrutura_ocupacao_trocar` e `estrutura_ocupacao_encerrar`):
+  --   1) linha do colaborador (`collaborators ... for update`, acima);
+  --   2) advisory lock da organizacao (abaixo).
+  -- A ordem e DETERMINISTICA e consistente entre as tres RPCs de ocupacao: uma
+  -- corrida `definir` x `trocar` (ou `definir` x `encerrar`) sobre o MESMO
+  -- colaborador serializa na linha do colaborador e NUNCA forma ciclo de espera.
   -- Lock de transacao por organizacao (mesmo padrao da F3-04): serializa
   -- leitura-antes-de-escrever da estrutura do tenant.
   perform pg_advisory_xact_lock(hashtext('position_reporting_lines:' || v_org::text));
@@ -475,7 +482,22 @@ begin
     return v_evento.result_entity_id;
   end if;
 
-  perform pg_advisory_xact_lock(hashtext('position_reporting_lines:' || p_organization_id::text));
+  -- F6 / #427 — ORDEM CANONICA DE LOCKS (identica a
+  -- `estrutura_ocupacao_definir` e `estrutura_ocupacao_encerrar`):
+  --   1) linha do colaborador (`collaborators ... for update`);
+  --   2) advisory lock da organizacao (`position_reporting_lines:<org>`).
+  -- A ordem e DETERMINISTICA e consistente entre as tres RPCs de ocupacao: uma
+  -- corrida `trocar` x `definir` sobre o MESMO colaborador serializa na LINHA do
+  -- colaborador e NUNCA forma ciclo de espera (com a ordem invertida, definir
+  -- seguraria a linha esperando o advisory enquanto trocar seguraria o advisory
+  -- esperando a linha — deadlock 40P01 em vez do conflito publico).
+  select c.organization_id into v_org from public.collaborators c
+   where c.id = p_collaborator_id for update;
+  if not found or v_org is distinct from p_organization_id then
+    raise exception 'F5_07_NOT_FOUND: colaborador inexistente ou de outro tenant';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('position_reporting_lines:' || v_org::text));
 
   if exists (
     select 1 from public.collaborator_events e
@@ -486,12 +508,6 @@ begin
        and e.effective_date = v_vigencia
   ) then
     raise exception 'F5_07_CONFLICT: segunda transicao de ocupacao na mesma relacao e data civil';
-  end if;
-
-  select c.organization_id into v_org from public.collaborators c
-   where c.id = p_collaborator_id for update;
-  if not found or v_org is distinct from p_organization_id then
-    raise exception 'F5_07_NOT_FOUND: colaborador inexistente ou de outro tenant';
   end if;
 
   -- F6 / #427 §2: EXATAMENTE UMA ocupacao atravessando a data efetiva.
@@ -1511,6 +1527,7 @@ do $guarda$
 declare
   v_nome text;
   v_def text;
+  v_sem text;
   v_n integer;
 begin
   -- A exclusão por POSIÇÃO permanece (nenhum contrato histórico é removido).
@@ -1546,6 +1563,22 @@ begin
     end if;
     if position('cardinalidade de ocupacao ambigua' in v_def) = 0 then
       raise exception 'F6_427: guarda de cardinalidade ausente em %', v_nome;
+    end if;
+    -- Ordem canonica de locks (auditoria da #427): a LINHA do colaborador
+    -- (`for update`) precede o advisory lock da organizacao nas duas RPCs.
+    -- Inverter volta a permitir ciclo de espera (deadlock 40P01) entre
+    -- `definir` e `trocar` sobre o mesmo colaborador.
+    -- A medicao ignora COMENTARIOS (`-- ...`): eles mencionam `for update` e
+    -- poderiam mascarar a ordem real das instrucoes. A classe de caracteres usa
+    -- chr(10) explicito (nenhuma dependencia do escape de nova linha do motor).
+    v_sem := regexp_replace(v_def, '--[^' || chr(10) || ']*', '', 'g');
+    if position('for update' in lower(v_sem)) = 0
+       or position('pg_advisory_xact_lock' in lower(v_sem)) = 0
+       or position('for update' in lower(v_sem))
+          > position('pg_advisory_xact_lock' in lower(v_sem)) then
+      raise exception
+        'F6_427: ordem canonica de locks violada em % (a linha do colaborador com FOR UPDATE deve preceder o pg_advisory_xact_lock)',
+        v_nome;
     end if;
   end loop;
 

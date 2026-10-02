@@ -57,11 +57,16 @@ em `.ai/*`, não são duplicadas aqui.
 > `supabase/migrations/20261028000000_f6_issue427_cardinalidade_ocupacoes.sql`
 > (exclusão temporal por `collaborator_id`, preservando a exclusão por posição),
 > guardas de cardinalidade nas escritas, fail-closed dos consumidores
-> estruturais e validadores `55-cenario/55-validar-f6-427.sql` (matriz da Issue).
-> **`SQL execution: NOT AVAILABLE` neste host:** o sandbox nega named pipe
-> (Docker inacessível) e a política de execução do host bloqueia os
+> estruturais, validadores `55-cenario/55-validar-f6-427.sql` (matriz da Issue) e
+> prova CONCORRENTE entre duas sessões (`56-cenario`/`57-sessao-a`/`58-sessao-b`/
+> `59-validar-f6-427-concorrencia.sql`). Correção da auditoria estática: ordem
+> CANÔNICA de locks (linha do colaborador com `FOR UPDATE` antes do advisory da
+> organização) padronizada em `definir`/`trocar` e travada por guarda na própria
+> migration. **`SQL execution: NOT AVAILABLE` neste host:** o sandbox nega named
+> pipe (Docker inacessível) e a política de execução do host bloqueia os
 > `supabase/validacao/*.ps1`; a certificação SQL/Edge em runtime descartável
-> depende do CI. Sem merge, sem fechar a Issue e sem alterar o Plano Mestre.
+> (incluindo a corrida entre sessões) depende do CI. Sem merge, sem fechar a
+> Issue e sem alterar o Plano Mestre.
 
 - **Baseline local deste checkpoint:** `main` / `origin/main` em
   `d7c3191b1de33be0d13afa1507fc7b8ce518d29a`; o CI desse SHA não foi
