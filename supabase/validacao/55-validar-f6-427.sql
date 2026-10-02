@@ -1337,6 +1337,29 @@ begin
     raise exception '[FAIL] 11: c9 deveria ter EXATAMENTE 1 ocupacao (tem %)', v_n;
   end if;
 
+  -- O caminho ELEGIVEL exige, alem da estrutura (P5), a prova P1 do helper: evento
+  -- soberano ADMISSAO com cycle_scope CICLO_ATUAL_E_POSTERIORES e effective_date
+  -- POSTERIOR a ativacao do ciclo (2036/1 ativa em 2020-01-01). A fixture semeia
+  -- esse evento apenas para c8/c9; c3 — o caso "1 ocupacao" do caminho ELEGIVEL —
+  -- precisa do seu proprio evento, senao a recusa vem de SEM_EVENTO_ADMISSAO.
+  if not exists (select 1 from public.collaborator_events e
+                  where e.organization_id = v_org
+                    and e.collaborator_id = 'f9c00000-0000-0000-0000-0000000000c3'
+                    and e.event_type = 'ADMISSAO') then
+    insert into public.collaborator_events
+      (organization_id, collaborator_id, position_id, event_type, effective_date,
+       cycle_scope, reason, before_value, after_value, payload_hash,
+       result_entity_id, actor_user_profile_id, actor_membership_id, operation_id)
+    values
+      (v_org, 'f9c00000-0000-0000-0000-0000000000c3', null,
+       'ADMISSAO', now() - interval '30 days', 'CICLO_ATUAL_E_POSTERIORES',
+       'Admissao soberana F6-427 c3 (prova 11)', null,
+       jsonb_build_object('origem','fixture'), repeat('e', 64),
+       'f9c00000-0000-0000-0000-0000000000c3',
+       'f9b00000-0000-0000-0000-0000000000a1', 'f9d42700-0000-0000-0000-0000000000a1',
+       'f9f00000-0000-0000-0000-0000000009c3');
+  end if;
+
   -- A guarda de ambiguidade existe no helper (via textual; o estado >1 nao e
   -- construivel pela via normal).
   if position('ESTRUTURA_AMBIGUA' in
@@ -1366,8 +1389,9 @@ declare
   v_res   jsonb;
   v_n     int;
 begin
-  -- (1) UMA ocupacao vigente agora (c3 em P6, aberta pela prova 6) => ELEGIVEL
-  -- com posicao resolvida pela fonte relacional (occupations), nunca por ordenacao.
+  -- (1) UMA ocupacao vigente AGORA (c3 em P5: a troca para P6 e datada de
+  -- 2033-01-01, futura em relacao a `now()` usado pelo helper) => ELEGIVEL com a
+  -- posicao resolvida pela fonte relacional (occupations), nunca por ordenacao.
   if public.colaborador_ocupacoes_cardinalidade(v_c3, now()) <> 1 then
     raise exception '[FAIL] 11: pre-condicao: c3 deveria ter 1 ocupacao vigente agora';
   end if;
@@ -1376,8 +1400,14 @@ begin
      or coalesce((v_res->>'elegivel')::boolean, false) is not true then
     raise exception '[FAIL] 11: c3 (1 ocupacao) deveria ser ELEGIVEL (%)', v_res;
   end if;
-  if (v_res->>'posicao_id')::uuid is distinct from v_p6 then
-    raise exception '[FAIL] 11: posicao resolvida deveria ser P6 (%)', v_res->>'posicao_id';
+  if (v_res->>'posicao_id')::uuid is distinct from 'f9800000-0000-0000-0000-0000000000c5'::uuid then
+    raise exception '[FAIL] 11: posicao resolvida em now() deveria ser P5 (posicao de c3 antes da troca datada de 2033) (%)', v_res->>'posicao_id';
+  end if;
+  -- E, apos a transicao datada de 2033-01-01, a posicao soberana de c3 e P6: a
+  -- mesma fonte relacional acompanha a vigencia, sem ordenacao nem escolha.
+  if public.colaborador_posicao_soberana(v_c3, '2033-06-01T00:00:00Z')
+     is distinct from 'f9800000-0000-0000-0000-0000000000c6'::uuid then
+    raise exception '[FAIL] 11: apos a transicao de 2033-01-01 a posicao soberana de c3 deveria ser P6';
   end if;
 
   -- (2) Segunda origem UNICA (c9, ocupacao aberta pela fixture desta prova) =>
