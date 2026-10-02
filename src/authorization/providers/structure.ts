@@ -36,6 +36,13 @@ function buildHierarchyScope(
   occupants: readonly Occupant[],
   organizationId: string
 ): HierarchyScope {
+  // F6 #427 §4: a origem de ocupação do ator precisa ser ÚNICA. Mais de uma
+  // position própria é ambiguidade e NÃO pode produzir união de escopo: DENY
+  // fail-closed (o caller nunca escolhe a posição).
+  if (new Set(actorPositions).size > 1) {
+    return { positionIds: new Set<string>(), collaboratorIds: new Set<string>() };
+  }
+
   const byManager = new Map<string, string[]>();
   for (const p of positions) {
     // tenant: nós de outra organização são ignorados (fail-closed).
@@ -46,9 +53,19 @@ function buildHierarchyScope(
     byManager.set(p.managerPositionId, lista);
   }
 
+  const ocupacoesPorPosicao = new Map<string, number>();
+  for (const o of occupants) {
+    ocupacoesPorPosicao.set(o.positionId, (ocupacoesPorPosicao.get(o.positionId) ?? 0) + 1);
+  }
+
   const occupantByPosition = new Map<string, string | null>();
   for (const o of occupants) {
-    occupantByPosition.set(o.positionId, o.collaboratorId);
+    // F6 #427 §3: >1 ocupante vigente na MESMA posição também é ambiguidade —
+    // a posição é tratada como vaga (fail-closed); nunca "o último vence".
+    occupantByPosition.set(
+      o.positionId,
+      (ocupacoesPorPosicao.get(o.positionId) ?? 0) > 1 ? null : o.collaboratorId
+    );
   }
 
   const positionIds = new Set<string>();

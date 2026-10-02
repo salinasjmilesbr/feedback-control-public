@@ -414,6 +414,41 @@ end $$;
 do $$
 declare
   v_n int;
+  v_ok boolean := false;
+begin
+  -- Invariante #427: responsabilidades temporárias múltiplas são permitidas
+  -- (prova acima), mas OCUPAÇÕES simultâneas do mesmo colaborador não são: C1
+  -- já ocupa P1 desde 2025-01-01 e a segunda occupation deve ser recusada pela
+  -- exclusion por colaborador, sem persistir nada.
+  begin
+    insert into public.occupations (
+      organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to
+    ) values (
+      'f8a00000-0000-0000-0000-0000000000a1',
+      'f8b00000-0000-0000-0000-0000000000c1',
+      'f8c00000-0000-0000-0000-0000000000a4',
+      'Acumulo invalido de posicao',
+      '2025-01-01T00:00:00Z', null
+    );
+  exception when exclusion_violation then
+    v_ok := true;
+  end;
+  if not v_ok then
+    raise exception '[FAIL] duas occupations simultaneas do mesmo colaborador NAO foram rejeitadas';
+  end if;
+
+  select count(*) into v_n
+  from public.occupations
+  where collaborator_id = 'f8b00000-0000-0000-0000-0000000000c1';
+  if v_n <> 1 then
+    raise exception '[FAIL] titular C1 deveria manter exatamente 1 occupation (encontrado %)', v_n;
+  end if;
+  raise notice '[PASS] occupation unica por colaborador (exclusion por collaborator; multiplas temporary responsibilities preservadas)';
+end $$;
+
+do $$
+declare
+  v_n int;
 begin
   -- Tipo evaluative presente (preparação para resolução futura) e período
   -- fechado em todas as linhas.

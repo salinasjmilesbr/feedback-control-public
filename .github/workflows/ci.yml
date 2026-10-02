@@ -672,3 +672,22 @@ jobs:
           docker exec -i supabase_db_feedback-control \
             psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
             < supabase/validacao/03-validar-f5-07-cutover.sql
+
+      # ----------------------------------------------------------------------
+      # F6 / #427: cardinalidade soberana de ocupacoes — exclusao temporal por
+      # collaborator_id (preservando a exclusao por posicao), guardas de
+      # cardinalidade nas escritas, fail-closed dos consumidores estruturais e
+      # cardinalidade explicita nas materializacoes. Roda por ultimo para nao
+      # mascarar regressoes de atividades anteriores.
+      # ----------------------------------------------------------------------
+      - name: Seed F6 #427 scenario (cardinalidade soberana de ocupacoes)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/55-cenario-f6-427.sql
+
+      - name: Run F6 #427 validation (matriz de cardinalidade soberana)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/55-validar-f6-427.sql

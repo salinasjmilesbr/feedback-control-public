@@ -211,26 +211,32 @@ end $$;
 do $$
 declare
   v_n int;
+  v_pos uuid;
   v_manager uuid;
+  v_responsible uuid;
 begin
-  -- Gerência sem Coordenador: C_MULTI ocupa P_CONS e P_ANL3 (ambos reportam
-  -- diretamente a P_GER, Gerente) — dois gestores resolvidos para P_GER.
+  -- Gerência sem Coordenador: C_MULTI tem origem ÚNICA (P_CONS, Consultor),
+  -- que reporta diretamente a P_GER (Gerente). A antiga expectativa de "2
+  -- gestores diretos por união de múltiplas occupations" foi abolida pela #427.
   select count(*) into v_n
   from public.organizacao_resolver_gestor_direto(
     'f9b00000-0000-0000-0000-0000000000c5', '2025-03-15T00:00:00Z'
   );
-  if v_n <> 2 then
-    raise exception '[FAIL] C_MULTI deveria ter 2 gestores diretos (multi-positions), encontrado %', v_n;
+  if v_n <> 1 then
+    raise exception '[FAIL] C_MULTI deveria ter 1 gestor direto (origem unica), encontrado %', v_n;
   end if;
 
-  select manager_position_id into v_manager
+  select occupied_position_id, manager_position_id, manager_responsible_collaborator_id
+    into v_pos, v_manager, v_responsible
   from public.organizacao_resolver_gestor_direto(
     'f9b00000-0000-0000-0000-0000000000c5', '2025-03-15T00:00:00Z'
   ) limit 1;
-  if v_manager is distinct from 'f9c00000-0000-0000-0000-0000000000a1' then
-    raise exception '[FAIL] gestor direto de C_MULTI deveria ser P_GER (Gerente, sem Coordenador)';
+  if v_pos is distinct from 'f9c00000-0000-0000-0000-0000000000a5'
+     or v_manager is distinct from 'f9c00000-0000-0000-0000-0000000000a1'
+     or v_responsible is distinct from 'f9b00000-0000-0000-0000-0000000000c1' then
+    raise exception '[FAIL] gestor direto de C_MULTI deveria ser P_GER (Gerente), a partir da origem unica P_CONS';
   end if;
-  raise notice '[PASS] gerencia sem Coordenador: Consultor/Analista resolvem o Gerente como superior';
+  raise notice '[PASS] gerencia sem Coordenador: origem unica P_CONS resolve o Gerente como unico superior (sem uniao de positions)';
 end $$;
 
 -- ============================================================================
@@ -339,7 +345,8 @@ begin
 end $$;
 
 -- ============================================================================
--- 6) Escopo estrutural (união coerente de múltiplas positions)
+-- 6) Escopo estrutural (origem ÚNICA; a antiga união de múltiplas positions
+--    foi abolida pela #427 — a ambiguidade NUNCA amplia escopo)
 -- ============================================================================
 
 do $$
@@ -352,10 +359,8 @@ begin
     'f9b00000-0000-0000-0000-0000000000c5', '2025-03-15T00:00:00Z'
   );
   if v_pos is distinct from
-     array['f9c00000-0000-0000-0000-0000000000a5',
-           'f9c00000-0000-0000-0000-0000000000a6',
-           'f9c00000-0000-0000-0000-0000000000a7']::uuid[] then
-    raise exception '[FAIL] escopo de posicoes de C_MULTI inesperado';
+     array['f9c00000-0000-0000-0000-0000000000a5']::uuid[] then
+    raise exception '[FAIL] escopo de posicoes de C_MULTI deveria ser apenas a origem unica P_CONS';
   end if;
 
   select array_agg(unit_id order by unit_id) into v_units
@@ -365,7 +370,51 @@ begin
   if v_units is distinct from array['f9e00000-0000-0000-0000-000000000002']::uuid[] then
     raise exception '[FAIL] escopo de unidades de C_MULTI inesperado';
   end if;
-  raise notice '[PASS] multiplas positions produzem escopo coerente (C_MULTI: P_CONS, P_ANL3, P_ANL4 na U2)';
+  raise notice '[PASS] origem unica produz escopo sem uniao (C_MULTI: apenas P_CONS na U2)';
+end $$;
+
+do $$
+declare
+  v_n int;
+  v_ok boolean := false;
+  v_pos uuid[];
+begin
+  -- Invariante #427: segunda occupation simultânea do MESMO colaborador deve
+  -- ser recusada pelo banco (exclusion por colaborador) sem persistir nada nem
+  -- ampliar escopo. C_MULTI já ocupa P_CONS desde 2025-01-01; P_ANL3 está vaga.
+  begin
+    insert into public.occupations (
+      organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to
+    ) values (
+      'f9a00000-0000-0000-0000-0000000000a1',
+      'f9b00000-0000-0000-0000-0000000000c5',
+      'f9c00000-0000-0000-0000-0000000000a6',
+      'Acumulo invalido de posicao',
+      '2025-01-01T00:00:00Z', null
+    );
+  exception when exclusion_violation then
+    v_ok := true;
+  end;
+  if not v_ok then
+    raise exception '[FAIL] duas occupations simultaneas do mesmo colaborador NAO foram rejeitadas';
+  end if;
+
+  select count(*) into v_n
+  from public.occupations
+  where collaborator_id = 'f9b00000-0000-0000-0000-0000000000c5';
+  if v_n <> 1 then
+    raise exception '[FAIL] C_MULTI deveria manter exatamente 1 occupation (encontrado %)', v_n;
+  end if;
+
+  select array_agg(position_id order by position_id) into v_pos
+  from public.organizacao_resolver_escopo_posicoes(
+    'f9b00000-0000-0000-0000-0000000000c5', '2025-03-15T00:00:00Z'
+  );
+  if v_pos is distinct from
+     array['f9c00000-0000-0000-0000-0000000000a5']::uuid[] then
+    raise exception '[FAIL] insercao recusada nao deveria ter ampliado o escopo de C_MULTI';
+  end if;
+  raise notice '[PASS] occupation unica por colaborador: insercao sobreposta recusada e escopo inalterado (sem uniao)';
 end $$;
 
 do $$

@@ -15,7 +15,9 @@
 --     com posicao vigente, unidade como FILHA, unidade como PAI e unidade
 --     encerravel (sem dependencia);
 --   - posicoes (uma com ocupacao vigente, uma com reporting line vigente, uma
---     livre) e um colaborador sintetico ocupante;
+--     livre) e colaboradores sinteticos ocupantes — no maximo UMA ocupacao
+--     simultanea por colaborador (invariante da Issue #427), portanto as
+--     ocupacoes que precisam coexistir usam colaboradores DISTINTOS;
 --   - uma linha de trilha `structure_events` para os testes de append-only.
 --
 -- Regras:
@@ -325,16 +327,21 @@ insert into public.organizational_positions (
 -- ----------------------------------------------------------------------------
 -- 7) Ocupacoes e reporting line (Alfa)
 -- ----------------------------------------------------------------------------
---  O-OCUP: ocupacao vigente em P-OCUP         (teste de recusa de I3)
---  O-FREE: ocupacao vigente em P-FREE         (teste de encerramento em TC)
---  R-1:    P-SUB reporta a P-MGR              (guarda F3-04 preservada)
+-- Invariante da Issue #427 (migration 20261028000000,
+-- `ex_occupations_collaborator_no_overlap`): no maximo UMA ocupacao por
+-- colaborador em cada instante, no modelo meio-aberto `[valid_from, valid_to)`.
+-- As ocupacoes que precisam coexistir usam COLABORADORES DISTINTOS — nenhum
+-- INSERT deste cenario sobrepoe ocupacoes do mesmo `collaborator_id`.
+--  O-OCUP: ocupacao vigente em P-OCUP (colaborador A)  (teste de recusa de I3)
+--  O-FREE: ocupacao vigente em P-FREE (colaborador B)  (teste de encerramento em TC)
+--  R-1:    P-SUB reporta a P-MGR                       (guarda F3-04 preservada)
 insert into public.occupations
   (id, organization_id, collaborator_id, organizational_position_id, reason, valid_from) values
   ('f8410000-0000-0000-0000-000000000001', 'f8a00000-0000-0000-0000-0000000000a1',
    'f8500000-0000-0000-0000-0000000000a1', 'f8310000-0000-0000-0000-000000000001',
    'ocupacao vigente F5-08', '2026-01-01T00:00:00Z'),
   ('f8410000-0000-0000-0000-000000000002', 'f8a00000-0000-0000-0000-0000000000a1',
-   'f8500000-0000-0000-0000-0000000000a1', 'f8310000-0000-0000-0000-000000000004',
+   'f8500000-0000-0000-0000-0000000000a2', 'f8310000-0000-0000-0000-000000000004',
    'ocupacao encerravel F5-08', '2026-01-01T00:00:00Z');
 
 insert into public.position_reporting_lines
@@ -422,10 +429,13 @@ insert into public.organizational_positions (
    'f8110000-0000-0000-0000-00000000001b', 'f8e00000-0000-0000-0000-0000000000a1',
    'f8f00000-0000-0000-0000-0000000000a1', '2026-01-01T00:00:00Z', 'F6 P4.5 01-cenario-f5-08 posição funcional');
 
+-- O-OCUP-P2 (`...0003`): posicao 05 ocupada por um TERCEIRO colaborador —
+-- cada colaborador acumula no maximo UMA ocupacao simultanea (invariante #427;
+-- ver secao 7).
 insert into public.occupations
   (id, organization_id, collaborator_id, organizational_position_id, reason, valid_from) values
   ('f8410000-0000-0000-0000-000000000003', 'f8a00000-0000-0000-0000-0000000000a1',
-   'f8500000-0000-0000-0000-0000000000a1', 'f8310000-0000-0000-0000-000000000005',
+   'f8500000-0000-0000-0000-0000000000a3', 'f8310000-0000-0000-0000-000000000005',
    'ocupacao vigente P2', '2026-01-01T00:00:00Z');
 
 insert into public.position_reporting_lines

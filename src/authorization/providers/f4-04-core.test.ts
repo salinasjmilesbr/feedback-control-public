@@ -43,7 +43,7 @@ const occupants: Occupant[] = [
   { positionId: "p4", collaboratorId: "c_an2" },
   { positionId: "p5", collaboratorId: null }, // vaga
   { positionId: "p6", collaboratorId: "c_deep" },
-  { positionId: "p7", collaboratorId: "c_an1" }, // mesma pessoa em outro ramo
+  { positionId: "p7", collaboratorId: "c_an4" }, // outro ramo (ocupante distinto — #427)
   { positionId: "p9", collaboratorId: "c_an3" },
   { positionId: "px", collaboratorId: "c_orgb" },
 ];
@@ -63,14 +63,16 @@ describe("F4-04 — hierarchy (structure)", () => {
     expect([...scope.collaboratorIds].sort()).toEqual(["c_an1", "c_an2"]);
   });
 
-  it("DESCENDANTS: árvore completa, atravessa vaga intermediária e deduplica collaborator", () => {
+  it("DESCENDANTS: árvore completa, atravessa vaga intermediária e resolve cada ocupante", () => {
     const scope = resolveDescendants(["p1"], positions, occupants, ORG);
     expect([...scope.positionIds].sort()).toEqual(
       ["p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9"].sort()
     );
-    // c_an1 aparece em p3 e p7 (deduplicado); vaga p5 não cria collaborator.
+    // #427: um colaborador tem NO MÁXIMO uma ocupação vigente, então nenhuma
+    // posição do alcance pode ser ocupada pela mesma pessoa; a vaga p5 não cria
+    // collaborator.
     expect([...scope.collaboratorIds].sort()).toEqual(
-      ["c_an1", "c_an2", "c_an3", "c_coord", "c_deep", "c_other"].sort()
+      ["c_an1", "c_an2", "c_an3", "c_an4", "c_coord", "c_deep", "c_other"].sort()
     );
   });
 
@@ -80,9 +82,24 @@ describe("F4-04 — hierarchy (structure)", () => {
     expect(coord.collaboratorIds.has("c_an3")).toBe(false);
   });
 
-  it("multi-positions: união de todas as positions do ator", () => {
+  it("#427: origem de ocupação ambígua (duas positions próprias) ⇒ DENY fail-closed", () => {
+    // A união de duas posições próprias do ator DEIXOU de valer: sem origem
+    // única não há escopo estrutural (nenhuma posição é escolhida pelo caller).
     const scope = resolveDirectReports(["p2", "p8"], positions, occupants, ORG);
-    expect([...scope.positionIds].sort()).toEqual(["p3", "p4", "p5", "p9"]);
+    expect(scope.positionIds.size).toBe(0);
+    expect(scope.collaboratorIds.size).toBe(0);
+  });
+
+  it("#427: >1 ocupante vigente na MESMA posição ⇒ posição tratada como vaga", () => {
+    const ocupantesAmbiguos: Occupant[] = [
+      ...occupants,
+      { positionId: "p2", collaboratorId: "c_outro_coord" },
+    ];
+    const scope = resolveDirectReports(["p1"], positions, ocupantesAmbiguos, ORG);
+    // A posição p2 permanece no alcance (a travessia é por posição), mas o
+    // ocupante ambíguo não vira collaborator autorizado.
+    expect(scope.positionIds.has("p2")).toBe(true);
+    expect(scope.collaboratorIds.has("c_outro_coord")).toBe(false);
   });
 
   it("tenant: aresta cross-org é ignorada (fail-closed)", () => {

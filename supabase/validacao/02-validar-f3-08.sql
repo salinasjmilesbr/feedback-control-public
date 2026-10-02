@@ -438,7 +438,8 @@ declare
   v_n int;
 begin
   -- EVAL2 sem configuração → snapshot com 0 membros; EVAL3 config vazia →
-  -- 0 membros; EVAL4 sem posição → 0 posições; EVAL5 duas posições.
+  -- 0 membros; EVAL4 sem posição → 0 posições; EVAL5 posição ÚNICA (F6/#427:
+  -- a união de múltiplas positions foi abolida).
   select count(*) into v_n
   from public.collegiate_cycle_snapshot_members sm
   join public.collegiate_cycle_snapshots s on s.id = sm.snapshot_id
@@ -474,7 +475,11 @@ end $$;
 do $$
 declare
   v_pos uuid[];
+  v_n int;
 begin
+  -- F6 / #427 §5: origem de ocupação ÚNICA. O avaliado EVAL5 possui somente
+  -- P_X a5; o snapshot congela exatamente essa posição — NUNCA a união das
+  -- múltiplas posições que o contrato anterior admitia.
   select array_agg(position_id order by position_id) into v_pos
   from public.collegiate_cycle_snapshot_positions sp
   join public.collegiate_cycle_snapshots s on s.id = sp.snapshot_id
@@ -482,11 +487,60 @@ begin
     and s.ano = 2025 and s.ciclo = 1
     and s.collaborator_id = 'fab00000-0000-0000-0000-0000000000c6';
   if v_pos is distinct from
-     array['fac00000-0000-0000-0000-0000000000a5',
-           'fac00000-0000-0000-0000-0000000000a6']::uuid[] then
-    raise exception '[FAIL] EVAL5 deveria ter snapshot com 2 posicoes (X e Y)';
+     array['fac00000-0000-0000-0000-0000000000a5']::uuid[] then
+    raise exception '[FAIL] EVAL5 deveria ter snapshot com 1 posicao (P_X) — sem uniao de posicoes';
   end if;
-  raise notice '[PASS] avaliado com multiplas positions congelado com 2 posicoes (união coerente)';
+
+  select count(*) into v_n
+  from public.occupations
+  where collaborator_id = 'fab00000-0000-0000-0000-0000000000c6'
+    and valid_from <= '2025-03-01T00:00:00Z'
+    and (valid_to is null or valid_to > '2025-03-01T00:00:00Z');
+  if v_n <> 1 then
+    raise exception '[FAIL] EVAL5 deveria ter cardinalidade de ocupacao = 1 (encontrado %)', v_n;
+  end if;
+  raise notice '[PASS] avaliado com origem unica congelado com 1 posicao (sem uniao de posicoes)';
+end $$;
+
+do $$
+declare
+  v_ok boolean := false;
+  v_state text := null;
+  v_msg text := null;
+  v_n int;
+begin
+  -- F6 / #427: a segunda ocupação SIMULTÂNEA do mesmo colaborador deixou de ser
+  -- representável. A barreira final do banco (exclusion por collaborator_id)
+  -- recusa a inserção com 23P01 e nada é persistido.
+  begin
+    insert into public.occupations (
+      organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to
+    ) values (
+      'faa00000-0000-0000-0000-0000000000a1',
+      'fab00000-0000-0000-0000-0000000000c6',
+      'fac00000-0000-0000-0000-0000000000a6',
+      'segunda ocupacao simultanea (sintetica)', '2025-01-01T00:00:00Z', null
+    );
+  exception when others then
+    v_state := sqlstate; v_msg := sqlerrm;
+    if v_state = '23P01'
+       and v_msg like '%ex_occupations_collaborator_no_overlap%' then
+      v_ok := true;
+    end if;
+  end;
+
+  if not v_ok then
+    raise exception '[FAIL] sobreposicao de ocupacao do MESMO colaborador NAO foi barrada pela exclusion por colaborador (sqlstate=% msg=%)',
+      coalesce(v_state, 'sem erro'), coalesce(v_msg, 'sem mensagem');
+  end if;
+
+  select count(*) into v_n
+  from public.occupations
+  where collaborator_id = 'fab00000-0000-0000-0000-0000000000c6';
+  if v_n <> 1 then
+    raise exception '[FAIL] tentativa recusada deixou ocupacao persistida (encontrado %)', v_n;
+  end if;
+  raise notice '[PASS] segunda ocupacao simultanea do mesmo colaborador recusada (23P01) sem persistir nada';
 end $$;
 
 do $$
@@ -583,29 +637,46 @@ end $$;
 -- ============================================================================
 -- 6) Mudanças posteriores não alteram snapshots
 -- ============================================================================
+-- F6 / #427: o cenário não admite mais uma segunda ocupação simultânea de EVAL1
+-- (a exclusão por `collaborator_id` a recusaria). Em vez de "mover" EVAL1 para
+-- P_Z, este bloco prova que (i) a origem de EVAL1 permanece P_E1, (ii) P_Z não
+-- entra no snapshot e (iii) a tentativa de segunda ocupação é recusada pelo
+-- banco (23P01) sem persistir nada.
 
 do $$
 declare
   v_n int;
   v_members uuid[];
   v_snap uuid;
+  v_pos uuid[];
 begin
-  -- Move EVAL1 de P_E1 para P_Z em 2026-01-01 (occupation muda após ciclos).
-  update public.occupations
-     set valid_to = '2026-01-01T00:00:00Z'
-   where collaborator_id = 'fab00000-0000-0000-0000-0000000000c2'
-     and organizational_position_id = 'fac00000-0000-0000-0000-0000000000a2';
+  -- F6 / #427 — ocupação de EVAL1: o cenário já traz EVAL1 (c2) em P_E1 a2
+  -- (aberta desde 2025-01-01). A antiga "movimentação posterior" que atribuía a
+  -- EVAL1 uma SEGUNDA ocupação (P_Z a8) deixou de ser representável: a exclusão
+  -- por colaborador recusaria a linha, então o cenário deixou de tê-la. As provas
+  -- abaixo cobrem (i) a origem vigente, (ii) a ausência de P_Z e (iii) a recusa
+  -- de qualquer sobreposição da mesma colaboradora.
+  select count(*) into v_n
+  from public.occupations
+  where collaborator_id = 'fab00000-0000-0000-0000-0000000000c2'
+    and organizational_position_id = 'fac00000-0000-0000-0000-0000000000a2'
+    and valid_from <= '2026-01-01T00:00:00Z'
+    and (valid_to is null or valid_to > '2026-01-01T00:00:00Z');
+  if v_n <> 1 then
+    raise exception '[FAIL] EVAL1 deveria ter 1 ocupacao vigente em P_E1 em 2026-01-01 (encontrado %)', v_n;
+  end if;
 
-  insert into public.occupations (
-    organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to
-  ) values (
-    'faa00000-0000-0000-0000-0000000000a1',
-    'fab00000-0000-0000-0000-0000000000c2',
-    'fac00000-0000-0000-0000-0000000000a8',
-    'Movido apos ciclos', '2026-01-01T00:00:00Z', null
-  );
+  -- Origens de ocupação declaradas no cenário para EVAL1: somente P_E1 a2.
+  select array_agg(organizational_position_id order by organizational_position_id)
+    into v_pos
+  from public.occupations
+  where collaborator_id = 'fab00000-0000-0000-0000-0000000000c2';
+  if v_pos is distinct from array['fac00000-0000-0000-0000-0000000000a2']::uuid[] then
+    raise exception '[FAIL] EVAL1 deveria ter P_E1 (a2) como unica origem de ocupacao';
+  end if;
 
-  -- Ciclo 1 de EVAL1 permanece com P_E1 e {M1, M2}.
+  -- Ciclo 1 de EVAL1 permanece com P_E1 e {M1, M2} — o snapshot é imutável e
+  -- nenhuma posição posterior (P_Z a8) é acrescentada a ele.
   select id into v_snap
   from public.collegiate_cycle_snapshots
   where organization_id = 'faa00000-0000-0000-0000-0000000000a1'
@@ -617,7 +688,15 @@ begin
   where snapshot_id = v_snap
     and position_id = 'fac00000-0000-0000-0000-0000000000a2';
   if v_n <> 1 then
-    raise exception '[FAIL] snapshot ciclo 1 de EVAL1 deveria manter P_E1 apos a movimentacao';
+    raise exception '[FAIL] snapshot ciclo 1 de EVAL1 deveria manter P_E1';
+  end if;
+
+  select count(*) into v_n
+  from public.collegiate_cycle_snapshot_positions
+  where snapshot_id = v_snap
+    and position_id = 'fac00000-0000-0000-0000-0000000000a8';
+  if v_n <> 0 then
+    raise exception '[FAIL] snapshot ciclo 1 de EVAL1 nao pode conter P_Z (sem uniao de posicoes)';
   end if;
 
   select array_agg(member_collaborator_id order by member_collaborator_id) into v_members
@@ -628,7 +707,49 @@ begin
            'fab00000-0000-0000-0000-0000000000c8']::uuid[] then
     raise exception '[FAIL] membros do snapshot ciclo 1 deveriam permanecer {M1, M2}';
   end if;
-  raise notice '[PASS] mudanca posterior de occupation nao altera snapshots materializados';
+  raise notice '[PASS] ocupacao de EVAL1 permanece P_E1 no snapshot (sem segunda posicao / sem uniao)';
+end $$;
+
+do $$
+declare
+  v_ok boolean := false;
+  v_state text := null;
+  v_msg text := null;
+  v_n int;
+begin
+  -- F6 / #427 — prova NEGATIVA da "movimentacao": a SEGUNDA ocupação
+  -- simultânea de EVAL1 (c2) em P_Z a8 é recusada pela exclusion por
+  -- `collaborator_id` (SQLSTATE 23P01) e NADA é persistido.
+  begin
+    insert into public.occupations (
+      organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to
+    ) values (
+      'faa00000-0000-0000-0000-0000000000a1',
+      'fab00000-0000-0000-0000-0000000000c2',
+      'fac00000-0000-0000-0000-0000000000a8',
+      'segunda ocupacao simultanea de EVAL1 (recusada)', '2026-01-01T00:00:00Z', null
+    );
+  exception when exclusion_violation then
+    v_state := sqlstate; v_msg := sqlerrm;
+    v_ok := true;
+  end;
+
+  if not v_ok then
+    raise exception '[FAIL] segunda ocupacao simultanea de EVAL1 NAO foi recusada pela exclusion por colaborador (sqlstate=% msg=%)',
+      coalesce(v_state, 'sem erro'), coalesce(v_msg, 'sem mensagem');
+  end if;
+  if v_msg is null
+     or position('ex_occupations_collaborator_no_overlap' in v_msg) = 0 then
+    raise exception '[FAIL] recusa de EVAL1 nao veio da exclusion por colaborador (msg=%)', v_msg;
+  end if;
+
+  select count(*) into v_n
+  from public.occupations
+  where collaborator_id = 'fab00000-0000-0000-0000-0000000000c2';
+  if v_n <> 1 then
+    raise exception '[FAIL] tentativa recusada deixou ocupacao persistida para EVAL1 (encontrado %)', v_n;
+  end if;
+  raise notice '[PASS] P_Z nao pode entrar como segunda ocupacao simultanea de EVAL1 (23P01, nada persistido)';
 end $$;
 
 do $$

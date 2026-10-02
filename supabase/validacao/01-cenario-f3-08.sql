@@ -9,8 +9,14 @@
 --     occupations e reporting lines (F3-01..F3-07);
 --   - colaboradores avaliados cobrindo: colegiado com 2 membros (EVAL1),
 --     sem configuração (EVAL2), configuração explicitamente vazia (EVAL3),
---     avaliado sem posição na data (EVAL4) e avaliado com DUAS posições
---     ocupadas e superiores distintos (EVAL5);
+--     avaliado sem posição na data (EVAL4) e avaliado com posição ÚNICA
+--     (EVAL5);
+--
+-- F6 / Issue #427: cada colaborador tem NO MÁXIMO UMA ocupação em qualquer
+-- instante (exclusion por collaborator_id em public.occupations). Duas
+-- ocupações simultâneas do mesmo colaborador deixaram de ser representáveis:
+-- a união de posições no snapshot foi abolida e a 02-validar-f3-08.sql prova
+-- que o banco recusa a segunda ocupação (23P01);
 --   - organização Beta mínima (colaborador) para testes cross-organization;
 --   - posição P_Z para o teste de "mudança posterior de occupation não altera
 --     snapshot".
@@ -169,13 +175,15 @@ insert into public.position_reporting_lines (
 -- ----------------------------------------------------------------------------
 -- Occupations (titulares)
 -- ----------------------------------------------------------------------------
+-- F6 / #427: uma ocupação por colaborador em qualquer instante. C_GER c1 fica
+-- somente em P_GER a1 (a linha de reporting de P_E1 resolve C_GER) e EVAL5 c6
+-- fica somente em P_X a5 (P_Y a6 permanece posição vazia; a tentativa de segunda
+-- ocupação simultânea é recusada pelo banco e é provada na validação).
 insert into public.occupations (
   organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to
 ) values
   ('faa00000-0000-0000-0000-0000000000a1', 'fab00000-0000-0000-0000-0000000000c1',
    'fac00000-0000-0000-0000-0000000000a1', 'Gerente 1', '2025-01-01T00:00:00Z', null),
-  ('faa00000-0000-0000-0000-0000000000a1', 'fab00000-0000-0000-0000-0000000000c1',
-   'fac00000-0000-0000-0000-0000000000a7', 'Gerente 2', '2025-01-01T00:00:00Z', null),
   ('faa00000-0000-0000-0000-0000000000a1', 'fab00000-0000-0000-0000-0000000000c2',
    'fac00000-0000-0000-0000-0000000000a2', 'E1 ocupado', '2025-01-01T00:00:00Z', null),
   ('faa00000-0000-0000-0000-0000000000a1', 'fab00000-0000-0000-0000-0000000000c3',
@@ -183,9 +191,7 @@ insert into public.occupations (
   ('faa00000-0000-0000-0000-0000000000a1', 'fab00000-0000-0000-0000-0000000000c4',
    'fac00000-0000-0000-0000-0000000000a4', 'E3 ocupado (raiz)', '2025-01-01T00:00:00Z', null),
   ('faa00000-0000-0000-0000-0000000000a1', 'fab00000-0000-0000-0000-0000000000c6',
-   'fac00000-0000-0000-0000-0000000000a5', 'X ocupado', '2025-01-01T00:00:00Z', null),
-  ('faa00000-0000-0000-0000-0000000000a1', 'fab00000-0000-0000-0000-0000000000c6',
-   'fac00000-0000-0000-0000-0000000000a6', 'Y ocupado', '2025-01-01T00:00:00Z', null);
+   'fac00000-0000-0000-0000-0000000000a5', 'X ocupado', '2025-01-01T00:00:00Z', null);
 
 -- ----------------------------------------------------------------------------
 -- Configurações padrão do colegiado

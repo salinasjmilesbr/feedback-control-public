@@ -231,12 +231,16 @@ export function ocupanteDaPosicao(
   posicaoId: string,
   referencia: string = agoraIso()
 ): string | null {
-  const vigente = estrutura.ocupacoes.find(
+  // F6 #427 §3: `>1` ocupante vigente na mesma posição é ambiguidade
+  // (fail-closed). A primeira da lista NUNCA é escolhida silenciosamente;
+  // `0` continua significando posição vaga.
+  const vigentes = estrutura.ocupacoes.filter(
     (ocupacao) =>
       ocupacao.posicaoId === posicaoId &&
       estaVigente(ocupacao.validFrom, ocupacao.validTo, referencia)
   );
-  return vigente ? vigente.collaboratorId : null;
+  if (vigentes.length !== 1) return null;
+  return vigentes[0]?.collaboratorId ?? null;
 }
 
 /** Reporting line VIGENTE de uma posição (superior formal), se houver. */

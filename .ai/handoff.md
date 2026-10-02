@@ -49,6 +49,19 @@ em `.ai/*`, não são duplicadas aqui.
 > **sem código, commit, push ou PR** nesta etapa. Os incrementos 1–4 e a
 > retomada funcional da #421 dependem da revisão/integração do desenho.
 > A árvore original da #421 e `auditoria-v21.txt` não foram transportados.
+>
+> **Implementação em andamento — #427 (cardinalidade soberana de ocupações):**
+> branch `feat/issue-427-cardinalidade-ocupacoes`, worktree
+> `feedback-control/node_modules/.427w`, base `origin/main` em
+> `09c9cedf9f50c46f79f25673416e314644e5e5fc`. Migration ADITIVA
+> `supabase/migrations/20261028000000_f6_issue427_cardinalidade_ocupacoes.sql`
+> (exclusão temporal por `collaborator_id`, preservando a exclusão por posição),
+> guardas de cardinalidade nas escritas, fail-closed dos consumidores
+> estruturais e validadores `55-cenario/55-validar-f6-427.sql` (matriz da Issue).
+> **`SQL execution: NOT AVAILABLE` neste host:** o sandbox nega named pipe
+> (Docker inacessível) e a política de execução do host bloqueia os
+> `supabase/validacao/*.ps1`; a certificação SQL/Edge em runtime descartável
+> depende do CI. Sem merge, sem fechar a Issue e sem alterar o Plano Mestre.
 
 - **Baseline local deste checkpoint:** `main` / `origin/main` em
   `d7c3191b1de33be0d13afa1507fc7b8ce518d29a`; o CI desse SHA não foi

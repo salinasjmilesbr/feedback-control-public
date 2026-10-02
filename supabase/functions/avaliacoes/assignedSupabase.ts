@@ -238,7 +238,7 @@ export function criarDepsAssignedSupabase(
       .eq("snapshot_id", linhaSnapshot.id)
       .eq("organization_id", entrada.organizationId)
       .order("position_id", { ascending: true });
-    if (erroPosicoes || !posicoes || posicoes.length === 0) return null;
+    if (erroPosicoes || !posicoes || posicoes.length !== 1) return null;
 
     const primeira = (posicoes as LinhaPosicaoSnapshot[])[0]!;
     return {

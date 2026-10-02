@@ -224,16 +224,60 @@ end $$;
 
 do $$
 declare
+  v_n int;
   v_cids uuid[];
+  v_pos uuid[];
 begin
-  select array_agg(collaborator_id order by collaborator_id) into v_cids
+  -- F6 / #427: MULTI (c6) tem ORIGEM ÚNICA de ocupação (P_AN2 e4). A antiga
+  -- "união de múltiplas positions" (e4 + e5) foi ABOLIDA: o alcance agora é
+  -- somente a subárvore de e4, que NÃO inclui a subárvore de P_MULTI2 e5 — logo
+  -- MULTI_CHILD (c8, em P_MULTI_CHILD e8) deixa de ser alcançado.
+  -- Antes da #427 o alcance trazia colaborador c8 (união); agora nenhuma pessoa
+  -- é alvo (as posições do alcance restrito estão vagas).
+  select coalesce(array_agg(collaborator_id order by collaborator_id), array[]::uuid[])
+    into v_cids
   from public.resolver_alvos_escopo(
     'd1b00000-0000-0000-0000-0000000000a4', 'd1a00000-0000-0000-0000-0000000000a1',
     'DESCENDANTS', null, '2024-12-01T00:00:00Z');
-  if v_cids is distinct from array['d1c00000-0000-0000-0000-0000000000c8']::uuid[] then
-    raise exception '[FAIL] uniao de multiplas positions divergente (esperado MULTI_CHILD)';
+  if v_cids is distinct from array[]::uuid[] then
+    raise exception '[FAIL] o alcance uniao (MULTI_CHILD c8) NAO pode ser concedido apos a #427 (encontrado %)', v_cids;
   end if;
-  raise notice '[PASS] multiplas positions produzem uniao correta (MULTI = 2 positions -> MULTI_CHILD)';
+
+  select count(*) into v_n
+  from public.resolver_alvos_escopo(
+    'd1b00000-0000-0000-0000-0000000000a4', 'd1a00000-0000-0000-0000-0000000000a1',
+    'DESCENDANTS', null, '2024-12-01T00:00:00Z');
+  if v_n <> 4 then
+    raise exception '[FAIL] origem unica de MULTI deveria alcancar 4 posicoes da subarvore de P_AN2 (encontrado %)', v_n;
+  end if;
+
+  -- A posição P_MULTI_CHILD e8 continua na árvore, mas FORA do alcance de MULTI:
+  -- a subárvore só entraria pela segunda ocupação abolida.
+  select count(*) into v_n
+  from public.resolver_alvos_escopo(
+    'd1b00000-0000-0000-0000-0000000000a4', 'd1a00000-0000-0000-0000-0000000000a1',
+    'DESCENDANTS', null, '2024-12-01T00:00:00Z')
+  where position_id = 'd1e00000-0000-0000-0000-0000000000e8';
+  if v_n <> 0 then
+    raise exception '[FAIL] P_MULTI_CHILD e8 deveria estar fora do alcance de origem unica de MULTI';
+  end if;
+
+  -- Alcance efetivo da origem única: e2 (COORD), e3 (AN1), e4 (AN2 propria),
+  -- e6 (vaga) — e5/e8 NÃO entram (segunda ocupação abolida).
+  select array_agg(position_id order by position_id) into v_pos
+  from public.resolver_alvos_escopo(
+    'd1b00000-0000-0000-0000-0000000000a4', 'd1a00000-0000-0000-0000-0000000000a1',
+    'DESCENDANTS', null, '2024-12-01T00:00:00Z')
+  where position_id is not null;
+  if v_pos is distinct from array[
+    'd1e00000-0000-0000-0000-0000000000e2',
+    'd1e00000-0000-0000-0000-0000000000e3',
+    'd1e00000-0000-0000-0000-0000000000e4',
+    'd1e00000-0000-0000-0000-0000000000e6'
+  ]::uuid[] then
+    raise exception '[FAIL] alcance de origem unica de MULTI divergente da arvore de P_AN2';
+  end if;
+  raise notice '[PASS] origem unica de ocupacao de MULTI: alcance restrito a arvore de P_AN2 — a antiga uniao (MULTI_CHILD) NAO e concedida';
 end $$;
 
 do $$
