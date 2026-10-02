@@ -344,17 +344,56 @@ begin
   end if;
 
   -- Estrutura de escopo (origem unica) e hierarquia resolvem nas fontes F3.
+  --
+  -- A prova da gestao de c2 -> c1 usa 2032-06-01 (ANTES da transicao): c1 ocupa
+  -- P1 em [2024-01-01, 2033-01-01). As provas de ESTRUTURA usam a data
+  -- pre-transicao porque, POR DESENHO, P1 fica VAGA a partir de 2033-01-01: c1
+  -- passa para P3 e nao existe outro ocupante de P1 (a transicao consecutiva
+  -- P1->P3 e exatamente a prova da linha 3 da matriz). Em 2033-06-01 o gestor
+  -- direto de c2 e NULL (correto) e o escopo de c2 e {P2} (1 linha, c2 e FOLHA:
+  -- nada reporta a P2). As assercoes de CARDINALIDADE e de posicao soberana
+  -- acima continuam corretas em 2033-06-01 (datas das provas da matriz).
   select r.manager_responsible_collaborator_id into v_gestor
     from public.organizacao_resolver_gestor_direto(
-      'f9c00000-0000-0000-0000-0000000000c2','2033-06-01T00:00:00Z') r;
+      'f9c00000-0000-0000-0000-0000000000c2','2032-06-01T00:00:00Z') r;
   if v_gestor is distinct from 'f9c00000-0000-0000-0000-0000000000c1'::uuid then
     raise exception '[FAIL] cenario F6-427: gestor direto de c2 deveria ser c1 (recebido %)', v_gestor;
   end if;
+
+  -- Prova de "escopo com descendentes" (origem UNICA): c1 em P1 alcanca a
+  -- subarvore {P2,P3,P4,P6} com UMA unica origem — e P2 precisa aparecer como
+  -- DESCENDENTE (is_own_position = false), provando que a arvore de reporting
+  -- lines e percorrida a partir da origem unica.
   select count(*) into v_escopo
     from public.organizacao_resolver_escopo_posicoes(
-      'f9c00000-0000-0000-0000-0000000000c2','2033-06-01T00:00:00Z') e;
+      'f9c00000-0000-0000-0000-0000000000c1','2032-06-01T00:00:00Z') e;
   if v_escopo < 2 then
-    raise exception '[FAIL] cenario F6-427: escopo de c2 deveria ter >=2 posicoes (recebido %)', v_escopo;
+    raise exception '[FAIL] cenario F6-427: escopo de c1 deveria ter >=2 posicoes (recebido %)', v_escopo;
+  end if;
+  select count(*) into v_escopo
+    from public.organizacao_resolver_escopo_posicoes(
+      'f9c00000-0000-0000-0000-0000000000c1','2032-06-01T00:00:00Z') e
+   where e.position_id = 'f9800000-0000-0000-0000-0000000000c2'
+     and e.is_own_position is false;
+  if v_escopo <> 1 then
+    raise exception '[FAIL] cenario F6-427: P2 deveria ser descendente de c1 (is_own_position=false) — recebido %', v_escopo;
+  end if;
+
+  -- Prova de FOLHA: c2 ocupa P2, nada reporta a P2, portanto o escopo de c2 e
+  -- EXATAMENTE a propria posicao (1 linha, is_own_position = true).
+  select count(*) into v_escopo
+    from public.organizacao_resolver_escopo_posicoes(
+      'f9c00000-0000-0000-0000-0000000000c2','2032-06-01T00:00:00Z') e;
+  if v_escopo <> 1 then
+    raise exception '[FAIL] cenario F6-427: escopo de c2 (folha) deveria ter exatamente 1 posicao (recebido %)', v_escopo;
+  end if;
+  select count(*) into v_escopo
+    from public.organizacao_resolver_escopo_posicoes(
+      'f9c00000-0000-0000-0000-0000000000c2','2032-06-01T00:00:00Z') e
+   where e.position_id = 'f9800000-0000-0000-0000-0000000000c2'
+     and e.is_own_position is true;
+  if v_escopo <> 1 then
+    raise exception '[FAIL] cenario F6-427: escopo de c2 deveria conter P2 com is_own_position=true (recebido %)', v_escopo;
   end if;
 
   -- A capability do plano estrutural resolve para o ator ADMIN e nao para o

@@ -163,11 +163,21 @@ declare
   v_msg      text := null;
   v_ok       boolean := false;
 begin
-  -- c6 NAO possui ocupacao: a primeira insercao cria a origem unica.
+  -- c6 NAO possui ocupacao: a primeira insercao cria a origem unica. Ela vai para
+  -- uma posicao NOVA e VAGA (P1a): P6 (`...00c6`) e o destino da troca do bloco 6
+  -- e ocupa-la aqui faria a exclusao por POSICAO recusar aquela troca adiante.
+  insert into public.organizational_positions
+    (id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from, name)
+  values ('f9800000-0000-0000-0000-0000000000cb', v_org,
+          'f9800000-0000-0000-0000-0000000000b1',
+          'f9800000-0000-0000-0000-0000000000e1',
+          'f9800000-0000-0000-0000-0000000000e3',
+          '2024-01-01T00:00:00Z','F6-427 posicao P1a (vaga, base da prova 1)');
+
   insert into public.occupations
     (id, organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to)
   values ('f9f00000-0000-0000-0000-000000000201', v_org, v_c6,
-          'f9800000-0000-0000-0000-0000000000c6','ocupacao F6-427 prova 1 (A)',
+          'f9800000-0000-0000-0000-0000000000cb','ocupacao F6-427 prova 1 (A)',
           '2040-01-01T00:00:00Z','2040-06-01T00:00:00Z');
 
   select count(*) into v_antes from public.occupations
@@ -241,6 +251,9 @@ begin
   insert into public.organizational_positions
     (id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from, name)
   values
+    ('f9800000-0000-0000-0000-0000000000cf', v_org,
+     'f9800000-0000-0000-0000-0000000000b1','f9800000-0000-0000-0000-0000000000e1',
+     'f9800000-0000-0000-0000-0000000000e3','2024-01-01T00:00:00Z','F6-427 posicao P1e (vaga, base da prova 2)'),
     ('f9800000-0000-0000-0000-0000000000cd', v_org,
      'f9800000-0000-0000-0000-0000000000b1','f9800000-0000-0000-0000-0000000000e1',
      'f9800000-0000-0000-0000-0000000000e3','2024-01-01T00:00:00Z','F6-427 posicao P1c (vaga, prova 2)'),
@@ -248,10 +261,14 @@ begin
      'f9800000-0000-0000-0000-0000000000b1','f9800000-0000-0000-0000-0000000000e1',
      'f9800000-0000-0000-0000-0000000000e3','2024-01-01T00:00:00Z','F6-427 posicao P1d (vaga, prova 2)');
 
+  -- A ocupacao-BASE de c8 precisa nascer em posicao VAGA: P5 (`...00c5`) ja e
+  -- ocupada por c3 na fixture, e usa-la aqui fazia a POSICAO recusar a insercao
+  -- (23P01 nao capturado) em vez da exclusion por COLABORADOR que esta prova
+  -- quer exercitar. Por isso a base vai para a posicao nova P1e (`...00cf`).
   insert into public.occupations
     (id, organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to)
   values ('f9f00000-0000-0000-0000-000000000211', v_org, v_c8,
-          'f9800000-0000-0000-0000-0000000000c5','ocupacao F6-427 prova 2 (A)',
+          'f9800000-0000-0000-0000-0000000000cf','ocupacao F6-427 prova 2 (A)',
           '2041-01-01T00:00:00Z', null);
 
   -- Tentativa 1 (concorrente imaginaria): mesmo colaborador, posicao diferente,
@@ -376,34 +393,91 @@ end $$;
 -- ----------------------------------------------------------------------------
 -- 4) estrutura_ocupacao_definir: 0 / 1 ocupacao atravessando a data
 -- ----------------------------------------------------------------------------
+-- TENANT EXCLUSIVO DESTA PROVA. O caso "0 ocupacao ATRAVESSANDO a data" NAO e
+-- realizavel sobre c1 da fixture: a fixture semeia c1/P1 em
+-- [2024-01-01, 2033-01-01), portanto `definir` em 2031-01-01 encontraria uma
+-- ocupacao ANTERIOR nao encerrada e a nova ocupacao ABERTA em [2031-01-01, inf)
+-- se sobreporia a ela — a exclusion por colaborador (ou a guarda de janela
+-- sobreposta da RPC) recusaria. "0 atravessando" nao significa "0 ocupacao
+-- existente": significa nenhuma ocupacao vigente NA data. Esta prova constroi
+-- esse estado em um tenant PROPRIO (organizacao `f9b42700-...-e9`), semeando a
+-- ocupacao de partida com datas posteriores a 2031-01-01, de modo que em
+-- 2031-01-01 nao exista NENHUMA ocupacao e em 2032-06-01 exista EXATAMENTE uma.
+-- Isolar o tenant preserva as contagens exatas de Alfa (8) e Beta (1) nos
+-- blocos 6 e 8. Nenhuma constraint/trigger e desabilitado.
 do $$
 declare
-  v_org    uuid := 'f9a42700-0000-0000-0000-0000000000a1';
-  v_ator   uuid := 'f9b00000-0000-0000-0000-0000000000a1';
-  v_c11    uuid := 'f9c00000-0000-0000-0000-0000000000c1';
-  v_p11    uuid := 'f9800000-0000-0000-0000-0000000000c1';
-  v_p12    uuid := 'f9800000-0000-0000-0000-0000000000c3';
+  -- Tenant exclusivo da prova 4 (namespace `f9X42700`, verificado contra TODOS
+  -- os arquivos do repositorio: `f9b42700`, `f9c42700`, `f9e42700`).
+  v_org    uuid := 'f9b42700-0000-0000-0000-0000000000e9';
+  v_ator   uuid := 'f9e42700-0000-0000-0000-0000000000a1';
+  v_uni    uuid := 'f9b42700-0000-0000-0000-0000000000b1';
+  v_job    uuid := 'f9b42700-0000-0000-0000-0000000000e1';
+  v_sen    uuid := 'f9b42700-0000-0000-0000-0000000000e3';
+  v_c11    uuid := 'f9c42700-0000-0000-0000-0000000000d1';
+  v_p11    uuid := 'f9b42700-0000-0000-0000-0000000000c1';  -- P-X
+  v_p12    uuid := 'f9b42700-0000-0000-0000-0000000000c2';  -- P-Y
   v_id1    uuid;
   v_id2    uuid;
   v_n      int;
 begin
-  -- Renomeia a fixture: c1 tem UMA ocupacao vigente em 2032 (P1) e nenhuma em
-  -- 2031 (antes do inicio) — sao exatamente os casos "1" e "0" atravessando.
+  -- Semeia o tenant exclusivo (mesmas listas de colunas usadas pelo cenario).
+  insert into public.organizations (id, name) values
+    (v_org, 'Org Sintetica F6-427 Gama (prova 4)');
+
+  insert into auth.users
+    (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+     raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+  values
+    (v_ator,'00000000-0000-0000-0000-000000000000','authenticated','authenticated',
+     'f6-427.prova4@example.invalid','x',now(),'{}'::jsonb,'{}'::jsonb,now(),now());
+
+  insert into public.user_profiles (id, status) values (v_ator, 'active');
+
+  insert into public.user_organization_memberships
+    (id, user_profile_id, organization_id, status) values
+    ('f9d42700-0000-0000-0000-0000000000e9', v_ator, v_org, 'active');
+
+  insert into public.job_roles (id, organization_id, name, code, status) values
+    (v_job, v_org, 'Analista F6-427 Gama','ANL-F6-427-G','active');
+
+  insert into public.seniority_levels (id, organization_id, name) values
+    (v_sen, v_org, 'Pleno F6-427 Gama');
+
+  insert into public.organizational_units (id, organization_id, name, valid_from) values
+    (v_uni, v_org, 'Unidade F6-427 Gama','2024-01-01T00:00:00Z');
+
+  insert into public.organizational_positions (
+    id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from, name
+  ) values
+    (v_p11, v_org, v_uni, v_job, v_sen, '2024-01-01T00:00:00Z','F6-427 Gama P-X'),
+    (v_p12, v_org, v_uni, v_job, v_sen, '2024-01-01T00:00:00Z','F6-427 Gama P-Y');
+
+  insert into public.collaborators
+    (id, organization_id, full_name, email, admission_date) values
+    (v_c11, v_org, 'Colaborador F6-427 Gama','colaborador.f6-427.gama@example.invalid', date '2024-01-01');
+
+  insert into public.collaborator_status_periods
+    (collaborator_id, status, valid_from, valid_to) values
+    (v_c11, 'active','2024-01-01T00:00:00Z',null);
+
+  -- Pre-condicao do tenant: ele nasce SEM nenhuma ocupacao.
   select count(*) into v_n from public.occupations
-   where collaborator_id = v_c11
-     and organization_id = v_org
-     and valid_from <= '2032-06-01T00:00:00Z'
-     and (valid_to is null or valid_to > '2032-06-01T00:00:00Z');
-  if v_n <> 1 then
-    raise exception '[FAIL] 4: pre-condicao de c1 em 2032 deveria ter 1 ocupacao (tem %)', v_n;
+   where organization_id = v_org;
+  if v_n <> 0 then
+    raise exception '[FAIL] 4: o tenant exclusivo da prova 4 deveria nascer sem ocupacoes (tem %)', v_n;
   end if;
+
+  -- Pre-condicao do caso "0 atravessando": o colaborador DESTA prova nasce sem
+  -- ocupacao alguma, portanto NAO ha ocupacao atravessando 2031-01-01. O caso "1
+  -- atravessando" e o estado produzido por (a) e e conferido logo antes de (b).
   select count(*) into v_n from public.occupations
    where collaborator_id = v_c11
      and organization_id = v_org
      and valid_from <= '2031-01-01T00:00:00Z'
      and (valid_to is null or valid_to > '2031-01-01T00:00:00Z');
   if v_n <> 0 then
-    raise exception '[FAIL] 4: pre-condicao de c1 em 2031 deveria ter 0 ocupacao (tem %)', v_n;
+    raise exception '[FAIL] 4: pre-condicao: o colaborador da prova 4 deveria ter 0 ocupacao atravessando 2031-01-01 (tem %)', v_n;
   end if;
 
   -- (a) ZERO ocupacao atravessando a data: abre a PRIMEIRA ocupacao.
@@ -425,6 +499,18 @@ begin
          and event_type = 'OCUPACAO_INICIADA'
          and effective_date = '2031-01-01T00:00:00Z') <> 1 then
     raise exception '[FAIL] 4a: evento OCUPACAO_INICIADA ausente para a primeira ocupacao';
+  end if;
+
+  -- Estado exigido pelo caso "1 atravessando": a ocupacao criada em (a) atravessa
+  -- 2032-06-01 (inicio 2031-01-01, sem valid_to) — mesma conferencia que a versao
+  -- anterior desta prova fazia como pre-condicao de contexto, agora no lugar certo.
+  select count(*) into v_n from public.occupations
+   where collaborator_id = v_c11
+     and organization_id = v_org
+     and valid_from <= '2032-06-01T00:00:00Z'
+     and (valid_to is null or valid_to > '2032-06-01T00:00:00Z');
+  if v_n <> 1 then
+    raise exception '[FAIL] 4: a ocupacao criada em (a) deveria atravessar 2032-06-01 (tem %)', v_n;
   end if;
 
   -- (b) UMA ocupacao atravessando: fecha A em [t0,t1) e abre B em [t1,inf) —
@@ -467,7 +553,7 @@ end $$;
 do $$
 declare
   v_org     uuid := 'f9a42700-0000-0000-0000-0000000000a1';
-  v_c7      uuid := 'f9c00000-0000-0000-0000-0000000000c7';
+  v_c1      uuid := 'f9c00000-0000-0000-0000-0000000000c1';
   v_p6      uuid := 'f9800000-0000-0000-0000-0000000000c6';
   v_antes_oc int;
   v_antes_ev int;
@@ -479,14 +565,16 @@ begin
   select count(*) into v_antes_oc from public.occupations where organization_id = v_org;
   select count(*) into v_antes_ev from public.collaborator_events where organization_id = v_org;
 
-  -- c7 ja ocupa P9 desde 2024 (aberta). Definir P6 em data ANTERIOR ao inicio da
-  -- ocupacao vigente deixaria uma janela futura sobreposta: a guarda da propria
-  -- RPC recusa (>0 ocupacoes iniciando na vigencia ou depois dela) ou a exclusion
-  -- barra — em QUALQUER caso, sem efeito parcial.
+  -- c1 tem um par CONSECUTIVO na fixture (P1 [2024,2033) e P3 [2033,inf)): definir
+  -- P6 em 2024-06-01 fecharia a ocupacao vigente e deixaria a ocupacao FUTURA de
+  -- 2033 sobreposta. A guarda da propria RPC recusa esse caso (>0 ocupacoes
+  -- iniciando na vigencia ou depois dela) ANTES de qualquer DML — sem efeito
+  -- parcial. (O sujeito precisa ter ocupacao FUTURA: com colaborador de ocupacao
+  -- unica a definicao seria legitima e nada seria recusado.)
   begin
     perform public.estrutura_ocupacao_definir(
       v_org, 'f9b00000-0000-0000-0000-0000000000a1',
-      'f9f00000-0000-0000-0000-000000000411'::uuid, v_c7, v_p6,
+      'f9f00000-0000-0000-0000-000000000411'::uuid, v_c1, v_p6,
       '2024-06-01T00:00:00Z','Tentativa F6-427 com janela sobreposta',
       'CICLO_ATUAL_E_POSTERIORES', null);
   exception when others then
@@ -531,24 +619,24 @@ begin
   select count(*) into v_antes_oc from public.occupations where organization_id = v_org;
   select count(*) into v_antes_ev from public.collaborator_events where organization_id = v_org;
 
-  -- c2 ocupa P2 (nao P3): informar P3 como "posicao atual" e divergencia de
-  -- contrato => F5_07_CONFLICT, antes de qualquer DML.
+  -- Caso (i): posicao atual IGUAL a nova (ambas erradas para c2) => a guarda de
+  -- identidade do contrato #375 recusa com F5_07_INVALID_INPUT, antes de qualquer
+  -- DML. (Este caso NAO e o de "posicao atual errada": esse e o caso (ii).)
   begin
     perform public.estrutura_ocupacao_trocar(
       v_org, 'f9b00000-0000-0000-0000-0000000000a1',
       'f9f00000-0000-0000-0000-000000000501'::uuid, v_c2, v_p3, v_p3,
-      '2034-01-01T00:00:00Z','Troca F6-427 com posicao atual errada');
+      '2034-01-01T00:00:00Z','Troca F6-427 com posicao atual igual a nova');
   exception when others then
     v_msg := SQLERRM; v_state := SQLSTATE;
-    if position('F5_07_CONFLICT' in SQLERRM) > 0
-       and (position('posicao atual e nova devem ser diferentes' in SQLERRM) > 0
-            or position('ocupacao vigente nao corresponde a posicao atual informada' in SQLERRM) > 0) then
+    if position('F5_07_INVALID_INPUT' in SQLERRM) > 0
+       and position('posicao atual e nova devem ser diferentes' in SQLERRM) > 0 then
       v_ok := true;
     end if;
   end;
 
   if not v_ok then
-    raise exception '[FAIL] 5: trocar com posicao atual errada deveria recusar com F5_07_CONFLICT (sqlstate=% msg=%)',
+    raise exception '[FAIL] 5: trocar com posicao atual IGUAL a nova deveria recusar com F5_07_INVALID_INPUT (sqlstate=% msg=%)',
       v_state, v_msg;
   end if;
 
@@ -599,10 +687,20 @@ declare
   v_n        int;
   v_ini      int;
   v_enc      int;
+  v_antes_oc int;
 begin
   -- Pre-condicao: c3 tem origem UNICA em P5 aberta desde 2024.
   if (select public.colaborador_ocupacoes_cardinalidade(v_c3,'2033-12-01T00:00:00Z')) <> 1 then
     raise exception '[FAIL] 6: pre-condicao: c3 deveria ter exatamente 1 ocupacao vigente';
+  end if;
+
+  -- Fotografia do tenant antes da troca (6 da fixture + 1 da prova 1 + 1 base da
+  -- prova 2 = 8): as conferencias abaixo sao por DELTA, para nao dependerem da
+  -- aritmetica dos blocos anteriores — a troca acrescenta EXATAMENTE 1 ocupacao e
+  -- o replay/divergencia nao acrescentam nem removem nada.
+  select count(*) into v_antes_oc from public.occupations where organization_id = v_org;
+  if v_antes_oc < 6 then
+    raise exception '[FAIL] 6: pre-condicao: tenant com menos ocupacoes que a fixture (%)', v_antes_oc;
   end if;
 
   v_id1 := public.estrutura_ocupacao_trocar(
@@ -637,8 +735,9 @@ begin
   if v_ini <> 1 or v_enc <> 1 then
     raise exception '[FAIL] 6: esperado 1 par de eventos por operacao (iniciada=%, encerrada=%)', v_ini, v_enc;
   end if;
-  if (select count(*) from public.occupations where organization_id = v_org) <> 8 then
-    raise exception '[FAIL] 6: a troca deveria produzir 8 ocupacoes no tenant (A fechada + B aberta)';
+  if (select count(*) from public.occupations where organization_id = v_org) <> v_antes_oc + 1 then
+    raise exception '[FAIL] 6: a troca deveria acrescentar exatamente 1 ocupacao ao tenant (antes=%, depois=%)',
+      v_antes_oc, (select count(*) from public.occupations where organization_id = v_org);
   end if;
 
   -- REPLAY: mesmo operation_id, mesmo payload => MESMO id, nada novo.
@@ -663,8 +762,9 @@ begin
   if v_n <> 1 then
     raise exception '[FAIL] 6: replay duplicou OCUPACAO_ENCERRADA (%)', v_n;
   end if;
-  if (select count(*) from public.occupations where organization_id = v_org) <> 8 then
-    raise exception '[FAIL] 6: replay criou/removeu ocupacao';
+  if (select count(*) from public.occupations where organization_id = v_org) <> v_antes_oc + 1 then
+    raise exception '[FAIL] 6: replay criou/removeu ocupacao (antes=%, depois=%)',
+      v_antes_oc, (select count(*) from public.occupations where organization_id = v_org);
   end if;
   if (select public.colaborador_ocupacoes_cardinalidade(v_c3,'2033-06-01T00:00:00Z')) <> 1 then
     raise exception '[FAIL] 6: replay deixou cardinalidade diferente de 1';
@@ -681,8 +781,9 @@ begin
       raise exception '[FAIL] 6: divergencia deveria ser F5_07_CONFLICT (msg=%)', SQLERRM;
     end if;
   end;
-  if (select count(*) from public.occupations where organization_id = v_org) <> 8 then
-    raise exception '[FAIL] 6: a divergencia alterou as ocupacoes';
+  if (select count(*) from public.occupations where organization_id = v_org) <> v_antes_oc + 1 then
+    raise exception '[FAIL] 6: a divergencia alterou as ocupacoes (antes=%, depois=%)',
+      v_antes_oc, (select count(*) from public.occupations where organization_id = v_org);
   end if;
 
   raise notice '[PASS] 6: trocar A->B cria exatamente um par OCUPACAO_INICIADA/OCUPACAO_ENCERRADA (operation_id principal + derivado) e o REPLAY com o mesmo operation_id devolve o MESMO id sem duplicar nada; divergencia de payload => F5_07_CONFLICT';
@@ -691,40 +792,80 @@ end $$;
 -- ----------------------------------------------------------------------------
 -- 7) Falha ao ABRIR B desfaz o fechamento de A e nao grava evento
 -- ----------------------------------------------------------------------------
--- Caminho real de rollback: no corpo da RPC, o `update public.occupations`
--- (fechamento de A) vem ANTES da recusa "posicao destino ja possui ocupante"
--- — ou seja, a falha acontece DEPOIS do DML de fechamento. Como tudo roda numa
--- unica transacao, o erro desfaz o fechamento: A permanece ABERTA e nenhuma
--- trilha e gravada. Nenhuma constraint/trigger e desabilitado.
+-- Caminho real de rollback, provado em DUAS etapas complementares:
+--   CASO 1 - destino JA ocupado: a guarda da propria RPC recusa ANTES de
+--            qualquer DML (nenhum fechamento chega a acontecer);
+--   CASO 2 - destino VAGO com `valid_to` NAO nulo: todas as guardas da RPC
+--            passam, o UPDATE FECHA A e so entao o INSERT da ocupacao aberta B
+--            e recusado pela trigger `enforce_occupation_within_position`
+--            (`occupations: ocupacao aberta alem do encerramento da posicao`).
+-- O CASO 2 e o UNICO caminho em que a falha acontece DEPOIS do UPDATE que fecha
+-- A; como tudo roda numa unica transacao, o erro desfaz o fechamento: A
+-- permanece ABERTA, B nao existe e nenhuma trilha e gravada.
+-- Nenhuma constraint/trigger e desabilitado.
 do $$
 declare
-  v_org      uuid := 'f9a42700-0000-0000-0000-0000000000a1';
-  v_c8       uuid := 'f9c00000-0000-0000-0000-0000000000c8';
-  v_p5       uuid := 'f9800000-0000-0000-0000-0000000000c5';
-  v_p9       uuid := 'f9800000-0000-0000-0000-0000000000c9';
-  v_antes_oc int;
-  v_antes_ev int;
-  v_dep_ev   int;
-  v_msg      text := null;
-  v_state    text := null;
-  v_ok       boolean := false;
+  v_org         uuid := 'f9a42700-0000-0000-0000-0000000000a1';
+  v_c1          uuid := 'f9c00000-0000-0000-0000-0000000000c1';
+  v_p3          uuid := 'f9800000-0000-0000-0000-0000000000c3';
+  v_p9          uuid := 'f9800000-0000-0000-0000-0000000000c9';
+  v_pd          uuid := 'f9800000-0000-0000-0000-0000000000d0';
+  v_op_ocupado  uuid := 'f9f00000-0000-0000-0000-000000000711';
+  v_op_rollback uuid := 'f9f00000-0000-0000-0000-000000000712';
+  v_antes_oc    int;
+  v_antes_ev    int;
+  v_antes_pd    int;
+  v_antes_ev_pd int;
+  v_dep_oc      int;
+  v_dep_ev      int;
+  v_msg         text := null;
+  v_state       text := null;
+  v_ok          boolean := false;
 begin
-  -- Fixture dedicada: A ABERTA (P5) e destino P9 JA ocupado por c7 (desde 2024,
-  -- aberto). A origem de c8 e UNICA na data, portanto os guardas de
-  -- cardinalidade passam e a recusa vem do destino ocupado — depois do UPDATE.
-  insert into public.occupations
-    (id, organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to)
-  values ('f9f00000-0000-0000-0000-000000000701', v_org, v_c8, v_p5,
-          'ocupacao F6-427 prova 7 (A aberta)','2024-01-01T00:00:00Z', null);
+  -- A ocupacao ABERTA (A) desta prova e a da propria fixture: c1 em P3
+  -- (`...00c3`, [2033-01-01, inf)). Nenhuma ocupacao e inserida aqui - a origem
+  -- ja existe e e UNICA atravessando as duas vigencias usadas abaixo.
+  --
+  -- Posicao de destino do CASO 2: NOVA, VAGA e com `valid_to` NAO nulo (2045),
+  -- de modo que a ocupacao aberta que a RPC tenta abrir seja recusada pela
+  -- trigger de contencao DEPOIS do UPDATE de fechamento de A.
+  insert into public.organizational_positions
+    (id, organization_id, unit_id, job_role_id, seniority_level_id, valid_from, valid_to, name)
+  values (v_pd, v_org,
+          'f9800000-0000-0000-0000-0000000000b1',
+          'f9800000-0000-0000-0000-0000000000e1',
+          'f9800000-0000-0000-0000-0000000000e3',
+          '2024-01-01T00:00:00Z','2045-01-01T00:00:00Z',
+          'F6-427 posicao P7-destino (encerra em 2045)');
+
+  -- Pre-condicao do CASO 2: destino vigente na vigencia usada, com encerramento
+  -- formal e VAGO (sem ocupante) — sem isso a recusa poderia vir de outra guarda.
+  if not exists (
+    select 1 from public.organizational_positions p
+     where p.id = v_pd and p.organization_id = v_org
+       and p.valid_from <= '2040-06-01T00:00:00Z'
+       and p.valid_to is not null
+       and p.valid_to > '2040-06-01T00:00:00Z'
+  ) then
+    raise exception '[FAIL] 7: pre-condicao do CASO 2 - posicao de destino ausente, sem encerramento ou nao vigente em 2040-06-01';
+  end if;
+  select count(*) into v_antes_pd from public.occupations
+   where organization_id = v_org and organizational_position_id = v_pd;
+  if v_antes_pd <> 0 then
+    raise exception '[FAIL] 7: pre-condicao do CASO 2 - posicao de destino deveria estar VAGA (tem %)', v_antes_pd;
+  end if;
 
   select count(*) into v_antes_oc from public.occupations where organization_id = v_org;
   select count(*) into v_antes_ev from public.collaborator_events where organization_id = v_org;
+  select count(*) into v_antes_ev_pd from public.collaborator_events
+   where organization_id = v_org and position_id = v_pd;
 
+  -- CASO 1 - destino JA ocupado (c7 em P9, [2024-01-01, inf)): recusa da guarda
+  -- da RPC ANTES de qualquer DML.
   begin
     perform public.estrutura_ocupacao_trocar(
-      v_org, 'f9b00000-0000-0000-0000-0000000000a1',
-      'f9f00000-0000-0000-0000-000000000711'::uuid, v_c8, v_p5, v_p9,
-      '2042-01-01T00:00:00Z','Troca F6-427 com destino ja ocupado');
+      v_org, 'f9b00000-0000-0000-0000-0000000000a1', v_op_ocupado, v_c1, v_p3, v_p9,
+      '2040-01-01T00:00:00Z','Troca F6-427 com destino ja ocupado');
   exception when others then
     v_msg := SQLERRM; v_state := SQLSTATE;
     if v_state = '23P01'
@@ -732,46 +873,86 @@ begin
       v_ok := true;
     end if;
   end;
-
   if not v_ok then
-    raise exception '[FAIL] 7: a troca para posicao ja ocupada deveria recusar (sqlstate=% msg=%)', v_state, v_msg;
+    raise exception '[FAIL] 7: CASO 1 - a troca para posicao ja ocupada deveria recusar (sqlstate=% msg=%)', v_state, v_msg;
   end if;
 
-  -- ROLLBACK integral: A continua ABERTA (o fechamento foi desfeito) e B nao existe.
+  -- CASO 2 - DESTINO VAGO com `valid_to` NAO nulo: a RPC passa por todas as
+  -- guardas, FECHA A (`update public.occupations`) e so entao o INSERT da
+  -- ocupacao aberta B e recusado pela trigger de contencao da posicao. Este e o
+  -- UNICO caminho em que a falha acontece DEPOIS do fechamento de A, portanto
+  -- ele prova o rollback transacional do fechamento.
+  v_msg := null; v_state := null; v_ok := false;
+  begin
+    perform public.estrutura_ocupacao_trocar(
+      v_org, 'f9b00000-0000-0000-0000-0000000000a1', v_op_rollback, v_c1, v_p3, v_pd,
+      '2040-06-01T00:00:00Z','Troca F6-427 para posicao com encerramento em 2045');
+  exception when others then
+    v_msg := SQLERRM; v_state := SQLSTATE;
+    if v_state = 'P0001' and v_msg like '%encerramento da posicao%' then
+      v_ok := true;
+    end if;
+  end;
+  if not v_ok then
+    raise exception '[FAIL] 7: CASO 2 - abrir B em posicao com encerramento deveria recusar pela trigger (sqlstate=% msg=%)', v_state, v_msg;
+  end if;
+
+  -- (a) ROLLBACK integral: A continua ABERTA (o fechamento do CASO 2 foi
+  -- desfeito) - a ocupacao de c1 em P3 permanece [2033-01-01, inf).
   if not exists (select 1 from public.occupations
-                  where collaborator_id = v_c8 and organizational_position_id = v_p5
-                    and valid_from = '2024-01-01T00:00:00Z' and valid_to is null) then
-    raise exception '[FAIL] 7: a ocupacao de origem (A) foi fechada por uma operacao que falhou — efeito parcial';
+                  where collaborator_id = v_c1 and organization_id = v_org
+                    and organizational_position_id = v_p3
+                    and valid_from = '2033-01-01T00:00:00Z' and valid_to is null) then
+    raise exception '[FAIL] 7: (a) a ocupacao de origem (A) foi fechada por uma operacao que falhou - efeito parcial';
+  end if;
+  -- A assercao anterior "a origem continua unica e vigente apos a falha",
+  -- preservada para a nova fixture: ha EXATAMENTE uma ocupacao de c1 na vigencia
+  -- do CASO 2.
+  if public.colaborador_ocupacoes_cardinalidade(v_c1,'2040-06-01T00:00:00Z') <> 1 then
+    raise exception '[FAIL] 7: a origem de c1 deveria continuar unica e vigente em 2040-06-01 apos as falhas';
+  end if;
+  -- (b) B nao existe em NENHUM dos dois destinos usados.
+  if exists (select 1 from public.occupations
+              where collaborator_id = v_c1 and organization_id = v_org
+                and organizational_position_id = v_p9) then
+    raise exception '[FAIL] 7: (b) a operacao que falhou criou a ocupacao de destino (B) em P9';
   end if;
   if exists (select 1 from public.occupations
-              where collaborator_id = v_c8 and organizational_position_id = v_p9) then
-    raise exception '[FAIL] 7: a operacao que falhou criou a ocupacao de destino (B)';
+              where collaborator_id = v_c1 and organization_id = v_org
+                and organizational_position_id = v_pd) then
+    raise exception '[FAIL] 7: (b) a operacao que falhou criou a ocupacao de destino (B) na posicao com encerramento';
   end if;
-  if (select count(*) from public.occupations where organization_id = v_org) <> v_antes_oc then
-    raise exception '[FAIL] 7: a contagem de ocupacoes mudou apos a falha';
+  -- (c) a contagem de ocupacoes do tenant nao mudou.
+  select count(*) into v_dep_oc from public.occupations where organization_id = v_org;
+  if v_dep_oc <> v_antes_oc then
+    raise exception '[FAIL] 7: (c) a contagem de ocupacoes mudou apos as falhas (% -> %)', v_antes_oc, v_dep_oc;
   end if;
-
+  -- (d) nenhuma trilha: nem para c1 com os dois operation_id usados, nem no tenant.
   select count(*) into v_dep_ev from public.collaborator_events
-   where organization_id = v_org and collaborator_id = v_c8;
+   where organization_id = v_org and collaborator_id = v_c1
+     and operation_id in (v_op_ocupado, v_op_rollback);
   if v_dep_ev <> 0 then
-    raise exception '[FAIL] 7: a operacao que falhou gravou evento (%)', v_dep_ev;
+    raise exception '[FAIL] 7: (d) a operacao que falhou gravou evento para c1 com o proprio operation_id (%)', v_dep_ev;
   end if;
-  if exists (select 1 from public.collaborator_events
-              where organization_id = v_org
-                and operation_id = 'f9f00000-0000-0000-0000-000000000711'::uuid) then
-    raise exception '[FAIL] 7: a operacao que falhou deixou trilha com o proprio operation_id';
-  end if;
-
   select count(*) into v_dep_ev from public.collaborator_events
    where organization_id = v_org;
   if v_dep_ev <> v_antes_ev then
-    raise exception '[FAIL] 7: a contagem de eventos do tenant mudou apos a falha (% -> %)', v_antes_ev, v_dep_ev;
+    raise exception '[FAIL] 7: (d) a contagem de eventos do tenant mudou apos as falhas (% -> %)', v_antes_ev, v_dep_ev;
   end if;
-  if public.colaborador_ocupacoes_cardinalidade(v_c8, now()) <> 1 then
-    raise exception '[FAIL] 7: a origem de c8 deveria continuar unica e vigente apos a falha';
+  -- (e) mesma comparacao antes/depois para a posicao de destino: continua VAGA
+  -- (nenhuma ocupacao e nenhum evento aponta para v_pd).
+  select count(*) into v_dep_oc from public.occupations
+   where organization_id = v_org and organizational_position_id = v_pd;
+  if v_dep_oc <> v_antes_pd or v_dep_oc <> 0 then
+    raise exception '[FAIL] 7: (e) a posicao de destino deixou de estar vaga (antes=%, depois=%)', v_antes_pd, v_dep_oc;
+  end if;
+  select count(*) into v_dep_ev from public.collaborator_events
+   where organization_id = v_org and position_id = v_pd;
+  if v_dep_ev <> v_antes_ev_pd or v_dep_ev <> 0 then
+    raise exception '[FAIL] 7: (e) a operacao que falhou gravou evento apontando para a posicao de destino (antes=%, depois=%)', v_antes_ev_pd, v_dep_ev;
   end if;
 
-  raise notice '[PASS] 7: falha ao ABRIR B (destino ja ocupado, depois do UPDATE de fechamento) desfaz o fechamento de A e nao grava evento — A permanece ABERTA, B nao existe e as contagens de ocupacoes/eventos sao identicas';
+  raise notice '[PASS] 7: recusa no destino ja ocupado (antes de qualquer DML) e falha na abertura de B por encerramento da posicao de destino (DEPOIS do fechamento de A) desfazem integralmente o efeito: A permanece aberta, B nao existe, nenhum evento e gravado';
 end $$;
 
 -- ----------------------------------------------------------------------------
@@ -781,7 +962,7 @@ do $$
 declare
   v_alfa     uuid := 'f9a42700-0000-0000-0000-0000000000a1';
   v_beta     uuid := 'f9a42700-0000-0000-0000-0000000000b1';
-  v_ator_no  uuid := 'f9b00000-0000-0000-0000-0000000000a2';  -- membership ativa, sem assignment
+  v_ator_no  uuid := 'f9b42700-0000-0000-0000-0000000000a5';  -- perfil ativo, NENHUMA membership no tenant
   v_ator_dis uuid := 'f9b00000-0000-0000-0000-0000000000a4';  -- membership disabled
   v_ator_bet uuid := 'f9b00000-0000-0000-0000-0000000000a3';  -- ator do outro tenant
   v_c1       uuid := 'f9c00000-0000-0000-0000-0000000000c1';
@@ -797,8 +978,18 @@ begin
   select count(*) into v_antes_oc from public.occupations;
   select count(*) into v_antes_ev from public.collaborator_events;
 
-  -- (a) operacao NOVA (operation_id inedito) com ator sem membership ativa:
-  -- cai na revalidacao de ator (perfil ativo + membership ativa) => FORBIDDEN.
+  -- (a) ator com PERFIL ATIVO e NENHUMA membership no tenant: o cenario fornece a1
+  -- e a2 com membership ativa, a4 com membership DISABLED e a3 do tenant Beta —
+  -- falta o caso "sem membership alguma", criado aqui. Cai na revalidacao de ator
+  -- (perfil ativo + membership ATIVA) => F5_07_FORBIDDEN.
+  insert into auth.users
+    (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+     raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+  values
+    (v_ator_no,'00000000-0000-0000-0000-000000000000','authenticated','authenticated',
+     'f6-427.semmembership@example.invalid','x',now(),'{}'::jsonb,'{}'::jsonb,now(),now());
+  insert into public.user_profiles (id, status) values (v_ator_no, 'active');
+
   begin
     perform public.estrutura_ocupacao_definir(
       v_alfa, v_ator_no, 'f9f00000-0000-0000-0000-000000000801'::uuid, v_c1, v_p2,
@@ -809,7 +1000,7 @@ begin
     if v_msg like 'F5_07_FORBIDDEN%' then v_ok := true; end if;
   end;
   if not v_ok then
-    raise exception '[FAIL] 8a: ator sem membership ativa deveria ser F5_07_FORBIDDEN (sqlstate=% msg=%)',
+    raise exception '[FAIL] 8a: ator com perfil ativo e SEM membership no tenant deveria ser F5_07_FORBIDDEN (sqlstate=% msg=%)',
       v_state, v_msg;
   end if;
 
@@ -906,11 +1097,16 @@ declare
   v_p1      uuid := 'f9800000-0000-0000-0000-0000000000c1';
   v_p2      uuid := 'f9800000-0000-0000-0000-0000000000c2';
   v_c1      uuid := 'f9c00000-0000-0000-0000-0000000000c1';
-  v_data    timestamptz := '2035-06-01T00:00:00Z';
+  -- A data e PRE-transicao: c1 ocupa P1 em [2024-01-01, 2033-01-01). Em
+  -- 2035-06-01 (post-transicao) P1 esta VAGA por desenho — c1 passou para P3 e
+  -- o gestor direto de c2 seria NULL, o que NAO e o proposito deste bloco
+  -- ("origem UNICA => alcance correto" com gestor/subordinados/cadeia).
+  v_data    timestamptz := '2032-06-01T00:00:00Z';
   v_n       int;
   v_propria int;
   v_desce   int;
   v_gestor  uuid;
+  v_pos_gestor uuid;
   v_sub     int;
   v_cadeia  int;
 begin
@@ -919,10 +1115,27 @@ begin
     raise exception '[FAIL] 9: pre-condicao: c2 deveria ter origem unica na data';
   end if;
 
+  -- Prova do ALCANCE: quem tem descendentes e c1 (em P1), cujo escopo alcanca a
+  -- subarvore {P2,P3,P4,P6} com UMA unica origem. P2 deve aparecer como
+  -- DESCENDENTE (is_own_position = false).
+  select count(*) into v_n
+    from public.organizacao_resolver_escopo_posicoes(v_c1, v_data) e;
+  if v_n < 2 then
+    raise exception '[FAIL] 9: escopo de c1 deveria ter ao menos a propria posicao e um descendente (%)', v_n;
+  end if;
+  select count(*) into v_n
+    from public.organizacao_resolver_escopo_posicoes(v_c1, v_data) e
+   where e.position_id = v_p2 and e.is_own_position is false;
+  if v_n <> 1 then
+    raise exception '[FAIL] 9: P2 deveria ser descendente de c1 (is_own_position=false) (%)', v_n;
+  end if;
+
+  -- c2 e FOLHA: origem unica em P2 e nada reporta a P2, portanto o escopo de c2
+  -- e EXATAMENTE 1 linha (a propria posicao).
   select count(*) into v_n
     from public.organizacao_resolver_escopo_posicoes(v_c2, v_data) e;
-  if v_n < 2 then
-    raise exception '[FAIL] 9: escopo de c2 deveria ter ao menos a propria posicao e um descendente (%)', v_n;
+  if v_n <> 1 then
+    raise exception '[FAIL] 9: escopo de c2 (folha) deveria ter exatamente 1 posicao (%)', v_n;
   end if;
 
   select count(*) into v_propria
@@ -939,10 +1152,15 @@ begin
     raise exception '[FAIL] 9: P2 nao pode aparecer como descendente de si mesma (%)', v_desce;
   end if;
 
-  -- Gestor direto: derivado da reporting line + ocupacao (c1 ocupa P1).
+  -- Gestor direto: derivado da reporting line + ocupacao (c1 ocupa P1). A posicao
+  -- do gestor e UUID — nao pode ser atribuida a `v_n` (int) — e e conferida
+  -- explicitamente contra P1.
   select r.manager_position_id, r.manager_responsible_collaborator_id
-    into v_n, v_gestor
+    into v_pos_gestor, v_gestor
     from public.organizacao_resolver_gestor_direto(v_c2, v_data) r;
+  if v_pos_gestor is distinct from v_p1 then
+    raise exception '[FAIL] 9: a posicao do gestor de c2 deveria ser P1 (recebido %)', v_pos_gestor;
+  end if;
   if v_gestor is distinct from v_c1 then
     raise exception '[FAIL] 9: gestor direto de c2 deveria ser c1 (recebido %)', v_gestor;
   end if;
@@ -971,7 +1189,7 @@ begin
     raise exception '[FAIL] 9: resolver avaliativo de c2 deveria devolver 1 linha para P2 (%)', v_n;
   end if;
 
-  raise notice '[PASS] 9: com origem UNICA o escopo estrutural e correto (propria posicao + descendentes), gestor/subordinados/cadeia/avaliativo resolvem pelas fontes F3-04/F3-07/F3-09';
+  raise notice '[PASS] 9: com origem UNICA o escopo estrutural e correto (c1 em P1 alcanca a subarvore com P2 como descendente; c2 e folha e tem exatamente a propria posicao) e gestor/subordinados/cadeia/avaliativo resolvem pelas fontes F3-04/F3-07/F3-09 na data pre-transicao 2032-06-01';
 end $$;
 
 -- ----------------------------------------------------------------------------
@@ -1098,7 +1316,10 @@ begin
   end if;
 
   -- Origem UNICA e VIGENTE de c9 (guarda de reexecucao): a ocupacao e aberta
-  -- AGORA, portanto atravessa `now()` do helper de admissao.
+  -- AGORA, portanto atravessa `now()` do helper de admissao. A posicao escolhida e
+  -- VAGA em TODO o tempo (a P1c criada pelo bloco 1): P1/P2/P3/P4/P5/P6/P9 da
+  -- fixture estao ocupadas — ou passam a estar — por c1/c2/c3/c4/c7, e uma
+  -- ocupacao ABERTA aqui colidiria com elas pela exclusao por POSICAO.
   if not exists (select 1 from public.occupations
                   where collaborator_id = 'f9c00000-0000-0000-0000-0000000000c9'
                     and valid_to is null) then
@@ -1106,7 +1327,7 @@ begin
       (id, organization_id, collaborator_id, organizational_position_id, reason, valid_from)
     values ('f9f00000-0000-0000-0000-000000000920', v_org,
             'f9c00000-0000-0000-0000-0000000000c9',
-            'f9800000-0000-0000-0000-0000000000c2',
+            'f9800000-0000-0000-0000-0000000000cc',
             'ocupacao F6-427 c9 (origem unica vigente)',
             now() - interval '30 days');
   end if;

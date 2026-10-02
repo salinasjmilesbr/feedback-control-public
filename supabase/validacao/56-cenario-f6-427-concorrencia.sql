@@ -82,8 +82,27 @@ select exists (
 
 \if :cenario_f6_427_conc_carregado
 do $$
+declare
+  v_org uuid := 'f427a000-0000-0000-0000-0000000000a1';
+  v_n   int;
 begin
-  raise notice '[PASS] cenario F6-427 concorrencia ja carregado — reexecucao no-op (fixture insert-once)';
+  -- O marcador e EXCLUSIVO desta fixture (organizacao `f427a000...a1`, usada por
+  -- NENHUM outro arquivo do repositorio). Ainda assim, marcador presente com
+  -- fixture INCOMPLETA e FALHA ALTA: nunca um no-op silencioso que deixaria as
+  -- sessoes 57/58/59 reprovar por pre-condicao (mesma classe do defeito do CI
+  -- #570, onde o marcador do 55-cenario ja existia por efeito de outro cenario).
+  -- Nao se confere a contagem de OCUPACOES aqui: a corrida (57/58/59) as altera
+  -- de proposito; a completude que importa e a estrutura fixa da fixture.
+  select count(*) into v_n from public.collaborators where organization_id = v_org;
+  if v_n <> 3 then
+    raise exception '[FAIL] cenario F6-427 conc: marcador presente mas colaboradores=% (esperado 3) — fixture INCOMPLETA; reexecute apos `supabase db reset`', v_n;
+  end if;
+  select count(*) into v_n from public.organizational_positions where organization_id = v_org;
+  if v_n <> 7 then
+    raise exception '[FAIL] cenario F6-427 conc: marcador presente mas posicoes=% (esperado 7) — fixture INCOMPLETA; reexecute apos `supabase db reset`', v_n;
+  end if;
+
+  raise notice '[PASS] cenario F6-427 concorrencia ja carregado — reexecucao no-op (fixture insert-once COMPLETA: 3 colaboradores e 7 posicoes na organizacao exclusiva da corrida)';
 end $$;
 \else
 
