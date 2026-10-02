@@ -1,4 +1,4 @@
-# Plano Mestre — Virtus (v21)
+# Plano Mestre — Virtus (v22)
 
 > ## NOTA DE RASTREABILIDADE — LEIA ANTES DE USAR ESTE DOCUMENTO
 >
@@ -27,11 +27,11 @@
 
 | Campo | Valor |
 |---|---|
-| Versão | **v21** |
-| Data-ação | Checkpoint pós-#414: adiamento do ciclo de vida de múltiplos Admins da Empresa e reconciliação do estado real da Etapa 6 |
-| Escopo | Reorganizar e preservar TODO o conhecimento vigente de doutrina, processo, roadmap e estado |
+| Versão | **v22** |
+| Data-ação | Checkpoint pós-#427/#429 antes do desenho do Incremento 2 (#431) |
+| Escopo | Sincronizar roadmap, handoff e protocolo com main pós-#429, preservando história útil |
 | Modelo | história + roadmap + manual operacional |
-| Fontes | `.ai/*`, `AGENTS.md`, `docs/etapa-5-certificacao.md`, `docs/F5-11-certificacao.md`, `docs/auditorias/*`, desenhos `docs/F3-*/F4-*/F5-*`; Issues **#275**, **#278**, **#293**, **#308**, **#310**, **#327**, **#333**, **#337**, **#338**, **#344**, **#351/#353**, **#355**, **#357/#358**, **#359**, **#360**, **#362**, **#364**, **#404**, **#410**, **#412**, **#414**; PRs **#413** e **#415**; commits F6 **#296**, **#298**, **#299**, **#301**, **#303** e **#306** |
+| Fontes | `.ai/*`, `AGENTS.md`, `docs/etapa-5-certificacao.md`, `docs/F5-11-certificacao.md`, `docs/auditorias/*`, desenhos `docs/F3-*/F4-*/F5-*`; Issues **#275**, **#278**, **#293**, **#308**, **#310**, **#327**, **#333**, **#337**, **#338**, **#344**, **#351/#353**, **#355**, **#357/#358**, **#359**, **#360**, **#362**, **#364**, **#404**, **#410**, **#412**, **#414**, **#427**, **#429**, **#431**, **#432**; PRs **#413**, **#415**, **#428** e **#430**; commits F6 **#296**, **#298**, **#299**, **#301**, **#303** e **#306** |
 | Registro de dívidas | `docs/dividas-tecnicas.md` (canônico — **não enumerado nem duplicado aqui**) |
 | Handoff operacional | `.ai/handoff.md` |
 
@@ -45,10 +45,10 @@
 - [Parte IV — Princípios e regras imutáveis](#parte-iv--princípios-e-regras-imutáveis)
 - [Parte V — Anti-overengineering](#parte-v--anti-overengineering)
 - [Parte VI — Processo: Issue → … → main](#parte-vi--processo-issue----main)
-- [Parte VII — Responsabilidades: Flash, GPT, Codex, orquestrador](#parte-vii--responsabilidades-flash-gpt-codex-orquestrador)
+- [Parte VII — Responsabilidades e seleção de agente](#parte-vii--responsabilidades-e-seleção-de-agente)
 - [Parte VIII — Autonomia e regras de parada dos DEVs](#parte-viii--autonomia-e-regras-de-parada-dos-devs)
 - [Parte IX — Regra de prompts curtos](#parte-ix--regra-de-prompts-curtos)
-- [Parte X — Nota Flash obrigatória](#parte-x--nota-flash-obrigatória)
+- [Parte X — Nota de entrega do agente](#parte-x--nota-de-entrega-do-agente)
 - [Parte XI — Git e GitHub](#parte-xi--git-e-github)
 - [Parte XII — Estratégia de testes e gates](#parte-xii--estratégia-de-testes-e-gates)
 - [Parte XIII — Custos e eficiência](#parte-xiii--custos-e-eficiência)
@@ -125,38 +125,43 @@ registro de gate) — o que não tem evidência é **dívida** ou **lacuna**, nu
 | **F6 — checkpoint pós-#359** | Plataforma soberana, leitura estrutural, identidade de posição, gestão de pessoas por posição, isolamento do runner descartável e provas P5 | Consolidado nesta v19; ver Parte III |
 | **F6 — validação integrada (#364; decisão #362)** | Validação funcional end-to-end do cenário Acme reconstruído | Concluída; Issue #364 fechada após checkpoint integrado |
 | **F6-AVALIACOES-05 (#404) + correção #410** | Integração funcional de Avaliações e CREATE por UUID soberano | Concluídas; Issues #404 e #410 fechadas |
-| **Avaliações — revisão contratual (Incremento 0, pré-#421)** | Emenda normativa F5-06/F6 para projeções, completude por ocorrência e estados sequenciais | Desenho em `docs/F6-avaliacoes-contrato-soberano-revisao.md`; incrementos funcionais 1–4 ainda não implementados; #421 depende dos contratos soberanos para a jornada completa |
+| **Avaliações — Incrementos 0 e 1** | Contrato e Fronteiras de Leitura | Incremento 0 concluído; Incremento 1 concluído/mergeado; #421 pausada até contratos server-side |
 | **R3-09B — jornada Admin → colaborador → convite (#310; #412/#413)** | Jornada navegável e runtime de cadastro, convite e login no tenant correto | Concluída; Issue #412 fechada e PR #413 merged |
+| **#427 — cardinalidade temporal de ocupações** | Uma ocupação por colaborador/data, sem sobreposição; temporárias não são ocupações | Concluída/mergeada |
+| **#429 — processo e validadores legados** | Protocolo de agentes, worktrees portáteis e F3-05/F3-08/F4-02 no CI | Concluída/mergeada |
 
 Detalhamento por fase (critérios, decisões, evidências): `docs/F5-01-desenho-tecnico.md` …
 `docs/F5-11-desenho-tecnico.md`, `docs/F5-09-p9-matriz-integrada.md`,
 `docs/F5-10-p7-matriz-integrada.md`, `docs/F5-11-certificacao.md`, `docs/etapa-5-certificacao.md`.
 
 ### II.2 Planejado
-Roadmap **até produção**. As etapas abaixo vêm do **Plano Mestre externo v15** (que **não** está
-versionado neste repositório — ver Parte XVII, item 5); foram incorporadas originalmente na v16 e
-permanecem preservadas nesta v17 por decisão do orquestrador,
-sem inventar detalhe além do que o roadmap vigente define. Notação única: **Etapa N (FN)**.
 
-| Etapa | Conteúdo esperado | Observação |
+| Etapa/Issue | Conteúdo | Estado/ordem |
 |---|---|---|
-| **F5-12 (Issue #256)** | Validação integrada e fechamento formal da Etapa 5 | **É a certificação transversal já produzida** — não há fase posterior de fechamento dentro da F5 |
-| **Etapa 7 (F7)** | **Segurança/hardening para produção** | Escopo definido pelo roadmap vigente; exige Issue + desenho fechado |
-| **Etapas 8–10 (F8–F10)** | **Arquitetura-alvo**, **migração**, **pré-produção** e **produção** (posteriores) | Vêm do roadmap vigente; o detalhamento exige Issue + desenho próprios e **não** é fabricado nesta v17 |
-| **#414 / PR #415 — ciclo de vida de múltiplos Admins** | Reavaliar cardinalidade, delegação e ciclo de vida de Admins da Empresa | Adiada por decisão de produto; Issue e PR fechados sem merge; R3-09 segue pendente na #310 |
-| **#310 — R3-09 restante** | Branding soberano e requisitos de ciclo de vida/administração da organização ainda não concluídos | Issue aberta; #412/#413 concluiu somente o incremento R3-09B de cadastro/convite |
-| Backlog: dívidas e findings bloqueantes | Limpeza de resíduos legados, provas literais faltantes e defeitos de diagnóstico; **DT-013** e o defeito distinto de boot da Edge `avaliacoes` estão resolvidos | Registro canônico: `docs/dividas-tecnicas.md` (seção de **FINDINGS BLOQUEANTES**); **#293/F6-A15** é o registro canônico dos findings UX; conversão de outros registros em Issue só por decisão explícita (Parte XV) |
-
-### II.3 Próxima fase estrutural após a Etapa 6
-Após a conclusão dos itens pendentes da Etapa 6, a próxima etapa estrutural do roadmap é a **Etapa 7
-(F7): segurança/hardening para produção**. O detalhamento continua dependente de **Issue + desenho
-fechado**; os itens F6 ainda pendentes permanecem no estado da Etapa 6 descrito na Parte III.
+| #431 — Incremento 2 | Desenho arquitetural de Avaliações | Próxima atividade; ainda não iniciado |
+| #421 | Jornada conforme contratos server-side | Pausada até contratos necessários |
+| #293 / F6-A15 | Validação da jornada soberana e findings UX | Posterior à validação da jornada soberana |
+| #414 / PR #415 | Ciclo de vida de múltiplos Admins | Adiada/não contratual, sem merge; migrations locais divergentes não representam produto |
+| Etapa 7 (F7) | Segurança/hardening para produção | Depois da Etapa 6; exige Issue/desenho próprios |
+| Etapas 8–10 | Arquitetura-alvo, migração, pré-produção e produção | Roadmap preservado; detalhamento por Issue/desenho |
+| Dívidas | Consultar docs/dividas-tecnicas.md e #293 | Sem ampliar escopo por inferência |
+### II.3 Próxima atividade estrutural
+A próxima atividade é #431 — desenho arquitetural do Incremento 2 de Avaliações. A Etapa 7 (F7) permanece no roadmap posterior ao fechamento da Etapa 6, conforme Issue e desenho próprios.
 
 ---
 
-## Parte III — Estado atual e checkpoint da Etapa 6
+## Parte III — Estado atual e próxima fase
 
-### III.1 Certificado
+### III.1 Checkpoint vigente pós-#427/#429
+- Incremento 0 de Avaliações concluído; Incremento 1 — Fronteiras de Leitura concluído/mergeado.
+- #427 e #429 concluídas/mergeadas na main pós-#429.
+- #431 é a próxima atividade, desenho do Incremento 2; arquitetura ainda não iniciada.
+- #421 pausada até contratos server-side; #293 posterior à validação da jornada soberana.
+- #414 adiada/não contratual; migrations divergentes locais não representam produto.
+- Dados funcionais atuais são massa de teste descartável; não planejar migração, reconciliação ou preservação; fixtures/testes são contrato executável.
+- Branch, SHA e ambiente local estão em .ai/handoff.md.
+
+### III.2 Certificado
 - **Etapa 5 certificada transversalmente** (`docs/etapa-5-certificacao.md`): os três blockers
   históricos — **B1 ciclos**, **B2 colaboradores/histórico**, **B3 metas/observações no PostgreSQL** —
   estão **demonstrados** com evidência reutilizada (validadores, passos de CI, matrizes e
@@ -167,7 +172,7 @@ fechado**; os itens F6 ainda pendentes permanecem no estado da Etapa 6 descrito 
   (§24) e a cadeia de validadores `34…43` verde.
 - **Nenhuma lacuna material bloqueante** foi encontrada na certificação transversal.
 
-### III.2 Checkpoint da Etapa 6
+### III.3 Histórico: checkpoint da Etapa 6 (supersedido como estado operacional)
 - **F6-01** está concluída.
 - **Baseline documental:** `main` em `d64b4599f532335a90ef58ef58895d093bd63623`.
 - **#310 — entrada soberana da Gestão Virtus:** o Admin Virtus de plataforma é autorizado por
@@ -240,34 +245,17 @@ fechado**; os itens F6 ainda pendentes permanecem no estado da Etapa 6 descrito 
 - **Decisão vigente para ciclos:** a quantidade é configurável entre **1–6 por organização/ano**,
   com **default 3**, sem invalidar ciclos já existentes.
 
-### III.3 Estado operacional e sequência restante
-- **Concluídas:** #364, #404/F6-AVALIACOES-05, #410 e #412/R3-09B; PR #413 merged.
-- **Abertas:** #293/F6-A15 (próxima atividade recomendada) e #310 (R3-09 residual). A #310 não está fechada:
-  R3-09B foi comprovada, mas branding e ciclo de vida de Admins continuam por resolver/reavaliar.
-- **Adiada:** #414; PR #415 fechado sem merge. A cardinalidade 1–4 não é requisito concluído nem autorização
-  automática para implementar em outra Issue.
-- **Planejadas sem Issue própria identificada:** F6-COLAB-03 e F6-A18.
-- **Bloqueios:** não há novo bloqueio técnico demonstrado para iniciar #293. O fechamento integral de R3-09 na #310
-  aguarda decisão futura sobre os itens residuais; a decisão de produto já adiou a parcela de múltiplos Admins.
-- O **CI oficial do PR/SHA** é a **autoridade final** (em especial para os pares de concorrência) e é
-  responsabilidade do **orquestrador** — as certificações registram isso explicitamente.
-- **PR e merge são do orquestrador** (`gh` ausente no ambiente do agente; DEV-04): o agente entrega
-  branch + SHA + título/corpo quando não há mecanismo autorizado de abertura de PR.
-- **Estado GitHub conferido nesta versão:** #293 e #310 abertas; #364, #404, #410, #412 e #414 fechadas; PR #413
-  merged; PR #415 fechado sem merge. F6-COLAB-03 e F6-A18 são itens planejados, não Issues abertas identificadas.
-- **Próxima atividade operacional recomendada:** retomar #293/F6-A15, o registro canônico aberto dos findings UX,
-  consultando seus itens e critérios vigentes e preservando os contratos soberanos. #364 e #404/#410 estão concluídas;
-  #293 é a próxima atividade aberta explicitamente prevista no encadeamento da Etapa 6.
-- Depois de #293/F6-A15, revisar o escopo e a ordem de F6-COLAB-03/F6-A18 antes do fechamento formal da Etapa 6.
-  Manter #310 aberta para concluir/reavaliar R3-09; adiar #414 não autoriza declarar esse requisito concluído. A Etapa 7
-  (F7) continua sendo a etapa estrutural seguinte após o fechamento da Etapa 6; preservar sem alterações o roadmap já
-  registrado para as Etapas 7–10.
-- **Ambiente local:** a auditoria registrada na Issue #414 confirma migrations #414 `20261019000000`–
-  `20261025000000` aplicadas no Supabase local persistente e `20261026000000` não aplicada. O estado Supabase cloud
-  não foi verificado. O banco local não deve ser presumido equivalente à `main`; não executar rollback/reset destrutivo
-  sem diagnóstico e autorização próprios.
+### III.4 Histórico: sequência operacional anterior (supersedida)
 
-### III.4 Contrato visual e de acesso — Issue #312
+Preserva evidências e decisões históricas da Etapa 6. A recomendação antiga de
+#293 como próxima atividade e estados temporários estão supersedidos por III.1 e
+pelo GitHub. Não inferir daqui a próxima atividade.
+- #364, #404, #410, #412/R3-09B concluídas no checkpoint anterior.
+- #414 adiada; #310 reteve itens residuais; F6-COLAB-03 e F6-A18 eram planejados.
+- Evidências locais de Supabase são históricas, não provam runtime atual.
+- CI no SHA do PR é autoridade final; seguir .ai/workflow.md/.ai/git-rules.md.
+
+### III.5 Contrato visual e de acesso — Issue #312
 - A identidade pública/plataforma passa a ter contrato normativo em `docs/brand/virtus-brand-guide.md` e matriz de aceite em `docs/brand/virtus-visual-acceptance.md`.
 - Hierarquia visual: **asset oficial aprovado → guidelines visuais aprovados → contrato textual → implementação existente**.
 - Marca: **VIRTUS**, tagline **Performance & Feedback Management**, tipografia **Inter**.
@@ -280,7 +268,7 @@ fechado**; os itens F6 ainda pendentes permanecem no estado da Etapa 6 descrito 
 - Processo visual: **asset/tokens → componente → tela isolada → validação desktop/mobile → próxima tela**, começando por **Header/Footer → Login → Gestão Virtus → Nova empresa**.
 - A Issue #312 é documental; não autoriza mudança em auth, RLS, Policy Engine ou contratos F4/F5.
 
-### III.5 Dívida e findings (resumo; lista canônica em `docs/dividas-tecnicas.md`)
+### III.6 Dívida e findings (resumo; lista canônica em `docs/dividas-tecnicas.md`)
 Resíduos legados de ciclo em módulos de apresentação (incluindo o caso **R1**, agora **verificado e
 fechado** como não-autoritativo, restando limpeza de UX), `localCycleRepository` legado por decisão,
 fixtures de teste que pré-carregam chaves locais, provas literais ainda ausentes em validadores e um
@@ -344,67 +332,24 @@ Fonte normativa detalhada: `.ai/architecture-rules.md` e `AGENTS.md` §3.
 
 ## Parte VI — Processo: Issue → … → main
 
-Fluxo oficial (detalhamento em `.ai/workflow.md`):
+Fluxo normativo em .ai/workflow.md: Issue → desenho fechado → implementação →
+validação → commit/push → PR + CI antecipado → auditoria do SHA → correção com
+novo SHA/CI → recertificação → merge explícito com CI verde no SHA auditado.
 
-**Issue → branch → desenho/revisão → implementação → validação local → commit/push → PR → CI →
-auditoria (GPT) / revisão (Codex) → squash merge em `main` → auditoria final.**
+## Parte VII — Responsabilidades e seleção de agente
 
-| Passo | Papel |
+A responsabilidade acompanha tarefa e risco, sem associação fixa de papel a
+modelo.
+
+| Modelo preferencial | Uso |
 |---|---|
-| **Issue** | Fonte de verdade do requisito e do escopo. Nada começa sem Issue (ou ordem explícita do orquestrador, com o desvio **registrado**, nunca oculto). |
-| **Branch** | Uma branch por atividade; **desenho e implementação em branches separadas**; nomes por tipo (`feat/`, `docs/`, `fix/`). |
-| **DEV-02** | **Agrupar execuções privilegiadas**, nunca relaxar controles: ler/analisar → implementar em lote → autoauditoria estática → **gate privilegiado integrado** → correções em lote → gate final. O antipadrão `editar → elevar → testar` repetido é proibido. |
-| **DEV-03** | **Validação progressiva**: testes focados durante o desenvolvimento; **análise estática transversal antes de novos gates**; full gate reservado ao fechamento. |
-| **DEV-04** | Com implementação e gates locais **verdes e sem blocker**: **commit + push e PR imediatamente** (`Closes #n` quando resolver integralmente). Se não houver mecanismo autorizado de PR, **não contorne** (nada de `gh`, PAT ou credencial): entregue **branch, SHA, título e corpo** e informe que o PR será aberto pelo orquestrador. CI antecipado; correção posterior gera **novo SHA com novo CI**. |
-| **Gates** | Obrigatórios no fechamento: `npm test`, `npm run build`, `npm run lint`, `git diff --check` (+ cadeia de validadores da fase, quando aplicável). |
-| **PR / CI** | PR auditável, CI verde no **SHA auditado**. |
-| **Auditorias** | **GPT** audita; **Codex** revisa antes do merge; findings são tratados como itens com classificação (bloqueante / dívida / fora de escopo). |
-| **Squash merge** | Somente com **CI verde e SHA auditado**, executado pelo **orquestrador**. **O agente de implementação nunca faz merge.** |
-| **Dependabot/PRs de dependência** | Fora de atividades estruturais. |
+| GPT-6 Sol | Arquitetura crítica, fechamento arquitetural e impasses reais |
+| DeepSeek Flash | Executor preferencial com contrato fechado e bem definido |
+| GPT-6 Luna | Auditoria rotineira/delta e análise com foco em custo |
+| DeepSeek Pro | Auditoria independente/final quando aplicável |
 
----
-
-## Parte VII — Responsabilidades: Flash, GPT, Codex, orquestrador
-
-| Papel | Quem é | Responsabilidade |
-|---|---|---|
-| **Flash (DEV de implementação)** | Agente-base de implementação (modelo `deepseek-flash`) | Lê as fontes obrigatórias, implementa o lote aprovado, roda validação progressiva, **autoauditoria estática**, autua as **Notas Flash** (Parte X), registra desvios/dívidas e **nunca faz merge**. O papel volta a executar atividades quando o override temporário do Codex for encerrado explicitamente. |
-| **GPT (auditor)** | Auditor externo | Auditoria final: confronta o **SHA auditado** com o contrato e a Issue, verifica evidência × obrigação, aponta findings com severidade (bloqueante/dívida/fora de escopo). |
-| **Codex (revisor e executor temporário)** | Revisor pré-merge e, durante o override vigente, executor de todas as atividades | Executa as atividades enquanto durar o override e faz revisão de código/contrato antes do merge; aponta defeitos materiais (segurança, autorização, integridade, contrato). |
-| **Orquestrador** | Humano, autoridade decisória | Cria Issues e PRs, decide arquitetura (abre/fecha `D#`/`Q#`), **autoriza elevação de acesso**, aprova exceções, define escopo/fase, executa **squash merge** e o **CI oficial** é sua responsabilidade. Deve consultar e preservar a memória operacional registrada (`.ai/handoff.md`, decisões, certificações e registros de dívidas), sem depender de memória informal. |
-
-Regra de ouro: **nenhum agente se autoconcede autoridade** — nem técnica, nem de elevação de acesso.
-
-### VII.1 Escolha dinâmica de agente (complexidade × risco × janela × custo)
-
-> **Override temporário vigente:** o **Codex executa todas as atividades** até decisão explícita do
-> orquestrador de voltar ao DeepSeek. Enquanto o override estiver ativo, ele prevalece sobre a escolha
-> dinâmica e sobre os padrões de janela/custo abaixo; não altera responsabilidades, gates, limites de
-> autonomia nem a proibição de merge pelo agente.
-
-A escolha de **quem executa** não é fixa: combina **complexidade + risco + horário (janela) + custo
-efetivo + ciclos humanos**. Os **números** de tarifa e as **janelas** vigentes ficam na **Parte XIII,
-item 8** (fonte única — não repetir aqui). Esta regra volta a reger a seleção somente quando o
-orquestrador encerrar explicitamente o override temporário.
-
-- **Identidade do agente DeepSeek:** `deepseek-flash` = **DeepSeek V4.1 Flash**, modelo **atual**.
-  `deepseek-v4-flash` (e `deepseek-v4-flash-vision-exp`) é **alias legado** roteado ao V4.1 Flash —
-  **não** é um modelo separado e, por isso, **não** é uma opção de custo (tarifa idêntica; números na
-  **Parte XIII, item 8**).
-- **`deepseek-v4-pro` (V4 Pro):** permanece a opção **mais cara** e só deve ser usada com
-  **justificativa técnica concreta**, registrada na entrega (nunca por hábito, preferência ou
-  impressão de “parecer melhor”).
-- **Off-peak:** o **V4.1 Flash é o padrão** do DeepSeek. Trabalho **pesado e flexível** pode ser
-  deslocado para a janela off-peak **sem** criar rodada humana adicional e **sem** prometer execução
-  futura — deslocar janela **não** autoriza adiar entrega, relaxar gate, reduzir verificação nem
-  anunciar trabalho futuro.
-- **Peak:** quando houver **vantagem econômica/operacional**, o **Codex** pode assumir atividades
-  **complexas** no lugar do DeepSeek; a decisão é do **orquestrador** e fica registrada na rodada.
-- **Autoridade inalterada:** esta regra é de **custo/eficiência**. Ela **não** altera autonomia e
-  regras de parada (Parte VIII), o papel de auditoria do GPT, a separação desenho × implementação
-  (Parte VI) nem qualquer regra de segurança, autorização ou arquitetura.
-
----
+Escalar por risco/complexidade e evitar consumo desnecessário de Sol. Executor
+segue contrato fechado e não faz merge; auditoria permanece independente.
 
 ## Parte VIII — Autonomia e regras de parada dos DEVs
 
@@ -414,14 +359,15 @@ teste **comprovadamente** errada, nomes/assinaturas que divergem do contrato já
 diagnóstico — sempre **sem** alterar contrato, sem enfraquecer guarda e sem ampliar escopo.
 
 ### VIII.2 Quando PARAR e reportar (não decidir)
-1. **Dúvida material de arquitetura/contrato** não coberta pelo desenho fechado.
-2. **Segurança/autorização/RLS/integridade** com risco material, ou qualquer suspeita de escalada.
-3. **Necessidade de alterar D1–D16/D21/D22** (ou qualquer `D#`) — inclusive **D15**.
-4. **Criar capability nova**, role/perfil novo **fora do aprovado**, ou reabrir mapa fechado.
-5. **Ampliar SELF para mutação** (SELF só lê o que lhe foi comunicado; mutação SELF é proibida).
-6. **Enfraquecer qualquer gate** (validação, guarda, RLS, ACL, allowlist).
-7. **Alteração de escopo** ou trabalho que exija mudar contrato fechado.
-8. **Causa-raiz incerta**, ou duas falhas da **mesma classe** sem análise transversal prévia.
+1. **Dúvida material de produto** sobre comportamento, prioridade ou regra → STOP e retorno ao responsável de produto.
+2. **Dúvida material de arquitetura/contrato** não coberta pelo desenho fechado.
+3. **Segurança/autorização/RLS/integridade** com risco material, ou qualquer suspeita de escalada.
+4. **Necessidade de alterar D1–D16/D21/D22** (ou qualquer `D#`) — inclusive **D15**.
+5. **Criar capability nova**, role/perfil novo **fora do aprovado**, ou reabrir mapa fechado.
+6. **Ampliar SELF para mutação** (SELF só lê o que lhe foi comunicado; mutação SELF é proibida).
+7. **Enfraquecer qualquer gate** (validação, guarda, RLS, ACL, allowlist).
+8. **Alteração de escopo** ou trabalho que exija mudar contrato fechado.
+9. **Causa-raiz incerta**, ou duas falhas da **mesma classe** sem análise transversal prévia.
 
 ### VIII.3 Forma de parar
 Parar **no ponto exato**, com **evidência arquivo:linha**, o que está bloqueado, o que **não** foi
@@ -447,26 +393,13 @@ escopos e aumenta a chance de erro e de retrabalho.
 
 ---
 
-## Parte X — Nota Flash obrigatória
+## Parte X — Nota de entrega do agente
 
-**O que é:** nota curta e estruturada que **fecha toda entrega** do DEV de implementação (Flash),
-anexada ao relatório final da atividade e refletida no handoff/PR.
-
-**Quando é exigida:** em **toda** entrega (implementação, correção delta, documentação de
-certificação) — inclusive quando a atividade termina sem código.
-
-**Formato (mínimo, em bullets):**
-1. **Branch e SHA** (base e head), e se houve push.
-2. **Arquivos** criados/alterados (com o que mudou em cada um).
-3. **Gates executados e resultados** (com os números reais; se não executou, dizer explicitamente).
-4. **Decisões tomadas** dentro da autonomia (e o fundamento).
-5. **Desvios/limitações do ambiente** (ex.: runner de shell indisponível, `gh` ausente).
-6. **Findings e dívidas** classificados (bloqueante / dívida / fora de escopo).
-7. **O que ficou pendente** e **quem** deve agir (orquestrador, próxima fase).
-
-Sem nota Flash, a entrega **não é considerada fechada**.
-
----
+Toda entrega recebe nota conforme .ai/workflow.md §9, com branch/SHA, arquivos,
+decisões/desvios, gates, auditoria, riscos e próximo responsável. Avaliar de
+0–10 com justificativa: preliminar, revisada se auditoria alterar avaliação e
+final após certificação. Comparar somente modelos/tarefas comparáveis. Nota não
+substitui gates nem auditoria independente.
 
 ## Parte XI — Git e GitHub
 
@@ -547,19 +480,7 @@ Fonte detalhada: `.ai/git-rules.md`.
 7. **Medição de eficiência:** avaliar o trabalho por **custo + tempo + número de rodadas + esforço
    humano**, preservando o resultado e os gates exigidos; não criar rodadas extras apenas para
    repetir evidência já suficiente.
-8. **Janelas e preços de referência:** em horário de São Paulo, **off-peak** corresponde a **01h–03h
-   e 07h–22h**; em dias úteis, **peak** corresponde a **22h–01h e 03h–07h**. Para o **DeepSeek
-   V4.1 Flash**, os preços de referência são: **off-peak** — cache hit **US$ 0,003/M**, cache miss
-   **US$ 0,15/M** e output **US$ 0,60/M**; **peak** — cache hit **US$ 0,006/M**, cache miss
-   **US$ 0,30/M** e output **US$ 1,20/M**. Priorizar off-peak quando isso não interromper o
-   trabalho nem criar rodadas adicionais; a preferência de janela nunca autoriza prometer execução
-   futura. Janela **oficial** em dias úteis (UTC): **peak 01:00–04:00 e 06:00–10:00** — exatamente o
-   que corresponde, em São Paulo (UTC−3), a **22h–01h e 03h–07h**. Para o **DeepSeek V4 Pro**
-   (`deepseek-v4-pro`), os preços de referência são: **off-peak** — cache hit **US$ 0,022/M**, cache
-   miss **US$ 0,66/M** e output **US$ 1,98/M**; **peak** — cache hit **US$ 0,044/M**, cache miss
-   **US$ 1,32/M** e output **US$ 3,96/M** (mais caro que o Flash em **todas** as faixas; a regra de
-   **quando** usar cada modelo está na Parte VII.1). O alias legado `deepseek-v4-flash` é roteado ao
-   V4.1 Flash e **cobrado à mesma tarifa** — **não** há economia em escolhê-lo.
+8. **Referências de custo históricas:** preços e janelas registrados no checkpoint v21 não definem seleção de agente vigente. A seleção atual por tarefa e risco está na Parte VII; não usar tarifas históricas como associação fixa de papel/modelo.
 9. **Snapshot de consumo da API (informado pelo orquestrador):** total **US$ 69,68**; saldo
    **US$ 9,31**; últimos **7 dias US$ 29,39**; **13.744 requests**; **4.518.439.425 tokens**. O saldo
    é o recurso mais escasso do projeto e reforça as regras 1 a 4 desta parte (não repetir gate sem
@@ -713,7 +634,7 @@ fontes. Itens conhecidos:
 
 ---
 
-*Fim da v21. Este documento é história + roadmap + manual operacional. Em caso de divergência com
+*Fim da v22. Este documento é história + roadmap + manual operacional. Em caso de divergência com
 `.ai/*` ou com o desenho de uma atividade, prevalece a fonte normativa — e a divergência deve ser
 registrada aqui.*
 ## Decisão normativa permanente — validação SQL
