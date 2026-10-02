@@ -673,16 +673,26 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (error || !data) return null;
 
+      // F6 #427 §3: a posição/unidade do recurso exige origem de ocupação ÚNICA
+      // na data soberana. `0` mantém positionId/unitId nulos (posição vaga);
+      // `>1` é ambiguidade e NÃO pode ser resolvida por ordenação/`limit 1` —
+      // o recurso falha fechado.
       const { data: ocupacoes } = await admin
         .from("occupations")
-        .select("organizational_position_id, organizational_positions(unit_id)")
-        .eq("collaborator_id", data.id)
-        .is("valid_to", null)
-        .limit(1);
-      const ocupacao = ((ocupacoes ?? []) as {
+        .select("organizational_position_id, valid_from, valid_to, organizational_positions(unit_id)")
+        .eq("collaborator_id", data.id);
+      const referencia = Date.now();
+      const vigentes = ((ocupacoes ?? []) as {
         organizational_position_id: string;
+        valid_from: string;
+        valid_to: string | null;
         organizational_positions?: { unit_id?: string | null } | null;
-      }[])[0];
+      }[]).filter(
+        (linha) =>
+          new Date(linha.valid_from).getTime() <= referencia &&
+          (linha.valid_to === null || new Date(linha.valid_to).getTime() > referencia)
+      );
+      const ocupacao = vigentes.length === 1 ? vigentes[0] : undefined;
 
       return {
         kind: "collaborator",

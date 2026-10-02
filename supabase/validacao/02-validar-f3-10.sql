@@ -446,23 +446,86 @@ begin
   raise notice '[PASS] cenario 11: substituto assume no periodo e titular reassume no retorno';
 end $$;
 
--- Cenário 12: pessoa ocupando duas posições simultâneas.
+-- Cenário 12 (revisto pela Issue #427): origem ÚNICA de ocupação por
+-- colaborador. A antiga prova de "pessoa ocupando duas posições simultâneas"
+-- foi ABOLIDA: DUP d2 ocupa somente P_DUP_A b3 e a resolução avaliativa devolve
+-- exatamente UMA linha. A segunda ocupação simultânea (P_DUP_B b4) deixou de ser
+-- representável e o banco a recusa (23P01) — prova negativa abaixo.
 do $$
 declare
   v_n int;
   v_pos uuid[];
+  v_resp uuid[];
 begin
-  select count(*), array_agg(occupied_position_id order by occupied_position_id) into v_n, v_pos
+  select count(*),
+         array_agg(occupied_position_id order by occupied_position_id),
+         array_agg(manager_collaborator_id order by occupied_position_id)
+    into v_n, v_pos, v_resp
   from public.organizacao_resolver_avaliador_avaliado('fcb00000-0000-0000-0000-0000000000d2', '2024-02-01T00:00:00Z');
-  if v_n <> 2 then
-    raise exception '[FAIL] DUP deveria ocupar 2 posicoes (encontrado %)', v_n;
+  if v_n <> 1 then
+    raise exception '[FAIL] DUP deveria resolver exatamente 1 posicao ocupada (encontrado %)', v_n;
   end if;
   if v_pos is distinct from
-     array['fcc00000-0000-0000-0000-0000000000b3',
-           'fcc00000-0000-0000-0000-0000000000b4']::uuid[] then
-    raise exception '[FAIL] DUP deveria ocupar P_DUP_A e P_DUP_B';
+     array['fcc00000-0000-0000-0000-0000000000b3']::uuid[] then
+    raise exception '[FAIL] DUP deveria resolver somente P_DUP_A (sem uniao com P_DUP_B)';
   end if;
-  raise notice '[PASS] cenario 12: pessoa com duas posicoes simultaneas (2 linhas)';
+  -- P_DUP_A reporta a P_COORD2 (C2) — responsável avaliativo da linha única.
+  if v_resp is distinct from
+     array['fcb00000-0000-0000-0000-0000000000c6']::uuid[] then
+    raise exception '[FAIL] responsavel avaliativo de DUP deveria ser C2 (gestor de P_DUP_A)';
+  end if;
+
+  -- P_DUP_B b4 permanece VAGA: a segunda ocupação simultânea não existe mais.
+  select count(*) into v_n
+  from public.occupations
+  where collaborator_id = 'fcb00000-0000-0000-0000-0000000000d2'
+    and organizational_position_id = 'fcc00000-0000-0000-0000-0000000000b4';
+  if v_n <> 0 then
+    raise exception '[FAIL] P_DUP_B deveria estar vaga para DUP (encontrado %)', v_n;
+  end if;
+  raise notice '[PASS] cenario 12 (revisto #427): origem unica de DUP resolve 1 linha (P_DUP_A) e P_DUP_B fica vaga';
+end $$;
+
+-- Prova NEGATIVA do cenário 12: a segunda ocupação SIMULTÂNEA do mesmo
+-- colaborador (DUP em P_DUP_B) é recusada pela exclusion por `collaborator_id`
+-- (SQLSTATE 23P01) e NADA é persistido.
+do $$
+declare
+  v_ok boolean := false;
+  v_state text := null;
+  v_msg text := null;
+  v_n int;
+begin
+  begin
+    insert into public.occupations (
+      organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to
+    ) values (
+      'fca00000-0000-0000-0000-0000000000a1',
+      'fcb00000-0000-0000-0000-0000000000d2',
+      'fcc00000-0000-0000-0000-0000000000b4',
+      'segunda ocupacao simultanea de DUP (recusada)', '2024-01-01T00:00:00Z', null
+    );
+  exception when exclusion_violation then
+    v_state := sqlstate; v_msg := sqlerrm;
+    v_ok := true;
+  end;
+
+  if not v_ok then
+    raise exception '[FAIL] segunda ocupacao simultanea de DUP NAO foi recusada pela exclusion por colaborador (sqlstate=% msg=%)',
+      coalesce(v_state, 'sem erro'), coalesce(v_msg, 'sem mensagem');
+  end if;
+  if v_msg is null
+     or position('ex_occupations_collaborator_no_overlap' in v_msg) = 0 then
+    raise exception '[FAIL] recusa de DUP nao veio da exclusion por colaborador (msg=%)', v_msg;
+  end if;
+
+  select count(*) into v_n
+  from public.occupations
+  where collaborator_id = 'fcb00000-0000-0000-0000-0000000000d2';
+  if v_n <> 1 then
+    raise exception '[FAIL] tentativa recusada deixou ocupacao persistida para DUP (encontrado %)', v_n;
+  end if;
+  raise notice '[PASS] cenario 12: segunda ocupacao simultanea do mesmo colaborador recusada (23P01) sem persistir nada';
 end $$;
 
 -- Cenário 13: Diretor reportando a Diretor (nível repetido).

@@ -156,12 +156,13 @@ begin
     'fk_occupations_positions',
     'ck_occupations_reason',
     'ck_occupations_valid_to',
-    'ex_occupations_position_no_overlap'
+    'ex_occupations_position_no_overlap',
+    'ex_occupations_collaborator_no_overlap'
   );
-  if v_n <> 7 then
+  if v_n <> 8 then
     raise exception '[FAIL] constraints esperadas de occupations ausentes (% encontradas)', v_n;
   end if;
-  raise notice '[PASS] constraints pk/fk/check/exclusion esperadas presentes em occupations';
+  raise notice '[PASS] constraints pk/fk/check/exclusion esperadas presentes em occupations (posicao + cardinalidade por colaborador)';
 end $$;
 
 do $$
@@ -302,7 +303,8 @@ begin
 end $$;
 
 -- ============================================================================
--- 2) Cenário: ocupação, vacância, multi-posições, transferência, licença
+-- 2) Cenário: ocupação, vacância, origem única por colaborador,
+--    transferência, licença
 -- ============================================================================
 
 do $$
@@ -384,17 +386,64 @@ end $$;
 do $$
 declare
   v_n int;
+  v_pos uuid;
 begin
-  -- Colaborador ocupando DUAS posições simultaneamente (C1 em P1 e P2).
+  -- Invariante #427: o colaborador tem NO MÁXIMO uma ocupação por instante.
+  -- C1 (titular de P1 até 2025-06-30) tem origem única em 2025-03-01 — a
+  -- antiga prova de "duas posições simultâneas" foi substituída por esta.
   select count(*) into v_n
   from public.occupations
   where collaborator_id = 'f7b00000-0000-0000-0000-0000000000c1'
     and valid_from <= '2025-03-01T00:00:00Z'
     and (valid_to is null or valid_to > '2025-03-01T00:00:00Z');
-  if v_n <> 2 then
-    raise exception '[FAIL] C1 deveria ocupar 2 posicoes simultaneamente em 2025-03-01 (encontrado %)', v_n;
+  if v_n <> 1 then
+    raise exception '[FAIL] C1 deveria ter exatamente 1 posicao em 2025-03-01 (encontrado %)', v_n;
   end if;
-  raise notice '[PASS] colaborador ocupa duas posicoes simultaneamente (sem exclusion por collaborator)';
+
+  select organizational_position_id into v_pos
+  from public.occupations
+  where collaborator_id = 'f7b00000-0000-0000-0000-0000000000c1'
+    and valid_from <= '2025-03-01T00:00:00Z'
+    and (valid_to is null or valid_to > '2025-03-01T00:00:00Z');
+  if v_pos is distinct from 'f7c00000-0000-0000-0000-0000000000a1' then
+    raise exception '[FAIL] origem unica de C1 em 2025-03-01 deveria ser P1 (Gerente)';
+  end if;
+  raise notice '[PASS] colaborador tem origem unica por instante (C1 = P1 em 2025-03-01; sem acumulo de posicoes)';
+end $$;
+
+do $$
+declare
+  v_n int;
+  v_ok boolean := false;
+begin
+  -- Duas occupations simultâneas do MESMO colaborador (C1 já ocupa P1 em
+  -- 2025-01-01): devem ser recusadas pela exclusion por colaborador, e nada
+  -- pode ser persistido.
+  begin
+    insert into public.occupations (
+      organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to
+    ) values (
+      'f7a00000-0000-0000-0000-0000000000a1',
+      'f7b00000-0000-0000-0000-0000000000c1',
+      'f7c00000-0000-0000-0000-0000000000a4',
+      'Acumulo invalido de posicao',
+      '2025-01-01T00:00:00Z', null
+    );
+  exception when exclusion_violation then
+    v_ok := true;
+  end;
+  if not v_ok then
+    raise exception '[FAIL] duas occupations simultaneas do mesmo colaborador NAO foram rejeitadas';
+  end if;
+
+  select count(*) into v_n
+  from public.occupations
+  where collaborator_id = 'f7b00000-0000-0000-0000-0000000000c1'
+    and organizational_position_id = 'f7c00000-0000-0000-0000-0000000000a4';
+  if v_n <> 0 then
+    raise exception '[FAIL] insercao recusada nao deveria ter persistido occupation para C1';
+  end if;
+  raise notice '[PASS] no maximo uma occupation por colaborador por instante (exclusion por collaborator; nada persistido)';
 end $$;
 
 do $$
@@ -493,25 +542,41 @@ end $$;
 do $$
 declare
   v_ok boolean := false;
+  v_state text := null;
+  v_msg text := null;
 begin
   begin
-    -- Segundo ocupante simultaneo na mesma posicao (P1 ja ocupada por C2).
+    -- Segundo ocupante simultaneo na mesma posicao (P1 ja ocupada por C2 desde
+    -- 2025-07-01). F6 / #427 — a linha e atribuida a C1, cuja UNICA ocupacao (P1)
+    -- encerrou em 2025-06-30: em 2026-01-01 C1 NAO tem ocupacao vigente, logo a
+    -- exclusion por `collaborator_id` NAO pode disparar. O UNICO veredito
+    -- possivel e a exclusion por POSICAO — exatamente o discriminador desta
+    -- prova (a cardinalidade por colaborador nao pode "roubar" o motivo aqui).
     insert into public.occupations (
       organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to
     ) values (
       'f7a00000-0000-0000-0000-0000000000a1',
-      'f7b00000-0000-0000-0000-0000000000c3',
+      'f7b00000-0000-0000-0000-0000000000c1',
       'f7c00000-0000-0000-0000-0000000000a1',
       'Segundo ocupante invalido',
       '2026-01-01T00:00:00Z', null
     );
   exception when exclusion_violation then
+    v_state := sqlstate; v_msg := sqlerrm;
     v_ok := true;
   end;
   if not v_ok then
     raise exception '[FAIL] dois ocupantes simultaneos na mesma posicao NAO foram rejeitados';
   end if;
-  raise notice '[PASS] um ocupante por posicao por instante (exclusion por position)';
+  -- Discriminador explicito: a recusa TEM de vir da exclusion por POSICAO.
+  if v_msg is null
+     or position('ex_occupations_position_no_overlap' in v_msg) = 0 then
+    raise exception '[FAIL] a recusa do segundo ocupante nao veio da exclusion por POSICAO (msg=%)', v_msg;
+  end if;
+  if v_state <> '23P01' then
+    raise exception '[FAIL] recusa do segundo ocupante com SQLSTATE inesperado (%)', v_state;
+  end if;
+  raise notice '[PASS] um ocupante por posicao por instante (exclusion por POSICAO; C1 sem ocupacao vigente na janela)';
 end $$;
 
 do $$
@@ -546,16 +611,24 @@ begin
   begin
     -- Occupation aberta alem do encerramento da posicao (P5 encerrada em
     -- 2025-06-30): deve ser rejeitada.
+    -- F6 / #427 — JULGAMENTO: a linha é atribuída a C1, cuja única ocupação
+    -- terminou exatamente em 2025-06-30. O período abaixo começa em 2025-07-01
+    -- (consecutivo — a exclusion por `collaborator_id` não dispara) e P5 já está
+    -- encerrada desde 2025-06-30: o único veredito possível é o trigger de
+    -- validade da posição, exatamente o discriminador original.
     insert into public.occupations (
       organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to
     ) values (
       'f7a00000-0000-0000-0000-0000000000a1',
-      'f7b00000-0000-0000-0000-0000000000c4',
+      'f7b00000-0000-0000-0000-0000000000c1',
       'f7c00000-0000-0000-0000-0000000000a5',
       'Ocupacao alem do encerramento',
-      '2025-03-01T00:00:00Z', null
+      '2025-07-01T00:00:00Z', null
     );
   exception when others then
+    if sqlerrm not like '%encerramento da posicao%' then
+      raise;
+    end if;
     v_ok := true;
   end;
   if not v_ok then
@@ -564,18 +637,30 @@ begin
   raise notice '[PASS] occupation alem do encerramento da posicao rejeitada (trigger de validade)';
 end $$;
 
+-- F6 / #427: as duas provas de integridade cross-org abaixo precisam de um
+-- colaborador de OUTRA organizacao que NAO tenha ocupacao alguma. O Cb (d1) da
+-- fixture ocupa BP1 de forma aberta e a nova exclusion por `collaborator_id`
+-- dispararia ANTES da FK composta, mascarando o veredito que estas provas
+-- discriminam. d2 nasce SEM ocupacao (e sem periodo de status) apenas para isso.
+do $$
+begin
+  insert into public.collaborators (id, organization_id) values
+    ('f7b00000-0000-0000-0000-0000000000d2', 'f7a00000-0000-0000-0000-0000000000b1');
+end $$;
+
 do $$
 declare
   v_ok boolean := false;
 begin
   begin
-    -- Cross-organization (collaborator de outra org): occupation Alfa com Cb
-    -- (Beta), posicao vaga P4 (Alfa).
+    -- Cross-organization (collaborator de outra org): occupation Alfa com d2
+    -- (Beta, SEM ocupacao), posicao vaga P4 (Alfa). O UNICO veredito possivel e a
+    -- FK composta (collaborator_id, organization_id).
     insert into public.occupations (
       organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to
     ) values (
       'f7a00000-0000-0000-0000-0000000000a1',
-      'f7b00000-0000-0000-0000-0000000000d1',
+      'f7b00000-0000-0000-0000-0000000000d2',
       'f7c00000-0000-0000-0000-0000000000a4',
       'Cross-org collaborator',
       '2025-06-01T00:00:00Z', '2025-06-30T00:00:00Z'
@@ -595,12 +680,13 @@ declare
 begin
   begin
     -- Cross-organization (posicao de outra org): occupation Beta com posicao
-    -- P4 (Alfa), colaborador Cb (Beta).
+    -- P4 (Alfa) e colaborador d2 (Beta, SEM ocupacao) — o UNICO veredito
+    -- possivel e a FK composta (organizational_position_id, organization_id).
     insert into public.occupations (
       organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to
     ) values (
       'f7a00000-0000-0000-0000-0000000000b1',
-      'f7b00000-0000-0000-0000-0000000000d1',
+      'f7b00000-0000-0000-0000-0000000000d2',
       'f7c00000-0000-0000-0000-0000000000a4',
       'Cross-org position',
       '2025-06-01T00:00:00Z', '2025-06-30T00:00:00Z'
@@ -617,22 +703,31 @@ end $$;
 do $$
 declare
   v_ok boolean := false;
+  v_state text := null;
 begin
   begin
-    -- Motivo vazio (posicao vaga P4, colaborador C4 sem occupations).
+    -- Motivo vazio. F6 / #427 — a linha e atribuida a C1, cuja UNICA ocupacao
+    -- (P1) encerrou em 2025-06-30: NAO ha ocupacao vigente em 2027-01-01, logo a
+    -- exclusion por `collaborator_id` nao pode disputar o veredito. A posicao P4
+    -- esta vaga. O UNICO veredito possivel e o check de `reason`, e o SQLSTATE e
+    -- conferido explicitamente.
     insert into public.occupations (
       organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to
     ) values (
       'f7a00000-0000-0000-0000-0000000000a1',
-      'f7b00000-0000-0000-0000-0000000000c4',
+      'f7b00000-0000-0000-0000-0000000000c1',
       'f7c00000-0000-0000-0000-0000000000a4',
-      '   ', '2026-01-01T00:00:00Z', null
+      '   ', '2027-01-01T00:00:00Z', null
     );
   exception when check_violation then
+    v_state := sqlstate;
     v_ok := true;
   end;
   if not v_ok then
     raise exception '[FAIL] reason vazio NAO foi rejeitado';
+  end if;
+  if v_state <> '23514' then
+    raise exception '[FAIL] reason vazio nao foi rejeitado por check constraint (sqlstate=%)', v_state;
   end if;
   raise notice '[PASS] reason vazio/espacos rejeitado por check constraint';
 end $$;
@@ -640,23 +735,30 @@ end $$;
 do $$
 declare
   v_ok boolean := false;
+  v_state text := null;
 begin
   begin
-    -- Periodo invalido (valid_to <= valid_from).
+    -- Periodo invalido (valid_to <= valid_from). F6 / #427: a janela é vazia
+    -- (`[2027-01-01, 2027-01-01)`), portanto NÃO pode colidir com a exclusion por
+    -- colaborador; o único veredito possível é o check de período.
     insert into public.occupations (
       organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to
     ) values (
       'f7a00000-0000-0000-0000-0000000000a1',
-      'f7b00000-0000-0000-0000-0000000000c4',
+      'f7b00000-0000-0000-0000-0000000000c3',
       'f7c00000-0000-0000-0000-0000000000a4',
       'Periodo invalido',
-      '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'
+      '2027-01-01T00:00:00Z', '2027-01-01T00:00:00Z'
     );
   exception when check_violation then
+    v_state := sqlstate;
     v_ok := true;
   end;
   if not v_ok then
     raise exception '[FAIL] occupation com periodo invalido NAO foi rejeitada';
+  end if;
+  if v_state <> '23514' then
+    raise exception '[FAIL] periodo invalido nao foi rejeitado por check constraint (sqlstate=%)', v_state;
   end if;
   raise notice '[PASS] occupation com valid_to <= valid_from rejeitada por check constraint';
 end $$;
@@ -704,18 +806,28 @@ end $$;
 do $$
 declare
   v_ok boolean := false;
-  v_n int;
   v_id uuid;
+  v_occ_id uuid;
 begin
-  -- Desligamento coerente: C4 (sem occupations) pode ser desligado após
-  -- encerrar o período active. Executa e reverte para manter o cenário.
+  -- Desligamento coerente: C4 (titular de P2) pode ser desligado após encerrar
+  -- explicitamente sua occupation e o período active. Executa e reverte para
+  -- manter o cenário intacto.
   select id into v_id
   from public.collaborator_status_periods
   where collaborator_id = 'f7b00000-0000-0000-0000-0000000000c4'
     and status = 'active'
     and valid_to is null;
 
+  select id into v_occ_id
+  from public.occupations
+  where collaborator_id = 'f7b00000-0000-0000-0000-0000000000c4'
+    and organizational_position_id = 'f7c00000-0000-0000-0000-0000000000a2'
+    and valid_to is null;
+
   begin
+    update public.occupations
+       set valid_to = '2026-01-01T00:00:00Z'
+     where id = v_occ_id;
     update public.collaborator_status_periods
        set valid_to = '2026-01-01T00:00:00Z'
      where id = v_id;
@@ -731,17 +843,20 @@ begin
   end;
 
   if not v_ok then
-    raise exception '[FAIL] desligamento sem occupations vigentes NAO foi permitido';
+    raise exception '[FAIL] desligamento apos fechamento explicito das occupations NAO foi permitido';
   end if;
-  raise notice '[PASS] desligamento permitido apos fechamento explicito das occupations (nonexistentes)';
+  raise notice '[PASS] desligamento permitido apos fechamento explicito da occupation vigente do titular';
 
-  -- Reverter: remove o periodo inactive e reabre o active.
+  -- Reverter: remove o periodo inactive, reabre o active e reabre a occupation.
   delete from public.collaborator_status_periods
   where collaborator_id = 'f7b00000-0000-0000-0000-0000000000c4'
     and status = 'inactive';
   update public.collaborator_status_periods
      set valid_to = null
    where id = v_id;
+  update public.occupations
+     set valid_to = null
+   where id = v_occ_id;
 end $$;
 
 -- ============================================================================
@@ -976,7 +1091,8 @@ where id in (
   'f7b00000-0000-0000-0000-0000000000c2',
   'f7b00000-0000-0000-0000-0000000000c3',
   'f7b00000-0000-0000-0000-0000000000c4',
-  'f7b00000-0000-0000-0000-0000000000d1'
+  'f7b00000-0000-0000-0000-0000000000d1',
+  'f7b00000-0000-0000-0000-0000000000d2'
 );
 
 delete from public.job_roles

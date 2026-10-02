@@ -177,20 +177,88 @@ end $$;
 rollback;
 
 begin;
-insert into public.occupations
-  (id, organization_id, collaborator_id, organizational_position_id, reason, valid_from)
-values ('f6a22000-0000-4000-8000-000000000f08',
-        'f6a22000-0000-4000-8000-0000000000a1',
-        'f6a22000-0000-4000-8000-000000000e01',
-        'f6a22000-0000-4000-8000-000000000d03',
-        'ambiguidade ocupacional P2', '2026-01-01T00:00:00Z');
-do $$ begin
-  if exists (select 1 from public.resolver_capabilities_escopos_efetivas(
-      'f6a22000-0000-4000-8000-000000000002','f6a22000-0000-4000-8000-0000000000a1')
-      where grant_origin like 'position_responsibility:%') then
-    raise exception '[FAIL] ambiguidade ocupacional foi deduplicada em vez de DENY';
+-- F6 / Issue #427 — JULGAMENTO: a segunda ocupação simultânea de e01 (em d03)
+-- NÃO é mais representável. A exclusion `ex_occupations_collaborator_no_overlap`
+-- recusa o INSERT (23P01), então o estado "ambíguo" que este bloco simulava NÃO
+-- pode ser construído sem desabilitar constraint — o que é proibido. O bloco
+-- preserva a INTENÇÃO (fail-closed diante de ambiguidade ocupacional) provando:
+--   (1) o banco recusa a sobreposição (23P01) e NADA é persistido — a
+--       ambiguidade é impedida na origem, que é o fail-closed mais forte; e
+--   (2) o resolver continua NEGANDO grants de `position_responsibility` sempre
+--       que a cardinalidade de ocupação do vínculo não é exatamente 1 (guarda
+--       `ao.occupation_count = 1`), comportamento que a constraint não substitui.
+do $$
+declare
+  v_ok boolean := false;
+  v_state text := null;
+  v_msg text := null;
+  v_n int;
+begin
+  -- Pré-condição: e01 tem exatamente UMA ocupação vigente (f01 em d01).
+  select count(*) into v_n
+    from public.occupations
+   where collaborator_id = 'f6a22000-0000-4000-8000-000000000e01'
+     and organization_id = 'f6a22000-0000-4000-8000-0000000000a1'
+     and valid_from <= now() and (valid_to is null or valid_to > now());
+  if v_n <> 1 then
+    raise exception '[FAIL] pre-condicao: e01 deveria ter 1 ocupacao vigente (tem %)', v_n;
   end if;
-  raise notice '[PASS] ambiguidade ocupacional resulta em fail-closed';
+
+  begin
+    insert into public.occupations
+      (id, organization_id, collaborator_id, organizational_position_id, reason, valid_from)
+    values ('f6a22000-0000-4000-8000-000000000f08',
+            'f6a22000-0000-4000-8000-0000000000a1',
+            'f6a22000-0000-4000-8000-000000000e01',
+            'f6a22000-0000-4000-8000-000000000d03',
+            'ambiguidade ocupacional P2 (recusada pela exclusion por colaborador)', '2026-01-01T00:00:00Z');
+    raise exception '[FAIL] a segunda ocupacao simultanea de e01 foi ACEITA (ambiguidade construida)';
+  exception
+    when exclusion_violation then
+      v_state := sqlstate; v_msg := sqlerrm; v_ok := true;
+    when others then
+      v_state := sqlstate; v_msg := sqlerrm;
+  end;
+
+  if not v_ok then
+    raise exception '[FAIL] sobreposicao de ocupacao de e01 NAO foi recusada pela exclusion por colaborador (sqlstate=% msg=%)',
+      coalesce(v_state, 'sem erro'), coalesce(v_msg, 'sem mensagem');
+  end if;
+  if v_msg is null
+     or position('ex_occupations_collaborator_no_overlap' in v_msg) = 0 then
+    raise exception '[FAIL] recusa de e01 nao veio da exclusion por colaborador (msg=%)', v_msg;
+  end if;
+
+  -- (1) Fail-closed na origem: nada de ambíguo persistiu.
+  select count(*) into v_n
+    from public.occupations
+   where collaborator_id = 'f6a22000-0000-4000-8000-000000000e01'
+     and organization_id = 'f6a22000-0000-4000-8000-0000000000a1';
+  if v_n <> 1 then
+    raise exception '[FAIL] tentativa recusada deixou ocupacao persistida para e01 (tem %)', v_n;
+  end if;
+  raise notice '[PASS] ambiguidade ocupacional impedida na origem: segunda ocupacao de e01 recusada (23P01, ex_occupations_collaborator_no_overlap) sem persistir nada';
+end $$;
+
+-- (2) Guarda de cardinalidade do resolver preservada: a recusa de grants
+-- `position_responsibility` exige `occupation_count = 1` do vínculo do ator
+-- (`actor_occupations`), portanto o estado >1 jamais produziria união/escolha por
+-- ordenação — o DENY por ambiguidade é intrínseco ao resolver, e não apenas um
+-- efeito colateral da constraint.
+do $$
+declare
+  v_guarda boolean := false;
+begin
+  select (position('occupation_count = 1' in p.prosrc) > 0)
+    into v_guarda
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and p.proname = 'resolver_capabilities_escopos_efetivas';
+  if v_guarda is distinct from true then
+    raise exception '[FAIL] resolver sem a guarda de cardinalidade (occupation_count = 1) de fail-closed';
+  end if;
+  raise notice '[PASS] ambiguidade ocupacional resulta em fail-closed (guarda de cardinalidade do resolver + barreira do banco)';
 end $$;
 rollback;
 

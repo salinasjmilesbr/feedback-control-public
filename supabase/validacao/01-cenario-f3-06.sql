@@ -7,7 +7,8 @@
 --
 --   - duas organizações sintéticas (Alfa e Beta F3-06), com catálogos,
 --     unidades, colaboradores (núcleo F3-01 + status periods), posições e
---     occupations (titular canônico);
+--     occupations (titular canônico; #427: no máximo uma occupation por
+--     colaborador por instante — sem titular acumulando posições);
 --   - temporary_responsibilities demonstrando: titular mantém occupation
 --     durante a substituição; substituto sem occupation artificial; mesmo
 --     substituto cobrindo duas posições simultaneamente; tipo evaluative
@@ -158,13 +159,16 @@ insert into public.organizational_positions (
 -- ----------------------------------------------------------------------------
 -- Occupations (titular canônico)
 -- ----------------------------------------------------------------------------
+-- Invariante #427: no máximo UMA occupation por colaborador por instante
+-- (exclusion `ex_occupations_collaborator_no_overlap`). Cada titular abaixo tem
+-- origem única; a recusa da sobreposição por colaborador é comprovada em
+-- 02-validar-f3-06.sql (bloco negativo). O substituto NÃO recebe occupation —
+-- responsabilidades temporárias seguem podendo ser múltiplas por colaborador.
 insert into public.occupations (
   organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to
 ) values
   ('f8a00000-0000-0000-0000-0000000000a1', 'f8b00000-0000-0000-0000-0000000000c1',
    'f8c00000-0000-0000-0000-0000000000a1', 'Gerente titular', '2025-01-01T00:00:00Z', null),
-  ('f8a00000-0000-0000-0000-0000000000a1', 'f8b00000-0000-0000-0000-0000000000c1',
-   'f8c00000-0000-0000-0000-0000000000a2', 'Acumula analise', '2025-01-01T00:00:00Z', null),
   ('f8a00000-0000-0000-0000-0000000000a1', 'f8b00000-0000-0000-0000-0000000000c3',
    'f8c00000-0000-0000-0000-0000000000a3', 'Analista (licenca mantida)', '2025-01-01T00:00:00Z', null),
   ('f8a00000-0000-0000-0000-0000000000b1', 'f8b00000-0000-0000-0000-0000000000d1',

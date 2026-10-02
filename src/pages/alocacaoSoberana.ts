@@ -87,12 +87,15 @@ export function ocupacaoVigenteDoColaborador(
   collaboratorId: string,
   referencia: string = agoraIso()
 ): OcupacaoSoberana | null {
-  const vigente = estrutura.ocupacoes.find(
+  // F6 #427 §3: `0` = ausência e `>1` = ambiguidade são AMBOS fail-closed.
+  // A primeira ocupação da lista NUNCA é escolhida silenciosamente.
+  const vigentes = estrutura.ocupacoes.filter(
     (ocupacao) =>
       ocupacao.collaboratorId === collaboratorId &&
       estaVigente(ocupacao.validFrom, ocupacao.validTo, referencia)
   );
-  return vigente ?? null;
+  if (vigentes.length !== 1) return null;
+  return vigentes[0] ?? null;
 }
 
 /** Reporting line VIGENTE da posição subordinada (superior formal atual). */
@@ -401,11 +404,14 @@ export function gestorDiretoDaPosicao(
 ): { readonly managerPositionId: string; readonly collaboratorId: string | null } | null {
   const linha = reportingVigenteDaPosicao(estrutura, subordinatePositionId, referencia);
   if (!linha) return null;
-  const ocupacao = estrutura.ocupacoes.find(
+  // F6 #427 §3: >1 ocupante vigente na mesma posição é ambiguidade —
+  // fail-closed (nenhum ocupante é escolhido por ordem da lista).
+  const ocupantes = estrutura.ocupacoes.filter(
     (item) =>
       item.posicaoId === linha.managerPositionId &&
       estaVigente(item.validFrom, item.validTo, referencia)
   );
+  const ocupacao = ocupantes.length === 1 ? ocupantes[0] ?? null : null;
   return {
     managerPositionId: linha.managerPositionId,
     collaboratorId: ocupacao ? ocupacao.collaboratorId : null,

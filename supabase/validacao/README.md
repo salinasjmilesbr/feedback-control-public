@@ -431,13 +431,17 @@ Observações:
    author/substituição/reporting); `collaborator_id`/`organizational_position_id`/
    `reason`/`valid_from` NOT NULL (vacância = ausência; sem occupation com NULL).
 2. **Constraints/triggers**: PK, FKs compostas + RESTRICT, checks (reason,
-   valid_to), exclusion por posição (um ocupante por instante); funções/triggers
-   de validade na posição e de desligamento (inactive) fail-closed presentes.
+   valid_to), exclusion por posição (um ocupante por instante) e exclusion por
+   colaborador (`ex_occupations_collaborator_no_overlap`, F6/#427: no máximo uma
+   occupation por colaborador por instante — a prova negativa correspondente é
+   executada em `02-validar-f3-05.sql`); funções/triggers de validade na posição
+   e de desligamento (inactive) fail-closed presentes.
 3. **Cenário**: posição ocupada e posição vaga por data; troca de ocupante na
-   mesma posição (histórico preservado, posição não recriada); colaborador com
-   duas occupations simultâneas; licença (leave) sem encerrar/recriar
-   occupation; histórico consultável por data; reporting line P2→P1
-   independente do ocupante; `reason` não vazio.
+   mesma posição (histórico preservado, posição não recriada); origem única de
+   occupation por colaborador (a antiga prova de "duas occupations simultâneas"
+   foi substituída pela prova negativa da exclusion por colaborador); licença
+   (leave) sem encerrar/recriar occupation; histórico consultável por data;
+   reporting line P2→P1 independente do ocupante; `reason` não vazio.
 4. **Rejeições/integridade**: dois ocupantes simultâneos na mesma posição,
    occupation antes/`além` da validade da posição, cross-organization
    (collaborator e posição), `reason` vazio, período inválido e desligamento
@@ -561,13 +565,17 @@ Observações:
    explícitos; 3 policies inalteradas.
 2. **Responsável por posição**: titular/substituto/efetivo (vaga com substituto;
    ocupada sem substituto; vaga sem substituto → NULL).
-3. **Gestor direto**: derivado da reporting line + occupation; gerência sem
-   Coordenador (Consultor/Analista resolvem o Gerente); multi-positions com dois
-   gestores; licença não exclui.
+3. **Gestor direto**: derivado da reporting line + occupation com origem ÚNICA
+   de occupation (F6/#427: com >1 occupations vigentes os resolvers devolvem
+   DENY/fail-closed — a antiga "união de múltiplas occupations" foi abolida);
+   gerência sem Coordenador (Consultor/Analista resolvem o Gerente); licença não
+   exclui.
 4. **Subordinados/descendentes**: conjuntos e profundidades corretos.
 5. **Cadeia**: ascendente com posições vagas preservadas (responsável NULL antes
    do substituto; C_SUB durante).
-6. **Escopo**: união coerente de múltiplas positions (posições + unidades).
+6. **Escopo**: origem única de occupation (F6/#427) — posições e unidades
+   derivadas apenas da ocupação vigente; a antiga "união coerente de múltiplas
+   positions" deixou de existir.
 7. **RLS deny-by-default**: authenticated não resolve ocupante.
 8. **F3-01..F3-06 intactas** e **limpeza** do cenário.
 
@@ -743,7 +751,8 @@ Observações:
    seniority); gerência menor sem Coordenador; Especialista no mesmo patamar do
    Gerente (mesmo superior, zero subordinados); posição vaga; troca definitiva de
    ocupante (+ sucessão F3-09); transferência entre coordenações; licença mantendo
-   occupation; substituição temporária; pessoa com duas posições; Diretor→Diretor;
+   occupation; substituição temporária; pessoa com posição ÚNICA (F6/#427 — a
+   antiga "duas posições simultâneas" foi abolida); Diretor→Diretor;
    colegiado ausente/vazio/com membros e histórico por ciclo.
 3. **Reconstrução histórica** em 5 datas (2024-02-01, 05-01, 07-15, 09-15, 12-01).
 4. **RLS deny-by-default** comprovado como `authenticated`; policies inalteradas.
@@ -867,8 +876,9 @@ Observações:
   removem ao final os dados sintéticos do cenário (banco local limpo);
 - `01-cenario-f4-02.sql` monta uma estrutura F3 sintética (units + parent,
   positions, reporting lines, occupations com troca histórica, posição vaga e
-  multi-position) usando apenas UUIDs fixos com prefixo `d1` e a função
-  sintética `Analista` em todas as posições (hierarquia só por reporting line);
+  origem única de occupation — F6/#427) usando apenas UUIDs fixos com prefixo
+  `d1` e a função sintética `Analista` em todas as posições (hierarquia só por
+  reporting line);
 - o deny-by-default é comprovado pelo passo 7 de `02-validar-f4-02.sql`
   (`set role authenticated`: leituras 0 linhas; resolvers INVOKER retornam
   vazio).
@@ -881,7 +891,9 @@ Observações:
 2. **Capability × scope**: mesma capability (`collaborator.read`) com 3 scopes
    diferentes; SELF resolve só o colaborador vinculado; usuário sem vínculo
    falha fechado nos estruturais; DIRECT_REPORTS usa reporting line (só COORD),
-   não job_role; DESCENDANTS pela árvore F3; união de múltiplas positions.
+   não job_role; DESCENDANTS pela árvore F3; origem única de occupation (a
+   antiga união de múltiplas positions foi abolida pela Issue #427 e o alcance
+   restrito é provado explicitamente).
 3. **UNIT/ORGANIZATION**: UNIT alcança somente a unidade explícita (sem
    subunidades); ORGANIZATION limitado ao tenant; ADMIN+ORGANIZATION sem
    capability confidencial.

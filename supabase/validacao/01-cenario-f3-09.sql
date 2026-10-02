@@ -13,7 +13,15 @@
 --     (D7: author_user_profile_id);
 --   - colaboradores: C_GER (titular), C_GER2 (sucessor), C_SUB (substituto
 --     avaliativo), A1/A2 (avaliados com superior), A3 (raiz/sem superior) e A4
---     (duas posições ocupadas).
+--     (posição única);
+--
+-- F6 / Issue #427: cada colaborador tem NO MÁXIMO UMA ocupação em qualquer
+-- instante (exclusion por collaborator_id em public.occupations). Duas
+-- ocupações simultâneas do mesmo colaborador deixaram de ser representáveis:
+-- A4 tem ORIGEM ÚNICA em P_A4 a5 — a resolução avaliativa dele produz UMA
+-- linha (D3 revisto pela #427), e a 02-validar-f3-09.sql prova que o banco
+-- recusa a segunda ocupação (23P01). P_A5 a6 permanece posição VAGA (mantém a
+-- reporting line declarada abaixo e é o alvo da tentativa recusada).
 --
 -- Regras:
 --   - EXECUTAR SOMENTE no Supabase local de desenvolvimento (docker exec/psql
@@ -166,6 +174,10 @@ insert into public.position_reporting_lines (
 -- ----------------------------------------------------------------------------
 -- Occupations (titulares)
 -- ----------------------------------------------------------------------------
+-- F6 / Issue #427: A4 (c7) tem ORIGEM ÚNICA em P_A4 a5. P_A5 a6 fica VAGA — a
+-- antiga segunda ocupação simultânea de A4 deixou de ser representável e a
+-- tentativa de recriá-la é recusada pelo banco (23P01), o que a
+-- 02-validar-f3-09.sql prova com `begin ... exception when exclusion_violation`.
 insert into public.occupations (
   organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to
 ) values
@@ -178,9 +190,7 @@ insert into public.occupations (
   ('fba00000-0000-0000-0000-0000000000a1', 'fbb00000-0000-0000-0000-0000000000c6',
    'fbc00000-0000-0000-0000-0000000000a4', 'A3 ocupado (raiz)', '2025-01-01T00:00:00Z', null),
   ('fba00000-0000-0000-0000-0000000000a1', 'fbb00000-0000-0000-0000-0000000000c7',
-   'fbc00000-0000-0000-0000-0000000000a5', 'A4 ocupado P_A4', '2025-01-01T00:00:00Z', null),
-  ('fba00000-0000-0000-0000-0000000000a1', 'fbb00000-0000-0000-0000-0000000000c7',
-   'fbc00000-0000-0000-0000-0000000000a6', 'A4 ocupado P_A5', '2025-01-01T00:00:00Z', null);
+   'fbc00000-0000-0000-0000-0000000000a5', 'A4 ocupado P_A4 (origem unica)', '2025-01-01T00:00:00Z', null);
 
 -- ----------------------------------------------------------------------------
 -- Temporary responsibility avaliativa (substituto avalia no período)

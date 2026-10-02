@@ -672,3 +672,60 @@ jobs:
           docker exec -i supabase_db_feedback-control \
             psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
             < supabase/validacao/03-validar-f5-07-cutover.sql
+
+      # ----------------------------------------------------------------------
+      # F6 / #427: cardinalidade soberana de ocupacoes — exclusao temporal por
+      # collaborator_id (preservando a exclusao por posicao), guardas de
+      # cardinalidade nas escritas, fail-closed dos consumidores estruturais e
+      # cardinalidade explicita nas materializacoes. Roda por ultimo para nao
+      # mascarar regressoes de atividades anteriores.
+      # ----------------------------------------------------------------------
+      - name: Seed F6 #427 scenario (cardinalidade soberana de ocupacoes)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/55-cenario-f6-427.sql
+
+      - name: Run F6 #427 validation (matriz de cardinalidade soberana)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/55-validar-f6-427.sql
+
+      # ----------------------------------------------------------------------
+      # F6 / #427: CONCORRENCIA REAL entre DUAS sessoes PostgreSQL — prova que a
+      # ordem canonica de locks (linha do colaborador ANTES do advisory lock)
+      # elimina o ciclo de espera entre `definir` e `trocar`, que duas tentativas
+      # concorrentes de ocupacao sobreposta jamais persistem sobreposicao e que
+      # nenhuma falha deixa efeito parcial. A sessao A roda em BACKGROUND (ela
+      # abre as janelas de contencao com o lock em maos); a sessao B espera a
+      # MARCA nao transacional publicada por A e mede o bloqueio; o validador de
+      # consolidacao roda depois das duas.
+      # ----------------------------------------------------------------------
+      - name: Seed F6 #427 concurrency scenario (organizacao exclusiva da corrida)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/56-cenario-f6-427-concorrencia.sql
+
+      - name: "Run F6 #427 concurrency (DUAS sessoes reais: A em background, B em foreground)"
+        run: |
+          set -e
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/57-sessao-a-f6-427-concorrencia.sql &
+          SESSAO_A=$!
+          # A sessao B NAO depende de tempo fixo: o laco dela aguarda a MARCA de
+          # contencao publicada por A DENTRO da escrita (ja com os locks em maos).
+          # O `sleep 1` existe apenas para dar tempo ao start do processo de A.
+          sleep 1
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/58-sessao-b-f6-427-concorrencia.sql
+          wait "$SESSAO_A"
+
+      - name: Run F6 #427 concurrency consolidation (estado final apos a corrida)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/59-validar-f6-427-concorrencia.sql

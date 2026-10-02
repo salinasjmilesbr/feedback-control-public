@@ -8,8 +8,9 @@
 --   - uma organização sintética (Alfa F3-07) com catálogos, unidades,
 --     colaboradores (núcleo + status), posições e reporting lines formando uma
 --     árvore que exercita: gerência sem Coordenador, posição superior VAGA com
---     substituto operacional temporário, múltiplas occupations, licença sem
---     excluir titular, cadeia com ancestrais vagos;
+--     substituto operacional temporário, origem ÚNICA de occupation por
+--     colaborador (invariante #427; sem união de múltiplas positions), licença
+--     sem excluir titular, cadeia com ancestrais vagos;
 --   - occupations e temporary responsibilities para distinguir titular e
 --     substituto na resolução.
 --
@@ -160,8 +161,13 @@ insert into public.position_reporting_lines (
    'f9c00000-0000-0000-0000-0000000000a6', 'Analista sob Analista (multi-gerencia)', '2025-01-01T00:00:00Z', null);
 
 -- ----------------------------------------------------------------------------
--- Occupations (titular canônico)
+-- Occupations (titular canônico; origem ÚNICA por colaborador — #427)
 -- ----------------------------------------------------------------------------
+-- Invariante #427: no máximo UMA occupation por colaborador por instante
+-- (exclusion `ex_occupations_collaborator_no_overlap`). C_MULTI tem UMA única
+-- origem (P_CONS/Consultor), de modo que os resolvers estruturais não produzem
+-- união de escopo; a recusa da sobreposição por colaborador é comprovada em
+-- 02-validar-f3-07.sql (bloco negativo). P_ANL3 permanece sem ocupante.
 insert into public.occupations (
   organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to
 ) values
@@ -172,9 +178,7 @@ insert into public.occupations (
   ('f9a00000-0000-0000-0000-0000000000a1', 'f9b00000-0000-0000-0000-0000000000c4',
    'f9c00000-0000-0000-0000-0000000000a4', 'Analista em licenca mantida', '2025-01-01T00:00:00Z', null),
   ('f9a00000-0000-0000-0000-0000000000a1', 'f9b00000-0000-0000-0000-0000000000c5',
-   'f9c00000-0000-0000-0000-0000000000a5', 'Consultor (multi)', '2025-01-01T00:00:00Z', null),
-  ('f9a00000-0000-0000-0000-0000000000a1', 'f9b00000-0000-0000-0000-0000000000c5',
-   'f9c00000-0000-0000-0000-0000000000a6', 'Analista (multi)', '2025-01-01T00:00:00Z', null),
+   'f9c00000-0000-0000-0000-0000000000a5', 'Consultor (origem unica)', '2025-01-01T00:00:00Z', null),
   ('f9a00000-0000-0000-0000-0000000000a1', 'f9b00000-0000-0000-0000-0000000000c7',
    'f9c00000-0000-0000-0000-0000000000a7', 'Analista subordinado', '2025-01-01T00:00:00Z', null);
 

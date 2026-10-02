@@ -257,6 +257,9 @@ describe("F5-08 P6 — adaptador da estrutura soberana (UUID)", () => {
   });
 
   it("dado ambíguo (duas ocupações/reporting/colegiado vigentes) ⇒ fail-closed", () => {
+    // #427: este estado é INCONSISTENTE e a constraint do banco o impede para
+    // dados novos. A prova permanece como defesa em profundidade: uma leitura
+    // sobre fotografia legada/inconsistente nunca escolhe arbitrariamente.
     const duasOcupacoes = montarProjecaoEstrutural({
       referencia: REF,
       posicoes: [posicao(POS_ANALISTA), posicao(POS_COLEGA)],
@@ -282,5 +285,43 @@ describe("F5-08 P6 — adaptador da estrutura soberana (UUID)", () => {
       ],
     });
     expect(colegiadoSoberano(doisColegiados, COL_ANALISTA)).toEqual([]);
+  });
+
+  it("#427: ocupações históricas SEQUENCIAIS do mesmo colaborador são válidas", () => {
+    // A [2026-01-01, 2026-06-01) e B [2026-06-01, ∞): períodos consecutivos
+    // (fim de A = início de B) NÃO se sobrepõem no modelo meio-aberto — a nova
+    // cardinalidade soberana permite o histórico sequencial.
+    const sequencial = (referencia: string) =>
+      montarProjecaoEstrutural({
+        referencia,
+        posicoes: [posicao(POS_ANALISTA), posicao(POS_COLEGA)],
+        ocupacoes: [
+          {
+            ocupacaoId: "o-hist",
+            collaboratorId: COL_ANALISTA,
+            posicaoId: POS_ANALISTA,
+            validFrom: INICIO,
+            validTo: "2026-06-01T00:00:00.000Z",
+            version: 1,
+          },
+          {
+            ocupacaoId: "o-atual",
+            collaboratorId: COL_ANALISTA,
+            posicaoId: POS_COLEGA,
+            validFrom: "2026-06-01T00:00:00.000Z",
+            validTo: null,
+            version: 1,
+          },
+        ],
+        reportingLines: [],
+        colegiados: [],
+      });
+
+    // Antes da transição: apenas a ocupação histórica é vigente.
+    expect(posicaoSoberana(sequencial("2026-05-01T00:00:00.000Z"), COL_ANALISTA)).toBe(POS_ANALISTA);
+    // Em REF (depois da transição): apenas a ocupação atual — nunca ambíguo.
+    const atual = sequencial(REF);
+    expect(vinculoEstrutural(atual, COL_ANALISTA)?.posicaoId).toBe(POS_COLEGA);
+    expect(vinculoEstrutural(atual, COL_ANALISTA)?.cadeiaConfiavel).toBe(true);
   });
 });

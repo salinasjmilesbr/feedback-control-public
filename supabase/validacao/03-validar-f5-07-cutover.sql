@@ -738,11 +738,16 @@ declare
   v_state text := null;
 begin
   -- Barreira TEMPORAL no banco (ultima linha de defesa): sobreposicao de
-  -- ocupacao na mesma posicao e impossivel, mesmo por escrita direta.
+  -- ocupacao na mesma POSICAO e impossivel, mesmo por escrita direta.
+  -- O segundo ocupante e um colaborador SEM ocupacao (c8, "sem alocacao" —
+  -- ver 02-validar-f5-07): assim a recusa comprova a exclusion de POSICAO
+  -- (`ex_occupations_position_no_overlap`) e nao a exclusion de CARDINALIDADE
+  -- por colaborador introduzida pela Issue #427
+  -- (`ex_occupations_collaborator_no_overlap`, migration 20261028000000).
   begin
     insert into public.occupations
       (organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to)
-    values ('d7a00000-0000-0000-0000-0000000000a1','d7c00000-0000-0000-0000-0000000000c4',
+    values ('d7a00000-0000-0000-0000-0000000000a1','d7c00000-0000-0000-0000-0000000000c8',
             'd7f00000-0000-0000-0000-0000000000c2','sobreposicao sintetica f5-07',
             '2025-01-01T00:00:00Z', null);
   exception when others then
@@ -755,6 +760,14 @@ begin
       v_state, v_msg;
   end if;
 
+  -- Controle negativo da PROVA: se a recusa viesse da exclusion de
+  -- CARDINALIDADE por colaborador (#427), a prova teria deixado de exercitar a
+  -- barreira por POSICAO.
+  if v_msg like '%ex_occupations_collaborator_no_overlap%' then
+    raise exception '[FAIL] a recusa veio da exclusion de CARDINALIDADE por colaborador (#427), nao da exclusion de POSICAO (msg=%)',
+      v_msg;
+  end if;
+
   if not exists (select 1 from public.occupations
                   where id = 'd7f00000-0000-0000-0000-0000000000f2'
                     and collaborator_id = 'd7c00000-0000-0000-0000-0000000000c2'
@@ -762,7 +775,12 @@ begin
     raise exception '[FAIL] a ocupacao vigente original foi perdida na tentativa concorrente';
   end if;
 
-  raise notice '[PASS] T-15 barreira temporal: exclusion de vigencia (23P01) impede duas ocupacoes vigentes na mesma posicao';
+  if exists (select 1 from public.occupations
+              where collaborator_id = 'd7c00000-0000-0000-0000-0000000000c8') then
+    raise exception '[FAIL] a tentativa concorrente deixou ocupacao gravada para o colaborador sem alocacao';
+  end if;
+
+  raise notice '[PASS] T-15 barreira temporal: exclusion de vigencia por POSICAO (23P01) impede duas ocupacoes vigentes na mesma posicao';
 end $$;
 
 -- ============================================================================

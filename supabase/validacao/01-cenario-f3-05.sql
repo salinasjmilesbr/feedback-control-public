@@ -8,14 +8,17 @@
 --   - duas organizações sintéticas (Alfa e Beta F3-05), com catálogos,
 --     unidades, colaboradores (núcleo F3-01 + status periods) e posições;
 --   - occupations demonstrando: posição ocupada e posição vaga (sem qualquer
---     occupation); um colaborador ocupando DUAS posições simultaneamente;
---     troca de ocupante na MESMA posição (sem recriar a posição);
---     transferência com histórico (fechar + abrir); licença independente da
---     occupation (colaborador em leave mantém a ocupação vigente, sem recriar);
+--     occupation); cada colaborador com NO MÁXIMO UMA posição por instante
+--     (invariante da #427: exclusion por collaborator_id — sem união de
+--     posições simultâneas); troca de ocupante na MESMA posição (sem recriar a
+--     posição); transferência com histórico (fechar + abrir); licença
+--     independente da occupation (colaborador em leave mantém a ocupação
+--     vigente, sem recriar);
 --   - uma reporting line (P2 → P1) que deve permanecer independente do
 --     ocupante (troca de ocupante não a altera);
---   - colaborador sem occupations (C4) para o teste positivo de desligamento e
---     posição encerrada (P5) para o teste de integridade temporal.
+--   - colaborador C4 titular de P2 (posição ocupada sem acumular posições) para
+--     o teste positivo de desligamento, e posição encerrada (P5) para o teste
+--     de integridade temporal.
 --
 -- Regras:
 --   - EXECUTAR SOMENTE no Supabase local de desenvolvimento (docker exec/psql
@@ -167,9 +170,14 @@ insert into public.position_reporting_lines (
 -- ----------------------------------------------------------------------------
 -- Occupations
 -- ----------------------------------------------------------------------------
+-- Invariante #427: no máximo UMA occupation por colaborador em qualquer
+-- instante (exclusion `ex_occupations_collaborator_no_overlap`, além da
+-- exclusion por posição). Nenhum colaborador abaixo acumula posições; a
+-- recusa da sobreposição por colaborador é comprovada em
+-- 02-validar-f3-05.sql (bloco negativo).
 -- oc1: C1 ocupa P1 (Gerente) até 2025-06-30 (encerrada na transferência).
--- oc2: C1 ocupa P2 (Analista) vigente — C1 ocupa DUAS posições enquanto oc1
---      está aberta (2025-01-01..2025-06-30).
+-- oc2: C4 ocupa P2 (Analista) aberta — posição ocupada sem acumular posições
+--      (a posição P2 permanece na árvore para a reporting line P2 → P1).
 -- oc3: C2 assume P1 em 2025-07-01 — troca de ocupante na MESMA posição.
 -- oc4: C3 ocupa P3 vigente — permanece durante o período de licença de C3.
 -- oc6: Cb ocupa BP1 (Beta).
@@ -181,8 +189,8 @@ insert into public.occupations (
   ('f7a00000-0000-0000-0000-0000000000a1', 'f7b00000-0000-0000-0000-0000000000c1',
    'f7c00000-0000-0000-0000-0000000000a1', 'Gerente titular',
    '2025-01-01T00:00:00Z', '2025-06-30T00:00:00Z'),
-  ('f7a00000-0000-0000-0000-0000000000a1', 'f7b00000-0000-0000-0000-0000000000c1',
-   'f7c00000-0000-0000-0000-0000000000a2', 'Acumula posicao de analista',
+  ('f7a00000-0000-0000-0000-0000000000a1', 'f7b00000-0000-0000-0000-0000000000c4',
+   'f7c00000-0000-0000-0000-0000000000a2', 'Analista titular (sem acumulo)',
    '2025-01-01T00:00:00Z', null),
   ('f7a00000-0000-0000-0000-0000000000a1', 'f7b00000-0000-0000-0000-0000000000c2',
    'f7c00000-0000-0000-0000-0000000000a1', 'Troca de ocupante na posicao',

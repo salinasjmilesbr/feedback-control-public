@@ -12,7 +12,8 @@
 --   sob Gerente; gerência menor sem Coordenador; Especialista no mesmo patamar
 --   do Gerente; posição vaga; troca definitiva de ocupante; transferência entre
 --   coordenações; licença mantendo occupation; substituição temporária; pessoa
---   com duas posições simultâneas; Diretor reportando a Diretor; colegiado
+--   com posição ÚNICA (P_DUP_B vaga — a antiga "duas posições simultâneas" foi
+--   abolida pela Issue #427); Diretor reportando a Diretor; colegiado
 --   ausente/com membros/histórico por ciclo.
 --
 -- Regras:
@@ -146,8 +147,8 @@ insert into public.organizational_positions (
   ('fcc00000-0000-0000-0000-0000000000b0', 'fca00000-0000-0000-0000-0000000000a1', 'fcf00000-0000-0000-0000-000000000001', 'fcd00000-0000-0000-0000-000000000006', null, '2024-01-01T00:00:00Z', null, 'F6 P4.5 01-cenario-f3-10 posição funcional'), -- P_CONS_G2
   ('fcc00000-0000-0000-0000-0000000000b1', 'fca00000-0000-0000-0000-0000000000a1', 'fcf00000-0000-0000-0000-000000000001', 'fcd00000-0000-0000-0000-000000000008', null, '2024-01-01T00:00:00Z', null, 'F6 P4.5 01-cenario-f3-10 posição funcional'), -- P_EST_G2
   ('fcc00000-0000-0000-0000-0000000000b2', 'fca00000-0000-0000-0000-0000000000a1', 'fcf00000-0000-0000-0000-000000000001', 'fcd00000-0000-0000-0000-000000000004', null, '2024-01-01T00:00:00Z', null, 'F6 P4.5 01-cenario-f3-10 posição funcional'), -- P_ESP1
-  ('fcc00000-0000-0000-0000-0000000000b3', 'fca00000-0000-0000-0000-0000000000a1', 'fcf00000-0000-0000-0000-000000000001', 'fcd00000-0000-0000-0000-000000000007', null, '2024-01-01T00:00:00Z', null, 'F6 P4.5 01-cenario-f3-10 posição funcional'), -- P_DUP_A
-  ('fcc00000-0000-0000-0000-0000000000b4', 'fca00000-0000-0000-0000-0000000000a1', 'fcf00000-0000-0000-0000-000000000001', 'fcd00000-0000-0000-0000-000000000007', null, '2024-01-01T00:00:00Z', null, 'F6 P4.5 01-cenario-f3-10 posição funcional'), -- P_DUP_B
+  ('fcc00000-0000-0000-0000-0000000000b3', 'fca00000-0000-0000-0000-0000000000a1', 'fcf00000-0000-0000-0000-000000000001', 'fcd00000-0000-0000-0000-000000000007', null, '2024-01-01T00:00:00Z', null, 'F6 P4.5 01-cenario-f3-10 posição funcional'), -- P_DUP_A (origem unica de DUP)
+  ('fcc00000-0000-0000-0000-0000000000b4', 'fca00000-0000-0000-0000-0000000000a1', 'fcf00000-0000-0000-0000-000000000001', 'fcd00000-0000-0000-0000-000000000007', null, '2024-01-01T00:00:00Z', null, 'F6 P4.5 01-cenario-f3-10 posição funcional'), -- P_DUP_B (VAGA: #427 abole a segunda ocupacao simultanea)
   ('fcc00000-0000-0000-0000-0000000000b9', 'fca00000-0000-0000-0000-0000000000b1', 'fcf00000-0000-0000-0000-000000000011', 'fcd00000-0000-0000-0000-000000000011', 'fce00000-0000-0000-0000-000000000011', '2024-01-01T00:00:00Z', null, 'F6 P4.5 01-cenario-f3-10 posição funcional'); -- P_BETA
 
 -- ----------------------------------------------------------------------------
@@ -254,12 +255,17 @@ insert into public.position_reporting_lines (
   ('fca00000-0000-0000-0000-0000000000a1', 'fcc00000-0000-0000-0000-0000000000b0', 'fcc00000-0000-0000-0000-0000000000ae', 'Consultor Gerencia 2', '2024-01-01T00:00:00Z', null),
   ('fca00000-0000-0000-0000-0000000000a1', 'fcc00000-0000-0000-0000-0000000000b1', 'fcc00000-0000-0000-0000-0000000000ae', 'Estagiario Gerencia 2', '2024-01-01T00:00:00Z', null),
   ('fca00000-0000-0000-0000-0000000000a1', 'fcc00000-0000-0000-0000-0000000000b2', 'fcc00000-0000-0000-0000-0000000000a2', 'Especialista sob Diretoria', '2024-01-01T00:00:00Z', null),
-  ('fca00000-0000-0000-0000-0000000000a1', 'fcc00000-0000-0000-0000-0000000000b3', 'fcc00000-0000-0000-0000-0000000000a5', 'DUP posicao A', '2024-01-01T00:00:00Z', null),
-  ('fca00000-0000-0000-0000-0000000000a1', 'fcc00000-0000-0000-0000-0000000000b4', 'fcc00000-0000-0000-0000-0000000000a6', 'DUP posicao B', '2024-01-01T00:00:00Z', null);
+  ('fca00000-0000-0000-0000-0000000000a1', 'fcc00000-0000-0000-0000-0000000000b3', 'fcc00000-0000-0000-0000-0000000000a5', 'Origem unica de DUP sob Coordenacao 2', '2024-01-01T00:00:00Z', null),
+  ('fca00000-0000-0000-0000-0000000000a1', 'fcc00000-0000-0000-0000-0000000000b4', 'fcc00000-0000-0000-0000-0000000000a6', 'Posicao vaga (sem segunda ocupacao de DUP)', '2024-01-01T00:00:00Z', null);
 
 -- ----------------------------------------------------------------------------
 -- Occupations (base; P_VACANTE sem occupation; C1_SUC/SUB sem occupation ainda)
 -- ----------------------------------------------------------------------------
+-- F6 / Issue #427: no máximo UMA occupation por colaborador em qualquer instante
+-- (exclusion `ex_occupations_collaborator_no_overlap`). O antigo "DUP com duas
+-- posições simultâneas" foi abolido: DUP d2 ocupa somente P_DUP_A b3 e P_DUP_B
+-- b4 fica VAGA (a tentativa de segunda ocupação é recusada pelo banco e é
+-- provada em 02-validar-f3-10.sql).
 insert into public.occupations (
   organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to
 ) values
@@ -281,8 +287,7 @@ insert into public.occupations (
   ('fca00000-0000-0000-0000-0000000000a1', 'fcb00000-0000-0000-0000-0000000000cf', 'fcc00000-0000-0000-0000-0000000000b0', 'Consultor Gerencia 2', '2024-01-01T00:00:00Z', null),
   ('fca00000-0000-0000-0000-0000000000a1', 'fcb00000-0000-0000-0000-0000000000d0', 'fcc00000-0000-0000-0000-0000000000b1', 'Estagiario Gerencia 2', '2024-01-01T00:00:00Z', null),
   ('fca00000-0000-0000-0000-0000000000a1', 'fcb00000-0000-0000-0000-0000000000d1', 'fcc00000-0000-0000-0000-0000000000b2', 'Especialista', '2024-01-01T00:00:00Z', null),
-  ('fca00000-0000-0000-0000-0000000000a1', 'fcb00000-0000-0000-0000-0000000000d2', 'fcc00000-0000-0000-0000-0000000000b3', 'DUP posicao A', '2024-01-01T00:00:00Z', null),
-  ('fca00000-0000-0000-0000-0000000000a1', 'fcb00000-0000-0000-0000-0000000000d2', 'fcc00000-0000-0000-0000-0000000000b4', 'DUP posicao B', '2024-01-01T00:00:00Z', null);
+  ('fca00000-0000-0000-0000-0000000000a1', 'fcb00000-0000-0000-0000-0000000000d2', 'fcc00000-0000-0000-0000-0000000000b3', 'Origem unica de DUP (P_DUP_B vaga)', '2024-01-01T00:00:00Z', null);
 
 -- ----------------------------------------------------------------------------
 -- Colegiado: AJR v1 {M1,M2}; ASR explicitamente vazio (sem membros)

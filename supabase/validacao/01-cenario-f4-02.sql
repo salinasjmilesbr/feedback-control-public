@@ -11,12 +11,14 @@
 --     vínculo;
 --   - estrutura F3 mínima (units + parent, positions, reporting lines,
 --     occupations) para provar DIRECT_REPORTS/DESCENDANTS/UNIT/vaga/histórico/
---     multi-position;
+--     origem única de ocupação;
 --   - role customizada `gestao_equipe` (collaborator.read + evaluation.read)
 --     atribuída com múltiplos scopes (DIRECT_REPORTS + DESCENDANTS +
 --     ORGANIZATIONAL_UNIT sobre U_ROOT);
 --   - `admin` (sistema) com scope ORGANIZATION EXPLÍCITO (D14), em Alfa e Beta;
---   - MULTI_USER com role+DESCENDANTS (união de múltiplas positions);
+--   - MULTI_USER com role+DESCENDANTS sobre ORIGEM ÚNICA (a união de múltiplas
+--     positions foi abolida pela Issue #427: no máximo UMA occupation por
+--     colaborador em cada instante);
 --   - NO_LINK com role+DESCENDANTS mas SEM vínculo (fail-closed).
 --
 -- Regras:
@@ -162,7 +164,7 @@ insert into public.collaborators (id, organization_id) values
   ('d1c00000-0000-0000-0000-0000000000c3', 'd1a00000-0000-0000-0000-0000000000a1'),  -- COORD
   ('d1c00000-0000-0000-0000-0000000000c4', 'd1a00000-0000-0000-0000-0000000000a1'),  -- AN1 (sai em 2024-06)
   ('d1c00000-0000-0000-0000-0000000000c7', 'd1a00000-0000-0000-0000-0000000000a1'),  -- SUCCESSOR
-  ('d1c00000-0000-0000-0000-0000000000c6', 'd1a00000-0000-0000-0000-0000000000a1'),  -- MULTI (2 positions)
+  ('d1c00000-0000-0000-0000-0000000000c6', 'd1a00000-0000-0000-0000-0000000000a1'),  -- MULTI (origem unica)
   ('d1c00000-0000-0000-0000-0000000000c8', 'd1a00000-0000-0000-0000-0000000000a1'),  -- MULTI_CHILD
   ('d1c00000-0000-0000-0000-0000000000d1', 'd1a00000-0000-0000-0000-0000000000b1');  -- BETA collab
 
@@ -186,8 +188,8 @@ insert into public.organizational_positions (
   ('d1e00000-0000-0000-0000-0000000000e2', 'd1a00000-0000-0000-0000-0000000000a1', 'd1e00000-0000-0000-0000-0000000000c2', 'd1c00000-0000-0000-0000-0000000000e1', '2024-01-01T00:00:00Z', 'F6 P4.5 01-cenario-f4-02 posição funcional'),  -- P_COORD
   ('d1e00000-0000-0000-0000-0000000000e3', 'd1a00000-0000-0000-0000-0000000000a1', 'd1e00000-0000-0000-0000-0000000000c2', 'd1c00000-0000-0000-0000-0000000000e1', '2024-01-01T00:00:00Z', 'F6 P4.5 01-cenario-f4-02 posição funcional'),  -- P_AN1
   ('d1e00000-0000-0000-0000-0000000000e4', 'd1a00000-0000-0000-0000-0000000000a1', 'd1e00000-0000-0000-0000-0000000000c2', 'd1c00000-0000-0000-0000-0000000000e1', '2024-01-01T00:00:00Z', 'F6 P4.5 01-cenario-f4-02 posição funcional'),  -- P_AN2
-  ('d1e00000-0000-0000-0000-0000000000e5', 'd1a00000-0000-0000-0000-0000000000a1', 'd1e00000-0000-0000-0000-0000000000c2', 'd1c00000-0000-0000-0000-0000000000e1', '2024-01-01T00:00:00Z', 'F6 P4.5 01-cenario-f4-02 posição funcional'),  -- P_MULTI2
-  ('d1e00000-0000-0000-0000-0000000000e8', 'd1a00000-0000-0000-0000-0000000000a1', 'd1e00000-0000-0000-0000-0000000000c2', 'd1c00000-0000-0000-0000-0000000000e1', '2024-01-01T00:00:00Z', 'F6 P4.5 01-cenario-f4-02 posição funcional'),  -- P_MULTI_CHILD
+  ('d1e00000-0000-0000-0000-0000000000e5', 'd1a00000-0000-0000-0000-0000000000a1', 'd1e00000-0000-0000-0000-0000000000c2', 'd1c00000-0000-0000-0000-0000000000e1', '2024-01-01T00:00:00Z', 'F6 P4.5 01-cenario-f4-02 posição funcional'),  -- P_MULTI2 (VAGA: #427 abole a 2a ocupacao de MULTI)
+  ('d1e00000-0000-0000-0000-0000000000e8', 'd1a00000-0000-0000-0000-0000000000a1', 'd1e00000-0000-0000-0000-0000000000c2', 'd1c00000-0000-0000-0000-0000000000e1', '2024-01-01T00:00:00Z', 'F6 P4.5 01-cenario-f4-02 posição funcional'),  -- P_MULTI_CHILD (fora do alcance de MULTI apos a #427)
   ('d1e00000-0000-0000-0000-0000000000e6', 'd1a00000-0000-0000-0000-0000000000a1', 'd1e00000-0000-0000-0000-0000000000c2', 'd1c00000-0000-0000-0000-0000000000e1', '2024-01-01T00:00:00Z', 'F6 P4.5 01-cenario-f4-02 posição funcional');  -- P_VACANT
 
 -- ----------------------------------------------------------------------------
@@ -203,16 +205,22 @@ insert into public.position_reporting_lines (organization_id, subordinate_positi
   ('d1a00000-0000-0000-0000-0000000000a1', 'd1e00000-0000-0000-0000-0000000000e6', 'd1e00000-0000-0000-0000-0000000000e2', 'estrutura sintetica', '2024-01-01T00:00:00Z');
 
 -- ----------------------------------------------------------------------------
--- Occupations (F3): troca em P_AN1 (histórico); MULTI em 2 positions; P_VACANT vazia
+-- Occupations (F3): troca em P_AN1 (histórico); MULTI em UMA position (origem
+-- única — #427 abole a união de múltiplas positions); P_VACANT vazia
 -- ----------------------------------------------------------------------------
+-- F6 / Issue #427: no máximo UMA occupation por colaborador em qualquer instante
+-- (exclusion `ex_occupations_collaborator_no_overlap`). MULTI c6 tinha duas
+-- ocupações simultâneas (P_AN2 e4 e P_MULTI2 e5) cujo propósito documentado era
+-- a "união de múltiplas positions" — abolida. MULTI agora tem ORIGEM ÚNICA em
+-- P_AN2 e4; P_MULTI2 e5 permanece posição VAGA (a subárvore de P_MULTI2 deixa de
+-- entrar no alcance de MULTI, o que a 02-validar-f4-02.sql prova explicitamente).
 insert into public.occupations (organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to) values
   ('d1a00000-0000-0000-0000-0000000000a1', 'd1c00000-0000-0000-0000-0000000000c1', 'd1e00000-0000-0000-0000-0000000000e0', 'ocupacao sintetica', '2024-01-01T00:00:00Z', null),
   ('d1a00000-0000-0000-0000-0000000000a1', 'd1c00000-0000-0000-0000-0000000000c2', 'd1e00000-0000-0000-0000-0000000000e1', 'ocupacao sintetica', '2024-01-01T00:00:00Z', null),
   ('d1a00000-0000-0000-0000-0000000000a1', 'd1c00000-0000-0000-0000-0000000000c3', 'd1e00000-0000-0000-0000-0000000000e2', 'ocupacao sintetica', '2024-01-01T00:00:00Z', null),
   ('d1a00000-0000-0000-0000-0000000000a1', 'd1c00000-0000-0000-0000-0000000000c4', 'd1e00000-0000-0000-0000-0000000000e3', 'ocupacao sintetica', '2024-01-01T00:00:00Z', '2024-06-01T00:00:00Z'),
   ('d1a00000-0000-0000-0000-0000000000a1', 'd1c00000-0000-0000-0000-0000000000c7', 'd1e00000-0000-0000-0000-0000000000e3', 'sucessao sintetica', '2024-06-01T00:00:00Z', null),
-  ('d1a00000-0000-0000-0000-0000000000a1', 'd1c00000-0000-0000-0000-0000000000c6', 'd1e00000-0000-0000-0000-0000000000e4', 'ocupacao sintetica', '2024-01-01T00:00:00Z', null),
-  ('d1a00000-0000-0000-0000-0000000000a1', 'd1c00000-0000-0000-0000-0000000000c6', 'd1e00000-0000-0000-0000-0000000000e5', 'ocupacao sintetica', '2024-01-01T00:00:00Z', null),
+  ('d1a00000-0000-0000-0000-0000000000a1', 'd1c00000-0000-0000-0000-0000000000c6', 'd1e00000-0000-0000-0000-0000000000e4', 'origem unica de MULTI (P_MULTI2 vaga)', '2024-01-01T00:00:00Z', null),
   ('d1a00000-0000-0000-0000-0000000000a1', 'd1c00000-0000-0000-0000-0000000000c8', 'd1e00000-0000-0000-0000-0000000000e8', 'ocupacao sintetica', '2024-01-01T00:00:00Z', null);
 
 -- ----------------------------------------------------------------------------
@@ -295,7 +303,8 @@ select a.id, a.organization_id, 'DESCENDANTS', 'active', 'd1b00000-0000-0000-000
   from public.membership_access_role_assignments a
  where a.membership_id = 'd1d00000-0000-0000-0000-0000000000a3' and a.access_role_id = 'd1f00000-0000-0000-0000-0000000000f1';
 
--- MULTI_USER <- DESCENDANTS (união de múltiplas positions)
+-- MULTI_USER <- DESCENDANTS (origem ÚNICA de ocupação — a união de múltiplas
+-- positions foi abolida pela Issue #427; ver seção de occupations)
 insert into public.access_role_assignment_scopes (assignment_id, organization_id, scope_type, status, created_by)
 select a.id, a.organization_id, 'DESCENDANTS', 'active', 'd1b00000-0000-0000-0000-0000000000a5'
   from public.membership_access_role_assignments a

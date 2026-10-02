@@ -210,28 +210,80 @@ declare
   v_pos uuid[];
   v_mgr uuid[];
 begin
-  -- A4 ocupa duas posições (P_A4, P_A5) → duas linhas de resolução (D3).
+  -- F6 / #427 (D3 revisto): A4 tem ORIGEM ÚNICA de ocupação (P_A4 a5). A
+  -- resolução avaliativa devolve exatamente UMA linha — a antiga expectativa de
+  -- "duas posições → duas linhas de resolução" foi ABOLIDA pela #427.
   select count(*),
          array_agg(occupied_position_id order by occupied_position_id),
          array_agg(manager_collaborator_id order by occupied_position_id)
     into v_n, v_pos, v_mgr
   from public.organizacao_resolver_avaliador_avaliado(
     'fbb00000-0000-0000-0000-0000000000c7', '2025-03-01T00:00:00Z');
-  if v_n <> 2 then
-    raise exception '[FAIL] A4 deveria resolver 2 posicoes ocupadas (encontrado %)', v_n;
+  if v_n <> 1 then
+    raise exception '[FAIL] A4 deveria resolver exatamente 1 posicao ocupada (encontrado %)', v_n;
   end if;
   if v_pos is distinct from
-     array['fbc00000-0000-0000-0000-0000000000a5',
-           'fbc00000-0000-0000-0000-0000000000a6']::uuid[] then
-    raise exception '[FAIL] A4 deveria resolver P_A4 e P_A5';
+     array['fbc00000-0000-0000-0000-0000000000a5']::uuid[] then
+    raise exception '[FAIL] origem unica de A4 deveria ser P_A4 (sem uniao com P_A5)';
   end if;
-  -- Substituto avaliativo ativo → manager = C_SUB em ambas.
+  -- Substituto avaliativo ativo → manager = C_SUB.
   if v_mgr is distinct from
-     array['fbb00000-0000-0000-0000-0000000000c3',
-           'fbb00000-0000-0000-0000-0000000000c3']::uuid[] then
+     array['fbb00000-0000-0000-0000-0000000000c3']::uuid[] then
     raise exception '[FAIL] manager de A4 em 2025-03-01 deveria ser o substituto C_SUB';
   end if;
-  raise notice '[PASS] multiplas posicoes resolvidas separadamente (2 linhas) com responsavel avaliativo';
+
+  -- A posicao P_A5 a6 permanece VAGA: a segunda ocupacao simultanea de A4 nao
+  -- existe mais no cenario (nada de uniao de posicoes).
+  select count(*) into v_n
+  from public.occupations
+  where collaborator_id = 'fbb00000-0000-0000-0000-0000000000c7'
+    and organizational_position_id = 'fbc00000-0000-0000-0000-0000000000a6';
+  if v_n <> 0 then
+    raise exception '[FAIL] P_A5 deveria estar vaga para A4 (encontrado %)', v_n;
+  end if;
+  raise notice '[PASS] origem unica de A4 resolvida em 1 linha com responsavel avaliativo (sem uniao de posicoes)';
+end $$;
+
+do $$
+declare
+  v_ok boolean := false;
+  v_state text := null;
+  v_msg text := null;
+  v_n int;
+begin
+  -- F6 / #427 — prova NEGATIVA: a segunda ocupação SIMULTÂNEA de A4 (c7) na
+  -- posição P_A5 a6 deixou de ser representável. A barreira final do banco
+  -- (exclusion por collaborator_id) recusa o INSERT com 23P01 e NADA persiste.
+  begin
+    insert into public.occupations (
+      organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to
+    ) values (
+      'fba00000-0000-0000-0000-0000000000a1',
+      'fbb00000-0000-0000-0000-0000000000c7',
+      'fbc00000-0000-0000-0000-0000000000a6',
+      'segunda ocupacao simultanea de A4 (recusada)', '2025-01-01T00:00:00Z', null
+    );
+  exception when exclusion_violation then
+    v_state := sqlstate; v_msg := sqlerrm;
+    v_ok := true;
+  end;
+
+  if not v_ok then
+    raise exception '[FAIL] segunda ocupacao simultanea de A4 NAO foi recusada pela exclusion por colaborador (sqlstate=% msg=%)',
+      coalesce(v_state, 'sem erro'), coalesce(v_msg, 'sem mensagem');
+  end if;
+  if v_msg is null
+     or position('ex_occupations_collaborator_no_overlap' in v_msg) = 0 then
+    raise exception '[FAIL] recusa de A4 nao veio da exclusion por colaborador (msg=%)', v_msg;
+  end if;
+
+  select count(*) into v_n
+  from public.occupations
+  where collaborator_id = 'fbb00000-0000-0000-0000-0000000000c7';
+  if v_n <> 1 then
+    raise exception '[FAIL] tentativa recusada deixou ocupacao persistida para A4 (encontrado %)', v_n;
+  end if;
+  raise notice '[PASS] segunda ocupacao simultanea do mesmo colaborador recusada (23P01, ex_occupations_collaborator_no_overlap) sem persistir nada';
 end $$;
 
 -- ============================================================================
@@ -260,14 +312,15 @@ do $$
 declare
   v_n int;
 begin
-  -- 4 responsabilidades: A1(P_A1), A2(P_A2), A4(P_A4), A4(P_A5); A3 é raiz → 0.
+  -- 3 responsabilidades: A1(P_A1), A2(P_A2) e A4(P_A4, origem unica); A3 é
+  -- raiz → 0 e A4 deixa de gerar a segunda linha (P_A5) — D3 revisto pela #427.
   select count(*) into v_n
   from public.cycle_evaluation_responsibilities cer
   join public.collegiate_cycle_snapshots s on s.id = cer.snapshot_id
   where s.organization_id = 'fba00000-0000-0000-0000-0000000000a1'
     and s.ano = 2025 and s.ciclo = 1;
-  if v_n <> 4 then
-    raise exception '[FAIL] esperadas 4 responsabilidades (encontrado %)', v_n;
+  if v_n <> 3 then
+    raise exception '[FAIL] esperadas 3 responsabilidades (encontrado %)', v_n;
   end if;
 
   select count(*) into v_n
@@ -291,7 +344,7 @@ begin
   if v_n <> 0 then
     raise exception '[FAIL] responsavel original deveria ser o titular C_GER (nao o substituto)';
   end if;
-  raise notice '[PASS] 4 responsabilidades originais; raiz sem responsabilidade; titular congelado (nao substituto)';
+  raise notice '[PASS] 3 responsabilidades originais; raiz sem responsabilidade; titular congelado (nao substituto)';
 end $$;
 
 -- ============================================================================
@@ -310,15 +363,14 @@ begin
     into v_n, v_resp, v_flag
   from public.resolver_responsavel_avaliacao_vigente(
     'fba00000-0000-0000-0000-0000000000a1', 2025, 1, '2025-03-01T00:00:00Z');
-  if v_n <> 4 then
-    raise exception '[FAIL] vigente deveria retornar 4 responsabilidades (encontrado %)', v_n;
+  if v_n <> 3 then
+    raise exception '[FAIL] vigente deveria retornar 3 responsabilidades (encontrado %)', v_n;
   end if;
   if v_resp is distinct from
      array['fbb00000-0000-0000-0000-0000000000c3',
            'fbb00000-0000-0000-0000-0000000000c3',
-           'fbb00000-0000-0000-0000-0000000000c3',
            'fbb00000-0000-0000-0000-0000000000c3']::uuid[]
-     or v_flag is distinct from array[true, true, true, true] then
+     or v_flag is distinct from array[true, true, true] then
     raise exception '[FAIL] vigente em 2025-03-01 deveria ser o substituto C_SUB';
   end if;
   raise notice '[PASS] vigente em 2025-03-01 = substituto avaliativo (overlay por data)';
@@ -339,9 +391,8 @@ begin
   if v_resp is distinct from
      array['fbb00000-0000-0000-0000-0000000000c1',
            'fbb00000-0000-0000-0000-0000000000c1',
-           'fbb00000-0000-0000-0000-0000000000c1',
            'fbb00000-0000-0000-0000-0000000000c1']::uuid[]
-     or v_flag is distinct from array[false, false, false, false] then
+     or v_flag is distinct from array[false, false, false] then
     raise exception '[FAIL] vigente em 2025-06-01 deveria voltar ao titular C_GER';
   end if;
   raise notice '[PASS] vigente em 2025-06-01 = titular (substituto nao vira gestor permanente)';
@@ -383,14 +434,14 @@ begin
     'Mudanca definitiva de gestor',
     'fbf00000-0000-0000-0000-000000000001'
   );
-  raise notice '[PASS] sucessao registrada pela RPC (4 responsabilidades abertas)';
+  raise notice '[PASS] sucessao registrada pela RPC (3 responsabilidades abertas)';
 end $$;
 
 do $$
 declare
   v_n int;
 begin
-  -- 4 eventos de sucessão com previous=C_GER, new=C_GER2, motivo e autor.
+  -- 3 eventos de sucessão com previous=C_GER, new=C_GER2, motivo e autor.
   select count(*) into v_n
   from public.evaluation_succession_events
   where organization_id = 'fba00000-0000-0000-0000-0000000000a1'
@@ -399,30 +450,30 @@ begin
     and succession_date = '2025-07-01T00:00:00Z'
     and motive = 'Mudanca definitiva de gestor'
     and author_user_profile_id = 'fbf00000-0000-0000-0000-000000000001';
-  if v_n <> 4 then
-    raise exception '[FAIL] esperados 4 eventos de sucessao (encontrado %)', v_n;
+  if v_n <> 3 then
+    raise exception '[FAIL] esperados 3 eventos de sucessao (encontrado %)', v_n;
   end if;
 
-  -- Responsável original preservado: 4 linhas fechadas com C_GER.
+  -- Responsável original preservado: 3 linhas fechadas com C_GER.
   select count(*) into v_n
   from public.cycle_evaluation_responsibilities
   where organization_id = 'fba00000-0000-0000-0000-0000000000a1'
     and responsible_collaborator_id = 'fbb00000-0000-0000-0000-0000000000c1'
     and valid_to is not null;
-  if v_n <> 4 then
-    raise exception '[FAIL] responsavel original (C_GER) deveria ser preservado nas 4 linhas fechadas';
+  if v_n <> 3 then
+    raise exception '[FAIL] responsavel original (C_GER) deveria ser preservado nas 3 linhas fechadas';
   end if;
 
-  -- 4 novas responsabilidades abertas com C_GER2.
+  -- 3 novas responsabilidades abertas com C_GER2.
   select count(*) into v_n
   from public.cycle_evaluation_responsibilities
   where organization_id = 'fba00000-0000-0000-0000-0000000000a1'
     and responsible_collaborator_id = 'fbb00000-0000-0000-0000-0000000000c2'
     and valid_to is null;
-  if v_n <> 4 then
-    raise exception '[FAIL] esperadas 4 responsabilidades abertas com C_GER2';
+  if v_n <> 3 then
+    raise exception '[FAIL] esperadas 3 responsabilidades abertas com C_GER2';
   end if;
-  raise notice '[PASS] 4 eventos com original C_GER -> novo C_GER2; original preservado; novas abertas';
+  raise notice '[PASS] 3 eventos com original C_GER -> novo C_GER2; original preservado; novas abertas';
 end $$;
 
 do $$
