@@ -7,6 +7,10 @@
 - **Uma branch por atividade** (Issue), com prefixo por tipo conforme o
   histórico do repositório: `docs/`, `feat/`, `fix/`, `chore/`, `refactor/`,
   `security/`, `ci/`.
+- **Worktree da atividade fora do checkout principal** — nunca dentro de
+  `node_modules`, `.temp`, build/cache, de outra worktree ou de seus
+  descendentes; raiz configurável por ambiente, **sem** caminho local como
+  requisito portátil (`.ai/workflow.md` §8).
 - **Desenho e implementação separados**: documento de desenho em branch `docs/…`
   (sem código funcional); código em branch própria posterior, somente com
   contrato fechado.
@@ -71,6 +75,9 @@ credenciais/`git config` para contornar. Detalhes: `.ai/workflow.md` §7.3.
 ## 4. Checklist de entrega
 
 - [ ] Branch correta da atividade; diff contém só arquivos previstos.
+- [ ] **DEV-05**: worktree da atividade **fora** do checkout principal,
+      `node_modules`, `.temp` e de outra worktree (`.ai/workflow.md` §8); nota de
+      entrega publicada (`.ai/workflow.md` §9).
 - [ ] `git diff --check` limpo.
 - [ ] `npm test`, `npm run build`, `npm run lint` verdes (ou limitação registrada).
 - [ ] Commit objetivo com mensagem no padrão do histórico.

@@ -123,7 +123,9 @@ jobs:
     needs: scope
     if: always() && (needs.scope.result != 'success' || needs.scope.outputs.docs_only != 'true')
     runs-on: ubuntu-latest
-    # Cenarios/validadores SQL: F4-08, F5-04, F5-08 P6, F5-09 P1 e regressao F5-06/F5-07.
+    # Cenarios/validadores SQL: F4-08, F5-04, F5-08 P6, F5-09 P1, regressao
+    # F5-06/F5-07, F6 #427 (cardinalidade + concorrencia) e os legados
+    # F3-05/F3-08/F4-02 integrados pela Issue #429.
     timeout-minutes: 40
     defaults:
       run:
@@ -729,3 +731,48 @@ jobs:
           docker exec -i supabase_db_feedback-control \
             psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
             < supabase/validacao/59-validar-f6-427-concorrencia.sql
+
+      # ----------------------------------------------------------------------
+      # F6 / #429: cobertura CI dos validadores legados F3-05/F3-08/F4-02.
+      # Os tres validadores foram revisados (asserts estruturais stale trocados
+      # por PRESENCA de tabelas/colunas/funcoes esperadas e provas RLS aceitando
+      # negacao por ausencia de GRANT ou por RLS — sem relaxar prova material) e
+      # passam a integrar a certificacao corrente. Rodam sequencialmente no
+      # mesmo banco efemero do runner, ja migrado por `db reset`;
+      # `-v ON_ERROR_STOP=1` propaga qualquer falha SQL para o CI.
+      # ----------------------------------------------------------------------
+      - name: Seed F3-05 scenario (occupations temporais)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/01-cenario-f3-05.sql
+
+      - name: Run F3-05 validation (occupations; exclusoes por posicao e por colaborador)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/02-validar-f3-05.sql
+
+      - name: Seed F3-08 scenario (colegiado e snapshots)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/01-cenario-f3-08.sql
+
+      - name: Run F3-08 validation (snapshot imutavel do colegiado)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/02-validar-f3-08.sql
+
+      - name: Seed F4-02 scenario (escopos de autorizacao)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/01-cenario-f4-02.sql
+
+      - name: Run F4-02 validation (resolvers/escopos com origem unica de ocupacao)
+        run: |
+          docker exec -i supabase_db_feedback-control \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < supabase/validacao/02-validar-f4-02.sql

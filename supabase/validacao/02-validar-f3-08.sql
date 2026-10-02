@@ -31,37 +31,44 @@
 -- 1) Estrutura: tabelas esperadas, constraints, funções e RLS
 -- ============================================================================
 
+-- F6 / #429: com as fases seguintes entregues, o inventário exato de tabelas
+-- deixou de valer (o inventário corrente é guardado por `02-validar-f4-08.sql`).
+-- A prova passa a exigir a PRESENÇA das 19 tabelas esperadas da F3-08 —
+-- reprova remoção/renomeação sem transformar evolução legítima em falha.
 do $$
+declare
+  v_tabela text;
+  v_tabelas text[] := array[
+    'collaborator_identifiers',
+    'collaborator_status_periods',
+    'collaborators',
+    'collegiate_configuration_members',
+    'collegiate_configurations',
+    'collegiate_cycle_snapshot_members',
+    'collegiate_cycle_snapshot_positions',
+    'collegiate_cycle_snapshots',
+    'job_roles',
+    'occupations',
+    'organizational_positions',
+    'organizational_unit_parent_periods',
+    'organizational_units',
+    'organizations',
+    'position_reporting_lines',
+    'seniority_levels',
+    'temporary_responsibilities',
+    'user_organization_memberships',
+    'user_profiles'
+  ];
 begin
-  if exists (
-    select 1
-    from pg_tables t
-    where t.schemaname = 'public'
-      and t.tablename not in (
-        'collaborator_identifiers',
-        'collaborator_status_periods',
-        'collaborators',
-        'collegiate_configuration_members',
-        'collegiate_configurations',
-        'collegiate_cycle_snapshot_members',
-        'collegiate_cycle_snapshot_positions',
-        'collegiate_cycle_snapshots',
-        'job_roles',
-        'occupations',
-        'organizational_positions',
-        'organizational_unit_parent_periods',
-        'organizational_units',
-        'organizations',
-        'position_reporting_lines',
-        'seniority_levels',
-        'temporary_responsibilities',
-        'user_organization_memberships',
-        'user_profiles'
-      )
-  ) then
-    raise exception '[FAIL] tabela inesperada no schema public (F3-08 cria apenas as 5 tabelas de colegiado/snapshot)';
-  end if;
-  raise notice '[PASS] schema public contém as 19 tabelas esperadas (F2 + F3-01..07 + F3-08)';
+  foreach v_tabela in array v_tabelas loop
+    if not exists (
+      select 1 from pg_tables t
+      where t.schemaname = 'public' and t.tablename = v_tabela
+    ) then
+      raise exception '[FAIL] tabela esperada da F3-08 ausente no schema public: %', v_tabela;
+    end if;
+  end loop;
+  raise notice '[PASS] as 19 tabelas esperadas da F3-08 estao presentes (F2 + F3-01..07 + F3-08)';
 end $$;
 
 do $$
@@ -145,14 +152,30 @@ begin
   if v_n <> 5 then
     raise exception '[FAIL] RLS nao habilitado em todas as tabelas F3-08';
   end if;
+  -- F6 / #429: "zero policies" deixou de valer quando a F4-08 entregou leitura
+  -- own-tenant. A invariante que permanece: NENHUMA policy de escrita e as
+  -- policies esperadas de leitura own-tenant presentes; a negação de leitura por
+  -- `authenticated` continua provada na seção 8.
   if exists (
     select 1 from pg_policies p
     where p.schemaname = 'public'
       and p.tablename like 'collegiate_%'
+      and p.cmd <> 'SELECT'
   ) then
-    raise exception '[FAIL] existe policy nas tabelas de colegiado/snapshot';
+    raise exception '[FAIL] policy de ESCRITA em tabela de colegiado/snapshot (deny-by-default violado)';
   end if;
-  raise notice '[PASS] RLS habilitado nas 5 tabelas F3-08, zero policies (deny-by-default)';
+  select count(*) into v_n
+  from pg_policies p
+  where p.schemaname = 'public'
+    and p.policyname in (
+      'collegiate_cycle_snapshots_select_same_tenant',
+      'collegiate_cycle_snapshot_positions_select_same_tenant',
+      'collegiate_cycle_snapshot_members_select_same_tenant'
+    );
+  if v_n <> 3 then
+    raise exception '[FAIL] policies de leitura own-tenant esperadas ausentes (esperado 3, encontrado %)', v_n;
+  end if;
+  raise notice '[PASS] RLS habilitado nas 5 tabelas F3-08; apenas as policies de leitura own-tenant esperadas';
 end $$;
 
 do $$
@@ -853,21 +876,35 @@ set role authenticated;
 
 do $$
 declare
-  v_n int;
+  v_n int := 0;
 begin
-  select count(*) into v_n from public.collegiate_configurations;
+  -- F6 / #429: a negação pode vir da AUSÊNCIA de GRANT (privilégio) ou de RLS
+  -- own-tenant filtrando as linhas (0). Ambos são fail-closed.
+  begin
+    select count(*) into v_n from public.collegiate_configurations;
+  exception when insufficient_privilege then
+    v_n := 0;
+  end;
   if v_n <> 0 then
     raise exception '[FAIL] authenticated enxergou collegiate_configurations';
   end if;
-  select count(*) into v_n from public.collegiate_cycle_snapshots;
+  begin
+    select count(*) into v_n from public.collegiate_cycle_snapshots;
+  exception when insufficient_privilege then
+    v_n := 0;
+  end;
   if v_n <> 0 then
     raise exception '[FAIL] authenticated enxergou collegiate_cycle_snapshots';
   end if;
-  select count(*) into v_n from public.collegiate_cycle_snapshot_members;
+  begin
+    select count(*) into v_n from public.collegiate_cycle_snapshot_members;
+  exception when insufficient_privilege then
+    v_n := 0;
+  end;
   if v_n <> 0 then
     raise exception '[FAIL] authenticated enxergou collegiate_cycle_snapshot_members';
   end if;
-  raise notice '[PASS] RLS: authenticated nao le tabelas de colegiado/snapshot';
+  raise notice '[PASS] RLS/ACL: authenticated nao le tabelas de colegiado/snapshot (negado por privilegio ou zero linhas)';
 end $$;
 
 do $$
@@ -889,26 +926,36 @@ end $$;
 
 do $$
 declare
-  v_n int;
+  v_n int := 0;
 begin
-  update public.collegiate_cycle_snapshots set reference_date = reference_date;
-  get diagnostics v_n = row_count;
+  -- F6 / #429: a negação de escrita pode vir da AUSÊNCIA de GRANT (privilégio)
+  -- ou de RLS (0 linhas) — ambas fail-closed.
+  begin
+    update public.collegiate_cycle_snapshots set reference_date = reference_date;
+    get diagnostics v_n = row_count;
+  exception when insufficient_privilege then
+    v_n := 0;
+  end;
   if v_n <> 0 then
     raise exception '[FAIL] RLS permitiu UPDATE de authenticated em snapshots (%)', v_n;
   end if;
-  raise notice '[PASS] RLS: UPDATE de authenticated em snapshots afeta zero linhas';
+  raise notice '[PASS] RLS/ACL: UPDATE de authenticated em snapshots nao afeta linhas (negado ou zero linhas)';
 end $$;
 
 do $$
 declare
-  v_n int;
+  v_n int := 0;
 begin
-  delete from public.collegiate_configuration_members;
-  get diagnostics v_n = row_count;
+  begin
+    delete from public.collegiate_configuration_members;
+    get diagnostics v_n = row_count;
+  exception when insufficient_privilege then
+    v_n := 0;
+  end;
   if v_n <> 0 then
     raise exception '[FAIL] RLS permitiu DELETE de authenticated em members (%)', v_n;
   end if;
-  raise notice '[PASS] RLS: DELETE de authenticated em members afeta zero linhas';
+  raise notice '[PASS] RLS/ACL: DELETE de authenticated em members nao afeta linhas (negado ou zero linhas)';
 end $$;
 
 reset role;
@@ -917,26 +964,47 @@ reset role;
 -- 9) F3-01..F3-07 permanecem intactas
 -- ============================================================================
 
+-- F6 / #429: a contagem FIXA dos resolvers (7) deixou de ser expansível quando as
+-- fases seguintes (F3-09 etc.) acrescentaram resolvers legítimos. A prova passa a
+-- exigir a PRESENÇA das funções F3-07 esperadas — reprova remoção/renomeação sem
+-- transformar adição legítima em falha. As policies de identidade/sessão da F2
+-- passam ao mesmo padrão (presença das 3 esperadas), como em 02-validar-f4-02.sql.
 do $$
 declare
+  v_fn text;
+  v_fns text[] := array[
+    'organizacao_resolver_cadeia',
+    'organizacao_resolver_descendentes',
+    'organizacao_resolver_escopo_posicoes',
+    'organizacao_resolver_escopo_unidades',
+    'organizacao_resolver_gestor_direto',
+    'organizacao_resolver_responsavel_posicao',
+    'organizacao_resolver_subordinados_diretos'
+  ];
   v_n int;
 begin
-  select count(*) into v_n
-  from pg_proc p
-  join pg_namespace n on n.oid = p.pronamespace
-  where n.nspname = 'public'
-    and p.proname like 'organizacao_resolver_%';
-  if v_n <> 7 then
-    raise exception '[FAIL] funcoes de resolucao (F3-07) deveriam permanecer';
-  end if;
+  foreach v_fn in array v_fns loop
+    if not exists (
+      select 1 from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname = v_fn
+    ) then
+      raise exception '[FAIL] funcao de resolucao F3-07 ausente: %', v_fn;
+    end if;
+  end loop;
 
   select count(*) into v_n
   from pg_policies p
-  where p.schemaname = 'public';
+  where p.schemaname = 'public'
+    and p.policyname in (
+      'organizations_select_via_membership',
+      'user_profiles_select_own',
+      'user_organization_memberships_select_own'
+    );
   if v_n <> 3 then
-    raise exception '[FAIL] quantidade de policies alterada (esperado 3, encontrado %)', v_n;
+    raise exception '[FAIL] policies de identidade/sessao da F2 ausentes (esperado 3, encontrado %)', v_n;
   end if;
-  raise notice '[PASS] F3-07 (resolucao) e policies existentes intactas';
+  raise notice '[PASS] funcoes F3-07 esperadas presentes e policies de identidade/sessao da F2 intactas';
 end $$;
 
 -- ============================================================================

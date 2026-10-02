@@ -20,48 +20,66 @@
 -- ============================================================================
 -- 1) Estrutura: tabelas esperadas e ausência de entidades antecipadas
 -- ============================================================================
+-- F6 / #429: o inventário EXATO de tabelas era válido quando a F3-05 era a última
+-- fase entregue. Com as fases seguintes em `main`, `public` tem dezenas de
+-- tabelas legítimas e o inventário corrente é guardado por `02-validar-f4-08.sql`.
+-- A prova passa a exigir a PRESENÇA das tabelas esperadas: continua reprovando
+-- remoção/renomeação, sem transformar a evolução legítima do schema em falha
+-- (asserção estrutural stale atualizada — nenhuma prova material foi relaxada).
 
 do $$
+declare
+  v_tabela text;
+  v_tabelas text[] := array[
+    'collaborator_identifiers',
+    'collaborator_status_periods',
+    'collaborators',
+    'job_roles',
+    'occupations',
+    'organizational_positions',
+    'organizational_unit_parent_periods',
+    'organizational_units',
+    'organizations',
+    'position_reporting_lines',
+    'seniority_levels',
+    'user_organization_memberships',
+    'user_profiles'
+  ];
 begin
-  if exists (
-    select 1
-    from pg_tables t
-    where t.schemaname = 'public'
-      and t.tablename not in (
-        'collaborator_identifiers',
-        'collaborator_status_periods',
-        'collaborators',
-        'job_roles',
-        'occupations',
-        'organizational_positions',
-        'organizational_unit_parent_periods',
-        'organizational_units',
-        'organizations',
-        'position_reporting_lines',
-        'seniority_levels',
-        'user_organization_memberships',
-        'user_profiles'
-      )
-  ) then
-    raise exception '[FAIL] tabela inesperada no schema public (entidade fora do escopo F3-05)';
-  end if;
-  raise notice '[PASS] schema public contém somente as tabelas esperadas (F2 + F3-01/02/03/04 + F3-05)';
+  foreach v_tabela in array v_tabelas loop
+    if not exists (
+      select 1
+      from pg_tables t
+      where t.schemaname = 'public'
+        and t.tablename = v_tabela
+    ) then
+      raise exception '[FAIL] tabela esperada da F3-05 ausente no schema public: %', v_tabela;
+    end if;
+  end loop;
+  raise notice '[PASS] tabelas esperadas da F3-05 presentes (F2 + F3-01/02/03/04 + F3-05)';
 end $$;
 
+-- F6 / #429: das entidades "antecipadas" originais, `temporary_responsibilities`
+-- (F3-06) e `evaluations`/`collegiate_*` (F3-08/F5) passaram a existir
+-- legitimamente nas fases seguintes. Os nomes especulativos/legados continuam
+-- PROIBIDOS (guardam contra tabela homônima/duplicada) e são verificados como
+-- negação — preservando o que segue verificável.
 do $$
+declare
+  v_intrusas text[];
 begin
-  if exists (
-    select 1
-    from pg_tables t
-    where t.schemaname = 'public'
-      and t.tablename in (
-        'temporary_responsibilities', 'substitutions', 'collegiates',
-        'evaluation_panels', 'evaluations', 'snapshots', 'dotted_lines'
-      )
-  ) then
-    raise exception '[FAIL] tabela de substituicao/colegiado/avaliacao/snapshot antecipada';
+  select array_agg(t.tablename order by t.tablename)
+    into v_intrusas
+  from pg_tables t
+  where t.schemaname = 'public'
+    and t.tablename in (
+      'substitutions', 'collegiates', 'evaluation_panels',
+      'snapshots', 'dotted_lines'
+    );
+  if v_intrusas is not null then
+    raise exception '[FAIL] tabela especulativa/homonima presente no schema public: %', v_intrusas;
   end if;
-  raise notice '[PASS] nenhuma tabela de substituicao/colegiado/avaliacao/snapshot antecipada';
+  raise notice '[PASS] nenhuma tabela especulativa/homonima (substitutions/collegiates/evaluation_panels/snapshots/dotted_lines)';
 end $$;
 
 -- ----------------------------------------------------------------------------
@@ -918,13 +936,21 @@ set role authenticated;
 
 do $$
 declare
-  v_n int;
+  v_n int := 0;
 begin
-  select count(*) into v_n from public.occupations;
+  -- F6 / #429: em `main` a negação de leitura de `occupations` a `authenticated`
+  -- vem da AUSÊNCIA de GRANT (deny-by-default por privilégio), não mais de uma
+  -- policy que filtra linhas. Ambos são fail-closed: aceita-se a negação por
+  -- privilégio OU zero linhas (RLS).
+  begin
+    select count(*) into v_n from public.occupations;
+  exception when insufficient_privilege then
+    v_n := 0;
+  end;
   if v_n <> 0 then
     raise exception '[FAIL] authenticated enxergou linhas de occupations';
   end if;
-  raise notice '[PASS] RLS: authenticated nao le linhas de occupations';
+  raise notice '[PASS] RLS/ACL: authenticated nao le linhas de occupations (negado por privilegio ou zero linhas)';
 end $$;
 
 do $$
@@ -947,26 +973,36 @@ end $$;
 
 do $$
 declare
-  v_n int;
+  v_n int := 0;
 begin
-  update public.occupations set version = version + 1;
-  get diagnostics v_n = row_count;
+  -- F6 / #429: negação por AUSÊNCIA de GRANT (privilégio) ou por RLS (0 linhas).
+  begin
+    update public.occupations set version = version + 1;
+    get diagnostics v_n = row_count;
+  exception when insufficient_privilege then
+    v_n := 0;
+  end;
   if v_n <> 0 then
     raise exception '[FAIL] RLS permitiu UPDATE de authenticated em occupations (%)', v_n;
   end if;
-  raise notice '[PASS] RLS: UPDATE de authenticated em occupations afeta zero linhas';
+  raise notice '[PASS] RLS/ACL: UPDATE de authenticated em occupations nao afeta linhas (negado ou zero linhas)';
 end $$;
 
 do $$
 declare
-  v_n int;
+  v_n int := 0;
 begin
-  delete from public.occupations;
-  get diagnostics v_n = row_count;
+  -- F6 / #429: negação por AUSÊNCIA de GRANT (privilégio) ou por RLS (0 linhas).
+  begin
+    delete from public.occupations;
+    get diagnostics v_n = row_count;
+  exception when insufficient_privilege then
+    v_n := 0;
+  end;
   if v_n <> 0 then
     raise exception '[FAIL] RLS permitiu DELETE de authenticated em occupations (%)', v_n;
   end if;
-  raise notice '[PASS] RLS: DELETE de authenticated em occupations afeta zero linhas';
+  raise notice '[PASS] RLS/ACL: DELETE de authenticated em occupations nao afeta linhas (negado ou zero linhas)';
 end $$;
 
 reset role;
@@ -975,44 +1011,47 @@ reset role;
 -- 6) F3-01/F3-02/F3-03/F3-04 permanecem intactas
 -- ============================================================================
 
+-- F6 / #429: as colunas esperadas da era F3-01/F3-03/F3-04 precisam de PRESENÇA
+-- (reprova remoção/renomeação); colunas acrescentadas por fases posteriores são
+-- legítimas e o inventário corrente é guardado por `02-validar-f4-08.sql`.
 do $$
 declare
-  v_cols text[];
+  v_faltando text[];
 begin
-  select array_agg(column_name order by column_name)
-    into v_cols
-  from information_schema.columns
-  where table_schema = 'public' and table_name = 'collaborators';
-  if v_cols is distinct from
-     array['created_at', 'id', 'organization_id', 'updated_at', 'version']::text[]
-  then
-    raise exception '[FAIL] collaborators (F3-01) foi alterada indevidamente';
+  select array_agg(e.c order by e.c) into v_faltando
+  from unnest(array['created_at','id','organization_id','updated_at','version']) as e(c)
+  where not exists (
+    select 1 from information_schema.columns ic
+    where ic.table_schema = 'public' and ic.table_name = 'collaborators'
+      and ic.column_name = e.c);
+  if v_faltando is not null then
+    raise exception '[FAIL] collaborators (F3-01) perdeu colunas esperadas: %', v_faltando;
   end if;
 
-  select array_agg(column_name order by column_name)
-    into v_cols
-  from information_schema.columns
-  where table_schema = 'public' and table_name = 'organizational_positions';
-  if v_cols is distinct from
-     array['created_at', 'id', 'job_role_id', 'organization_id',
-           'seniority_level_id', 'unit_id', 'updated_at', 'valid_from',
-           'valid_to', 'version']::text[]
-  then
-    raise exception '[FAIL] organizational_positions (F3-03) foi alterada indevidamente';
+  select array_agg(e.c order by e.c) into v_faltando
+  from unnest(array['created_at','id','job_role_id','organization_id',
+                    'seniority_level_id','unit_id','updated_at','valid_from',
+                    'valid_to','version']) as e(c)
+  where not exists (
+    select 1 from information_schema.columns ic
+    where ic.table_schema = 'public' and ic.table_name = 'organizational_positions'
+      and ic.column_name = e.c);
+  if v_faltando is not null then
+    raise exception '[FAIL] organizational_positions (F3-03) perdeu colunas esperadas: %', v_faltando;
   end if;
 
-  select array_agg(column_name order by column_name)
-    into v_cols
-  from information_schema.columns
-  where table_schema = 'public' and table_name = 'position_reporting_lines';
-  if v_cols is distinct from
-     array['created_at', 'id', 'manager_position_id', 'organization_id',
-           'reason', 'subordinate_position_id', 'updated_at', 'valid_from',
-           'valid_to', 'version']::text[]
-  then
-    raise exception '[FAIL] position_reporting_lines (F3-04) foi alterada indevidamente';
+  select array_agg(e.c order by e.c) into v_faltando
+  from unnest(array['created_at','id','manager_position_id','organization_id',
+                    'reason','subordinate_position_id','updated_at','valid_from',
+                    'valid_to','version']) as e(c)
+  where not exists (
+    select 1 from information_schema.columns ic
+    where ic.table_schema = 'public' and ic.table_name = 'position_reporting_lines'
+      and ic.column_name = e.c);
+  if v_faltando is not null then
+    raise exception '[FAIL] position_reporting_lines (F3-04) perdeu colunas esperadas: %', v_faltando;
   end if;
-  raise notice '[PASS] F3-01/F3-02/F3-03/F3-04 intactas (colunas preservadas)';
+  raise notice '[PASS] F3-01/F3-02/F3-03/F3-04 intactas (colunas esperadas presentes)';
 end $$;
 
 do $$
@@ -1035,17 +1074,25 @@ begin
   raise notice '[PASS] constraints temporais/uniques de F3-01/F3-03/F3-04 presentes';
 end $$;
 
+-- F6 / #429: o total de policies cresceu legitimamente com F4-08/F5/F6; a prova
+-- passa a exigir a PRESENÇA das 3 policies de identidade/sessão da F2 (mesmo
+-- padrão de 02-validar-f4-02.sql), reprovando remoção sem reprovar evolução.
 do $$
 declare
   v_n int;
 begin
   select count(*) into v_n
   from pg_policies p
-  where p.schemaname = 'public';
+  where p.schemaname = 'public'
+    and p.policyname in (
+      'organizations_select_via_membership',
+      'user_profiles_select_own',
+      'user_organization_memberships_select_own'
+    );
   if v_n <> 3 then
-    raise exception '[FAIL] quantidade de policies alterada (esperado 3, encontrado %)', v_n;
+    raise exception '[FAIL] policies de identidade/sessao da F2 ausentes (esperado 3, encontrado %)', v_n;
   end if;
-  raise notice '[PASS] policies existentes inalteradas (3 policies de identidade/sessao da F2)';
+  raise notice '[PASS] policies de identidade/sessao da F2 inalteradas (3 presentes)';
 end $$;
 
 -- ============================================================================

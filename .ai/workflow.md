@@ -8,20 +8,25 @@
 ```
 Issue
   → branch
-  → desenho (Flash) e revisão/fechamento das decisões (GPT) — quando a atividade exigir contrato
-  → desenho entra em main
-  → implementação (Pro) e validação local
+  → desenho e revisão/fechamento das decisões — quando a atividade exigir contrato
+  → desenho persistido e FECHADO (na própria Issue ou em main — §2, item 4)
+  → implementação ISOLADA (worktree/branch própria — §8) e validação local
   → commit + push
   → PR (agente, quando houver mecanismo autorizado; senão o orquestrador — §7)
-  → CI no SHA do PR
   → auditoria (GPT; Codex quando aplicável)
+  → correções (novo SHA → novo CI)
+  → certificação/gates no SHA auditado
+  → auditoria final quando aplicável
+  → CI no SHA auditado
   → squash merge (somente com solicitação explícita do responsável)
   → atualização da main
 ```
 
 Regra mestre: **nenhuma implementação começa com decisão arquitetural aberta**.
-Um documento de desenho só autoriza implementação quando a revisão fechou todas
-as questões (`Q#`) como decisões (`D#`) e o documento foi para `main`.
+A atividade só autoriza implementação quando a revisão fechou todas as questões
+(`Q#`) como decisões (`D#`) e existe uma versão **FECHADA** do contrato — na
+própria Issue ou em `main` (**§2**, item 4). Toda entrega de agente é acompanhada
+da **nota de entrega** (**§9**).
 
 ## 2. Fases de uma atividade típica
 
@@ -35,7 +40,13 @@ as questões (`Q#`) como decisões (`D#`) e o documento foi para `main`.
    respondida e vira decisão fechada (`D#`) ou é absorvida por decisão existente,
    mantendo rastreabilidade. Documento passa ao estado **FECHADO — pronto para
    implementação**.
-4. **Merge do desenho em `main`** — o contrato da atividade fica disponível.
+4. **Persistência do contrato** — o desenho FECHADO fica disponível para a
+   implementação. Duas formas válidas: **(a)** versão final persistida em
+   comentário na **própria Issue**, marcada `DESENHO FECHADO PARA
+   IMPLEMENTAÇÃO`; **(b)** documento em `docs/` integrado a `main` por PR
+   documental. A forma (a) **não** exige PR documental nem merge prévio quando a
+   Issue já persiste a versão final. Nos dois casos o contrato é normativo e não
+   se reabre durante a implementação (**§4**).
 5. **Implementação (Pro)** — branch própria de código, fora da branch de
    desenho; segue exclusivamente o contrato fechado; inclui testes e validadores
    proporcionais ao risco; executa as validações locais planejadas.
@@ -296,3 +307,50 @@ registrando a limitação na entrega e em `.ai/git-rules.md` §3 — que cobre t
 | DEV-02 | Issue #177 | **§6** e `AGENTS.md` §4 |
 | DEV-03 | regra operacional vigente (gate de fechamento e uso de gates focados) | referenciada em contratos, matrizes de validação e corpos de Issue; **sem Issue e sem documento normativo próprio até esta atividade** |
 | DEV-04 | Issue #234 | **§7** e `AGENTS.md` §6 |
+| DEV-05 | Issue #429 | **§8** (worktrees), **§9** (nota de entrega) e `.ai/git-rules.md` §1/§4 |
+
+## 8. Worktrees de agentes (regra portátil — DEV-05)
+
+> Regra derivada da Issue #429. Vale para qualquer agente/modo e para qualquer
+> host. É **portátil**: não depende de caminho local específico.
+
+- **Nunca** criar worktree dentro do **checkout principal**, de `node_modules`,
+  de `.temp`, de diretórios de build/cache (`dist`, `.vite`, …), de **outra
+  worktree** ou de qualquer descendente desses caminhos. Já houve recursão de
+  worktrees e `ENOSPC` por esse motivo (Issue #429).
+- A **raiz** das worktrees é configurável por ambiente e deve ficar **fora** do
+  checkout principal (exemplos locais: `D:\Projetos\VirtusWorktrees`,
+  `~/virtus-worktrees`). **Nenhum caminho local é requisito portátil** do
+  produto, do repositório ou do CI.
+- Uma **branch por atividade**; a worktree de implementação usa a branch da
+  atividade com base em `origin/main` atual (**§1**).
+- Worktrees temporárias são **descartadas** ao final da atividade, após
+  commit/push/PR; nenhuma worktree é referenciada por arquivo versionado.
+
+**Verificação objetiva** (na raiz do checkout principal):
+
+```bash
+git worktree list --porcelain | awk '/^worktree /{print $2}'
+```
+
+Critério de reprovação: qualquer caminho listado que esteja **dentro** de outra
+worktree listada, ou dentro de `node_modules`, `.temp` ou build/cache.
+
+## 9. Nota de entrega do agente (DEV-05)
+
+Toda entrega de agente (implementação, correção ou auditoria) termina com uma
+**nota curta** neste formato, publicada na Issue/PR correspondente:
+
+| Campo | Conteúdo |
+| --- | --- |
+| **Issue/objetivo** | `#<n>` e o objetivo em uma linha |
+| **Branch/SHA** | branch da atividade, SHA entregue e (quando houver) SHA auditado |
+| **Arquivos** | arquivos criados/alterados |
+| **Decisões/desvios** | decisões dentro do contrato e desvios declarados |
+| **Testes/gates** | comandos executados, resultado e limitações de ambiente |
+| **Auditoria** | quem auditou (ou "pendente") e veredito |
+| **Riscos** | riscos residuais e mitigações |
+| **Próximo responsável** | quem age a seguir (auditoria, orquestrador para abrir PR, merge) |
+
+Nenhum agente declara a própria entrega aprovada (**§2**, itens 8–10), e **§7.3**
+continua valendo para `push` e criação de PR.
