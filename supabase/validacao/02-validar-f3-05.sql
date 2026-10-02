@@ -958,10 +958,10 @@ do $$
 declare
   v_n int := 0;
 begin
-  -- F6 / #429: em `main` a negação de leitura de `occupations` a `authenticated`
-  -- vem da AUSÊNCIA de GRANT (deny-by-default por privilégio), não mais de uma
-  -- policy que filtra linhas. Ambos são fail-closed: aceita-se a negação por
-  -- privilégio OU zero linhas (RLS).
+  -- F6 / #429/#430: a negação de leitura de `occupations` a `authenticated` é
+  -- NEGACAO EFETIVA AO CLIENTE — pode vir da AUSÊNCIA de GRANT (ACL) ou de RLS
+  -- (0 linhas) — sem atribuir o resultado a um mecanismo específico; a estrutura
+  -- corrente está provada acima (ACL) e nas assertions da seção 1.
   begin
     select count(*) into v_n from public.occupations;
   exception when insufficient_privilege then
@@ -984,11 +984,11 @@ begin
       'f7c00000-0000-0000-0000-0000000000a4',
       'Teste RLS', '2026-01-01T00:00:00Z', null
     );
-    raise exception '[FAIL] RLS permitiu INSERT de authenticated em occupations';
+    raise exception '[FAIL] negacao efetiva ao cliente (ACL ou RLS) permitiu INSERT de authenticated em occupations';
   exception when insufficient_privilege then
     null;
   end;
-  raise notice '[PASS] RLS: INSERT de authenticated em occupations negado';
+  raise notice '[PASS] negacao efetiva ao cliente (ACL ou RLS): INSERT de authenticated em occupations negado';
 end $$;
 
 do $$
@@ -1003,7 +1003,7 @@ begin
     v_n := 0;
   end;
   if v_n <> 0 then
-    raise exception '[FAIL] RLS permitiu UPDATE de authenticated em occupations (%)', v_n;
+    raise exception '[FAIL] negacao efetiva ao cliente (ACL ou RLS) permitiu UPDATE de authenticated em occupations (%)', v_n;
   end if;
   raise notice '[PASS] negacao efetiva ao cliente (ACL ou RLS): UPDATE de authenticated em occupations nao afeta linhas';
 end $$;
@@ -1020,7 +1020,7 @@ begin
     v_n := 0;
   end;
   if v_n <> 0 then
-    raise exception '[FAIL] RLS permitiu DELETE de authenticated em occupations (%)', v_n;
+    raise exception '[FAIL] negacao efetiva ao cliente (ACL ou RLS) permitiu DELETE de authenticated em occupations (%)', v_n;
   end if;
   raise notice '[PASS] negacao efetiva ao cliente (ACL ou RLS): DELETE de authenticated em occupations nao afeta linhas';
 end $$;

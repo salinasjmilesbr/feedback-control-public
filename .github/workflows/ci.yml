@@ -735,8 +735,8 @@ jobs:
       # ----------------------------------------------------------------------
       # F6 / #429: cobertura CI dos validadores legados F3-05/F3-08/F4-02.
       # Os tres validadores foram revisados (asserts estruturais stale trocados
-      # por PRESENCA de tabelas/colunas/funcoes esperadas e provas RLS aceitando
-      # negacao por ausencia de GRANT ou por RLS — sem relaxar prova material) e
+      # por PRESENCA de tabelas/colunas/funcoes esperadas e provas de NEGACAO
+      # EFETIVA ao cliente (ACL ou RLS) — sem relaxar prova material) e
       # passam a integrar a certificacao corrente. Rodam sequencialmente no
       # mesmo banco efemero do runner, ja migrado por `db reset`;
       # `-v ON_ERROR_STOP=1` propaga qualquer falha SQL para o CI.

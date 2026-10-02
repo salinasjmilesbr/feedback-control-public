@@ -956,11 +956,11 @@ begin
       'fab00000-0000-0000-0000-0000000000c2',
       '2027-01-01T00:00:00Z', null
     );
-    raise exception '[FAIL] RLS permitiu INSERT de authenticated em collegiate_configurations';
+    raise exception '[FAIL] negacao efetiva ao cliente (ACL ou RLS) permitiu INSERT de authenticated em collegiate_configurations';
   exception when insufficient_privilege then
     null;
   end;
-  raise notice '[PASS] RLS: INSERT de authenticated negado em collegiate_configurations';
+  raise notice '[PASS] negacao efetiva ao cliente (ACL ou RLS): INSERT de authenticated negado em collegiate_configurations';
 end $$;
 
 do $$
@@ -976,9 +976,9 @@ begin
     v_n := 0;
   end;
   if v_n <> 0 then
-    raise exception '[FAIL] RLS permitiu UPDATE de authenticated em snapshots (%)', v_n;
+    raise exception '[FAIL] negacao efetiva ao cliente (ACL ou RLS) permitiu UPDATE de authenticated em snapshots (%)', v_n;
   end if;
-  raise notice '[PASS] RLS/ACL: UPDATE de authenticated em snapshots nao afeta linhas (negado ou zero linhas)';
+  raise notice '[PASS] negacao efetiva ao cliente (ACL ou RLS): UPDATE de authenticated em snapshots nao afeta linhas';
 end $$;
 
 do $$
@@ -992,9 +992,9 @@ begin
     v_n := 0;
   end;
   if v_n <> 0 then
-    raise exception '[FAIL] RLS permitiu DELETE de authenticated em members (%)', v_n;
+    raise exception '[FAIL] negacao efetiva ao cliente (ACL ou RLS) permitiu DELETE de authenticated em members (%)', v_n;
   end if;
-  raise notice '[PASS] RLS/ACL: DELETE de authenticated em members nao afeta linhas (negado ou zero linhas)';
+  raise notice '[PASS] negacao efetiva ao cliente (ACL ou RLS): DELETE de authenticated em members nao afeta linhas';
 end $$;
 
 reset role;
