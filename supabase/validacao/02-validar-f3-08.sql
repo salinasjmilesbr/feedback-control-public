@@ -138,6 +138,7 @@ end $$;
 do $$
 declare
   v_n int;
+  v_extras text;
 begin
   select count(*) into v_n
   from pg_class c
@@ -152,30 +153,44 @@ begin
   if v_n <> 5 then
     raise exception '[FAIL] RLS nao habilitado em todas as tabelas F3-08';
   end if;
-  -- F6 / #429: "zero policies" deixou de valer quando a F4-08 entregou leitura
-  -- own-tenant. A invariante que permanece: NENHUMA policy de escrita e as
-  -- policies esperadas de leitura own-tenant presentes; a negação de leitura por
-  -- `authenticated` continua provada na seção 8.
-  if exists (
-    select 1 from pg_policies p
-    where p.schemaname = 'public'
-      and p.tablename like 'collegiate_%'
-      and p.cmd <> 'SELECT'
-  ) then
-    raise exception '[FAIL] policy de ESCRITA em tabela de colegiado/snapshot (deny-by-default violado)';
-  end if;
-  select count(*) into v_n
+  -- F6 / #429 + #430: prova ESTRUTURAL completa e AUTOSSUFICIENTE das policies de
+  -- `collegiate_*` (não delega à guarda da F4-08). Para o conjunto inteiro de
+  -- tabelas `collegiate_%` o guard exige: (i) NENHUMA policy extra; (ii) as três
+  -- policies esperadas presentes com identidade (tabela + nome), COMANDO `SELECT`,
+  -- PAPEL `authenticated` e EXPRESSÃO own-tenant exata.
+  select coalesce(string_agg(p.tablename || '.' || p.policyname, ', '
+                             order by p.tablename, p.policyname), '')
+    into v_extras
   from pg_policies p
   where p.schemaname = 'public'
-    and p.policyname in (
-      'collegiate_cycle_snapshots_select_same_tenant',
-      'collegiate_cycle_snapshot_positions_select_same_tenant',
-      'collegiate_cycle_snapshot_members_select_same_tenant'
+    and p.tablename like 'collegiate_%'
+    and (p.tablename, p.policyname) not in (
+      ('collegiate_cycle_snapshots',          'collegiate_cycle_snapshots_select_same_tenant'),
+      ('collegiate_cycle_snapshot_positions', 'collegiate_cycle_snapshot_positions_select_same_tenant'),
+      ('collegiate_cycle_snapshot_members',   'collegiate_cycle_snapshot_members_select_same_tenant')
     );
-  if v_n <> 3 then
-    raise exception '[FAIL] policies de leitura own-tenant esperadas ausentes (esperado 3, encontrado %)', v_n;
+  if v_extras <> '' then
+    raise exception '[FAIL] policy EXTRA em tabela de colegiado/snapshot: %', v_extras;
   end if;
-  raise notice '[PASS] RLS habilitado nas 5 tabelas F3-08; apenas as policies de leitura own-tenant esperadas';
+
+  select count(*) into v_n
+  from (values
+    ('collegiate_cycle_snapshots',          'collegiate_cycle_snapshots_select_same_tenant'),
+    ('collegiate_cycle_snapshot_positions', 'collegiate_cycle_snapshot_positions_select_same_tenant'),
+    ('collegiate_cycle_snapshot_members',   'collegiate_cycle_snapshot_members_select_same_tenant')
+  ) as e(tabela, politica)
+  join pg_policies p
+    on p.schemaname = 'public'
+   and p.tablename = e.tabela
+   and p.policyname = e.politica
+   and p.cmd = 'SELECT'
+   and p.roles = array['authenticated']::name[]
+   and regexp_replace(lower(coalesce(p.qual, '')), '\s+', '', 'g')
+       = 'user_has_active_membership(organization_id)';
+  if v_n <> 3 then
+    raise exception '[FAIL] policies SELECT own-tenant de collegiate_* divergentes da identidade/tabela/comando/papel/expressao esperados (esperado 3 exatas, encontrado %)', v_n;
+  end if;
+  raise notice '[PASS] RLS habilitado nas 5 tabelas F3-08; exatamente as 3 policies SELECT own-tenant esperadas (identidade/tabela/comando/papel/expressao) e nenhuma extra';
 end $$;
 
 do $$
@@ -869,8 +884,32 @@ begin
 end $$;
 
 -- ============================================================================
--- 8) RLS deny-by-default em execução (como authenticated)
+-- 8) Negação efetiva ao cliente (ACL/RLS) em execução (como authenticated)
 -- ============================================================================
+-- A ESTRUTURA que produz a negação (GRANT ausente nas tabelas de configuração,
+-- GRANT + policy own-tenant nas 3 de snapshot) é provada acima e na seção 1; os
+-- blocos de runtime abaixo provam a NEGACAO EFETIVA ao cliente (ACL ou RLS), sem
+-- afirmar qual dos dois mecanismos a produziu isoladamente.
+
+do $$
+declare
+  v_n int;
+begin
+  select count(*) into v_n
+  from (values
+    ('collegiate_cycle_snapshots',          true),
+    ('collegiate_cycle_snapshot_positions', true),
+    ('collegiate_cycle_snapshot_members',   true),
+    ('collegiate_configurations',           false),
+    ('collegiate_configuration_members',    false)
+  ) as e(tabela, esperado)
+  where has_table_privilege('authenticated', ('public.' || e.tabela)::regclass, 'SELECT')
+        is distinct from e.esperado;
+  if v_n <> 0 then
+    raise exception '[FAIL] GRANT SELECT de authenticated divergente em collegiate_* (% tabelas; contrato: apenas as 3 de snapshot, com policy own-tenant)', v_n;
+  end if;
+  raise notice '[PASS] estrutura de grants: authenticated com SELECT somente nas 3 tabelas de snapshot (own-tenant)';
+end $$;
 
 set role authenticated;
 
@@ -904,7 +943,7 @@ begin
   if v_n <> 0 then
     raise exception '[FAIL] authenticated enxergou collegiate_cycle_snapshot_members';
   end if;
-  raise notice '[PASS] RLS/ACL: authenticated nao le tabelas de colegiado/snapshot (negado por privilegio ou zero linhas)';
+  raise notice '[PASS] negacao efetiva ao cliente (ACL ou RLS): authenticated nao le tabelas de colegiado/snapshot';
 end $$;
 
 do $$

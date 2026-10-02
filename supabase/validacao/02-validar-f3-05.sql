@@ -929,8 +929,28 @@ begin
 end $$;
 
 -- ============================================================================
--- 5) RLS deny-by-default em execução (como authenticated)
+-- 5) Negação efetiva ao cliente (ACL/RLS) em execução (como authenticated)
 -- ============================================================================
+-- ESTRUTURA corrente do deny em `occupations`: `authenticated` NÃO possui
+-- privilégio de tabela (`revoke all on all tables ... from anon, authenticated`
+-- em `20260908140000`, sem re-concessão) — por isso a negação de leitura vem da
+-- ACL. Os blocos de runtime abaixo provam a NEGACAO EFETIVA ao cliente (ACL ou
+-- RLS), sem afirmar qual mecanismo a produziu isoladamente; a estrutura é
+-- verificada aqui e nas assertions de constraints/policies da seção 1.
+
+do $$
+declare
+  v_n int;
+begin
+  select count(*) into v_n
+  from (values ('occupations', false)) as e(tabela, esperado)
+  where has_table_privilege('authenticated', ('public.' || e.tabela)::regclass, 'SELECT')
+        is distinct from e.esperado;
+  if v_n <> 0 then
+    raise exception '[FAIL] authenticated com privilegio de tabela em occupations (contrato de negacao alterado; exige policy own-tenant + atualizacao desta prova)';
+  end if;
+  raise notice '[PASS] estrutura de ACL: authenticated sem privilegio de tabela em occupations (deny corrente)';
+end $$;
 
 set role authenticated;
 
@@ -950,7 +970,7 @@ begin
   if v_n <> 0 then
     raise exception '[FAIL] authenticated enxergou linhas de occupations';
   end if;
-  raise notice '[PASS] RLS/ACL: authenticated nao le linhas de occupations (negado por privilegio ou zero linhas)';
+  raise notice '[PASS] negacao efetiva ao cliente (ACL ou RLS): authenticated nao le linhas de occupations';
 end $$;
 
 do $$
@@ -985,7 +1005,7 @@ begin
   if v_n <> 0 then
     raise exception '[FAIL] RLS permitiu UPDATE de authenticated em occupations (%)', v_n;
   end if;
-  raise notice '[PASS] RLS/ACL: UPDATE de authenticated em occupations nao afeta linhas (negado ou zero linhas)';
+  raise notice '[PASS] negacao efetiva ao cliente (ACL ou RLS): UPDATE de authenticated em occupations nao afeta linhas';
 end $$;
 
 do $$
@@ -1002,7 +1022,7 @@ begin
   if v_n <> 0 then
     raise exception '[FAIL] RLS permitiu DELETE de authenticated em occupations (%)', v_n;
   end if;
-  raise notice '[PASS] RLS/ACL: DELETE de authenticated em occupations nao afeta linhas (negado ou zero linhas)';
+  raise notice '[PASS] negacao efetiva ao cliente (ACL ou RLS): DELETE de authenticated em occupations nao afeta linhas';
 end $$;
 
 reset role;

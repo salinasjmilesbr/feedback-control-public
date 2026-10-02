@@ -9,16 +9,16 @@
 Issue
   → branch
   → desenho e revisão/fechamento das decisões — quando a atividade exigir contrato
-  → desenho persistido e FECHADO (na própria Issue ou em main — §2, item 4)
+  → desenho persistido e FECHADO (na própria Issue OU em main — §2, item 4)
   → implementação ISOLADA (worktree/branch própria — §8) e validação local
   → commit + push
-  → PR (agente, quando houver mecanismo autorizado; senão o orquestrador — §7)
-  → auditoria (GPT; Codex quando aplicável)
-  → correções (novo SHA → novo CI)
-  → certificação/gates no SHA auditado
-  → auditoria final quando aplicável
-  → CI no SHA auditado
-  → squash merge (somente com solicitação explícita do responsável)
+  → PR + CI ANTECIPADO (agente, quando houver mecanismo autorizado; senão o
+    orquestrador — §7)
+  → auditoria do SHA do PR (GPT; Codex quando aplicável)
+  → correções, se houver (novo SHA → novo CI)
+  → nova auditoria/certificação quando aplicável
+  → squash merge SOMENTE com CI verde no SHA efetivamente auditado e solicitação
+    explícita do responsável
   → atualização da main
 ```
 
@@ -53,20 +53,20 @@ da **nota de entrega** (**§9**).
 6. **Commit e push** — concluídas a implementação e as validações locais
    planejadas, **sem blocker**, o agente de implementação executa `commit + push`
    na branch da atividade (**§7.2**, regra 1).
-7. **PR** — aberto **imediatamente após o push**, com vínculo à Issue
-   (`Closes #<n>`): pelo próprio agente quando o ambiente possuir mecanismo
-   **autorizado**; caso contrário, pelo **orquestrador**, a quem o agente entrega
-   **branch, SHA, título e corpo** (**§7.2**, regras 2 a 4, e **§7.3**).
-8. **CI verde no SHA do PR** — `npm test`, `npm run build`, `npm run lint`,
-   `git diff --check` e validações Supabase locais quando aplicável; o CI fica
-   associado ao **SHA efetivamente auditado**, e toda correção posterior gera
-   **novo SHA** com **novo CI** correspondente (**§7.2**, regras 6 e 7).
-9. **Auditoria** — GPT audita aderência ao contrato, invariantes de
-   segurança/autorização e ausência de mudanças fora do escopo; Codex quando
-   aplicável.
-10. **Squash merge** — integra em `main` com **SHA auditado**, **somente com
-    solicitação explícita do responsável**; o agente de implementação **nunca**
-    faz merge (**§7.2**, regras 8 e 9).
+7. **PR + CI antecipado** — o PR é aberto **imediatamente após o push**, com
+   vínculo à Issue (`Closes #<n>`): pelo próprio agente quando o ambiente possuir
+   mecanismo **autorizado**; caso contrário, pelo **orquestrador**, a quem o agente
+   entrega **branch, SHA, título e corpo** (**§7.2**, regras 2 a 4, e **§7.3**).
+   A abertura **dispara o CI** no SHA do PR (DEV-04, **§7**).
+8. **Auditoria do SHA** — GPT audita o **SHA do PR** (aderência ao contrato,
+   invariantes de segurança/autorização e ausência de mudanças fora do escopo);
+   Codex quando aplicável. O CI **verde** desse SHA é a evidência de runtime.
+9. **Correções e nova auditoria** — qualquer correção pós-auditoria gera **novo
+   SHA**, que exige **novo CI** correspondente e **nova auditoria/certificação**
+   quando aplicável (**§7.2**, regra 7).
+10. **Squash merge** — integra em `main` **somente** com **CI verde no SHA
+    efetivamente auditado** e **solicitação explícita do responsável**; o agente de
+    implementação **nunca** faz merge (**§7.2**, regras 6, 8 e 9).
 
 Na implementação e na validação, a distinção entre **aprovação técnica** e
 **autorização de elevação de acesso**, o trabalho em lote e o agrupamento de
@@ -130,9 +130,11 @@ São **independentes e não se substituem**:
 
 ### 6.2 Com desenho FECHADO: não repetir pedido de aprovação
 
-Com o contrato da atividade **FECHADO** (§1) e já em `main`, **não** se pede nova
-aprovação técnica para decisões já cobertas por ele: a implementação segue o
-contrato fechado (§2, item 5). Interromper o fluxo é permitido **somente** por:
+Com o contrato da atividade **FECHADO** (**§2**, item 4) — persistido na **própria
+Issue** **ou** em `main` —, **não** se pede nova aprovação técnica para decisões já
+cobertas por ele, **nem** se exige que o desenho esteja em `main` para iniciar a
+implementação: ela segue o contrato fechado (**§2**, item 5). Interromper o fluxo é
+permitido **somente** por:
 
 - **(a) contradição arquitetural real** — conflito objetivo entre o contrato,
   `.ai/architecture-rules.md` e/ou o código existente;
@@ -232,11 +234,11 @@ Issue
   → implementação
   → validação local
   → commit/push
-  → PR
-  → CI
-  → auditoria GPT
-  → Codex quando aplicável
-  → squash merge
+  → PR + CI antecipado
+  → auditoria do SHA
+  → correções, se houver (novo SHA → novo CI)
+  → nova auditoria/certificação quando aplicável
+  → squash merge (CI verde no SHA efetivamente auditado + solicitação explícita)
   → atualização da main
 ```
 
@@ -255,13 +257,15 @@ Issue
    GitHub já autorizada**, sem PAT nem credenciais locais adicionais.
 5. **Vínculo com a Issue.** Todo PR executável deve conter `Closes #<issue>`
    (quando a entrega resolve integralmente a Issue).
-6. **CI por SHA.** O CI deve estar associado ao **SHA efetivamente auditado**, e o
-   SHA do CI é confirmado **antes** da auditoria e do merge.
+6. **CI por SHA.** O CI roda no **SHA do PR** (disparo antecipado) e o **SHA
+   efetivamente auditado** é o mesmo cujo CI está **verde**; confirmar essa
+   correspondência antes do merge. CI verde em SHA diferente **não** autoriza
+   merge.
 7. **Correção posterior ao PR.** Qualquer correção gera **novo SHA**, que exige o
    **CI correspondente** (nova execução no novo SHA).
 8. **O agente de implementação nunca faz merge.**
-9. **Squash merge** permanece condicionado aos **gates objetivos vigentes** e à
-   **solicitação explícita do responsável**.
+9. **Squash merge** exige, cumulativamente: **CI verde no SHA efetivamente
+   auditado**, gates objetivos vigentes e **solicitação explícita do responsável**.
 
 ### 7.3 Limitação do ambiente: nunca contornar
 
@@ -327,14 +331,65 @@ registrando a limitação na entrega e em `.ai/git-rules.md` §3 — que cobre t
 - Worktrees temporárias são **descartadas** ao final da atividade, após
   commit/push/PR; nenhuma worktree é referenciada por arquivo versionado.
 
-**Verificação objetiva** (na raiz do checkout principal):
+### 8.1 Preflight obrigatório ANTES de `git worktree add`
+
+Portátil (não pressupõe nenhuma raiz local) e tolerante a **caminhos com
+espaços**: todas as expansões são citadas e a leitura da lista de worktrees usa
+`IFS=` com `read -r`. O pai do destino **precisa existir** (`mkdir -p` antes) —
+é ele que permite canonicalizar o destino mesmo antes de a worktree existir.
 
 ```bash
-git worktree list --porcelain | awk '/^worktree /{print $2}'
+set -euo pipefail
+: "${DEST:?defina DEST com o caminho ABSOLUTO da nova worktree}"
+
+repo_root="$(git rev-parse --show-toplevel)"
+dest_parent="$(cd "$(dirname "$DEST")" && pwd -P)"   # canonicaliza o pai (resolve symlinks)
+dest="$dest_parent/$(basename "$DEST")"              # destino canonicalizado
+
+# (1) o destino nao pode estar DENTRO do checkout principal
+case "$dest/" in
+  "$repo_root"/*) echo "REPROVADO: destino dentro do checkout principal: $dest" >&2; exit 1;;
+esac
+
+# (2) nenhum diretorio proibido como COMPONENTE do caminho (nao substring)
+case "/${dest#/}/" in
+  */node_modules/*|*/.temp/*|*/dist/*|*/.vite/*|*/build/*)
+    echo "REPROVADO: destino usa diretorio proibido: $dest" >&2; exit 1;;
+esac
+
+# (3) comparacao com as worktrees JA registradas (dentro, contendo ou igual)
+wt_list="$(mktemp)"; trap 'rm -f "$wt_list"' EXIT
+git worktree list --porcelain > "$wt_list"
+while IFS= read -r linha; do
+  case "$linha" in
+    worktree\ *)
+      wt="${linha#worktree }"
+      [ "$dest" = "$wt" ] && { echo "REPROVADO: destino ja e worktree registrada: $wt" >&2; exit 1; }
+      case "$dest/" in "$wt"/*)  echo "REPROVADO: destino DENTRO de worktree existente: $wt" >&2; exit 1;; esac
+      case "$wt/"   in "$dest"/*) echo "REPROVADO: destino CONTEM worktree existente: $wt" >&2; exit 1;; esac
+      ;;
+  esac
+done < "$wt_list"
+
+echo "PREFLIGHT OK: $dest"
 ```
 
-Critério de reprovação: qualquer caminho listado que esteja **dentro** de outra
-worktree listada, ou dentro de `node_modules`, `.temp` ou build/cache.
+Somente com `PREFLIGHT OK` executar `git worktree add "$dest" <branch>`. Depois do
+`add`, repetir o passo **(3)** sobre a lista final — a verificação pós-criação
+fecha o ciclo.
+
+**Critério de reprovação**: destino igual a, dentro de, ou contendo o checkout
+principal ou qualquer worktree registrada; ou que use `node_modules`, `.temp`,
+`dist`, `.vite` ou `build` como componente de caminho.
+
+### 8.2 Verificação da configuração vigente
+
+```bash
+git worktree list --porcelain | awk '/^worktree /{print substr($0,10)}'
+```
+
+Nenhum caminho listado pode estar **dentro** de outra worktree listada, nem
+dentro de `node_modules`, `.temp` ou build/cache.
 
 ## 9. Nota de entrega do agente (DEV-05)
 

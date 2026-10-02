@@ -1307,14 +1307,22 @@ falha. **Nenhuma prova material foi removida ou relaxada.**
   `position_reporting_lines` → presença das colunas esperadas; nomes
   especulativos/legados (`substitutions`, `collegiates`, `evaluation_panels`,
   `snapshots`, `dotted_lines`) permanecem **proibidos** como negação; total de
-  policies (3) → presença das 3 policies de identidade/sessão da F2; provas RLS
-  passaram a aceitar **negação por ausência de GRANT** (privilégio) **ou** 0
-  linhas (RLS) — ambas fail-closed (em `main`, `authenticated` não tem grant em
-  `occupations`).
+  policies (3) → presença das 3 policies de identidade/sessão da F2; a prova de
+  runtime de leitura/escrita passou a aceitar a **negação efetiva ao cliente**
+  (ausência de GRANT na ACL **ou** 0 linhas por RLS) — **sempre acompanhada de
+  assertion estrutural independente** do deny corrente
+  (`has_table_privilege('authenticated', 'public.occupations', 'SELECT')` falso) e
+  **sem** afirmar que a negação isoladamente comprova enforcement especificamente
+  por RLS.
 - **F3-08** — inventário exato → presença das 19 tabelas; contagem fixa de
-  resolvers (7) → **presença das 7 funções F3-07 esperadas**; "zero policies" em
-  `collegiate_*` → presença das 3 policies de leitura own-tenant **e ausência de
-  policy de escrita**; RLS de escrita aceita negação por privilégio ou 0 linhas.
+  resolvers (7) → **presença das 7 funções F3-07 esperadas**; o guard de policy de
+  `collegiate_*` passou a ser **autossuficiente** (não delega à guarda da F4-08):
+  exige **exatamente** as 3 policies SELECT own-tenant esperadas, validando
+  identidade (tabela + nome), **comando** (`SELECT`), **papel** (`authenticated`) e
+  **expressão** (`user_has_active_membership(organization_id)`), e **rejeita
+  qualquer policy extra** em `collegiate_*`; assertion estrutural independente de
+  GRANT (`has_table_privilege`) confirma `SELECT` **somente** nas 3 tabelas de
+  snapshot. A prova de runtime de escrita aceita a **negação efetiva** (ACL ou RLS).
 - **F4-02** — nenhuma alteração: a prova de DESCENDANTS de MULTI já reflete
   P_AN2 (`e4`, folha) com **zero descendentes** e as guardas globais são de
   presença. Permanece verde (29 `[PASS]`).
@@ -1350,3 +1358,19 @@ done
 Supabase + as **90 migrations** de `main` em LF, como no CI): `01/02-validar-f3-05`
 **43 `[PASS]`**, `01/02-validar-f3-08` **31 `[PASS]`**, `01/02-validar-f4-02`
 **29 `[PASS]`** — exit 0 nos seis arquivos, executados em sequência no mesmo banco.
+
+### Endurecimento pós-auditoria (#430)
+
+- **F3-08**: o guard de policies de `collegiate_*` valida
+  identidade/tabela/comando/papel/expressão das 3 policies SELECT own-tenant
+  esperadas e **rejeita policies extras**, sem depender da guarda da F4-08; soma-se
+  assertion estrutural de GRANT (`has_table_privilege`).
+- **Negações efetivas**: as provas de runtime descrevem **negação efetiva ao
+  cliente (ACL ou RLS)** — nunca enforcement especificamente por RLS — e seguem
+  acompanhadas de assertions estruturais independentes.
+- **Worktrees**: preflight portátil obrigatório **antes** de `git worktree add`
+  (`.ai/workflow.md` §8.1), canonicalizando o destino e comparando-o com checkout,
+  diretórios proibidos e worktrees existentes, inclusive caminhos com espaços.
+- **Workflow**: §1, §2, §6.2 e §7 alinhados ao DEV-04 — CI antecipado → auditoria
+  do SHA → correções (novo SHA → novo CI) → merge **somente** com CI verde no SHA
+  efetivamente auditado; desenho fechado na Issue não precisa estar em `main`.
