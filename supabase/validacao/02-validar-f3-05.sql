@@ -542,30 +542,41 @@ end $$;
 do $$
 declare
   v_ok boolean := false;
+  v_state text := null;
+  v_msg text := null;
 begin
   begin
-    -- Segundo ocupante simultaneo na mesma posicao (P1 ja ocupada por C2).
-    -- F6 / #427 — JULGAMENTO: a linha é atribuída a C4, que NÃO possui ocupação
-    -- nessa janela (C1, C2 e C3 já ocupam posições). Sem sobreposição por
-    -- `collaborator_id`, o ÚNICO veredito possível é a exclusion por POSIÇÃO —
-    -- que é exatamente o discriminador desta prova (a cardinalidade por
-    -- colaborador não pode mais "roubar" o motivo da recusa aqui).
+    -- Segundo ocupante simultaneo na mesma posicao (P1 ja ocupada por C2 desde
+    -- 2025-07-01). F6 / #427 — a linha e atribuida a C1, cuja UNICA ocupacao (P1)
+    -- encerrou em 2025-06-30: em 2026-01-01 C1 NAO tem ocupacao vigente, logo a
+    -- exclusion por `collaborator_id` NAO pode disparar. O UNICO veredito
+    -- possivel e a exclusion por POSICAO — exatamente o discriminador desta
+    -- prova (a cardinalidade por colaborador nao pode "roubar" o motivo aqui).
     insert into public.occupations (
       organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to
     ) values (
       'f7a00000-0000-0000-0000-0000000000a1',
-      'f7b00000-0000-0000-0000-0000000000c4',
+      'f7b00000-0000-0000-0000-0000000000c1',
       'f7c00000-0000-0000-0000-0000000000a1',
       'Segundo ocupante invalido',
       '2026-01-01T00:00:00Z', null
     );
   exception when exclusion_violation then
+    v_state := sqlstate; v_msg := sqlerrm;
     v_ok := true;
   end;
   if not v_ok then
     raise exception '[FAIL] dois ocupantes simultaneos na mesma posicao NAO foram rejeitados';
   end if;
-  raise notice '[PASS] um ocupante por posicao por instante (exclusion por position)';
+  -- Discriminador explicito: a recusa TEM de vir da exclusion por POSICAO.
+  if v_msg is null
+     or position('ex_occupations_position_no_overlap' in v_msg) = 0 then
+    raise exception '[FAIL] a recusa do segundo ocupante nao veio da exclusion por POSICAO (msg=%)', v_msg;
+  end if;
+  if v_state <> '23P01' then
+    raise exception '[FAIL] recusa do segundo ocupante com SQLSTATE inesperado (%)', v_state;
+  end if;
+  raise notice '[PASS] um ocupante por posicao por instante (exclusion por POSICAO; C1 sem ocupacao vigente na janela)';
 end $$;
 
 do $$
@@ -626,18 +637,30 @@ begin
   raise notice '[PASS] occupation alem do encerramento da posicao rejeitada (trigger de validade)';
 end $$;
 
+-- F6 / #427: as duas provas de integridade cross-org abaixo precisam de um
+-- colaborador de OUTRA organizacao que NAO tenha ocupacao alguma. O Cb (d1) da
+-- fixture ocupa BP1 de forma aberta e a nova exclusion por `collaborator_id`
+-- dispararia ANTES da FK composta, mascarando o veredito que estas provas
+-- discriminam. d2 nasce SEM ocupacao (e sem periodo de status) apenas para isso.
+do $$
+begin
+  insert into public.collaborators (id, organization_id) values
+    ('f7b00000-0000-0000-0000-0000000000d2', 'f7a00000-0000-0000-0000-0000000000b1');
+end $$;
+
 do $$
 declare
   v_ok boolean := false;
 begin
   begin
-    -- Cross-organization (collaborator de outra org): occupation Alfa com Cb
-    -- (Beta), posicao vaga P4 (Alfa).
+    -- Cross-organization (collaborator de outra org): occupation Alfa com d2
+    -- (Beta, SEM ocupacao), posicao vaga P4 (Alfa). O UNICO veredito possivel e a
+    -- FK composta (collaborator_id, organization_id).
     insert into public.occupations (
       organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to
     ) values (
       'f7a00000-0000-0000-0000-0000000000a1',
-      'f7b00000-0000-0000-0000-0000000000d1',
+      'f7b00000-0000-0000-0000-0000000000d2',
       'f7c00000-0000-0000-0000-0000000000a4',
       'Cross-org collaborator',
       '2025-06-01T00:00:00Z', '2025-06-30T00:00:00Z'
@@ -657,12 +680,13 @@ declare
 begin
   begin
     -- Cross-organization (posicao de outra org): occupation Beta com posicao
-    -- P4 (Alfa), colaborador Cb (Beta).
+    -- P4 (Alfa) e colaborador d2 (Beta, SEM ocupacao) — o UNICO veredito
+    -- possivel e a FK composta (organizational_position_id, organization_id).
     insert into public.occupations (
       organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to
     ) values (
       'f7a00000-0000-0000-0000-0000000000b1',
-      'f7b00000-0000-0000-0000-0000000000d1',
+      'f7b00000-0000-0000-0000-0000000000d2',
       'f7c00000-0000-0000-0000-0000000000a4',
       'Cross-org position',
       '2025-06-01T00:00:00Z', '2025-06-30T00:00:00Z'
@@ -682,16 +706,16 @@ declare
   v_state text := null;
 begin
   begin
-    -- Motivo vazio. F6 / #427 — JULGAMENTO: a linha é atribuída a C3 (posição
-    -- vaga P4), que NÃO possui ocupação nessa janela; C4 já ocupa P2 desde
-    -- 2025-01-01 e a exclusion por `collaborator_id` poderia disputar o veredito.
-    -- Com janela de 2027 (fora de qualquer ocupação vigente) só o check de
-    -- `reason` pode promovê-la, e o SQLSTATE é conferido explicitamente.
+    -- Motivo vazio. F6 / #427 — a linha e atribuida a C1, cuja UNICA ocupacao
+    -- (P1) encerrou em 2025-06-30: NAO ha ocupacao vigente em 2027-01-01, logo a
+    -- exclusion por `collaborator_id` nao pode disputar o veredito. A posicao P4
+    -- esta vaga. O UNICO veredito possivel e o check de `reason`, e o SQLSTATE e
+    -- conferido explicitamente.
     insert into public.occupations (
       organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to
     ) values (
       'f7a00000-0000-0000-0000-0000000000a1',
-      'f7b00000-0000-0000-0000-0000000000c3',
+      'f7b00000-0000-0000-0000-0000000000c1',
       'f7c00000-0000-0000-0000-0000000000a4',
       '   ', '2027-01-01T00:00:00Z', null
     );
@@ -1067,7 +1091,8 @@ where id in (
   'f7b00000-0000-0000-0000-0000000000c2',
   'f7b00000-0000-0000-0000-0000000000c3',
   'f7b00000-0000-0000-0000-0000000000c4',
-  'f7b00000-0000-0000-0000-0000000000d1'
+  'f7b00000-0000-0000-0000-0000000000d1',
+  'f7b00000-0000-0000-0000-0000000000d2'
 );
 
 delete from public.job_roles

@@ -637,11 +637,13 @@ end $$;
 -- ============================================================================
 -- 6) Mudanças posteriores não alteram snapshots
 -- ============================================================================
--- F6 / #427: o cenário não admite mais uma segunda ocupação simultânea de EVAL1
--- (a exclusão por `collaborator_id` a recusaria). Em vez de "mover" EVAL1 para
--- P_Z, este bloco prova que (i) a origem de EVAL1 permanece P_E1, (ii) P_Z não
--- entra no snapshot e (iii) a tentativa de segunda ocupação é recusada pelo
--- banco (23P01) sem persistir nada.
+-- F6 / #427: a transferência de EVAL1 (c2) de P_E1 (a2) para P_Z (a8) em
+-- 2026-01-01 é SEQUENCIAL — fecha A e abre B no MESMO instante, períodos
+-- consecutivos meio-abertos `[2025-01-01, 2026-01-01)` + `[2026-01-01, inf)`,
+-- portanto VÁLIDA sob a nova invariante (não há sobreposição do mesmo
+-- colaborador). A mudança VÁLIDA é executada e o snapshot JÁ CONGELADO tem de
+-- permanecer IMUTÁVEL; em seguida, uma SEGUNDA ocupação simultânea é recusada
+-- pelo banco (23P01) sem persistir nada.
 
 do $$
 declare
@@ -650,33 +652,64 @@ declare
   v_snap uuid;
   v_pos uuid[];
 begin
-  -- F6 / #427 — ocupação de EVAL1: o cenário já traz EVAL1 (c2) em P_E1 a2
-  -- (aberta desde 2025-01-01). A antiga "movimentação posterior" que atribuía a
-  -- EVAL1 uma SEGUNDA ocupação (P_Z a8) deixou de ser representável: a exclusão
-  -- por colaborador recusaria a linha, então o cenário deixou de tê-la. As provas
-  -- abaixo cobrem (i) a origem vigente, (ii) a ausência de P_Z e (iii) a recusa
-  -- de qualquer sobreposição da mesma colaboradora.
+  -- (1) Transferência SEQUENCIAL válida: fecha P_E1 e abre P_Z no mesmo instante.
+  update public.occupations
+     set valid_to = '2026-01-01T00:00:00Z'
+   where collaborator_id = 'fab00000-0000-0000-0000-0000000000c2'
+     and organizational_position_id = 'fac00000-0000-0000-0000-0000000000a2'
+     and valid_to is null;
+  if not found then
+    raise exception '[FAIL] EVAL1 deveria ter ocupacao ABERTA em P_E1 antes da transferencia sequencial';
+  end if;
+
+  insert into public.occupations (
+    organization_id, collaborator_id, organizational_position_id, reason, valid_from, valid_to
+  ) values (
+    'faa00000-0000-0000-0000-0000000000a1',
+    'fab00000-0000-0000-0000-0000000000c2',
+    'fac00000-0000-0000-0000-0000000000a8',
+    'Movido apos ciclos (transferencia sequencial)', '2026-01-01T00:00:00Z', null
+  );
+
+  -- A transferência é VÁLIDA e CONSECUTIVA: origem ÚNICA dos dois lados da
+  -- fronteira (cardinalidade = 1) e histórico com exatamente 2 períodos.
   select count(*) into v_n
   from public.occupations
   where collaborator_id = 'fab00000-0000-0000-0000-0000000000c2'
-    and organizational_position_id = 'fac00000-0000-0000-0000-0000000000a2'
+    and valid_from <= '2025-12-31T00:00:00Z'
+    and (valid_to is null or valid_to > '2025-12-31T00:00:00Z');
+  if v_n <> 1 then
+    raise exception '[FAIL] antes de 2026-01-01 EVAL1 deveria ter 1 ocupacao vigente (P_E1), encontrado %', v_n;
+  end if;
+
+  select count(*) into v_n
+  from public.occupations
+  where collaborator_id = 'fab00000-0000-0000-0000-0000000000c2'
     and valid_from <= '2026-01-01T00:00:00Z'
     and (valid_to is null or valid_to > '2026-01-01T00:00:00Z');
   if v_n <> 1 then
-    raise exception '[FAIL] EVAL1 deveria ter 1 ocupacao vigente em P_E1 em 2026-01-01 (encontrado %)', v_n;
+    raise exception '[FAIL] em 2026-01-01 EVAL1 deveria ter 1 ocupacao vigente (P_Z), encontrado %', v_n;
   end if;
 
-  -- Origens de ocupação declaradas no cenário para EVAL1: somente P_E1 a2.
-  select array_agg(organizational_position_id order by organizational_position_id)
-    into v_pos
+  select count(*) into v_n
+  from public.occupations
+  where collaborator_id = 'fab00000-0000-0000-0000-0000000000c2'
+    and valid_from <= '2026-01-01T00:00:00Z'
+    and (valid_to is null or valid_to > '2026-01-01T00:00:00Z')
+    and organizational_position_id = 'fac00000-0000-0000-0000-0000000000a8';
+  if v_n <> 1 then
+    raise exception '[FAIL] a ocupacao vigente de EVAL1 em 2026-01-01 deveria ser P_Z (a8), encontrado %', v_n;
+  end if;
+
+  select array_agg(organizational_position_id order by valid_from) into v_pos
   from public.occupations
   where collaborator_id = 'fab00000-0000-0000-0000-0000000000c2';
-  if v_pos is distinct from array['fac00000-0000-0000-0000-0000000000a2']::uuid[] then
-    raise exception '[FAIL] EVAL1 deveria ter P_E1 (a2) como unica origem de ocupacao';
+  if v_pos is distinct from array['fac00000-0000-0000-0000-0000000000a2',
+                                 'fac00000-0000-0000-0000-0000000000a8']::uuid[] then
+    raise exception '[FAIL] historico de EVAL1 deveria ser P_E1 -> P_Z (sequencial), encontrado %', v_pos;
   end if;
 
-  -- Ciclo 1 de EVAL1 permanece com P_E1 e {M1, M2} — o snapshot é imutável e
-  -- nenhuma posição posterior (P_Z a8) é acrescentada a ele.
+  -- (2) SNAPSHOT CONGELADO (ciclo 1) permanece IMUTÁVEL após a mudança VÁLIDA.
   select id into v_snap
   from public.collegiate_cycle_snapshots
   where organization_id = 'faa00000-0000-0000-0000-0000000000a1'
@@ -688,7 +721,7 @@ begin
   where snapshot_id = v_snap
     and position_id = 'fac00000-0000-0000-0000-0000000000a2';
   if v_n <> 1 then
-    raise exception '[FAIL] snapshot ciclo 1 de EVAL1 deveria manter P_E1';
+    raise exception '[FAIL] snapshot ciclo 1 de EVAL1 deveria manter P_E1 apos a movimentacao';
   end if;
 
   select count(*) into v_n
@@ -696,7 +729,7 @@ begin
   where snapshot_id = v_snap
     and position_id = 'fac00000-0000-0000-0000-0000000000a8';
   if v_n <> 0 then
-    raise exception '[FAIL] snapshot ciclo 1 de EVAL1 nao pode conter P_Z (sem uniao de posicoes)';
+    raise exception '[FAIL] snapshot ciclo 1 de EVAL1 nao pode conter P_Z (snapshot congelado nao recalcula)';
   end if;
 
   select array_agg(member_collaborator_id order by member_collaborator_id) into v_members
@@ -707,7 +740,7 @@ begin
            'fab00000-0000-0000-0000-0000000000c8']::uuid[] then
     raise exception '[FAIL] membros do snapshot ciclo 1 deveriam permanecer {M1, M2}';
   end if;
-  raise notice '[PASS] ocupacao de EVAL1 permanece P_E1 no snapshot (sem segunda posicao / sem uniao)';
+  raise notice '[PASS] mudanca posterior VALIDA de occupation (transferencia sequencial P_E1 -> P_Z) nao altera snapshots materializados';
 end $$;
 
 do $$
@@ -717,8 +750,9 @@ declare
   v_msg text := null;
   v_n int;
 begin
-  -- F6 / #427 — prova NEGATIVA da "movimentacao": a SEGUNDA ocupação
-  -- simultânea de EVAL1 (c2) em P_Z a8 é recusada pela exclusion por
+  -- F6 / #427 — prova NEGATIVA: depois da transferência sequencial, EVAL1 (c2)
+  -- tem P_Z ABERTA em `[2026-01-01, inf)`. Tentar manter uma SEGUNDA ocupação
+  -- simultânea (reocupar P_E1 sem fechar P_Z) é recusado pela exclusion por
   -- `collaborator_id` (SQLSTATE 23P01) e NADA é persistido.
   begin
     insert into public.occupations (
@@ -726,8 +760,8 @@ begin
     ) values (
       'faa00000-0000-0000-0000-0000000000a1',
       'fab00000-0000-0000-0000-0000000000c2',
-      'fac00000-0000-0000-0000-0000000000a8',
-      'segunda ocupacao simultanea de EVAL1 (recusada)', '2026-01-01T00:00:00Z', null
+      'fac00000-0000-0000-0000-0000000000a2',
+      'segunda ocupacao simultanea de EVAL1 (recusada)', '2026-06-01T00:00:00Z', null
     );
   exception when exclusion_violation then
     v_state := sqlstate; v_msg := sqlerrm;
@@ -746,10 +780,10 @@ begin
   select count(*) into v_n
   from public.occupations
   where collaborator_id = 'fab00000-0000-0000-0000-0000000000c2';
-  if v_n <> 1 then
-    raise exception '[FAIL] tentativa recusada deixou ocupacao persistida para EVAL1 (encontrado %)', v_n;
+  if v_n <> 2 then
+    raise exception '[FAIL] tentativa recusada deixou ocupacao persistida para EVAL1 (esperado 2: P_E1 fechada + P_Z aberta; encontrado %)', v_n;
   end if;
-  raise notice '[PASS] P_Z nao pode entrar como segunda ocupacao simultanea de EVAL1 (23P01, nada persistido)';
+  raise notice '[PASS] P_E1 nao pode voltar como segunda ocupacao simultanea de EVAL1 (23P01, nada persistido)';
 end $$;
 
 do $$

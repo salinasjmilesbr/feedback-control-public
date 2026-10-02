@@ -228,12 +228,15 @@ declare
   v_cids uuid[];
   v_pos uuid[];
 begin
-  -- F6 / #427: MULTI (c6) tem ORIGEM ÚNICA de ocupação (P_AN2 e4). A antiga
-  -- "união de múltiplas positions" (e4 + e5) foi ABOLIDA: o alcance agora é
-  -- somente a subárvore de e4, que NÃO inclui a subárvore de P_MULTI2 e5 — logo
-  -- MULTI_CHILD (c8, em P_MULTI_CHILD e8) deixa de ser alcançado.
-  -- Antes da #427 o alcance trazia colaborador c8 (união); agora nenhuma pessoa
-  -- é alvo (as posições do alcance restrito estão vagas).
+  -- F6 / #427: MULTI (c6) tem ORIGEM ÚNICA de ocupação em P_AN2 (e4). Na árvore
+  -- REAL da fixture as reporting lines vigentes são
+  --   e1->e0, e2->e1, e3->e2, e4->e2, e5->e2, e8->e5, e6->e2,
+  -- portanto P_AN2 (e4) é FOLHA: nenhuma linha tem manager = e4.
+  -- `organizacao_resolver_descendentes` devolve SOMENTE os subordinados
+  -- (transitivos) da origem — NUNCA a própria posição —, logo o alcance
+  -- DESCENDANTS de MULTI é VAZIO. A antiga "união de múltiplas positions"
+  -- (e4 + e5) foi ABOLIDA pela #427: a subárvore de P_MULTI2 (e5 -> e8) só
+  -- entraria pela segunda ocupação abolida, e MULTI_CHILD (c8) NÃO é alcançado.
   select coalesce(array_agg(collaborator_id order by collaborator_id), array[]::uuid[])
     into v_cids
   from public.resolver_alvos_escopo(
@@ -243,41 +246,39 @@ begin
     raise exception '[FAIL] o alcance uniao (MULTI_CHILD c8) NAO pode ser concedido apos a #427 (encontrado %)', v_cids;
   end if;
 
+  -- Origem FOLHA => ZERO descendentes. A expectativa é medida pelo resultado do
+  -- resolver, não por um conjunto presumido da árvore.
   select count(*) into v_n
   from public.resolver_alvos_escopo(
     'd1b00000-0000-0000-0000-0000000000a4', 'd1a00000-0000-0000-0000-0000000000a1',
     'DESCENDANTS', null, '2024-12-01T00:00:00Z');
-  if v_n <> 4 then
-    raise exception '[FAIL] origem unica de MULTI deveria alcancar 4 posicoes da subarvore de P_AN2 (encontrado %)', v_n;
-  end if;
-
-  -- A posição P_MULTI_CHILD e8 continua na árvore, mas FORA do alcance de MULTI:
-  -- a subárvore só entraria pela segunda ocupação abolida.
-  select count(*) into v_n
-  from public.resolver_alvos_escopo(
-    'd1b00000-0000-0000-0000-0000000000a4', 'd1a00000-0000-0000-0000-0000000000a1',
-    'DESCENDANTS', null, '2024-12-01T00:00:00Z')
-  where position_id = 'd1e00000-0000-0000-0000-0000000000e8';
   if v_n <> 0 then
-    raise exception '[FAIL] P_MULTI_CHILD e8 deveria estar fora do alcance de origem unica de MULTI';
+    raise exception '[FAIL] origem unica de MULTI (P_AN2 e4, FOLHA) deveria alcancar ZERO descendentes (encontrado %)', v_n;
   end if;
 
-  -- Alcance efetivo da origem única: e2 (COORD), e3 (AN1), e4 (AN2 propria),
-  -- e6 (vaga) — e5/e8 NÃO entram (segunda ocupação abolida).
   select array_agg(position_id order by position_id) into v_pos
   from public.resolver_alvos_escopo(
     'd1b00000-0000-0000-0000-0000000000a4', 'd1a00000-0000-0000-0000-0000000000a1',
     'DESCENDANTS', null, '2024-12-01T00:00:00Z')
   where position_id is not null;
-  if v_pos is distinct from array[
-    'd1e00000-0000-0000-0000-0000000000e2',
-    'd1e00000-0000-0000-0000-0000000000e3',
-    'd1e00000-0000-0000-0000-0000000000e4',
-    'd1e00000-0000-0000-0000-0000000000e6'
-  ]::uuid[] then
-    raise exception '[FAIL] alcance de origem unica de MULTI divergente da arvore de P_AN2';
+  if v_pos is not null then
+    raise exception '[FAIL] alcance DESCENDANTS de MULTI deveria ser VAZIO (encontrado %)', v_pos;
   end if;
-  raise notice '[PASS] origem unica de ocupacao de MULTI: alcance restrito a arvore de P_AN2 — a antiga uniao (MULTI_CHILD) NAO e concedida';
+
+  -- Reforço do discriminador: nem P_MULTI_CHILD (e8, subárvore da 2a ocupação
+  -- abolida) nem a própria origem (e4) podem constar do alcance — descendentes
+  -- NUNCA incluem a própria posição.
+  select count(*) into v_n
+  from public.resolver_alvos_escopo(
+    'd1b00000-0000-0000-0000-0000000000a4', 'd1a00000-0000-0000-0000-0000000000a1',
+    'DESCENDANTS', null, '2024-12-01T00:00:00Z')
+  where position_id in ('d1e00000-0000-0000-0000-0000000000e8',
+                        'd1e00000-0000-0000-0000-0000000000e4');
+  if v_n <> 0 then
+    raise exception '[FAIL] P_MULTI_CHILD (e8) e a origem propria (e4) nao podem constar do alcance DESCENDANTS de MULTI (encontrado %)', v_n;
+  end if;
+
+  raise notice '[PASS] origem unica de ocupacao de MULTI: P_AN2 (e4) e FOLHA => alcance DESCENDANTS VAZIO; a antiga uniao (MULTI_CHILD c8) NAO e concedida apos a #427';
 end $$;
 
 do $$
