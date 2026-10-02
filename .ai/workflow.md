@@ -1,6 +1,6 @@
 # Virtus — Workflow oficial dos agentes
 
-> Fluxo operacional e responsabilidades por modo. Complementa `AGENTS.md`.
+> Fluxo operacional e responsabilidades por tarefa. Complementa `AGENTS.md`.
 > GitHub é a fonte de verdade do andamento (Issues, PRs e revisões).
 
 ## 1. Fluxo oficial
@@ -14,7 +14,7 @@ Issue
   → commit + push
   → PR + CI ANTECIPADO (agente, quando houver mecanismo autorizado; senão o
     orquestrador — §7)
-  → auditoria do SHA do PR (GPT; Codex quando aplicável)
+  → auditoria independente do SHA do PR (conforme tarefa e risco)
   → correções, se houver (novo SHA → novo CI)
   → nova auditoria/certificação quando aplicável
   → squash merge SOMENTE com CI verde no SHA efetivamente auditado e solicitação
@@ -32,11 +32,11 @@ da **nota de entrega** (**§9**).
 
 1. **Leitura obrigatória** — `AGENTS.md`, `.ai/*`, Issue completa (escopo,
    critérios de aceite, fora de escopo), contratos relacionados e PRs em aberto.
-2. **Desenho (Flash)** — branch de documentação própria; produz
+2. **Desenho técnico** — branch de documentação própria; produz
    `docs/Fx-XX-desenho-tecnico.md` com o estado atual, modelo, invariantes,
    decisões propostas `D#`, questões `Q1/Q2/…`, critérios de aceite e estratégia
    de testes. **Sem código funcional**.
-3. **Revisão e fechamento (GPT)** — comenta o PR de desenho; cada `Q#` é
+3. **Revisão e fechamento independente** — comenta o PR de desenho; cada `Q#` é
    respondida e vira decisão fechada (`D#`) ou é absorvida por decisão existente,
    mantendo rastreabilidade. Documento passa ao estado **FECHADO — pronto para
    implementação**.
@@ -47,7 +47,7 @@ da **nota de entrega** (**§9**).
    documental. A forma (a) **não** exige PR documental nem merge prévio quando a
    Issue já persiste a versão final. Nos dois casos o contrato é normativo e não
    se reabre durante a implementação (**§4**).
-5. **Implementação (Pro)** — branch própria de código, fora da branch de
+5. **Implementação** — branch própria de código, fora da branch de
    desenho; segue exclusivamente o contrato fechado; inclui testes e validadores
    proporcionais ao risco; executa as validações locais planejadas.
 6. **Commit e push** — concluídas a implementação e as validações locais
@@ -58,9 +58,9 @@ da **nota de entrega** (**§9**).
    mecanismo **autorizado**; caso contrário, pelo **orquestrador**, a quem o agente
    entrega **branch, SHA, título e corpo** (**§7.2**, regras 2 a 4, e **§7.3**).
    A abertura **dispara o CI** no SHA do PR (DEV-04, **§7**).
-8. **Auditoria do SHA** — GPT audita o **SHA do PR** (aderência ao contrato,
+8. **Auditoria do SHA** — auditor independente avalia o **SHA do PR** (aderência ao contrato,
    invariantes de segurança/autorização e ausência de mudanças fora do escopo);
-   Codex quando aplicável. O CI **verde** desse SHA é a evidência de runtime.
+   A revisão é independente; o CI **verde** desse SHA é a evidência de runtime.
 9. **Correções e nova auditoria** — qualquer correção pós-auditoria gera **novo
    SHA**, que exige **novo CI** correspondente e **nova auditoria/certificação**
    quando aplicável (**§7.2**, regra 7).
@@ -73,24 +73,33 @@ Na implementação e na validação, a distinção entre **aprovação técnica*
 comandos privilegiados seguem **§6**. A abertura do PR, o disparo antecipado do CI
 e as regras de fechamento seguem **§7**.
 
-## 3. Responsabilidades por modo
-
-| Modo/ator | Papel |
+## 3. Responsabilidades por tarefa e escolha de modelo
+A responsabilidade decorre da tarefa e do risco, sem associação fixa de papel a
+modelo. Antes do prompt, verificar agente/modelo, fonte persistida, estágio do
+pipeline e contexto mínimo.
+| Modelo preferencial | Uso |
 | --- | --- |
-| **Flash** | Análise e desenho (contratos, questões `Q#`, decisões propostas `D#`) |
-| **Pro** | Implementação do contrato fechado (código, testes, validações) |
-| **GPT/Codex** | Revisão, auditoria e fechamento de decisões arquiteturais |
-| **GitHub** | Fonte de verdade: Issues, PRs, revisões e histórico |
+| GPT-6 Sol | Arquitetura crítica, fechamento arquitetural e impasses reais |
+| DeepSeek Flash | Executor preferencial com contrato fechado e bem definido |
+| GPT-6 Luna | Auditoria rotineira/delta e análise com foco em custo |
+| DeepSeek Pro | Auditoria independente/final quando aplicável |
+Escalar por risco/complexidade e evitar consumo desnecessário de Sol. Isso não
+substitui revisão independente nem gates.
+| Ator | Responsabilidade |
+| --- | --- |
+| Orquestrador | Escopo, fonte persistida, agente, pipeline, handoff e próximo responsável |
+| Executor | Implementar contrato fechado, validar, autoauditar e reportar desvios |
+| Revisor/auditor | Avaliar independentemente contrato, diff, gates e riscos |
+| GitHub | Fonte de verdade para Issues, PRs, revisões e histórico |
 
 ## 4. Perguntas e decisões
-
-- Pergunta arquitetural em aberto → registrar como **`Q#`** (contexto, problema,
-  alternativas, recomendação, impacto/risco) no documento de desenho.
-- Resposta aprovada na revisão → **`D#` FECHADA** (ou integração em decisão
-  existente com rastreabilidade explícita `Q# → D#`).
-- Documentos fechados (F4/F5 e demais) **não são reabertos** sem evidência
-  técnica nova; uma necessidade real de mudança vira **nova `Q#`** com a
-  evidência e tramita pelo fluxo normal.
+- Pergunta arquitetural aberta → registrar Q# no desenho com contexto,
+  alternativas, recomendação e impacto/risco.
+- Resposta aprovada → decisão D# FECHADA ou integração rastreável Q# → D#.
+- Decisão de produto é distinta da técnica. Dúvida material sobre comportamento,
+  prioridade ou regra de produto → STOP e retorno ao responsável de produto.
+- Documentos fechados não reabrem sem evidência técnica nova; mudança necessária
+  vira nova Q# e tramita pelo fluxo normal.
 
 ## 5. O que ler antes de cada modo
 
@@ -116,7 +125,7 @@ de PR** no sandbox está em `.ai/git-rules.md` §3.
 
 | Decisão | De quem é | Quando acontece |
 | --- | --- | --- |
-| **Aprovação técnica/arquitetural** | fluxo oficial: revisão/fechamento no desenho (GPT) e auditoria independente após a implementação | desenho (§2, itens 3–4) e auditoria (§2, item 9) |
+| **Aprovação técnica/arquitetural** | revisão/fechamento independente do desenho e auditoria independente após implementação | desenho (§2, itens 3–4) e auditoria (§2, item 9) |
 | **Autorização de elevação de acesso** | responsável pelo ambiente/host | quando o sandbox/SO exige permissão para executar um comando |
 
 São **independentes e não se substituem**:
@@ -406,6 +415,16 @@ Toda entrega de agente (implementação, correção ou auditoria) termina com um
 | **Auditoria** | quem auditou (ou "pendente") e veredito |
 | **Riscos** | riscos residuais e mitigações |
 | **Próximo responsável** | quem age a seguir (auditoria, orquestrador para abrir PR, merge) |
+| **Nota 0–10** | justificativa; preliminar após entrega, revisada se auditoria alterar a avaliação e final após certificação; comparar tarefas/modelos comparáveis |
 
 Nenhum agente declara a própria entrega aprovada (**§2**, itens 8–10), e **§7.3**
 continua valendo para `push` e criação de PR.
+
+## 10. Orquestração, frescor e handoff
+- Antes de cada prompt, conferir agente/modelo, fonte persistida, pipeline e contexto mínimo.
+- Prompt objetivo: delta, objetivo, restrições críticas, saída esperada e STOP. Regras permanentes são lidas no repo, não recopiadas.
+- Handoff persistido em Issue/PR ou documento operacional; chat não é fonte de retomada.
+- Antes de nova atividade arquitetural, comparar Plano Mestre e handoff com a última main certificada. Se materialmente obsoletos, checkpoint documental primeiro. Atualizar em mudança de fase ou obsolescência material.
+- Não usar planning IDs informais em prompts se não formalizados.
+- Dados funcionais atuais são massa de teste descartável: não planejar migração, reconciliação ou preservação; fixtures/testes são contrato executável.
+- Toda entrega recebe nota 0–10: preliminar, revisada após achados que alterem avaliação e final após certificação; comparar por modelo e tipo de tarefa.

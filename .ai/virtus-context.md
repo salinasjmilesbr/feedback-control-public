@@ -1,122 +1,29 @@
 # Virtus — Contexto persistente
 
-> Contexto **estável** e de longa duração do projeto, para reduzir prompts
-> repetitivos e inconsistência entre agentes (DeepSeek Flash, DeepSeek Pro,
-> Codex/GPT e outros). Complemento de `AGENTS.md`; não substitui a Issue nem o
-> contrato da atividade. Sem segredos, credenciais ou dados sensíveis.
+> Contexto estável e de longa duração. Complementa AGENTS.md; não substitui Issue, desenho fechado nem handoff.
 
-## 1. Identidade do projeto
+## Identidade
+- Virtus (Vivo Virtus / feedback-control): gestão de avaliações, observações, metas e estrutura organizacional.
+- Repositório público: GitHub salinasjmilesbr/feedback-control-public. GitHub é a fonte de verdade para Issues, requisitos, decisões de revisão e histórico.
 
-- **Produto:** Virtus (Vivo Virtus / `feedback-control`) — gestão de avaliações,
-  observações, metas e estrutura organizacional.
-- **Repositório público (origem):** GitHub `salinasjmilesbr/feedback-control-public`.
-- **GitHub é a fonte de verdade** para Issues, requisitos, decisões registradas
-  em revisões de PR e histórico de mudanças.
+## Stack e fronteiras
+- Frontend: React, TypeScript, Vite, React Router, Vitest, ESLint e jsPDF.
+- Persistência: Supabase Auth e PostgreSQL com RLS; desenvolvimento local usa Docker.
+- auth.uid() é a raiz de identidade; tenant e autorização são validados server-side. Policy Engine é fronteira soberana; authorize() aplica enforcement e can() atende somente à UX.
+- RLS é barreira de segurança; tabelas autorizativas têm acesso fechado; autorização é fail-closed e cross-tenant é DENY.
+- Frontend, JWT, localStorage e payload não concedem autoridade. Não derive autoridade de nome, cargo ou matrícula.
+- Separe autorização, workflow, cálculos, persistência e auditoria; preserve histórico e trilhas de auditoria.
+- Não inclua dados pessoais ou corporativos reais em código, fixtures, testes, documentação, commits ou PRs.
 
-## 2. Stack e infraestrutura
+## Domínios e contratos
+- Estrutura organizacional soberana: unidades, posições, hierarquia, cargos, senioridades, colegiado, ocupações, responsabilidades temporárias e reporting line.
+- Um colaborador ocupa no máximo uma posição por data, sem sobreposição temporal; responsabilidades temporárias não são ocupações.
+- Avaliações e domínios migrados seguem contratos versionados em docs/ e suas Issues; não presuma dual-write nem autoridade local.
+- Domínios ainda legados podem conservar dados em localStorage somente conforme contrato específico; isso não concede autoridade.
+- Migrations, RPCs, RLS e contratos SQL exigem execução SQL real quando PostgreSQL/Supabase estiver disponível. Testes estáticos não provam execução SQL.
 
-- Frontend: React, TypeScript, Vite, React Router, Vitest, ESLint, jsPDF.
-- Persistência/identidade: Supabase (Supabase Auth, Postgres com RLS; stack
-  local via Docker); `@supabase/supabase-js`.
-- Domínios funcionais legados ainda em `localStorage` (pré-migração F5);
-  compatibilidade com dados antigos de `localStorage` é obrigatória **para os
-  domínios ainda não migrados** (metas e observações). **Autoridade
-  estrutural** (unidades, posições, hierarquia, cargos, senioridades, colegiado,
-  ocupação e reporting line), **cadastro de colaboradores** e **avaliações** já são
-  soberanos no PostgreSQL (F5-06/F5-07/F5-08): `localStorage` não é fonte de
-  verdade, não há dual-write e a leitura do cliente é RLS own-tenant
-  (`docs/F5-08-p6-duvida-mundo-funcional.md` registra o residual de elegibilidade
-  dos domínios de ciclo/metas). **Ciclos**: o desenho técnico está fechado e
-  integrado (`docs/F5-09-desenho-tecnico.md`, D1–D28, fases P1–P9; dúvidas
-  ratificadas em `docs/F5-09-duvidas.md`) e a entidade soberana é
-  `public.evaluation_cycles` (F5-06 D15). A **F5-09 P1–P8 está implementada e
-  integrada em `main`** (P8 = squash `a1e30a86`, PR #205): integridade de schema
-  e trilha append-only `cycle_events` + helpers (P1), RPCs `ciclo_*` (P2–P4),
-  leitura RLS own-tenant (P5), Policy Engine de ciclo (P6), Edge `ciclos` +
-  reconciliação do bundle `admin` (P7) e cutover da gestão de ciclos no frontend
-  (P8 — UUID soberano como identidade, `expectedVersion` da leitura soberana,
-  sem fallback/dual-write **no fluxo de gestão**). A atividade corrente é a
-  **F5-09 P9** (validação integrada; matriz em
-  `docs/F5-09-p9-matriz-integrada.md`). O armazenamento local legado
-  (`cicloAvaliacaoStorage`/`cicloEquipeService`) permanece **apenas** em
-  consumidores ainda não migrados (painel/relatórios). **Observações (F5-11):** as fases **P1–P4 estão
-  integradas em `main`** (o squash da P4 é `8e88e375`), a **P5 (cutover soberano da UI, Issue #250)** e a
-  família **P5.1–P5.4** (SELF/read automático, autoridade administrativa por role, lifecycle de
-  `user_profiles.status`, exclusividade automática da role `observacoes_avaliado`) estão implementadas na
-  branch `feat/f5-11-p5-1-self-read-observacoes`, e a F5-11 está **CERTIFICADA** (Issue #254) em
-  `docs/F5-11-certificacao.md`, com **PR e gates finais pendentes** (`GATES PENDENTES (orquestrador)`);
-  o **fluxo SELF do avaliado** passou a ler as observações **comunicadas** por via soberana; o estado
-  consolidado de metas (F5-10) e observações é o de `.ai/handoff.md` §3.
-- CI (`.github/workflows/ci.yml`): `npm test`, `npm run build`, `npm run lint`,
-  `git diff --check` e validação Supabase local (RLS/policies) quando aplicável.
-
-## 3. Fases (roadmap) e contratos
-
-Documentos de desenho por fase em `docs/Fx-XX-desenho-tecnico.md`. O arquivo
-`docs/Fx-XX-desenho-tecnico.md` da atividade é o **contrato específico** dela;
-não existe contrato sem documento fechado correspondente.
-
-- **F1** — infraestrutura/ambiente (ex.: Supabase local, convenções, GitHub
-  Actions). Contratos em `docs/` quando aplicável.
-- **F2** — contas, organização e autenticação Supabase.
-- **F3** — estrutura organizacional (colaboradores, job roles, unidades,
-  posições, ocupações, responsabilidades temporárias, colegiado, sucessão).
-  Encerrada e validada (`F3-10`).
-- **F4** — autorização e segurança (catálogo de capabilities/roles, scopes,
-  Policy Engine, hierarquia, temporárias, acesso excepcional C, Pilot D, RLS
-  F4-08, aplicação funcional F4-09, validação integrada F4-10). **Encerrada**
-  com matriz de rastreabilidade (`F4-10-matriz-rastreabilidade.md`).
-- **F5** — identidade e multiusuário em runtime real: F5-01 (identidade
-  autenticada), F5-02 (vínculo usuário↔colaborador), F5-03 (organização ativa),
-  F5-04 (access roles/capabilities reais), F5-05, F5-06 (avaliações no PostgreSQL),
-  F5-07 (colaboradores e histórico organizacional soberanos) e F5-08 (estrutura e
-  catálogos soberanos). F5-09 (ciclos soberanos) tem **desenho técnico fechado e
-  integrado** (`docs/F5-09-desenho-tecnico.md`, D1–D28, fases P1–P9; ratificações
-  em `docs/F5-09-duvidas.md`) com **P1–P8 implementadas e integradas em `main`**
-  e a **P9 (validação integrada) em andamento**; as **observações (F5-11)** têm **P1–P4 integradas em
-  `main`** (squash da P4 = `8e88e375`), a **P5 (cutover soberano da UI, Issue #250) e a família P5.1–P5.4
-  implementadas** na branch `feat/f5-11-p5-1-self-read-observacoes`, e a fase está **CERTIFICADA**
-  (`docs/F5-11-certificacao.md`, Issue #254), com PR e merge pendentes (`.ai/handoff.md` §3);
-  o **fluxo SELF do avaliado lê as observações comunicadas** por via soberana (role automática
-  `observacoes_avaliado`, sem mutações SELF).
-  A **certificação transversal da Etapa 5 (Issue #256)** foi produzida em
-  `docs/etapa-5-certificacao.md`, **sem lacuna material bloqueante**: os três blockers históricos
-  (ciclos, colaboradores, metas/observações) estão demonstradamente resolvidos e as obrigações
-  transversais têm evidência citável. **A Issue #256 é a própria F5-12** — a validação integrada e o
-  **fechamento formal da Etapa 5 são essa entrega**, não uma fase posterior. O item **R1 foi
-  verificado e fechado** ali: nenhum leitor legado de ciclo é autoridade de decisão de
-  autorização/segurança (`permissaoAvaliacao.ts` não tem consumidor de produção; a autoridade é
-  server-side e prevalece), restando apenas resíduo de apresentação (o ciclo local entra como insumo
-  do gate de UI em `EditarFeedbackPage`/`FeedbackDetalhePage`/`NovoFeedbackPage`, com o soberano
-  prevalecendo). Restam **dívidas não bloqueantes** (`localCycleRepository` LEGADO declarado,
-  fixtures com chaves legadas, prova literal de transferência entre organizações, defeito latente de
-  diagnóstico no validador 41 e o cenário 42 derivando tenant da P2).
-  As atividades seguintes da fase seguem o roadmap do GitHub.
-- **F6+** — hardening geral e trabalhos futuros (fora de escopo das fases
-  anteriores).
-- **DEV-\*** — atividades de **infraestrutura de processo** (ex.: DEV-01, esta
-  camada de contexto persistente), sem alteração funcional do produto.
-
-Regras de rastreabilidade de decisões: ver `.ai/workflow.md`.
-
-## 4. Mapa do repositório
-
-| Caminho | Conteúdo |
-| --- | --- |
-| `AGENTS.md` | Ponto de entrada obrigatório (ordem de leitura) |
-| `.ai/` | Contexto persistente e regras de operação dos agentes (esta camada) |
-| `docs/` | Contratos de desenho `Fx-XX-desenho-tecnico.md` e matrizes por fase |
-| `src/` | Frontend React/TS (inclui `src/auth` e `src/authorization`) |
-| `src/authorization/` | Policy Engine central e capabilities (não duplicar fora daqui) |
-| `supabase/` | Migrations, validações SQL e seed local (ver `supabase/README.md`) |
-| `.github/` | Workflows de CI, Dependabot, template de PR |
-| `.env.example` | Exemplo de variáveis de ambiente (nunca valores reais) |
-
-## 5. Regras de uso
-
-- Ao iniciar atividade: leia `AGENTS.md` → `.ai/*` → Issue → contrato `docs/Fx-XX`.
-- Ao retomar trabalho interrompido: leia primeiro `.ai/handoff.md`.
-- Atualize `.ai/handoff.md` ao final de cada entrega (estado operacional, sem
-  dados sensíveis).
-- Referencie documentos em vez de copiar conteúdo entre arquivos; mantenha esta
-  camada objetiva e sem duplicação excessiva.
+## Fontes e mapa
+- AGENTS.md é o ponto de entrada; .ai/workflow.md define processo; .ai/architecture-rules.md define fronteiras permanentes; desenho fechado docs/Fx-XX é contrato da atividade.
+- docs/ contém desenhos/matrizes; src/ contém frontend; src/authorization/ contém Policy Engine; supabase/ contém migrations/validações; .github/ contém CI/templates.
+- Estado operacional (Issues em curso, branch, SHA, gates e host) pertence exclusivamente a .ai/handoff.md.
+- Ao iniciar, leia AGENTS.md, fontes .ai, Issue e contrato. Ao retomar, leia primeiro .ai/handoff.md. Evite duplicar estado operacional.
