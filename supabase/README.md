@@ -658,7 +658,7 @@ migration aditiva sobre o estado da F3-04):
   do tempo única; troca de ocupante fecha + abre, sem recriar a posição);
   posição vaga = ausência de occupation válida; NENHUMA constraint limita
   múltiplas posições simultâneas de um colaborador (sem exclusion por
-  collaborator); sem occupation artificial com `collaborator_id NULL`;
+  collaborator); sem occupation artificial com `collaborator_id NULL`; *(HISTÓRICO SUPERSEDIDO pela #427 — ver "Contrato corrente" abaixo.)*
 - transferência: encerra a occupation anterior e cria nova (histórico
   preservado), sem alterar/recriar collaborator, posição ou reporting lines;
 - licença independente: `leave` não encerra nem invalida occupation e o retorno
@@ -674,11 +674,37 @@ migration aditiva sobre o estado da F3-04):
 - auditoria/autor: sem coluna de autor (baseline F3-04; auditoria transversal
   futura — limitação documentada);
 - RLS habilitado e deny-by-default na tabela nova, sem policies e sem grants;
-  nenhuma policy existente alterada;
+  nenhuma policy existente alterada; *(HISTÓRICO SUPERSEDIDO — ver "Contrato corrente" abaixo.)*
 - dados: somente sintéticos, via cenário de validação
   `supabase/validacao/01-cenario-f3-05.sql` (o `seed.sql` continua sem inserir
   dados funcionais); rebuild e validação descritos no README de `validacao/` e
   registrados na seção "Validação executada (F3-05)".
+
+
+> **Contrato corrente (supersede os itens históricos acima) — #427/#429/#430.**
+>
+> - **Cardinalidade soberana (#427):** `occupations` mantém a exclusion por
+>   posição **e** passou a ter `ex_occupations_collaborator_no_overlap` — no
+>   máximo **UMA** occupation por colaborador em qualquer instante, inclusive
+>   entre posições diferentes. O item histórico *"NENHUMA constraint limita
+>   múltiplas posições simultâneas de um colaborador"* está **SUPERSEDIDO**:
+>   múltiplas posições simultâneas do **mesmo** colaborador deixaram de ser
+>   válidas; **histórico sequencial** (`[t0,t1)` + `[t1,t2)`) e posições
+>   simultâneas de colaboradores **distintos** seguem válidos. As RPCs
+>   `estrutura_ocupacao_definir`/`trocar` exigem cardinalidade explícita (zero ou
+>   uma; exatamente uma) e os resolvers estruturais são fail-closed diante de
+>   origem ambígua.
+> - **RLS e grants (F4-08+):** o item histórico *"sem policies e sem grants"*
+>   descreve apenas o estado da fase F3-05. O contrato corrente concede `SELECT`
+>   a `authenticated` **somente** onde existe policy own-tenant; em `occupations`
+>   a leitura é **negada por ausência de GRANT**
+>   (`20260908140000_f4_08_revoke_excess_table_privileges.sql` revoga os
+>   privilégios excessivos e não há re-concessão). A validação corrente prova a
+>   **negação efetiva** ao cliente (ACL **ou** RLS) e a mantém acompanhada de
+>   assertion **estrutural** independente (`has_table_privilege`) — sem afirmar
+>   que a negação isoladamente comprova enforcement especificamente por RLS.
+> - **Cobertura CI:** `02-validar-f3-05.sql` integra o CI (Issue #429) e roda
+>   sobre o schema corrente; ver `supabase/validacao/README.md`.
 
 ## Temporary responsibilities — substituições temporárias (F3-06)
 
@@ -769,12 +795,33 @@ aditiva sobre o estado da F3-07):
 - mudanças posteriores de configuração/occupation/reporting NÃO alteram
   snapshots materializados; reabertura excepcional de ciclo não refaz snapshot;
 - integridade multi-organização por FKs compostas `ON DELETE RESTRICT`; RLS
-  deny-by-default nas 5 tabelas novas, sem policies/grants (funções
+  deny-by-default nas 5 tabelas novas, sem policies/grants (funções *(HISTÓRICO SUPERSEDIDO — ver "Contrato corrente" abaixo.)*
   `SECURITY INVOKER`, sem bypass); ciclos atuais do localStorage permanecem
   intactos (sem migração — D14).
 - dados: somente sintéticos, via cenário de validação
   `supabase/validacao/01-cenario-f3-08.sql`; rebuild e validação descritos no
   README de `validacao/` e registrados na seção "Validação executada (F3-08)".
+
+
+> **Contrato corrente (supersede os itens históricos acima) — #427/#429/#430.**
+>
+> - **Policies SELECT own-tenant (F4-08+):** o item histórico *"deny-by-default
+>   nas 5 tabelas novas, sem policies/grants"* descreve apenas a fase F3-08. O
+>   contrato corrente tem políticas **de leitura own-tenant** em três tabelas de
+>   snapshot — `collegiate_cycle_snapshots_select_same_tenant`,
+>   `collegiate_cycle_snapshot_positions_select_same_tenant` e
+>   `collegiate_cycle_snapshot_members_select_same_tenant`, todas `FOR SELECT TO
+>   authenticated USING (public.user_has_active_membership(organization_id))`;
+>   **nenhuma** policy de escrita; `collegiate_configurations` e
+>   `collegiate_configuration_members` permanecem **sem policy** e com `SELECT`
+>   revogado de `authenticated`.
+> - **Imutabilidade preservada:** o snapshot congelado do ciclo não é recalculado;
+>   transferência **sequencial** de ocupação após o ciclo não altera o snapshot
+>   materializado.
+> - **Cobertura CI:** `02-validar-f3-08.sql` integra o CI (Issue #429) e valida
+>   **estruturalmente** identidade/tabela/comando/papel/expressão das policies
+>   SELECT esperadas e **rejeita policies extras** — não depende apenas da guarda
+>   da F4-08; ver `supabase/validacao/README.md`.
 
 ## Responsabilidade avaliativa e sucessão de avaliador (F3-09)
 

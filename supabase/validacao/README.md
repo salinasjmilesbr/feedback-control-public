@@ -1280,3 +1280,97 @@ Testes (estáticos, sem Docker):
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File supabase/validacao/Test-DisposableCandidateWorktree.Tests.ps1
 ```
+
+# Cobertura CI dos validadores legados F3-05/F3-08/F4-02 (Issue #429)
+
+Os três validadores abaixo foram **revisados e passaram a integrar a certificação
+corrente do CI** (job `supabase-local`), executados **sequencialmente** no mesmo
+banco efêmero do runner (migrations aplicadas por `db reset`) com
+`-v ON_ERROR_STOP=1` — qualquer falha SQL reprova o job.
+
+| Cenário | Validador | Situação em `main` | Decisão (#429) |
+| --- | --- | --- | --- |
+| `01-cenario-f3-05.sql` | `02-validar-f3-05.sql` | asserções estruturais **stale** | **integrado ao CI** (atualizado) |
+| `01-cenario-f3-08.sql` | `02-validar-f3-08.sql` | contagem fixa expansível + policies | **integrado ao CI** (atualizado) |
+| `01-cenario-f4-02.sql` | `02-validar-f4-02.sql` | sem staleness bloqueante | **integrado ao CI** (sem alteração) |
+
+## Staleness corrigido (o que mudou e por quê)
+
+Com as fases seguintes entregues em `main`, asserções **estruturais** escritas
+quando cada fase era a última deixaram de ser satisfazíveis. A correção troca
+**conjunto/contagem exata** por **presença dos itens esperados**: continua
+reprovando remoção/renomeação e **não** transforma evolução legítima do schema em
+falha. **Nenhuma prova material foi removida ou relaxada.**
+
+- **F3-05** — inventário exato de tabelas → presença das 13 tabelas esperadas;
+  colunas exatas de `collaborators` / `organizational_positions` /
+  `position_reporting_lines` → presença das colunas esperadas; nomes
+  especulativos/legados (`substitutions`, `collegiates`, `evaluation_panels`,
+  `snapshots`, `dotted_lines`) permanecem **proibidos** como negação; total de
+  policies (3) → presença das 3 policies de identidade/sessão da F2; a prova de
+  runtime de leitura/escrita passou a aceitar a **negação efetiva ao cliente**
+  (ausência de GRANT na ACL **ou** 0 linhas por RLS) — **sempre acompanhada de
+  assertion estrutural independente** do deny corrente
+  (`has_table_privilege('authenticated', 'public.occupations', 'SELECT')` falso) e
+  **sem** afirmar que a negação isoladamente comprova enforcement especificamente
+  por RLS.
+- **F3-08** — inventário exato → presença das 19 tabelas; contagem fixa de
+  resolvers (7) → **presença das 7 funções F3-07 esperadas**; o guard de policy de
+  `collegiate_*` passou a ser **autossuficiente** (não delega à guarda da F4-08):
+  exige **exatamente** as 3 policies SELECT own-tenant esperadas, validando
+  identidade (tabela + nome), **comando** (`SELECT`), **papel** (`authenticated`) e
+  **expressão** (`user_has_active_membership(organization_id)`), e **rejeita
+  qualquer policy extra** em `collegiate_*`; assertion estrutural independente de
+  GRANT (`has_table_privilege`) confirma `SELECT` **somente** nas 3 tabelas de
+  snapshot. A prova de runtime de escrita aceita a **negação efetiva** (ACL ou RLS).
+- **F4-02** — nenhuma alteração: a prova de DESCENDANTS de MULTI já reflete
+  P_AN2 (`e4`, folha) com **zero descendentes** e as guardas globais são de
+  presença. Permanece verde (29 `[PASS]`).
+
+## Classificação de cobertura (decisão objetiva)
+
+- **Integrados ao CI (#429)**: **F3-05**, **F3-08** e **F4-02** — cobrem
+  invariantes ainda vigentes: ocupações e exclusões (posição × colaborador),
+  snapshot imutável do colegiado e resolução de escopos com origem única.
+- **Permanecem históricos (fora do CI)**: os demais `01-cenario-*/02-validar-*`
+  de F2/F3/F4/F5 mantêm registros de execução da época e **não** são gates
+  correntes; reativá-los exige a mesma revisão de staleness aplicada aqui, em
+  atividade própria, sem reescrever histórico.
+- O **inventário corrente do schema** continua sendo guardado por
+  `02-validar-f4-08.sql` (schema guard), e não pelos validadores de fase.
+
+## Como reproduzir localmente (runtime descartável)
+
+```bash
+npx --yes supabase@2.116.0 db start --yes
+npx --yes supabase@2.116.0 db reset --local --yes
+for par in "01-cenario-f3-05.sql 02-validar-f3-05.sql" \
+           "01-cenario-f3-08.sql 02-validar-f3-08.sql" \
+           "01-cenario-f4-02.sql 02-validar-f4-02.sql"; do
+  for f in $par; do
+    docker exec -i supabase_db_feedback-control \
+      psql -U postgres -d postgres -v ON_ERROR_STOP=1 < "supabase/validacao/$f"
+  done
+done
+```
+
+**Execução registrada na Issue #429** (runtime descartável limpo: plataforma
+Supabase + as **90 migrations** de `main` em LF, como no CI): `01/02-validar-f3-05`
+**43 `[PASS]`**, `01/02-validar-f3-08` **31 `[PASS]`**, `01/02-validar-f4-02`
+**29 `[PASS]`** — exit 0 nos seis arquivos, executados em sequência no mesmo banco.
+
+### Endurecimento pós-auditoria (#430)
+
+- **F3-08**: o guard de policies de `collegiate_*` valida
+  identidade/tabela/comando/papel/expressão das 3 policies SELECT own-tenant
+  esperadas e **rejeita policies extras**, sem depender da guarda da F4-08; soma-se
+  assertion estrutural de GRANT (`has_table_privilege`).
+- **Negações efetivas**: as provas de runtime descrevem **negação efetiva ao
+  cliente (ACL ou RLS)** — nunca enforcement especificamente por RLS — e seguem
+  acompanhadas de assertions estruturais independentes.
+- **Worktrees**: preflight portátil obrigatório **antes** de `git worktree add`
+  (`.ai/workflow.md` §8.1), canonicalizando o destino e comparando-o com checkout,
+  diretórios proibidos e worktrees existentes, inclusive caminhos com espaços.
+- **Workflow**: §1, §2, §6.2 e §7 alinhados ao DEV-04 — CI antecipado → auditoria
+  do SHA → correções (novo SHA → novo CI) → merge **somente** com CI verde no SHA
+  efetivamente auditado; desenho fechado na Issue não precisa estar em `main`.

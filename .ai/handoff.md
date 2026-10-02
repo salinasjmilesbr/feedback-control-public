@@ -50,23 +50,31 @@ em `.ai/*`, não são duplicadas aqui.
 > retomada funcional da #421 dependem da revisão/integração do desenho.
 > A árvore original da #421 e `auditoria-v21.txt` não foram transportados.
 >
-> **Implementação em andamento — #427 (cardinalidade soberana de ocupações):**
-> branch `feat/issue-427-cardinalidade-ocupacoes`, worktree
-> `feedback-control/node_modules/.427w`, base `origin/main` em
-> `09c9cedf9f50c46f79f25673416e314644e5e5fc`. Migration ADITIVA
-> `supabase/migrations/20261028000000_f6_issue427_cardinalidade_ocupacoes.sql`
-> (exclusão temporal por `collaborator_id`, preservando a exclusão por posição),
-> guardas de cardinalidade nas escritas, fail-closed dos consumidores
-> estruturais, validadores `55-cenario/55-validar-f6-427.sql` (matriz da Issue) e
-> prova CONCORRENTE entre duas sessões (`56-cenario`/`57-sessao-a`/`58-sessao-b`/
-> `59-validar-f6-427-concorrencia.sql`). Correção da auditoria estática: ordem
-> CANÔNICA de locks (linha do colaborador com `FOR UPDATE` antes do advisory da
-> organização) padronizada em `definir`/`trocar` e travada por guarda na própria
-> migration. **`SQL execution: NOT AVAILABLE` neste host:** o sandbox nega named
-> pipe (Docker inacessível) e a política de execução do host bloqueia os
-> `supabase/validacao/*.ps1`; a certificação SQL/Edge em runtime descartável
-> (incluindo a corrida entre sessões) depende do CI. Sem merge, sem fechar a
-> Issue e sem alterar o Plano Mestre.
+> **#427 (cardinalidade soberana de ocupações): MERGED** — squash em `main` no
+> SHA `dff8e9984604a5195101375a97507c2609472551` (migration aditiva
+> `20261028000000_f6_issue427_cardinalidade_ocupacoes.sql`, guardas de
+> cardinalidade, fail-closed dos resolvers, validadores `55`/`56`/`57`/`58`/`59`
+> e prova concorrente de duas sessões). Correções de fixture ao longo do CI (#570
+> a #574) e auditoria final independente com o delta `0aa3e65..cb9cbb6`.
+>
+> **Implementação — #429 (higiene de worktrees e cobertura dos validadores
+> legados):** branch `feat/issue-429-higiene-worktrees-cobertura-legada`, worktree
+> **ISOLADA fora do checkout principal**
+> (`D:\Projetos\VirtusWorktrees\issue429` — raiz local configurável, sem requisito
+> portátil), base `origin/main` em
+> `dff8e9984604a5195101375a97507c2609472551`. Persiste o protocolo de orquestração
+> e a regra portátil de worktrees em `.ai/workflow.md` (**§1**, **§2** item 4,
+> **§8**, **§9**, DEV-05) e `.ai/git-rules.md` (§1/§4); corrige o staleness dos
+> validadores legados **F3-05/F3-08** (presença de tabelas/colunas/funções/policies
+> em vez de conjunto ou contagem expansível; provas RLS aceitam negação por
+> ausência de `GRANT` **ou** por RLS) e mantém **F4-02**; integra os três pares ao
+> job `supabase-local` do CI, sequencialmente, sobre o banco efêmero do runner e
+> com `ON_ERROR_STOP=1`.
+> **Runtime local:** banco descartável limpo (plataforma Supabase + as 90
+> migrations de `main` em LF, como no CI) executou os três pares em sequência —
+> `02-validar-f3-05.sql` **43 `[PASS]`**, `02-validar-f3-08.sql` **31 `[PASS]`**,
+> `02-validar-f4-02.sql` **29 `[PASS]`** — exit 0 nos seis arquivos. Sem merge, sem
+> fechar a Issue e sem alterar o Plano Mestre.
 
 - **Baseline local deste checkpoint:** `main` / `origin/main` em
   `d7c3191b1de33be0d13afa1507fc7b8ce518d29a`; o CI desse SHA não foi
